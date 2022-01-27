@@ -18,6 +18,9 @@ type ObjectRuleset interface {
 	MaySet(newValue string) error
 }
 
+// PersistenceLayer implements the write api for election ratification
+// functions to call. It is how network state mutates upon a successful
+// election result.
 type PersistenceLayer struct {
 	d StorageDriver
 	o ObjectEngine
@@ -27,7 +30,11 @@ func NewPersistenceLayer(d StorageDriver, o ObjectEngine) (*PersistenceLayer, er
 	return &PersistenceLayer{d: d, o: o}, nil
 }
 
-type Identifier interface {
+// UniqueIdentifier are unique keys specified by the type. They may be a composite
+// of multiple attributes For now we're just doing the "everything is a string"
+// hack. This is a prototype... Typing system will give power to the data type
+// dynamically.
+type UniqueIdentifier interface {
 	Pairs() map[string]string
 	Key() string
 	// TODO: I think we might want "identifier types" somehow? Reusable?
@@ -35,11 +42,10 @@ type Identifier interface {
 }
 
 type Object interface {
-	Identifiers() []Identifier
+	Identifiers() []UniqueIdentifier
 }
 
-// TODO: we would like an array with insert and (pre|ap)pend
-func (p PersistenceLayer) UpdateKey(identifier Identifier, key string, value string, valueType string) error {
+func (p PersistenceLayer) UpdateKey(identifier UniqueIdentifier, key string, value string, valueType string) error {
 	ruleset := p.o.GetRuleset(valueType)
 	// Validate format of new value against type system
 	if err := ruleset.MaySet(value); err != nil {
@@ -54,6 +60,6 @@ func (p PersistenceLayer) UpdateKey(identifier Identifier, key string, value str
 }
 
 // TODO: consider that perhaps valueType should be an Identifier?
-func (p PersistenceLayer) FetchKey(identifier Identifier, valueType string) (Object, error) {
+func (p PersistenceLayer) FetchKey(identifier UniqueIdentifier, valueType string) (Object, error) {
 	return nil, nil
 }
