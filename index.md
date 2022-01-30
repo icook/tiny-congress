@@ -1,7 +1,7 @@
 # TODO
 
 - `db/driver.go:PersistenceLayer`: add support for lists insert and (pre|ap)pend. Consider other datatypes, perhaps with APIs similar to redis.
--
+- Try and get 1 minimally functional unit
 
 # Concepts
 
