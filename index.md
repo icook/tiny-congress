@@ -2,6 +2,8 @@
 
 - `db/driver.go:PersistenceLayer`: add support for lists insert and (pre|ap)pend. Consider other datatypes, perhaps with APIs similar to redis.
 - Try and get 1 minimally functional unit
+- I need to add another layer between the PersistenceLayer and the StorageDriver. Something that maps higher level operations (object retrieval, etc) to key/val operations.
+- NotFoundErr from StorageEngine should wrap lower layer error, since that will frequently be informative
 
 # Concepts
 
@@ -20,6 +22,49 @@ It is essential that this is powerful and composable, and it can be iterated on
 as a personal data management/indexining/filing/curation system. We want to be
 a configurable cataloging system, and then build elections on top of these
 abstractions.
+
+# Imagined Evolution
+
+After the base data layer and data browser is working in dictator mode we would
+like to evolve our congress to rely on multiple sources of authority.
+
+This requires introducing several new concepts that build on top of our typed
+data layer.
+
+## MandateGrant
+
+Every authority network grants authority to
+
+```go
+// The UUID of a given network identity
+type IdentityUID uuid.UUID
+// TokenType is a unique type string code for a given token
+type TokenType string
+// TokenNamespace separates tokens by their use. Runtime reserves the
+// Namespaces "authority" and "influence" for builtin survey and election logic
+type TokenNamespace string
+// MandateGrants are network state that gives Identities the ability to do
+// things in the non-dictatorial network
+type MandateGrant struct {
+    TokenType TokenType
+    TokenNamespace TokenNamespace
+    AuthorizedIdentities map[IdentityUID]float64
+}
+// A given Identity may be granted Authority. This would be an input to
+// election gate functions.
+type Authority map[TokenType]float64
+// A given Identity may be granted tokens on the "influence" namespace. These
+// are passed to Attribute
+type Influence map[TokenType]float64
+```
+
+## Identity
+
+Every authority 
+
+## Surveys
+
+## Elections
 
 ## PersistenceLayer
 
@@ -67,46 +112,56 @@ Here's an example schema of a system for tracking files that are snapshots of a
 website across multiple machines.
 
 ```yaml
-object_type: Website
+objectType: Website
 attributes:
     - name: url
-      data_type: uri:url
-unique_keys:
-    - attributes: ["url"]
+      type:
+          name: url
+          schemas: ["http", "https"]
+uids:
+    - name: url
+      attributes: ["url"]
 
-object_type: File
+objectType: File
 attributes:
     - name: sha256_hex
-      data_type: [32]byte
-unique_keys:
+      type: byte
+      typeParams:
+          maxLength: 32
+uids:
     - attributes: ["sha256_hex"]
 
-object_type: FileLocations
+objectType: FileLocations
 attributes:
     - name: path
-      data_type: unix_path
+      type:
+          name: path
     - name: machine
-      data_type: string
+      type:
+          name: string
     - name: file
-      data_type: ref:File@sha256_hex
-unique_keys:
+      type: reference
+      typeParams:
+          objectType: File
+          uid: sha256_hex
+uids:
     - attributes: ["machine", "path"]
 
-object_type: FileTags
+objectType: FileTags
 attributes:
     - name: tags
-      data_type: list:string
+      dataType: list:string
     - name: tags
-      data_type: list:string
-unique_keys:
+      dataType: list:string
+uids:
     - attributes: ["machine", "path"]
 
-object_type: WebsiteSnapshot
+objectType: WebsiteSnapshot
 attributes:
     - name: website
-      data_type: ref:Website@url
+      dataType: ref:Website@url
     - name: file
-      data_type: ref:File@sha256_hex
+      dataType: ref:File@sha256_hex
 ```
 
 ## DataTypes
