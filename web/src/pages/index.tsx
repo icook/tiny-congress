@@ -1,5 +1,6 @@
 // import { useRouter } from 'next/router';
 
+import Link from '../../src/Link';
 import { Meta } from '@/layouts/Meta';
 import { MUI } from '@/templates/MUI';
 
@@ -15,7 +16,8 @@ const Index = () => {
         />
       }
     >
-      <h1>HelloWorld</h1>
+      <Link href="/vote">Vote Mockup</Link>
+      <Link href="/vote-2">Vote Mockup 2</Link>
     </MUI>
   );
 };
