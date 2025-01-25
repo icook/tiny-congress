@@ -5,10 +5,10 @@
 replicaCount: 1
 
 image:
-  repository: nginx
+  repository: tc/backend
   pullPolicy: IfNotPresent
   # Overrides the image tag whose default is the chart appVersion.
-  tag: ""
+  tag: latest
 
 imagePullSecrets: []
 nameOverride: ""
@@ -80,3 +80,20 @@ nodeSelector: {}
 tolerations: []
 
 affinity: {}
+
+frontend:
+  replicas: 1
+  image:
+    repository: tc/frontend-dev
+    tag: latest
+    pullPolicy: IfNotPresent
+  service:
+    port: 3000
+    targetPort: 3000
+  resources:
+    limits:
+      cpu: 200m
+      memory: 256Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
