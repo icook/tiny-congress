@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
-import { Container } from "@/components/ui/container";
+import { Container } from "@/components/container";
 
 export default function Home() {
   return (
