@@ -1,9 +1,10 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
+import { Container } from "@/components/ui/container";
 
 export default function Home() {
   return (
-    <div className="container mx-auto py-8">
+    <Container className="py-8">
       <Card>
         <CardHeader>
           <CardTitle>TinyCongress</CardTitle>
@@ -45,6 +46,6 @@ export default function Home() {
           </div>
         </CardContent>
       </Card>
-    </div>
+    </Container>
   );
 }
