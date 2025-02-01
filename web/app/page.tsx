@@ -7,7 +7,7 @@ export default function Home() {
     <Container className="py-8">
       <Card>
         <CardHeader>
-          <CardTitle>TinyCongress</CardTitle>
+          <CardTitle>&#x1F5F3; TinyCongress</CardTitle>
           <CardDescription>Decentralized governance platform</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
