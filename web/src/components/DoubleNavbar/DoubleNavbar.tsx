@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
 import {
   IconCalendarStats,
   IconDeviceDesktopAnalytics,
@@ -9,6 +8,7 @@ import {
   IconSettings,
   IconUser,
 } from '@tabler/icons-react';
+import { Link, useLocation } from 'react-router-dom';
 import { Title, Tooltip, UnstyledButton } from '@mantine/core';
 import { MantineLogo } from '@mantinex/mantine-logo';
 import classes from './DoubleNavbar.module.css';
@@ -40,12 +40,13 @@ const linksMockdata = [
 export function DoubleNavbar() {
   const location = useLocation();
   const currentPath = location.pathname;
-  
+
   // Find active main link based on current path
-  const currentMainLink = mainLinksMockdata.find(link => 
-    link.path === currentPath || 
-    (link.path !== '/' && currentPath.startsWith(link.path))
-  ) || mainLinksMockdata[0];
+  const currentMainLink =
+    mainLinksMockdata.find(
+      (link) =>
+        link.path === currentPath || (link.path !== '/' && currentPath.startsWith(link.path))
+    ) || mainLinksMockdata[0];
 
   const [active, setActive] = useState(currentMainLink.label);
 

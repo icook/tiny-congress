@@ -4,10 +4,7 @@ import { DoubleNavbar } from '../components/DoubleNavbar/DoubleNavbar';
 
 export function Layout() {
   return (
-    <AppShell
-      navbar={{ width: 300, breakpoint: 'sm' }}
-      padding="md"
-    >
+    <AppShell navbar={{ width: 300, breakpoint: 'sm' }} padding="md">
       <AppShell.Navbar>
         <DoubleNavbar />
       </AppShell.Navbar>
