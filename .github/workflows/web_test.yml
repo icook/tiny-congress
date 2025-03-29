@@ -1,6 +1,9 @@
-name: npm test
+name: web test
 
 on:
+  push:
+    branches:
+      - '**'
   pull_request:
     branches:
       - '**'
