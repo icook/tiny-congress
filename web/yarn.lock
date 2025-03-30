@@ -1307,18 +1307,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@mantinex/mantine-logo@npm:^1.1.0":
-  version: 1.1.0
-  resolution: "@mantinex/mantine-logo@npm:1.1.0"
-  peerDependencies:
-    "@mantine/core": ">=7.0.0"
-    "@mantine/hooks": ">=7.0.0"
-    react: ^18.x || ^19.x
-    react-dom: ^18.x || ^19.x
-  checksum: 10c0/aee9d42dee9fdde2cb58f7e82f0fb15d5678e4a2ecfbe977b1881a741e52aef006a01539d0644b64da81bb76ba347dbc3bb2e9c1222858b9852f47b48217dc7b
-  languageName: node
-  linkType: hard
-
 "@nodelib/fs.scandir@npm:2.1.5":
   version: 2.1.5
   resolution: "@nodelib/fs.scandir@npm:2.1.5"
@@ -6178,7 +6166,6 @@ __metadata:
     "@mantine/form": "npm:^7.17.3"
     "@mantine/hooks": "npm:^7.17.3"
     "@mantine/notifications": "npm:^7.17.3"
-    "@mantinex/mantine-logo": "npm:^1.1.0"
     "@storybook/react": "npm:^8.6.8"
     "@storybook/react-vite": "npm:^8.6.8"
     "@tabler/icons-react": "npm:^3.31.0"
