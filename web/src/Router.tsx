@@ -2,6 +2,7 @@ import { createBrowserRouter, RouterProvider } from 'react-router-dom';
 import { DashboardPage } from './pages/Dashboard.page';
 import { HomePage } from './pages/Home.page';
 import { Layout } from './pages/Layout';
+import { ThreadedConversationPage } from './pages/ThreadedConversation.page';
 
 const router = createBrowserRouter([
   {
@@ -15,6 +16,10 @@ const router = createBrowserRouter([
       {
         path: 'dashboard',
         element: <DashboardPage />,
+      },
+      {
+        path: 'conversations',
+        element: <ThreadedConversationPage />,
       },
       // Placeholder routes for the other nav items
       {
@@ -59,60 +64,6 @@ const router = createBrowserRouter([
           <div>
             <h1>Settings</h1>
             <p>Settings page content</p>
-          </div>
-        ),
-      },
-      {
-        path: 'orders',
-        element: (
-          <div>
-            <h1>Orders</h1>
-            <p>Orders page content</p>
-          </div>
-        ),
-      },
-      {
-        path: 'clients',
-        element: (
-          <div>
-            <h1>Clients</h1>
-            <p>Clients page content</p>
-          </div>
-        ),
-      },
-      {
-        path: 'databases',
-        element: (
-          <div>
-            <h1>Databases</h1>
-            <p>Databases page content</p>
-          </div>
-        ),
-      },
-      {
-        path: 'pull-requests',
-        element: (
-          <div>
-            <h1>Pull Requests</h1>
-            <p>Pull Requests page content</p>
-          </div>
-        ),
-      },
-      {
-        path: 'issues',
-        element: (
-          <div>
-            <h1>Open Issues</h1>
-            <p>Issues page content</p>
-          </div>
-        ),
-      },
-      {
-        path: 'wiki',
-        element: (
-          <div>
-            <h1>Wiki</h1>
-            <p>Wiki pages content</p>
           </div>
         ),
       },
