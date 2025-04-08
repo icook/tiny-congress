@@ -1,0 +1,41 @@
+[package]
+name = "prioritization_room"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# Web server
+axum = "0.6"
+tokio = { version = "1", features = ["full"] }
+tower = "0.4"
+tower-http = { version = "0.4", features = ["cors", "trace"] }
+tracing = "0.1"
+tracing-subscriber = "0.3"
+
+# GraphQL
+async-graphql = "5.0"
+async-graphql-axum = "5.0"
+
+# Database 
+sqlx = { version = "0.6", features = ["runtime-tokio-rustls", "postgres", "chrono", "uuid", "json"] }
+refinery = { version = "0.8", features = ["tokio-postgres"] }
+
+# Utilities
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1.2", features = ["v4", "serde"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+async-trait = "0.1"
+futures = "0.3"
+thiserror = "1.0"
+anyhow = "1.0"
+rand = "0.8"
+reqwest = { version = "0.11", features = ["json"] }
+
+[dev-dependencies]
+hyper = "0.14"
+tower = { version = "0.4", features = ["util"] }
+
+[[bin]]
+name = "client"
+path = "src/bin/client.rs"

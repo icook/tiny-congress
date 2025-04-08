@@ -1,0 +1,40 @@
+apiVersion: skaffold/v2beta28
+kind: Config
+metadata:
+  name: prioritization-room
+build:
+  artifacts:
+    - image: tc-api
+      context: ./service/
+      docker:
+        dockerfile: ./dockerfiles/Dockerfile.backend
+    - image: postgres
+      context: .
+      docker:
+        dockerfile: ./dockerfiles/Dockerfile.frontend-dev
+    - image: tc-ui
+      context: ./web
+      docker:
+        dockerfile: ./dockerfiles/Dockerfile.frontend-dev
+deploy:
+  kubectl:
+    manifests:
+      - k8s/*.yaml
+profiles:
+  - name: dev
+    build:
+      local:
+        push: false
+    deploy:
+      kubectl: {}
+  - name: test
+    build:
+      local:
+        push: false
+    test:
+      - image: tc-api
+        custom:
+          command: cargo test --test integration_tests -- --test-threads=1 --nocapture
+          env:
+            - name: DATABASE_URL
+              value: postgres://postgres:postgres@postgres:5432/prioritization_test
