@@ -1,13 +1,11 @@
-use std::sync::Once;
-use sqlx::{PgPool, Pool, Postgres, Executor};
-use tinycongress_api::{graphql::{Round, Topic, Pairing, TopicRanking}, db};
+use sqlx::{PgPool, Executor};
+use tinycongress_api::db;
 use uuid::Uuid;
 
-static INIT: Once = Once::new();
 
-async fn setup_database() -> PgPool {
+async fn get_pool() -> PgPool {
     let database_url = std::env::var("DATABASE_URL")
-        .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:5432/prioritization_test".to_string());
+        .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:5432/tinycongress".to_string());
 
     // Use the application's database setup function
     let pool = db::setup_database(&database_url).await.unwrap();
@@ -23,20 +21,6 @@ async fn setup_database() -> PgPool {
     conn.execute("TRUNCATE TABLE topics CASCADE").await.unwrap();
 
     pool
-}
-
-async fn get_pool() -> PgPool {
-    static mut POOL: Option<PgPool> = None;
-
-    INIT.call_once(|| {
-        // This will ensure the setup only runs once
-        let rt = tokio::runtime::Runtime::new().unwrap();
-        unsafe {
-            POOL = Some(rt.block_on(setup_database()));
-        }
-    });
-
-    unsafe { POOL.as_ref().unwrap().clone() }
 }
 
 // Helper to insert a test topic
@@ -510,7 +494,7 @@ async fn test_active_round() {
     sqlx::query!("DELETE FROM rounds").execute(&pool).await.unwrap();
 
     // Create a completed round
-    let completed_round_id = insert_test_round(&pool, "completed").await;
+    let _completed_round_id = insert_test_round(&pool, "completed").await;
 
     // Create an active round
     let active_round_id = insert_test_round(&pool, "active").await;

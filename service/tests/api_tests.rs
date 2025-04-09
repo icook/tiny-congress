@@ -1,5 +1,5 @@
 use axum::{
-    body::Body,
+    body::{Body, to_bytes},
     http::{Request, StatusCode},
     Router,
     routing::get,
@@ -35,7 +35,7 @@ async fn test_graphql_playground() {
     assert_eq!(response.status(), StatusCode::OK);
     
     // Get the response body
-    let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
+    let body = to_bytes(response.into_body(), 1024 * 1024).await.unwrap();
     let body_str = String::from_utf8(body.to_vec()).unwrap();
     
     // Check that the response contains HTML for the GraphQL playground
@@ -64,7 +64,7 @@ async fn test_graphql_query() {
     assert_eq!(response.status(), StatusCode::OK);
     
     // Get the response body
-    let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
+    let body = to_bytes(response.into_body(), 1024 * 1024).await.unwrap();
     let body_str = String::from_utf8(body.to_vec()).unwrap();
     
     // Check that the response contains the expected data

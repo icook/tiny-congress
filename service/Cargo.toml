@@ -5,16 +5,16 @@ edition = "2021"
 
 [dependencies]
 # Web server
-axum = "0.6"
+axum = "0.8"
 tokio = { version = "1", features = ["full"] }
-tower = "0.4"
-tower-http = { version = "0.4", features = ["cors", "trace"] }
+tower = "0.5"
+tower-http = { version = "0.6", features = ["cors", "trace"] }
 tracing = "0.1"
 tracing-subscriber = "0.3"
 
 # GraphQL
-async-graphql = "5.0"
-async-graphql-axum = "5.0"
+async-graphql = "7.0"
+async-graphql-axum = "7.0"
 
 # Database
 sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "postgres", "chrono", "uuid", "json"] }
@@ -22,20 +22,20 @@ refinery = { version = "0.8", features = ["tokio-postgres"] }
 
 # Utilities
 chrono = { version = "0.4", features = ["serde"] }
-uuid = { version = "1.2", features = ["v4", "serde"] }
+uuid = { version = "1.16", features = ["v4", "serde"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 async-trait = "0.1"
 futures = "0.3"
-thiserror = "1.0"
+thiserror = "2.0"
 anyhow = "1.0"
-rand = "0.8"
-reqwest = { version = "0.11", features = ["json"] }
+rand = "0.9"
+reqwest = { version = "0.12", features = ["json"] }
 
 [dev-dependencies]
-hyper = "0.14"
+hyper = "1.6"
 sqlx-cli = "0.8.3"
-tower = { version = "0.4", features = ["util"] }
+tower = { version = "0.5", features = ["util"] }
 
 [[bin]]
 name = "client"

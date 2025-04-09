@@ -1,5 +1,5 @@
 use async_graphql::ID;
-use prioritization_room::graphql::{Round, Topic, Pairing, TopicRanking};
+use tinycongress_api::graphql::{Round, Topic, Pairing, TopicRanking};
 use chrono::Utc;
 
 #[test]

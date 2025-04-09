@@ -60,9 +60,9 @@ async fn main() -> Result<(), anyhow::Error> {
     let addr = SocketAddr::from(([0, 0, 0, 0], port));
     tracing::info!("Starting server at http://{}/graphql", addr);
 
-    axum::Server::bind(&addr)
-        .serve(app.into_make_service())
-        .await?;
+    // Updated server binding code
+    let listener = tokio::net::TcpListener::bind(addr).await?;
+    axum::serve(listener, app).await?;
 
     Ok(())
 }
