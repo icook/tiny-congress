@@ -1,4 +1,4 @@
-use sqlx::{PgPool, postgres::PgPoolOptions, Executor};
+use sqlx::{PgPool, postgres::PgPoolOptions};
 use std::time::Duration;
 
 /// Connect to the database and run migrations
@@ -9,13 +9,7 @@ pub async fn setup_database(database_url: &str) -> Result<PgPool, anyhow::Error>
         .acquire_timeout(Duration::from_secs(3))
         .connect(database_url)
         .await?;
-    
-    // Run migrations directly using SQLx
-    let mut conn = pool.acquire().await?;
-    
-    // Execute the migration SQL file
-    conn.execute(include_str!("../migrations/V1__initial_schema.sql")).await?;
-    
+
     Ok(pool)
 }
 
@@ -30,7 +24,7 @@ pub async fn get_active_round_count(pool: &PgPool) -> Result<i64, sqlx::Error> {
     )
     .fetch_one(pool)
     .await?;
-    
+
     Ok(result.count.unwrap_or(0))
 }
 
@@ -44,7 +38,7 @@ pub async fn create_seed_data(pool: &PgPool) -> Result<(), sqlx::Error> {
     .await?
     .count
     .unwrap_or(0);
-    
+
     if topics_count == 0 {
         // Create topics
         let topics = vec![
@@ -54,10 +48,10 @@ pub async fn create_seed_data(pool: &PgPool) -> Result<(), sqlx::Error> {
             ("Infrastructure", "Rebuild roads, bridges, and utilities"),
             ("Tax Reform", "Simplify tax code and close loopholes"),
         ];
-        
+
         for (title, description) in topics {
             let topic_id = uuid::Uuid::new_v4();
-            
+
             sqlx::query!(
                 r#"
                 INSERT INTO topics (id, title, description)
@@ -69,7 +63,7 @@ pub async fn create_seed_data(pool: &PgPool) -> Result<(), sqlx::Error> {
             )
             .execute(pool)
             .await?;
-            
+
             // Add to rankings
             sqlx::query!(
                 r#"
@@ -82,15 +76,15 @@ pub async fn create_seed_data(pool: &PgPool) -> Result<(), sqlx::Error> {
             .await?;
         }
     }
-    
+
     // Create active round if none exists
     let active_rounds = get_active_round_count(pool).await?;
-    
+
     if active_rounds == 0 {
         let round_id = uuid::Uuid::new_v4();
         let now = chrono::Utc::now();
         let end_time = now + chrono::Duration::minutes(10);
-        
+
         sqlx::query!(
             r#"
             INSERT INTO rounds (id, start_time, end_time, status)
@@ -103,7 +97,7 @@ pub async fn create_seed_data(pool: &PgPool) -> Result<(), sqlx::Error> {
         )
         .execute(pool)
         .await?;
-        
+
         // Create pairings for the round
         let topics = sqlx::query!(
             r#"
@@ -114,11 +108,11 @@ pub async fn create_seed_data(pool: &PgPool) -> Result<(), sqlx::Error> {
         )
         .fetch_all(pool)
         .await?;
-        
+
         if topics.len() >= 2 {
             // Create at least one pairing
             let pairing_id = uuid::Uuid::new_v4();
-            
+
             sqlx::query!(
                 r#"
                 INSERT INTO pairings (id, round_id, topic_a_id, topic_b_id)
@@ -133,6 +127,6 @@ pub async fn create_seed_data(pool: &PgPool) -> Result<(), sqlx::Error> {
             .await?;
         }
     }
-    
+
     Ok(())
 }

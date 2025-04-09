@@ -1,19 +1,22 @@
-FROM rust:1.68 as builder
+FROM rust:1.86 as builder
 
 WORKDIR /usr/src/app
 COPY . .
 
+RUN cargo install sqlx-cli
+RUN cargo sqlx prepare --check
 RUN cargo build --release
 
 FROM debian:bullseye-slim
 
 RUN apt-get update \
-    && apt-get install -y ca-certificates libpq5 libssl1.1 \
-    && rm -rf /var/lib/apt/lists/*
+  && apt-get install -y ca-certificates libpq5 libssl1.1 \
+  && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /usr/src/app/target/release/prioritization_room /usr/local/bin/
 COPY --from=builder /usr/src/app/target/release/client /usr/local/bin/
 
-ENV DATABASE_URL=postgres://postgres:postgres@postgres:5432/prioritization
+ENV SQLX_OFFLINE=true
+# ENV DATABASE_URL=postgres://postgres:postgres@postgres:5432/prioritization
 
 CMD ["prioritization_room"]

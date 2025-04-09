@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        WITH ranked_topics AS (\n            SELECT \n                topic_id, \n                score,\n                RANK() OVER (ORDER BY score DESC) as new_rank\n            FROM topic_rankings\n        )\n        UPDATE topic_rankings tr\n        SET rank = rt.new_rank\n        FROM ranked_topics rt\n        WHERE tr.topic_id = rt.topic_id\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "fa24159c51028a1a53571679a9081caffb3f7e5ce8d9e6e3ad68d2c628400b56"
+}

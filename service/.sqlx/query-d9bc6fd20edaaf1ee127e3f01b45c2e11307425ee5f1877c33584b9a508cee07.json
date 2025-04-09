@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO topic_rankings (topic_id, rank, score)\n        VALUES ($1, 0, 1500.0)\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d9bc6fd20edaaf1ee127e3f01b45c2e11307425ee5f1877c33584b9a508cee07"
+}
