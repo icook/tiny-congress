@@ -1,0 +1,40 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: prioritization-room
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8080
+    targetPort: 8080
+  selector:
+    app: prioritization-room
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prioritization-room
+spec:
+  selector:
+    matchLabels:
+      app: prioritization-room
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: prioritization-room
+    spec:
+      containers:
+      - name: prioritization-room
+        image: prioritization-room
+        ports:
+        - containerPort: 8080
+        env:
+        - name: DATABASE_URL
+          value: postgres://postgres:postgres@postgres:5432/prioritization
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 5
