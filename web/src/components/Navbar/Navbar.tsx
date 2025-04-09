@@ -10,7 +10,7 @@ import {
   IconMessages,
 } from '@tabler/icons-react';
 import { Link, useLocation } from 'react-router-dom';
-import { Box, Group, Text, Title, UnstyledButton } from '@mantine/core';
+import { Box, Group, Text, UnstyledButton } from '@mantine/core';
 import classes from './Navbar.module.css';
 
 const navLinks = [
@@ -45,7 +45,7 @@ export function Navbar() {
       data-active={link.label === active || currentPath === link.path || undefined}
       key={link.label}
     >
-      <Group spacing="sm">
+      <Group gap="sm">
         <link.icon size={20} stroke={1.5} />
         <Text>{link.label}</Text>
       </Group>

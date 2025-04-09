@@ -12,10 +12,10 @@ import {
   Slider,
   Accordion,
   Tooltip,
-  ThemeIcon,
   ActionIcon,
   Transition,
   rem,
+  MantineTheme,
 } from '@mantine/core';
 import {
   IconChevronRight,
@@ -67,7 +67,9 @@ export interface Thread {
 // Custom hook for timer
 const useInterval = (callback: () => void, delay: number | null) => {
   useEffect(() => {
-    if (delay === null) return;
+    if (delay === null) {
+      return;
+    }
     const id = setInterval(callback, delay);
     return () => clearInterval(id);
   }, [callback, delay]);
@@ -76,12 +78,12 @@ const useInterval = (callback: () => void, delay: number | null) => {
 // Component to display a vote slider for a specific dimension
 function DimensionVoteSlider({
   dimension,
-  branchId,
+  _branchId,
   initialValue = 0,
   onVote,
 }: {
   dimension: Dimension;
-  branchId: string;
+  _branchId: string;
   initialValue?: number;
   onVote: (dimensionId: string, value: number) => void;
 }) {
@@ -89,7 +91,7 @@ function DimensionVoteSlider({
 
   return (
     <Box mb="xs">
-      <Group mb={5} position="apart">
+      <Group mb={5} justify="space-between">
         <Text size="sm" fw={500}>{dimension.name}</Text>
         <Badge variant="light" size="sm">{value}</Badge>
       </Group>
@@ -144,7 +146,9 @@ function Branch({
 
   const handleExpand = () => {
     setExpanded(!expanded);
-    if (onExpand) onExpand();
+    if (onExpand) {
+      onExpand();
+    }
   };
 
   // Display branch differently based on its status
@@ -155,15 +159,17 @@ function Branch({
       padding={isMainBranch ? "md" : "sm"}
       radius="md"
       mb="md"
-      sx={(theme) => ({
-        borderLeft: isSelected ? `${rem(4)} solid ${theme.colors.blue[5]}` : undefined,
-        opacity: !isViable && !isSelected ? 0.7 : 1,
-        backgroundColor: isMainBranch ? theme.colorScheme === 'dark' ? theme.colors.dark[7] : theme.colors.gray[0] : undefined,
-        maxWidth: isMainBranch ? '100%' : '95%',
-        marginLeft: isMainBranch ? 0 : 'auto',
-      })}
+      styles={{
+        root: (theme: MantineTheme) => ({
+          borderLeft: isSelected ? `${rem(4)} solid ${theme.colors.blue[5]}` : undefined,
+          opacity: !isViable && !isSelected ? 0.7 : 1,
+          backgroundColor: isMainBranch ? theme.colors.gray[0] : undefined,
+          maxWidth: isMainBranch ? '100%' : '95%',
+          marginLeft: isMainBranch ? 0 : 'auto',
+        })
+      }}
     >
-      <Group position="apart" mb="xs">
+      <Group justify="space-between" mb="xs">
         <Group>
           <Avatar 
             src={author.avatar} 
@@ -174,8 +180,8 @@ function Branch({
             {author.name.charAt(0)}
           </Avatar>
           <div>
-            <Text weight={500}>{author.name}</Text>
-            <Group spacing="xs">
+            <Text fw={500}>{author.name}</Text>
+            <Group gap="xs">
               <Text size="xs" color="dimmed">
                 {formattedTime}
               </Text>
@@ -192,7 +198,7 @@ function Branch({
           </div>
         </Group>
         
-        <Group spacing="xs">
+        <Group gap="xs">
           <Badge 
             leftSection={averageScore > 0 ? <IconThumbUp size={12} /> : averageScore < 0 ? <IconThumbDown size={12} /> : null}
             color={averageScore > 0 ? 'green' : averageScore < 0 ? 'red' : 'gray'}
@@ -227,12 +233,12 @@ function Branch({
           <Accordion.Item value="votes">
             <Accordion.Control>Rate this response</Accordion.Control>
             <Accordion.Panel>
-              <Stack spacing="xs">
+              <Stack gap="xs">
                 {dimensions.map((dimension) => (
                   <DimensionVoteSlider
                     key={dimension.id}
                     dimension={dimension}
-                    branchId={branch.id}
+                    _branchId={branch.id}
                     onVote={(dimensionId, value) => onVote(branch.id, dimensionId, value)}
                   />
                 ))}
@@ -285,16 +291,16 @@ export function ThreadedConversation({ thread }: { thread: Thread }) {
             value
           };
           return { ...branch, votes: updatedVotes };
-        } else {
-          // Add new vote
-          return {
-            ...branch,
-            votes: [
-              ...branch.votes,
-              { userId: 'current-user', dimension: dimensionId, value }
-            ]
-          };
         }
+        
+        // Add new vote
+        return {
+          ...branch,
+          votes: [
+            ...branch.votes,
+            { userId: 'current-user', dimension: dimensionId, value }
+          ]
+        };
       }
       return branch;
     });
@@ -342,7 +348,9 @@ export function ThreadedConversation({ thread }: { thread: Thread }) {
       branch => !branch.isSelected && !branch.isHidden && branch.isViable
     );
     
-    if (currentLevelBranches.length === 0) return;
+    if (currentLevelBranches.length === 0) {
+      return;
+    }
     
     // Find branch with highest score
     let highestRatedBranch = currentLevelBranches[0];
@@ -362,7 +370,9 @@ export function ThreadedConversation({ thread }: { thread: Thread }) {
 
   // Helper function to calculate a branch's score based on votes
   const calculateBranchScore = (branch: ConversationBranch): number => {
-    if (branch.votes.length === 0) return 0;
+    if (branch.votes.length === 0) {
+      return 0;
+    }
     
     return branch.votes.reduce((sum, vote) => sum + vote.value, 0) / branch.votes.length;
   };
@@ -389,7 +399,9 @@ export function ThreadedConversation({ thread }: { thread: Thread }) {
         b.parentId === currentParentId && (!b.isHidden || b.isSelected)
       );
       
-      if (childBranches.length === 0) break;
+      if (childBranches.length === 0) {
+        break;
+      }
       
       result.push(childBranches);
       
@@ -410,10 +422,10 @@ export function ThreadedConversation({ thread }: { thread: Thread }) {
   return (
     <Stack>
       <Paper p="md" withBorder>
-        <Group position="apart">
-          <Text size="xl" weight={700}>{activeThread.title}</Text>
+        <Group justify="space-between">
+          <Text size="xl" fw={700}>{activeThread.title}</Text>
           {timeUntilNextSelection !== null && (
-            <Group spacing="xs">
+            <Group gap="xs">
               <IconClock size={16} />
               <Text size="sm">
                 Next selection in: {formatTimeRemaining(timeUntilNextSelection)}
@@ -431,7 +443,7 @@ export function ThreadedConversation({ thread }: { thread: Thread }) {
               key={branch.id}
               branch={branch}
               dimensions={activeThread.dimensions}
-              isMainBranch={true}
+              isMainBranch
               onVote={handleVote}
             />
           ))}
@@ -460,10 +472,10 @@ export function ThreadedConversation({ thread }: { thread: Thread }) {
       ))}
       
       {activeThread.activeInterval !== null && (
-        <Group position="center" mt="md">
+        <Group justify="center" mt="md">
           <Button
             variant="outline"
-            leftIcon={<IconArrowBack size={16} />}
+            leftSection={<IconArrowBack size={16} />}
             onClick={() => {
               // Reset the timer
               setTimeUntilNextSelection(activeThread.activeInterval);
@@ -473,7 +485,7 @@ export function ThreadedConversation({ thread }: { thread: Thread }) {
           </Button>
           <Button
             color="blue"
-            leftIcon={<IconArrowForward size={16} />}
+            leftSection={<IconArrowForward size={16} />}
             onClick={selectHighestRatedBranch}
           >
             Select Top Branch Now
