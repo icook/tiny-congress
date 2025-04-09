@@ -6,7 +6,7 @@ use axum::{
     Extension,
 };
 use async_graphql::{EmptySubscription, Schema};
-use prioritization_room::graphql::{QueryRoot, MutationRoot, graphql_playground, graphql_handler};
+use tinycongress_api::graphql::{QueryRoot, MutationRoot, graphql_playground, graphql_handler};
 use tower::ServiceExt;
 
 fn create_test_app() -> Router {

@@ -1,6 +1,6 @@
 use async_graphql::{Schema, EmptySubscription};
 use serde_json::Value;
-use prioritization_room::graphql::{QueryRoot, MutationRoot};
+use tinycongress_api::graphql::{QueryRoot, MutationRoot};
 
 async fn execute_query(query: &str) -> Value {
     let schema = Schema::build(QueryRoot, MutationRoot, EmptySubscription).finish();

@@ -1,6 +1,3 @@
-mod db;
-mod graphql;
-
 use axum::{
     routing::get,
     Router,
@@ -10,7 +7,7 @@ use axum::{
 };
 use std::net::SocketAddr;
 use async_graphql::{EmptySubscription, Schema};
-use prioritization_room::{
+use tinycongress_api::{
     graphql::{QueryRoot, MutationRoot, graphql_playground, graphql_handler},
     db::{setup_database, create_seed_data},
 };

@@ -13,10 +13,9 @@ RUN apt-get update \
   && apt-get install -y ca-certificates libpq5 libssl1.1 \
   && rm -rf /var/lib/apt/lists/*
 
-COPY --from=builder /usr/src/app/target/release/prioritization_room /usr/local/bin/
+COPY --from=builder /usr/src/app/target/release/tinycongress-api /usr/local/bin/
 COPY --from=builder /usr/src/app/target/release/client /usr/local/bin/
 
 ENV SQLX_OFFLINE=true
-# ENV DATABASE_URL=postgres://postgres:postgres@postgres:5432/prioritization
 
-CMD ["prioritization_room"]
+CMD ["tinycongress-api"]
