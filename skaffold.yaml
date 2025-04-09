@@ -3,6 +3,7 @@ kind: Config
 metadata:
   name: prioritization-room
 build:
+  platforms: ["linux/arm64"]
   artifacts:
     - image: tc-api
       context: ./service/
@@ -11,11 +12,15 @@ build:
     - image: postgres
       context: .
       docker:
-        dockerfile: ./dockerfiles/Dockerfile.frontend-dev
-    - image: tc-ui
-      context: ./web
+        dockerfile: ./dockerfiles/Dockerfile.postgres
+    - image: tc-ui-dev
+      context: ./web/
       docker:
         dockerfile: ./dockerfiles/Dockerfile.frontend-dev
+    - image: tc-ui-release
+      context: ./web/
+      docker:
+        dockerfile: ./dockerfiles/Dockerfile.frontend
 deploy:
   kubectl:
     manifests:

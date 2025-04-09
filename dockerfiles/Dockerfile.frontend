@@ -1,29 +1,31 @@
 # Build stage
-FROM node:20-alpine AS builder
+FROM node:20-slim AS builder
 WORKDIR /app
-COPY web/package.json web/package-lock.json ./web/
-# RUN npm ci
-COPY ./web .
-RUN npm run build
+
+# Install latest stable yarn
+RUN corepack enable && corepack prepare yarn@stable --activate
+
+# Install dependencies
+COPY .yarn ./.yarn
+COPY package.json yarn.lock .yarnrc.yml ./
+RUN yarn install --immutable
+
+# build
+COPY . ./
+RUN yarn build
 
 # Production stage
-FROM node:20-alpine AS runner
-WORKDIR /app
+FROM nginx:alpine
+WORKDIR /usr/share/nginx/html
 
-ENV NODE_ENV=production
+# Copy static assets from builder
+COPY --from=builder /app/dist/ ./
 
-# Copy only necessary files from builder
-COPY --from=builder /app/web/next.config.js ./
-COPY --from=builder /app/web/public ./public
-COPY --from=builder /app/web/package.json ./package.json
-COPY --from=builder /app/web/.next/standalone ./
-COPY --from=builder /app/web/.next/static ./.next/static
+# Copy custom nginx config if needed
+# COPY nginx.conf /etc/nginx/conf.d/default.conf
 
 # Expose port
-EXPOSE 3000
+EXPOSE 80
 
-# Set the user to non-root
-USER node
-
-# Start the application
-CMD ["node", "server.js"]
+# Start nginx
+CMD ["nginx", "-g", "daemon off;"]

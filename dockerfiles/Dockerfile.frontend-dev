@@ -1,14 +1,17 @@
 # Development stage
-FROM node:20-alpine
+FROM node:20-slim
 WORKDIR /app
 
+# Install latest stable yarn
+RUN corepack enable && corepack prepare yarn@stable --activate
+
 # Install dependencies only (maximize cache usage)
-COPY web/package.json web/package-lock.json ./web/
-WORKDIR /app/web
-RUN npm install
+COPY .yarn ./.yarn
+COPY package.json yarn.lock .yarnrc.yml ./
+RUN yarn install --immutable
 
 # Copy source code
-COPY web .
+COPY . ./
 # Development environment setup
 ENV NODE_ENV=development
 ENV PORT=3000
@@ -20,4 +23,4 @@ EXPOSE 3000
 WORKDIR /app/web
 
 # Start Next.js in development mode
-CMD ["npm", "run", "dev"]
+CMD ["yarn", "dev"]
