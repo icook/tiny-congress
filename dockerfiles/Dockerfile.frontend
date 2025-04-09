@@ -2,9 +2,6 @@
 FROM node:20-slim AS builder
 WORKDIR /app
 
-# Install latest stable yarn
-RUN corepack enable && corepack prepare yarn@stable --activate
-
 # Install dependencies
 COPY .yarn ./.yarn
 COPY package.json yarn.lock .yarnrc.yml ./
