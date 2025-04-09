@@ -5,9 +5,9 @@ import {
   IconFingerprint,
   IconGauge,
   IconHome2,
+  IconMessages,
   IconSettings,
   IconUser,
-  IconMessages,
 } from '@tabler/icons-react';
 import { Link, useLocation } from 'react-router-dom';
 import { Box, Group, Text, UnstyledButton } from '@mantine/core';
@@ -31,7 +31,8 @@ export function Navbar() {
   // Find active link based on current path
   const currentLink =
     navLinks.find(
-      (link) => link.path === currentPath || (link.path !== '/' && currentPath.startsWith(link.path))
+      (link) =>
+        link.path === currentPath || (link.path !== '/' && currentPath.startsWith(link.path))
     ) || navLinks[0];
 
   const [active, setActive] = useState(currentLink.label);
@@ -59,10 +60,8 @@ export function Navbar() {
           <img src="/src/logo.png" alt="Logo" className={classes.logo} />
         </Box>
       </div>
-      
-      <div className={classes.navLinks}>
-        {links}
-      </div>
+
+      <div className={classes.navLinks}>{links}</div>
     </nav>
   );
 }

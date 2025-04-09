@@ -1,30 +1,30 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import {
-  Paper,
-  Text,
-  Stack,
-  Group,
+  IconArrowBack,
+  IconArrowForward,
+  IconChevronRight,
+  IconClock,
+  IconThumbDown,
+  IconThumbUp,
+} from '@tabler/icons-react';
+import {
+  Accordion,
+  ActionIcon,
   Avatar,
   Badge,
   Box,
-  Card,
   Button,
-  Slider,
-  Accordion,
-  Tooltip,
-  ActionIcon,
-  Transition,
-  rem,
+  Card,
+  Group,
   MantineTheme,
+  Paper,
+  rem,
+  Slider,
+  Stack,
+  Text,
+  Tooltip,
+  Transition,
 } from '@mantine/core';
-import {
-  IconChevronRight,
-  IconArrowBack,
-  IconArrowForward,
-  IconThumbUp,
-  IconThumbDown,
-  IconClock,
-} from '@tabler/icons-react';
 
 // Types for our conversation system
 export interface Dimension {
@@ -92,8 +92,12 @@ function DimensionVoteSlider({
   return (
     <Box mb="xs">
       <Group mb={5} justify="space-between">
-        <Text size="sm" fw={500}>{dimension.name}</Text>
-        <Badge variant="light" size="sm">{value}</Badge>
+        <Text size="sm" fw={500}>
+          {dimension.name}
+        </Text>
+        <Badge variant="light" size="sm">
+          {value}
+        </Badge>
       </Group>
       <Slider
         marks={[
@@ -134,14 +138,15 @@ function Branch({
   const { author, content, timestamp, isSelected, isViable } = branch;
 
   // Calculate average vote score across all dimensions
-  const averageScore = branch.votes.length > 0
-    ? branch.votes.reduce((sum, vote) => sum + vote.value, 0) / branch.votes.length
-    : 0;
+  const averageScore =
+    branch.votes.length > 0
+      ? branch.votes.reduce((sum, vote) => sum + vote.value, 0) / branch.votes.length
+      : 0;
 
   // Format the timestamp
-  const formattedTime = new Date(timestamp).toLocaleTimeString([], { 
-    hour: '2-digit', 
-    minute: '2-digit' 
+  const formattedTime = new Date(timestamp).toLocaleTimeString([], {
+    hour: '2-digit',
+    minute: '2-digit',
   });
 
   const handleExpand = () => {
@@ -155,8 +160,8 @@ function Branch({
   return (
     <Card
       withBorder
-      shadow={isMainBranch ? "md" : "sm"}
-      padding={isMainBranch ? "md" : "sm"}
+      shadow={isMainBranch ? 'md' : 'sm'}
+      padding={isMainBranch ? 'md' : 'sm'}
       radius="md"
       mb="md"
       styles={{
@@ -166,17 +171,12 @@ function Branch({
           backgroundColor: isMainBranch ? theme.colors.gray[0] : undefined,
           maxWidth: isMainBranch ? '100%' : '95%',
           marginLeft: isMainBranch ? 0 : 'auto',
-        })
+        }),
       }}
     >
       <Group justify="space-between" mb="xs">
         <Group>
-          <Avatar 
-            src={author.avatar} 
-            radius="xl" 
-            size="md"
-            color={author.isAI ? "blue" : "red"}
-          >
+          <Avatar src={author.avatar} radius="xl" size="md" color={author.isAI ? 'blue' : 'red'}>
             {author.name.charAt(0)}
           </Avatar>
           <div>
@@ -186,34 +186,41 @@ function Branch({
                 {formattedTime}
               </Text>
               {author.isAI && (
-                <Badge size="xs" variant="outline" color="blue">AI</Badge>
+                <Badge size="xs" variant="outline" color="blue">
+                  AI
+                </Badge>
               )}
               {isSelected && (
-                <Badge size="xs" color="green">Selected</Badge>
+                <Badge size="xs" color="green">
+                  Selected
+                </Badge>
               )}
               {!isSelected && isViable && (
-                <Badge size="xs" color="yellow">Viable</Badge>
+                <Badge size="xs" color="yellow">
+                  Viable
+                </Badge>
               )}
             </Group>
           </div>
         </Group>
-        
+
         <Group gap="xs">
-          <Badge 
-            leftSection={averageScore > 0 ? <IconThumbUp size={12} /> : averageScore < 0 ? <IconThumbDown size={12} /> : null}
+          <Badge
+            leftSection={
+              averageScore > 0 ? (
+                <IconThumbUp size={12} />
+              ) : averageScore < 0 ? (
+                <IconThumbDown size={12} />
+              ) : null
+            }
             color={averageScore > 0 ? 'green' : averageScore < 0 ? 'red' : 'gray'}
           >
             {averageScore.toFixed(1)}
           </Badge>
-          
+
           {!isMainBranch && (
             <Tooltip label="Select this branch">
-              <ActionIcon 
-                onClick={onSelect} 
-                variant="light" 
-                color="blue"
-                disabled={isSelected}
-              >
+              <ActionIcon onClick={onSelect} variant="light" color="blue" disabled={isSelected}>
                 <IconChevronRight size={18} />
               </ActionIcon>
             </Tooltip>
@@ -221,15 +228,12 @@ function Branch({
         </Group>
       </Group>
 
-      <Text size={isMainBranch ? "md" : "sm"} mb="md">
+      <Text size={isMainBranch ? 'md' : 'sm'} mb="md">
         {content}
       </Text>
 
       {!isMainBranch && (
-        <Accordion 
-          value={expanded ? 'votes' : null} 
-          onChange={() => handleExpand()}
-        >
+        <Accordion value={expanded ? 'votes' : null} onChange={() => handleExpand()}>
           <Accordion.Item value="votes">
             <Accordion.Control>Rate this response</Accordion.Control>
             <Accordion.Panel>
@@ -272,69 +276,66 @@ export function ThreadedConversation({ thread }: { thread: Thread }) {
 
   // Organize branches by their parent-child relationships
   const organizedBranches = organizeBranches(activeThread.branches);
-  
+
   // Handler for voting on a branch
   const handleVote = (branchId: string, dimensionId: string, value: number) => {
     // Find the branch to update
-    const updatedBranches = activeThread.branches.map(branch => {
+    const updatedBranches = activeThread.branches.map((branch) => {
       if (branch.id === branchId) {
         // Check if there's already a vote for this dimension
         const existingVoteIndex = branch.votes.findIndex(
-          vote => vote.dimension === dimensionId && vote.userId === 'current-user'
+          (vote) => vote.dimension === dimensionId && vote.userId === 'current-user'
         );
-        
+
         if (existingVoteIndex >= 0) {
           // Update existing vote
           const updatedVotes = [...branch.votes];
           updatedVotes[existingVoteIndex] = {
             ...updatedVotes[existingVoteIndex],
-            value
+            value,
           };
           return { ...branch, votes: updatedVotes };
         }
-        
+
         // Add new vote
         return {
           ...branch,
-          votes: [
-            ...branch.votes,
-            { userId: 'current-user', dimension: dimensionId, value }
-          ]
+          votes: [...branch.votes, { userId: 'current-user', dimension: dimensionId, value }],
         };
       }
       return branch;
     });
-    
+
     setActiveThread({
       ...activeThread,
-      branches: updatedBranches
+      branches: updatedBranches,
     });
   };
 
   // Select a branch manually
   const handleSelectBranch = (branchId: string) => {
     // Mark the selected branch and update viable branches
-    const updatedBranches = activeThread.branches.map(branch => {
+    const updatedBranches = activeThread.branches.map((branch) => {
       if (branch.id === branchId) {
         return { ...branch, isSelected: true };
       } else if (branch.parentId === getParentIdForBranch(branchId)) {
         // For branches with the same parent, determine if they should remain viable
         const shouldRemainViable = calculateBranchScore(branch) > 0;
-        return { 
-          ...branch, 
+        return {
+          ...branch,
           isSelected: false,
           isViable: shouldRemainViable,
-          isHidden: !shouldRemainViable && branch.id !== branchId
+          isHidden: !shouldRemainViable && branch.id !== branchId,
         };
       }
       return branch;
     });
-    
+
     setActiveThread({
       ...activeThread,
-      branches: updatedBranches
+      branches: updatedBranches,
     });
-    
+
     // Reset the timer if we're on automatic mode
     if (activeThread.activeInterval !== null) {
       setTimeUntilNextSelection(activeThread.activeInterval);
@@ -345,25 +346,25 @@ export function ThreadedConversation({ thread }: { thread: Thread }) {
   const selectHighestRatedBranch = () => {
     // Get all viable branches that are not yet selected
     const currentLevelBranches = activeThread.branches.filter(
-      branch => !branch.isSelected && !branch.isHidden && branch.isViable
+      (branch) => !branch.isSelected && !branch.isHidden && branch.isViable
     );
-    
+
     if (currentLevelBranches.length === 0) {
       return;
     }
-    
+
     // Find branch with highest score
     let highestRatedBranch = currentLevelBranches[0];
     let highestScore = calculateBranchScore(highestRatedBranch);
-    
-    currentLevelBranches.forEach(branch => {
+
+    currentLevelBranches.forEach((branch) => {
       const score = calculateBranchScore(branch);
       if (score > highestScore) {
         highestRatedBranch = branch;
         highestScore = score;
       }
     });
-    
+
     // Select the highest rated branch
     handleSelectBranch(highestRatedBranch.id);
   };
@@ -373,43 +374,43 @@ export function ThreadedConversation({ thread }: { thread: Thread }) {
     if (branch.votes.length === 0) {
       return 0;
     }
-    
+
     return branch.votes.reduce((sum, vote) => sum + vote.value, 0) / branch.votes.length;
   };
 
   // Helper to get the parent ID for a branch
   const getParentIdForBranch = (branchId: string): string | null => {
-    const branch = activeThread.branches.find(b => b.id === branchId);
+    const branch = activeThread.branches.find((b) => b.id === branchId);
     return branch ? branch.parentId : null;
   };
 
   // Helper function to organize branches into a threaded structure
   function organizeBranches(branches: ConversationBranch[]): ConversationBranch[][] {
     const result: ConversationBranch[][] = [];
-    const rootBranches = branches.filter(b => b.parentId === null);
-    
+    const rootBranches = branches.filter((b) => b.parentId === null);
+
     // Add root branches
     result.push(rootBranches);
-    
+
     // Now build the thread by following selected branches
-    let currentParentId: string | null = rootBranches.find(b => b.isSelected)?.id || null;
-    
+    let currentParentId: string | null = rootBranches.find((b) => b.isSelected)?.id || null;
+
     while (currentParentId !== null) {
-      const childBranches = branches.filter(b => 
-        b.parentId === currentParentId && (!b.isHidden || b.isSelected)
+      const childBranches = branches.filter(
+        (b) => b.parentId === currentParentId && (!b.isHidden || b.isSelected)
       );
-      
+
       if (childBranches.length === 0) {
         break;
       }
-      
+
       result.push(childBranches);
-      
+
       // Find the next selected branch
-      const nextSelected = childBranches.find(b => b.isSelected);
+      const nextSelected = childBranches.find((b) => b.isSelected);
       currentParentId = nextSelected?.id || null;
     }
-    
+
     return result;
   }
 
@@ -423,7 +424,9 @@ export function ThreadedConversation({ thread }: { thread: Thread }) {
     <Stack>
       <Paper p="md" withBorder>
         <Group justify="space-between">
-          <Text size="xl" fw={700}>{activeThread.title}</Text>
+          <Text size="xl" fw={700}>
+            {activeThread.title}
+          </Text>
           {timeUntilNextSelection !== null && (
             <Group gap="xs">
               <IconClock size={16} />
@@ -434,43 +437,47 @@ export function ThreadedConversation({ thread }: { thread: Thread }) {
           )}
         </Group>
       </Paper>
-      
+
       {organizedBranches.map((levelBranches, level) => (
         <Box key={`level-${level}`} pl={level > 0 ? 20 : 0}>
           {/* Display selected branch for this level as main */}
-          {levelBranches.filter(b => b.isSelected).map(branch => (
-            <Branch
-              key={branch.id}
-              branch={branch}
-              dimensions={activeThread.dimensions}
-              isMainBranch
-              onVote={handleVote}
-            />
-          ))}
-          
+          {levelBranches
+            .filter((b) => b.isSelected)
+            .map((branch) => (
+              <Branch
+                key={branch.id}
+                branch={branch}
+                dimensions={activeThread.dimensions}
+                isMainBranch
+                onVote={handleVote}
+              />
+            ))}
+
           {/* Display other branches (viable alternatives) */}
-          {levelBranches.filter(b => !b.isSelected && !b.isHidden).map(branch => (
-            <Transition
-              key={branch.id}
-              mounted={!branch.isHidden}
-              transition="fade"
-              duration={400}
-            >
-              {(styles) => (
-                <div style={styles}>
-                  <Branch
-                    branch={branch}
-                    dimensions={activeThread.dimensions}
-                    onVote={handleVote}
-                    onSelect={() => handleSelectBranch(branch.id)}
-                  />
-                </div>
-              )}
-            </Transition>
-          ))}
+          {levelBranches
+            .filter((b) => !b.isSelected && !b.isHidden)
+            .map((branch) => (
+              <Transition
+                key={branch.id}
+                mounted={!branch.isHidden}
+                transition="fade"
+                duration={400}
+              >
+                {(styles) => (
+                  <div style={styles}>
+                    <Branch
+                      branch={branch}
+                      dimensions={activeThread.dimensions}
+                      onVote={handleVote}
+                      onSelect={() => handleSelectBranch(branch.id)}
+                    />
+                  </div>
+                )}
+              </Transition>
+            ))}
         </Box>
       ))}
-      
+
       {activeThread.activeInterval !== null && (
         <Group justify="center" mt="md">
           <Button
