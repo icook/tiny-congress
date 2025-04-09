@@ -1,0 +1,24 @@
+FROM postgres:15
+
+# Install build dependencies for postgres extensions
+RUN apt-get update \
+    && apt-get install -y postgresql-server-dev-15 pgxnclient \
+    libicu-dev build-essential
+
+# Install the pg_trgm extension (included in contrib)
+RUN apt-get install -y postgresql-contrib
+
+# Install pgmq extension using pgxn
+RUN pgxn install pgmq
+
+# Set environment variables
+ENV POSTGRES_USER=postgres
+ENV POSTGRES_PASSWORD=postgres
+ENV POSTGRES_DB=tinycongress
+
+# Create extension setup script
+RUN echo "CREATE EXTENSION IF NOT EXISTS pgmq;" > /docker-entrypoint-initdb.d/init-extensions.sql
+
+EXPOSE 5432
+
+CMD ["postgres"]
