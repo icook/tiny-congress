@@ -5,10 +5,14 @@ metadata:
 build:
   platforms: ["linux/arm64"]
   artifacts:
-    - image: tc-api
+    - image: tc-api-release
       context: ./service/
       docker:
         dockerfile: ./dockerfiles/Dockerfile.backend
+    - image: tc-api-dev
+      context: ./service/
+      docker:
+        dockerfile: ./dockerfiles/Dockerfile.backend-dev
     - image: postgres
       context: .
       docker:
@@ -22,9 +26,20 @@ build:
       docker:
         dockerfile: ./dockerfiles/Dockerfile.frontend
 deploy:
-  kubectl:
-    manifests:
-      - k8s/*.yaml
+  helm:
+    releases:
+      - name: tc
+        chartPath: kube/app
+        valuesFiles:
+          - kube/app/values.yaml
+        version: 0.1.0
+test:
+  - image: tc-api-dev
+    custom:
+      - command: cd service && cargo test -- --test-threads=1 --nocapture
+  - image: tc-ui-dev
+    custom:
+      - command: cd web && yarn test
 profiles:
   - name: dev
     build:
@@ -32,14 +47,3 @@ profiles:
         push: false
     deploy:
       kubectl: {}
-  - name: test
-    build:
-      local:
-        push: false
-    test:
-      - image: tc-api
-        custom:
-          command: cargo test --test integration_tests -- --test-threads=1 --nocapture
-          env:
-            - name: DATABASE_URL
-              value: postgres://postgres:postgres@postgres:5432/prioritization_test
