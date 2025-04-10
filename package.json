@@ -1,0 +1,24 @@
+{
+  "name": "tiny-congress",
+  "version": "1.0.0",
+  "description": "A simple 11ty landing page",
+  "main": "index.js",
+  "scripts": {
+    "start": "eleventy --serve",
+    "build": "eleventy"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/icook/tiny-congress.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/icook/tiny-congress/issues"
+  },
+  "homepage": "https://github.com/icook/tiny-congress#readme",
+  "dependencies": {
+    "@11ty/eleventy": "^3.0.0"
+  }
+}
