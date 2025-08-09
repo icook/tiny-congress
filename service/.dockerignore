@@ -2,13 +2,6 @@
 /target/
 
 # VCS / Editors / OS
-.git
-.gitignore
 .idea/
 .vscode/
 .DS_Store
-
-# Coverage / logs
-coverage/
-*.log
-**/*.log
