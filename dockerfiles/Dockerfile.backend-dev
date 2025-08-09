@@ -1,29 +1,32 @@
 FROM rust:1.86 as builder
 
 WORKDIR /usr/src/app
+ENV CARGO_HOME=/usr/local/cargo
+ENV CARGO_TARGET_DIR=/usr/src/app/target
 
 # 1. Copy manifests and fetch dependencies
 COPY Cargo.toml Cargo.lock ./
 RUN mkdir src && echo "fn main() {}" > src/main.rs
 RUN --mount=type=cache,target=/usr/src/app/target \
-  --mount=type=cache,target=/root/.cargo/registry \
+  --mount=type=cache,target=/usr/local/cargo/registry \
+  --mount=type=cache,target=/usr/local/cargo/git \
   cargo build --release --bin tinycongress-api
 RUN rm -rf src
 
 # 2. Copy source and build
 COPY . .
 RUN --mount=type=cache,target=/usr/src/app/target \
-  --mount=type=cache,target=/root/.cargo/registry \
+  --mount=type=cache,target=/usr/local/cargo/registry \
+  --mount=type=cache,target=/usr/local/cargo/git \
   cargo install sqlx-cli --locked --features postgres
 RUN --mount=type=cache,target=/usr/src/app/target \
-  --mount=type=cache,target=/root/.cargo/registry \
+  --mount=type=cache,target=/usr/local/cargo/registry \
+  --mount=type=cache,target=/usr/local/cargo/git \
   cargo sqlx prepare --check
 RUN --mount=type=cache,target=/usr/src/app/target \
-  --mount=type=cache,target=/root/.cargo/registry \
-  cargo build
-
-# Install the dev-built binary to a stable path on PATH
-RUN install -m 0755 target/debug/tinycongress-api /usr/local/bin/tinycongress-api
+  --mount=type=cache,target=/usr/local/cargo/registry \
+  --mount=type=cache,target=/usr/local/cargo/git \
+  sh -ec 'cargo build --bin tinycongress-api && install -m 0755 target/debug/tinycongress-api /usr/local/bin/tinycongress-api'
 
 # Default command: run the dev-built binary from PATH
 CMD ["tinycongress-api"]
