@@ -1,8 +1,29 @@
 FROM rust:1.86 as builder
 
 WORKDIR /usr/src/app
-COPY . .
 
-RUN cargo install sqlx-cli --locked --features postgres
-RUN cargo sqlx prepare --check
-RUN cargo build
+# 1. Copy manifests and fetch dependencies
+COPY Cargo.toml Cargo.lock ./
+RUN mkdir src && echo "fn main() {}" > src/main.rs
+RUN --mount=type=cache,target=/usr/src/app/target \
+  --mount=type=cache,target=/root/.cargo/registry \
+  cargo build --release --bin tinycongress-api
+RUN rm -rf src
+
+# 2. Copy source and build
+COPY . .
+RUN --mount=type=cache,target=/usr/src/app/target \
+  --mount=type=cache,target=/root/.cargo/registry \
+  cargo install sqlx-cli --locked --features postgres
+RUN --mount=type=cache,target=/usr/src/app/target \
+  --mount=type=cache,target=/root/.cargo/registry \
+  cargo sqlx prepare --check
+RUN --mount=type=cache,target=/usr/src/app/target \
+  --mount=type=cache,target=/root/.cargo/registry \
+  cargo build
+
+# Install the dev-built binary to a stable path on PATH
+RUN install -m 0755 target/debug/tinycongress-api /usr/local/bin/tinycongress-api
+
+# Default command: run the dev-built binary from PATH
+CMD ["tinycongress-api"]

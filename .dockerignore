@@ -1,0 +1,19 @@
+# VCS / CI metadata
+.git
+.github/
+.gitignore
+
+# Editors / OS
+.idea/
+.vscode/
+.DS_Store
+
+# Skaffold cache/state
+.skaffold/
+
+# Logs
+*.log
+**/*.log
+
+# Node modules at root if any (frontend handled in web/.dockerignore too)
+node_modules/

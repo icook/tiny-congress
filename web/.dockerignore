@@ -1,1 +1,25 @@
-./node_modules
+node_modules/
+npm-debug.log*
+yarn-error.log*
+*.log
+**/*.log
+
+# Vite / build outputs
+dist/
+.vite/
+node_modules/.vite/
+coverage/
+.nyc_output/
+
+# Editors/OS
+.idea/
+.vscode/
+.DS_Store
+
+# Yarn Berry: ignore cache, keep required dirs
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/sdks
+!.yarn/versions

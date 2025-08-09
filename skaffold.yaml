@@ -1,18 +1,16 @@
-apiVersion: skaffold/v2beta28
+apiVersion: skaffold/v4beta13
 kind: Config
 metadata:
   name: prioritization-room
 build:
   platforms: ["linux/arm64"]
   artifacts:
-    - image: tc-api-release
-      context: ./service/
-      docker:
-        dockerfile: ./dockerfiles/Dockerfile.backend
     - image: tc-api-dev
       context: ./service/
       docker:
         dockerfile: ./dockerfiles/Dockerfile.backend-dev
+        buildArgs:
+          BUILDKIT_INLINE_CACHE: "1"
     - image: postgres
       context: .
       docker:
@@ -21,10 +19,6 @@ build:
       context: ./web/
       docker:
         dockerfile: ./dockerfiles/Dockerfile.frontend-dev
-    - image: tc-ui-release
-      context: ./web/
-      docker:
-        dockerfile: ./dockerfiles/Dockerfile.frontend
 deploy:
   helm:
     releases:
@@ -33,13 +27,39 @@ deploy:
         valuesFiles:
           - kube/app/values.yaml
         version: 0.1.0
+        setValueTemplates:
+          image.repository: "{{.IMAGE_REPO_tc_api_dev}}"
+          image.tag: "{{.IMAGE_TAG_tc_api_dev}}"
+          frontend.image.repository: "{{.IMAGE_REPO_tc_ui_dev}}"
+          frontend.image.tag: "{{.IMAGE_TAG_tc_ui_dev}}"
+
+# Pre-deploy tests: run fast unit/API/UI tests only
 test:
   - image: tc-api-dev
     custom:
-      - command: cd service && cargo test -- --test-threads=1 --nocapture
+      - command: cd service && cargo test --test api_tests --test graphql_tests --test model_tests -- --test-threads=1 --nocapture
   - image: tc-ui-dev
     custom:
-      - command: cd web && yarn test
+      - command: cd web && yarn install --frozen-lockfile && yarn test
+
+# Post-deploy verification: run integration tests against the live cluster
+verify:
+  - name: integration-tests
+    container:
+      name: integration-tests
+      image: tc-api-dev
+      command: ["/bin/sh"]
+      args: ["-lc", "cd /usr/src/app && DATABASE_URL=postgres://postgres:postgres@postgres:5432/prioritization cargo test --test integration_tests -- --test-threads=1 --nocapture"]
+    executionMode:
+      kubernetesCluster: {}
+
+# Ensure Postgres is reachable from localhost for developer workflows
+portForward:
+  - resourceType: service
+    resourceName: postgres
+    port: 5432
+    localPort: 5432
+
 profiles:
   - name: dev
     build:
@@ -47,3 +67,14 @@ profiles:
         push: false
     deploy:
       kubectl: {}
+  - name: release
+    build:
+      artifacts:
+        - image: tc-api-release
+          context: ./service/
+          docker:
+            dockerfile: ./dockerfiles/Dockerfile.backend
+        - image: tc-ui-release
+          context: ./web/
+          docker:
+            dockerfile: ./dockerfiles/Dockerfile.frontend

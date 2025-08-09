@@ -37,13 +37,18 @@ spec:
             - name: http
               containerPort: 8080
               protocol: TCP
+          env:
+            - name: RUST_LOG
+              value: info
+            - name: DATABASE_URL
+              value: postgres://postgres:postgres@postgres:5432/prioritization
           livenessProbe:
             httpGet:
-              path: /
+              path: /health
               port: http
           readinessProbe:
             httpGet:
-              path: /
+              path: /health
               port: http
           resources:
             {{- toYaml .Values.resources | nindent 12 }}

@@ -25,6 +25,12 @@ async fn main() -> Result<(), anyhow::Error> {
     }
     tracing_subscriber::fmt::init();
 
+    // Init banner so container logs clearly show startup
+    tracing::info!(
+        version = env!("CARGO_PKG_VERSION"),
+        "tinycongress-api starting up"
+    );
+
     // Database connection
     let database_url = std::env::var("DATABASE_URL")
         .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:5432/tinycongress".to_string());
