@@ -88,12 +88,5 @@ frontend:
     tag: latest
     pullPolicy: IfNotPresent
   service:
-    port: 3000
-    targetPort: 3000
-  resources:
-    limits:
-      cpu: 200m
-      memory: 256Mi
-    requests:
-      cpu: 100m
-      memory: 128Mi
+    port: 5173
+    targetPort: 5173

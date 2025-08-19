@@ -1,23 +1,23 @@
-# Development stage
 FROM node:20-slim
 WORKDIR /app
 
-# Install dependencies only (maximize cache usage)
-COPY .yarn ./.yarn
-COPY package.json yarn.lock .yarnrc.yml ./
+# Enable corepack for Yarn Berry
+RUN corepack enable
+
+# Install dependencies (context is ./web)
+COPY .yarn/ ./.yarn/
+COPY .yarnrc.yml package.json yarn.lock ./
 RUN yarn install --immutable
 
-# Copy source code
+# Copy the rest of the app
 COPY . ./
+
 # Development environment setup
 ENV NODE_ENV=development
-ENV PORT=3000
-ENV WATCHPACK_POLLING=true
+ENV PORT=5173
+ENV HOST=0.0.0.0
 
 # Expose development port
-EXPOSE 3000
+EXPOSE 5173
 
-WORKDIR /app/web
-
-# Start Next.js in development mode
 CMD ["yarn", "dev"]

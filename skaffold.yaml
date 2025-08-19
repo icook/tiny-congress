@@ -59,6 +59,14 @@ portForward:
     resourceName: postgres
     port: 5432
     localPort: 5432
+  - resourceType: service
+    resourceName: tc
+    port: 80
+    localPort: 8080
+  - resourceType: deployment
+    resourceName: tc-frontend
+    port: 5173
+    localPort: 5173
 
 profiles:
   - name: dev
