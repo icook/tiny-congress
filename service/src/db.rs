@@ -1,15 +1,39 @@
-use sqlx::{PgPool, postgres::PgPoolOptions};
+use sqlx::{postgres::PgPoolOptions, PgPool};
 use std::time::Duration;
+use tracing::{info, warn};
 
 /// Connect to the database and run migrations
 pub async fn setup_database(database_url: &str) -> Result<PgPool, anyhow::Error> {
-    // Create a connection pool with connection timeout and max connections
-    let pool = PgPoolOptions::new()
-        .max_connections(10)
-        .acquire_timeout(Duration::from_secs(3))
-        .connect(database_url)
-        .await?;
+    // Use backoff for cleaner retry with jitter and time budget
+    use backoff::{future::retry, Error as BackoffError, ExponentialBackoff};
 
+    let backoff = ExponentialBackoff {
+        max_elapsed_time: Some(Duration::from_secs(60)), // overall retry budget
+        max_interval: Duration::from_secs(30),            // cap single waits
+        ..ExponentialBackoff::default()
+    };
+
+    let pool = retry(backoff, || async {
+        info!("Attempting to connect to Postgres...");
+        match PgPoolOptions::new()
+            .max_connections(10)
+            // Allow extra time to acquire a connection during startup bursts
+            .acquire_timeout(Duration::from_secs(30))
+            .connect(database_url)
+            .await
+        {
+            Ok(pool) => Ok(pool),
+            Err(e) => {
+                warn!(error = %e, "Postgres not ready yet; retrying");
+                Err(BackoffError::transient(e))
+            }
+        }
+    })
+    .await?;
+
+    // Run database migrations (embedded at compile time)
+    sqlx::migrate!().run(&pool).await?;
+    info!("Migrations applied");
     Ok(pool)
 }
 
