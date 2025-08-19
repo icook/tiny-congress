@@ -77,7 +77,7 @@ jobs:
           # skaffold verify -p ${SKAFFOLD_PROFILE}
 
       - name: Tag cache images (default branch only)
-        if: github.ref == 'refs/heads/main'
+        if: github.ref == 'refs/heads/master'
         env:
           SKAFFOLD_DEFAULT_REPO: ghcr.io/${{ github.repository }}
         run: |
