@@ -3,22 +3,24 @@ kind: Config
 metadata:
   name: prioritization-room
 build:
-  platforms: ["linux/arm64"]
+  local:
+    useBuildkit: true
+    concurrency: 3
   artifacts:
     - image: tc-api-dev
       context: ./service/
       docker:
-        dockerfile: ./dockerfiles/Dockerfile.backend-dev
+        dockerfile: Dockerfile.dev
         buildArgs:
           BUILDKIT_INLINE_CACHE: "1"
     - image: postgres
       context: .
       docker:
-        dockerfile: ./dockerfiles/Dockerfile.postgres
+        dockerfile: dockerfiles/Dockerfile.postgres
     - image: tc-ui-dev
       context: ./web/
       docker:
-        dockerfile: ./dockerfiles/Dockerfile.frontend-dev
+        dockerfile: Dockerfile.dev
 deploy:
   helm:
     releases:
@@ -81,8 +83,13 @@ profiles:
         - image: tc-api-release
           context: ./service/
           docker:
-            dockerfile: ./dockerfiles/Dockerfile.backend
+            dockerfile: Dockerfile
         - image: tc-ui-release
           context: ./web/
           docker:
-            dockerfile: ./dockerfiles/Dockerfile.frontend
+            dockerfile: Dockerfile
+  - name: ci
+    build:
+      local:
+        push: false
+        useBuildkit: true
