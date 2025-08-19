@@ -16,3 +16,36 @@ This is a non-functional WIP monorepo for a web community.
 - Local dev cluster with hot reload
 - CI cluster setup test running
 - Production image building
+
+# macOS Developer Setup
+
+This guide gets you from a clean macOS to running TinyCongress locally.
+
+## Prerequisites
+
+- macOS 13+ (Apple Silicon or Intel)
+- Admin user
+
+## Install Homebrew
+
+```bash
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+# Follow on-screen PATH instructions (usually add to ~/.profile)
+```
+
+## Core tooling
+
+```bash
+brew install git gnupg jq
+brew install --cask docker
+brew install kubectl minikube skaffold
+```
+
+- Open Docker Desktop once to finalize installation.
+
+## Start dev cluster
+
+```bash
+minikube start
+skaffold dev --port-forward
+```
