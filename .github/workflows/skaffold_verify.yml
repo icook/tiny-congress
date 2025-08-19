@@ -84,7 +84,7 @@ jobs:
           set -euo pipefail
           # Tag latest built images as :cache for cross-branch reuse
           for img in tc-api-dev tc-ui-dev postgres; do
-            src="${SKAFFOLD_DEFAULT_REPO}/${img}:$(git rev-parse --short=12 HEAD)"
+            src="${SKAFFOLD_DEFAULT_REPO}/${img}:$(git rev-parse --short=7 HEAD)"
             dst="${SKAFFOLD_DEFAULT_REPO}/${img}:cache"
             echo "Tagging ${src} as ${dst}"
             docker pull "$src"
