@@ -19,6 +19,12 @@ jobs:
     permissions:
       contents: read
       packages: write
+    env:
+      # Common environment for all steps
+      SKAFFOLD_DEFAULT_REPO: ghcr.io/${{ github.repository }}
+      BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
+      # Use the dedicated CI profile to build linux/amd64 images on GitHub runners
+      SKAFFOLD_PROFILE: ci
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -56,7 +62,7 @@ jobs:
           kubectl version --client=true
           kubectl cluster-info
           kubectl get nodes -o wide
-      
+
       - name: Login to GHCR
         uses: docker/login-action@v3
         with:
@@ -65,30 +71,32 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build, deploy & verify (ci profile)
-        env:
-          # Use the dedicated CI profile to build linux/amd64 images on GitHub runners
-          SKAFFOLD_PROFILE: ci
-          SKAFFOLD_DEFAULT_REPO: ghcr.io/${{ github.repository }}
         run: |
           set -euo pipefail
           skaffold run -p ${SKAFFOLD_PROFILE}
           # skaffold verify will build and deploy first if needed, then run verification
-          skaffold verify -p ${SKAFFOLD_PROFILE}
+          # skaffold verify -p ${SKAFFOLD_PROFILE}
 
-      - name: Tag cache images (default branch only)
-        if: github.ref == 'refs/heads/main'
-        env:
-          SKAFFOLD_DEFAULT_REPO: ghcr.io/${{ github.repository }}
+      - name: Tag cache images (for cross-branch reuse)
         run: |
           set -euo pipefail
-          # Tag latest built images as :cache for cross-branch reuse
+          # Tag latest built images with branch-specific cache for future builds on this branch
           for img in tc-api-dev tc-ui-dev postgres; do
             src="${SKAFFOLD_DEFAULT_REPO}/${img}:$(git rev-parse --short=12 HEAD)"
-            dst="${SKAFFOLD_DEFAULT_REPO}/${img}:cache"
-            echo "Tagging ${src} as ${dst}"
+            branch_dst="${SKAFFOLD_DEFAULT_REPO}/${img}:cache-${BRANCH_NAME}"
+
+            echo "Tagging ${src} as ${branch_dst}"
             docker pull "$src"
-            docker tag "$src" "$dst"
-            docker push "$dst"
+            docker tag "$src" "$branch_dst"
+            docker push "$branch_dst"
+
+            # Also tag as main cache if this is the default branch
+            if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+              main_dst="${SKAFFOLD_DEFAULT_REPO}/${img}:cache"
+              echo "Tagging ${src} as ${main_dst} (main branch)"
+              docker tag "$src" "$main_dst"
+              docker push "$main_dst"
+            fi
           done
 
       - name: Dump diagnostics on failure

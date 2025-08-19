@@ -15,6 +15,7 @@ build:
         buildArgs:
           BUILDKIT_INLINE_CACHE: "1"
         cacheFrom:
+          - "tc-api-dev:cache-{{.ENV.BRANCH_NAME}}"
           - "tc-api-dev:cache"
     - image: postgres
       context: .
@@ -23,6 +24,7 @@ build:
         buildArgs:
           BUILDKIT_INLINE_CACHE: "1"
         cacheFrom:
+          - "postgres:cache-{{.ENV.BRANCH_NAME}}"
           - "postgres:cache"
     - image: tc-ui-dev
       context: ./web/
@@ -31,6 +33,7 @@ build:
         buildArgs:
           BUILDKIT_INLINE_CACHE: "1"
         cacheFrom:
+          - "tc-ui-dev:cache-{{.ENV.BRANCH_NAME}}"
           - "tc-ui-dev:cache"
 deploy:
   helm:
