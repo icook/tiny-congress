@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/GoogleContainerTools/skaffold/main/docs-v2/content/en/schemas/v4beta13.json
 apiVersion: skaffold/v4beta13
 kind: Config
 metadata:
@@ -13,14 +14,24 @@ build:
         dockerfile: Dockerfile.dev
         buildArgs:
           BUILDKIT_INLINE_CACHE: "1"
+        cacheFrom:
+          - "tc-api-dev:cache"
     - image: postgres
       context: .
       docker:
         dockerfile: dockerfiles/Dockerfile.postgres
+        buildArgs:
+          BUILDKIT_INLINE_CACHE: "1"
+        cacheFrom:
+          - "postgres:cache"
     - image: tc-ui-dev
       context: ./web/
       docker:
         dockerfile: Dockerfile.dev
+        buildArgs:
+          BUILDKIT_INLINE_CACHE: "1"
+        cacheFrom:
+          - "tc-ui-dev:cache"
 deploy:
   helm:
     releases:
@@ -91,5 +102,5 @@ profiles:
   - name: ci
     build:
       local:
-        push: false
+        push: true
         useBuildkit: true
