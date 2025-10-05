@@ -82,21 +82,22 @@ jobs:
         run: |
           set -euo pipefail
           images=(tc-api-dev tc-ui-dev postgres)
+          max_attempts=60
           for img in "${images[@]}"; do
             ref="${REGISTRY}/${img}:${GITHUB_SHA}"
             echo "Waiting for ${ref} to be available"
-            for attempt in $(seq 1 30); do
+            for attempt in $(seq 1 ${max_attempts}); do
               if docker manifest inspect "${ref}" >/dev/null 2>&1; then
                 echo "Found ${ref}"
                 break
               fi
 
-              if [[ ${attempt} -eq 30 ]]; then
+              if [[ ${attempt} -eq ${max_attempts} ]]; then
                 echo "Timed out waiting for ${ref}"
                 exit 1
               fi
 
-              echo "Still waiting for ${ref} (attempt ${attempt})"
+              echo "Still waiting for ${ref} (attempt ${attempt}/${max_attempts})"
               sleep 10
             done
           done
