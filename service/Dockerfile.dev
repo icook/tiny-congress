@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1.6
 # Use cargo-chef to share dependency layers between builds
 FROM lukemathwalker/cargo-chef:latest-rust-1.86 AS chef
 
@@ -10,27 +11,34 @@ COPY . .
 RUN cargo chef prepare --recipe-path recipe.json
 
 FROM chef AS cacher
+RUN cargo install sccache --locked
 COPY --from=planner /usr/src/app/recipe.json recipe.json
-RUN cargo chef cook --profile dev --recipe-path recipe.json
+ENV RUSTC_WRAPPER=/usr/local/cargo/bin/sccache
+ENV SCCACHE_DIR=/usr/local/sccache
+ENV SCCACHE_CACHE_SIZE=10G
+RUN --mount=type=cache,id=service-sccache,target=/usr/local/sccache cargo chef cook --profile dev --recipe-path recipe.json
 # Pre-install sqlx-cli so its dependencies stay cached with the chef layer
-RUN cargo install sqlx-cli --locked --features postgres
+RUN --mount=type=cache,id=service-sccache,target=/usr/local/sccache cargo install sqlx-cli --locked --features postgres
 
 FROM rust:1.86 AS builder
 
 WORKDIR /usr/src/app
 ENV CARGO_HOME=/usr/local/cargo
 ENV CARGO_TARGET_DIR=/usr/src/app/target
+ENV RUSTC_WRAPPER=/usr/local/cargo/bin/sccache
+ENV SCCACHE_DIR=/usr/local/sccache
+ENV SCCACHE_CACHE_SIZE=10G
 
 COPY --from=cacher /usr/src/app/target target
 COPY --from=cacher /usr/local/cargo /usr/local/cargo
 COPY . .
 
 ENV SQLX_OFFLINE=true
-RUN cargo sqlx prepare --check
-RUN sh -ec 'cargo build --bin tinycongress-api && install -m 0755 target/debug/tinycongress-api /usr/local/bin/tinycongress-api'
+RUN --mount=type=cache,id=service-sccache,target=/usr/local/sccache cargo sqlx prepare --check
+RUN --mount=type=cache,id=service-sccache,target=/usr/local/sccache sh -ec 'cargo build --bin tinycongress-api && install -m 0755 target/debug/tinycongress-api /usr/local/bin/tinycongress-api'
 
 # Precompile test binaries so CI containers can run them without rebuilding dependencies
-RUN cargo test --no-run
+RUN --mount=type=cache,id=service-sccache,target=/usr/local/sccache cargo test --no-run
 
 # Default command: run the dev-built binary from PATH
 CMD ["tinycongress-api"]
