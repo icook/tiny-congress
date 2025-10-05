@@ -59,7 +59,7 @@ test:
       - command: >-
           docker run --rm
           ${SKAFFOLD_DEFAULT_REPO}/tc-api-dev:${GITHUB_SHA}
-          /bin/sh -lc "cd /usr/src/app && cargo test --test api_tests --test graphql_tests --test model_tests -- --test-threads=1 --nocapture"
+          /bin/sh -lc "cd /usr/src/app && /usr/local/cargo/bin/cargo test --test api_tests --test graphql_tests --test model_tests -- --test-threads=1 --nocapture"
   - image: tc-ui-dev
     custom:
       - command: >-
@@ -75,7 +75,7 @@ verify:
       name: integration-tests
       image: tc-api-dev
       command: ["/bin/sh"]
-      args: ["-lc", "cd /usr/src/app && DATABASE_URL=postgres://postgres:postgres@postgres:5432/prioritization cargo test --test integration_tests -- --test-threads=1 --nocapture"]
+      args: ["-lc", "cd /usr/src/app && DATABASE_URL=postgres://postgres:postgres@postgres:5432/prioritization /usr/local/cargo/bin/cargo test --test integration_tests -- --test-threads=1 --nocapture"]
     executionMode:
       kubernetesCluster: {}
 
