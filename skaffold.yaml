@@ -48,6 +48,9 @@ deploy:
           image.tag: "{{.IMAGE_TAG_tc_api_dev}}"
           frontend.image.repository: "{{.IMAGE_REPO_tc_ui_dev}}"
           frontend.image.tag: "{{.IMAGE_TAG_tc_ui_dev}}"
+        setValues:
+          serviceAccount:
+            create: false
 
 # Pre-deploy tests: run fast unit/API/UI tests only
 test:

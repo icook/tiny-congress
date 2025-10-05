@@ -88,8 +88,6 @@ jobs:
             for attempt in $(seq 1 30); do
               if docker manifest inspect "${ref}" >/dev/null 2>&1; then
                 echo "Found ${ref}"
-                docker pull "${ref}"
-                kind load docker-image "${ref}" --name "${KIND_CLUSTER_NAME:-skaffold-ci}"
                 break
               fi
 
@@ -102,6 +100,25 @@ jobs:
               sleep 10
             done
           done
+
+      - name: Configure registry access for KinD
+        env:
+          REGISTRY: ghcr.io
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_ACTOR: ${{ github.actor }}
+        run: |
+          set -euo pipefail
+          kubectl create secret docker-registry ghcr-cred \
+            --namespace default \
+            --docker-server="${REGISTRY}" \
+            --docker-username="${GITHUB_ACTOR}" \
+            --docker-password="${GITHUB_TOKEN}" \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+          kubectl patch serviceaccount default \
+            -n default \
+            --type merge \
+            -p '{"imagePullSecrets":[{"name":"ghcr-cred"}]}'
 
       - name: Prepare Skaffold image overrides
         id: images
