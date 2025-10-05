@@ -10,6 +10,8 @@ RUN cargo chef prepare --recipe-path recipe.json
 FROM chef AS cacher
 COPY --from=planner /usr/src/app/recipe.json recipe.json
 RUN cargo chef cook --release --recipe-path recipe.json
+# Pre-install sqlx-cli so its dependencies stay cached with the chef layer
+RUN cargo install sqlx-cli --locked --features postgres
 
 FROM rust:1.86 AS builder
 
@@ -19,8 +21,7 @@ COPY --from=cacher /usr/local/cargo /usr/local/cargo
 COPY . .
 
 ENV SQLX_OFFLINE=true
-RUN cargo install sqlx-cli --locked --features postgres
-RUN cargo sqlx prepare --check
+RUN cargo sqlx prepare --check -- --release
 RUN cargo build --release
 
 FROM debian:bullseye-slim

@@ -2,6 +2,8 @@
 FROM lukemathwalker/cargo-chef:latest-rust-1.86 AS chef
 
 WORKDIR /usr/src/app
+ENV CARGO_HOME=/usr/local/cargo
+ENV CARGO_TARGET_DIR=/usr/src/app/target
 
 FROM chef AS planner
 COPY . .
@@ -9,7 +11,9 @@ RUN cargo chef prepare --recipe-path recipe.json
 
 FROM chef AS cacher
 COPY --from=planner /usr/src/app/recipe.json recipe.json
-RUN cargo chef cook --recipe-path recipe.json
+RUN cargo chef cook --profile dev --recipe-path recipe.json
+# Pre-install sqlx-cli so its dependencies stay cached with the chef layer
+RUN cargo install sqlx-cli --locked --features postgres
 
 FROM rust:1.86 AS builder
 
@@ -22,7 +26,6 @@ COPY --from=cacher /usr/local/cargo /usr/local/cargo
 COPY . .
 
 ENV SQLX_OFFLINE=true
-RUN cargo install sqlx-cli --locked --features postgres
 RUN cargo sqlx prepare --check
 RUN sh -ec 'cargo build --bin tinycongress-api && install -m 0755 target/debug/tinycongress-api /usr/local/bin/tinycongress-api'
 
