@@ -1,5 +1,11 @@
 # Repository Guidelines
 
+## Default Delivery Flow
+- Create a feature branch (`feature/<slug>`) for every ticket before making changes.
+- Implement the work, keep commits focused, and run the relevant backend (`cargo test`) and frontend (`yarn test`) suites.
+- Once everything passes locally, push the branch and open a PR that links the tracked issue and summarizes validation.
+- Stick to this loop unless the issue description calls out an alternative rollout path.
+
 ## Project Structure & Module Organization
 - `service/`: Rust GraphQL API, workers, and SQL migrations (`migrations/`). Tests live in `service/tests/` (`*_tests.rs`).
 - `web/`: React/Mantine client on Vite. Source under `web/src/`, shared mocks in `web/test-utils/`.
@@ -13,6 +19,7 @@
 - Frontend quality gates: `yarn lint`, `yarn typecheck`, `yarn prettier`, `yarn vitest`; CI `yarn test` chains them.
 - Full-stack verification: `skaffold test -p test` and `skaffold dev -p dev` build images, deploy to Kubernetes, and exercise integrations.
 - CI monitoring: after pushing a branch, run `gh run watch --branch $(git rev-parse --abbrev-ref HEAD)` to stream workflow progress.
+- Rust Docker builds use cargo-chef stages by default; keep the planner/cacher/builder structure intact when editing `service/Dockerfile*` assets.
 
 ## Coding Style & Naming Conventions
 - Rust uses edition 2021 with rustfmt; keep modules snake_case and favor descriptive crate names.

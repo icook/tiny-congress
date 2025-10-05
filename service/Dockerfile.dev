@@ -1,38 +1,33 @@
-FROM rust:1.86 as builder
+# Use cargo-chef to share dependency layers between builds
+FROM lukemathwalker/cargo-chef:latest-rust-1.86 AS chef
+
+WORKDIR /usr/src/app
+
+FROM chef AS planner
+COPY . .
+RUN cargo chef prepare --recipe-path recipe.json
+
+FROM chef AS cacher
+COPY --from=planner /usr/src/app/recipe.json recipe.json
+RUN cargo chef cook --recipe-path recipe.json
+
+FROM rust:1.86 AS builder
 
 WORKDIR /usr/src/app
 ENV CARGO_HOME=/usr/local/cargo
 ENV CARGO_TARGET_DIR=/usr/src/app/target
 
-# 1. Copy manifests and fetch dependencies
-COPY Cargo.toml Cargo.lock ./
-RUN mkdir src && echo "fn main() {}" > src/main.rs
-RUN --mount=type=cache,target=/usr/src/app/target \
-  --mount=type=cache,target=/usr/local/cargo/registry \
-  --mount=type=cache,target=/usr/local/cargo/git \
-  cargo build --release --bin tinycongress-api
-RUN rm -rf src
-
-# 2. Copy source and build
+COPY --from=cacher /usr/src/app/target target
+COPY --from=cacher /usr/local/cargo /usr/local/cargo
 COPY . .
-RUN --mount=type=cache,target=/usr/src/app/target \
-  --mount=type=cache,target=/usr/local/cargo/registry \
-  --mount=type=cache,target=/usr/local/cargo/git \
-  cargo install sqlx-cli --locked --features postgres
-RUN --mount=type=cache,target=/usr/src/app/target \
-  --mount=type=cache,target=/usr/local/cargo/registry \
-  --mount=type=cache,target=/usr/local/cargo/git \
-  cargo sqlx prepare --check
-RUN --mount=type=cache,target=/usr/src/app/target \
-  --mount=type=cache,target=/usr/local/cargo/registry \
-  --mount=type=cache,target=/usr/local/cargo/git \
-  sh -ec 'cargo build --bin tinycongress-api && install -m 0755 target/debug/tinycongress-api /usr/local/bin/tinycongress-api'
+
+ENV SQLX_OFFLINE=true
+RUN cargo install sqlx-cli --locked --features postgres
+RUN cargo sqlx prepare --check
+RUN sh -ec 'cargo build --bin tinycongress-api && install -m 0755 target/debug/tinycongress-api /usr/local/bin/tinycongress-api'
 
 # Precompile test binaries so CI containers can run them without rebuilding dependencies
-RUN --mount=type=cache,target=/usr/src/app/target \
-  --mount=type=cache,target=/usr/local/cargo/registry \
-  --mount=type=cache,target=/usr/local/cargo/git \
-  cargo test --no-run
+RUN cargo test --no-run
 
 # Default command: run the dev-built binary from PATH
 CMD ["tinycongress-api"]
