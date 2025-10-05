@@ -5,6 +5,10 @@ RUN apt-get update \
   && apt-get install -y postgresql-server-dev-17 pgxnclient \
   libicu-dev build-essential
 
+# Ensure pg_config from Postgres 17 is preferred
+ENV PATH="/usr/lib/postgresql/17/bin:${PATH}"
+ENV PG_CONFIG=/usr/lib/postgresql/17/bin/pg_config
+
 # Install the pg_trgm extension (included in contrib)
 RUN apt-get install -y postgresql-contrib
 
