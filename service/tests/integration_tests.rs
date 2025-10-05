@@ -1,7 +1,7 @@
-use sqlx::{PgPool, Executor};
+use sqlx_core::{executor::Executor, query::query, query_as::query_as, query_scalar::query_scalar};
+use sqlx_postgres::PgPool;
 use tinycongress_api::db;
 use uuid::Uuid;
-
 
 async fn get_pool() -> PgPool {
     let database_url = std::env::var("DATABASE_URL")
@@ -15,8 +15,12 @@ async fn get_pool() -> PgPool {
 
     // Make sure we're starting with empty tables
     conn.execute("TRUNCATE TABLE votes CASCADE").await.unwrap();
-    conn.execute("TRUNCATE TABLE pairings CASCADE").await.unwrap();
-    conn.execute("TRUNCATE TABLE topic_rankings CASCADE").await.unwrap();
+    conn.execute("TRUNCATE TABLE pairings CASCADE")
+        .await
+        .unwrap();
+    conn.execute("TRUNCATE TABLE topic_rankings CASCADE")
+        .await
+        .unwrap();
     conn.execute("TRUNCATE TABLE rounds CASCADE").await.unwrap();
     conn.execute("TRUNCATE TABLE topics CASCADE").await.unwrap();
 
@@ -27,27 +31,27 @@ async fn get_pool() -> PgPool {
 async fn insert_test_topic(pool: &PgPool, title: &str, description: &str) -> Uuid {
     let topic_id = Uuid::new_v4();
 
-    sqlx::query!(
+    query(
         r#"
         INSERT INTO topics (id, title, description)
         VALUES ($1, $2, $3)
         "#,
-        topic_id,
-        title,
-        description
     )
+    .bind(topic_id)
+    .bind(title)
+    .bind(description)
     .execute(pool)
     .await
     .unwrap();
 
     // Insert into rankings as well
-    sqlx::query!(
+    query(
         r#"
         INSERT INTO topic_rankings (topic_id, rank, score)
         VALUES ($1, 0, 1500.0)
         "#,
-        topic_id
     )
+    .bind(topic_id)
     .execute(pool)
     .await
     .unwrap();
@@ -61,16 +65,16 @@ async fn insert_test_round(pool: &PgPool, status: &str) -> Uuid {
     let now = chrono::Utc::now();
     let end_time = now + chrono::Duration::minutes(10);
 
-    sqlx::query!(
+    query(
         r#"
         INSERT INTO rounds (id, start_time, end_time, status)
         VALUES ($1, $2, $3, $4)
         "#,
-        round_id,
-        now,
-        end_time,
-        status
     )
+    .bind(round_id)
+    .bind(now)
+    .bind(end_time)
+    .bind(status)
     .execute(pool)
     .await
     .unwrap();
@@ -79,19 +83,24 @@ async fn insert_test_round(pool: &PgPool, status: &str) -> Uuid {
 }
 
 // Helper to create a test pairing
-async fn insert_test_pairing(pool: &PgPool, round_id: Uuid, topic_a_id: Uuid, topic_b_id: Uuid) -> Uuid {
+async fn insert_test_pairing(
+    pool: &PgPool,
+    round_id: Uuid,
+    topic_a_id: Uuid,
+    topic_b_id: Uuid,
+) -> Uuid {
     let pairing_id = Uuid::new_v4();
 
-    sqlx::query!(
+    query(
         r#"
         INSERT INTO pairings (id, round_id, topic_a_id, topic_b_id)
         VALUES ($1, $2, $3, $4)
         "#,
-        pairing_id,
-        round_id,
-        topic_a_id,
-        topic_b_id
     )
+    .bind(pairing_id)
+    .bind(round_id)
+    .bind(topic_a_id)
+    .bind(topic_b_id)
     .execute(pool)
     .await
     .unwrap();
@@ -103,16 +112,16 @@ async fn insert_test_pairing(pool: &PgPool, round_id: Uuid, topic_a_id: Uuid, to
 async fn insert_test_vote(pool: &PgPool, pairing_id: Uuid, user_id: &str, choice_id: Uuid) -> Uuid {
     let vote_id = Uuid::new_v4();
 
-    sqlx::query!(
+    query(
         r#"
         INSERT INTO votes (id, pairing_id, user_id, choice_id)
         VALUES ($1, $2, $3, $4)
         "#,
-        vote_id,
-        pairing_id,
-        user_id,
-        choice_id
     )
+    .bind(vote_id)
+    .bind(pairing_id)
+    .bind(user_id)
+    .bind(choice_id)
     .execute(pool)
     .await
     .unwrap();
@@ -130,91 +139,90 @@ async fn test_topic_crud() {
     let topic_id = insert_test_topic(&pool, title, description).await;
 
     // Retrieve the topic
-    let topic = sqlx::query!(
+    let (db_id, db_title, db_description) = query_as::<_, (Uuid, String, String)>(
         r#"
         SELECT id, title, description
         FROM topics
         WHERE id = $1
         "#,
-        topic_id
     )
+    .bind(topic_id)
     .fetch_one(&pool)
     .await
     .unwrap();
 
     // Verify data
-    assert_eq!(topic.title, title);
-    assert_eq!(topic.description, description);
+    assert_eq!(db_id, topic_id);
+    assert_eq!(db_title, title);
+    assert_eq!(db_description, description);
 
     // Update the topic
     let new_title = "Updated Topic";
-    sqlx::query!(
+    query(
         r#"
         UPDATE topics
         SET title = $1
         WHERE id = $2
         "#,
-        new_title,
-        topic_id
     )
+    .bind(new_title)
+    .bind(topic_id)
     .execute(&pool)
     .await
     .unwrap();
 
     // Verify update
-    let updated_topic = sqlx::query!(
+    let updated_title: String = query_scalar(
         r#"
         SELECT title
         FROM topics
         WHERE id = $1
         "#,
-        topic_id
     )
+    .bind(topic_id)
     .fetch_one(&pool)
     .await
     .unwrap();
 
-    assert_eq!(updated_topic.title, new_title);
+    assert_eq!(updated_title, new_title);
 
     // Delete the topic
-    sqlx::query!(
+    query(
         r#"
         DELETE FROM topic_rankings
         WHERE topic_id = $1
         "#,
-        topic_id
     )
+    .bind(topic_id)
     .execute(&pool)
     .await
     .unwrap();
 
-    sqlx::query!(
+    query(
         r#"
         DELETE FROM topics
         WHERE id = $1
         "#,
-        topic_id
     )
+    .bind(topic_id)
     .execute(&pool)
     .await
     .unwrap();
 
     // Verify deletion
-    let count = sqlx::query!(
+    let remaining: i64 = query_scalar(
         r#"
-        SELECT COUNT(*) as count
+        SELECT COUNT(*)
         FROM topics
         WHERE id = $1
         "#,
-        topic_id
     )
+    .bind(topic_id)
     .fetch_one(&pool)
     .await
-    .unwrap()
-    .count
-    .unwrap_or(0);
+    .unwrap();
 
-    assert_eq!(count, 0);
+    assert_eq!(remaining, 0);
 }
 
 #[tokio::test]
@@ -242,35 +250,31 @@ async fn test_round_pairing_and_voting() {
     insert_test_vote(&pool, pairing_id, user3, topic_b_id).await;
 
     // Count votes
-    let votes_for_a = sqlx::query!(
+    let votes_for_a: i64 = query_scalar(
         r#"
-        SELECT COUNT(*) as count
+        SELECT COUNT(*)
         FROM votes
         WHERE pairing_id = $1 AND choice_id = $2
         "#,
-        pairing_id,
-        topic_a_id
     )
+    .bind(pairing_id)
+    .bind(topic_a_id)
     .fetch_one(&pool)
     .await
-    .unwrap()
-    .count
-    .unwrap_or(0);
+    .unwrap();
 
-    let votes_for_b = sqlx::query!(
+    let votes_for_b: i64 = query_scalar(
         r#"
-        SELECT COUNT(*) as count
+        SELECT COUNT(*)
         FROM votes
         WHERE pairing_id = $1 AND choice_id = $2
         "#,
-        pairing_id,
-        topic_b_id
     )
+    .bind(pairing_id)
+    .bind(topic_b_id)
     .fetch_one(&pool)
     .await
-    .unwrap()
-    .count
-    .unwrap_or(0);
+    .unwrap();
 
     // Verify vote counts
     assert_eq!(votes_for_a, 2);
@@ -278,91 +282,87 @@ async fn test_round_pairing_and_voting() {
 
     // Update rankings based on the votes
     // Simple ELO update: winner gets +15, loser gets -15
-    let current_score_a = sqlx::query!(
+    let current_score_a: f64 = query_scalar(
         r#"
         SELECT score
         FROM topic_rankings
         WHERE topic_id = $1
         "#,
-        topic_a_id
     )
+    .bind(topic_a_id)
     .fetch_one(&pool)
     .await
-    .unwrap()
-    .score;
+    .unwrap();
 
-    let current_score_b = sqlx::query!(
+    let current_score_b: f64 = query_scalar(
         r#"
         SELECT score
         FROM topic_rankings
         WHERE topic_id = $1
         "#,
-        topic_b_id
     )
+    .bind(topic_b_id)
     .fetch_one(&pool)
     .await
-    .unwrap()
-    .score;
+    .unwrap();
 
     // Topic A won, update scores
-    sqlx::query!(
+    query(
         r#"
         UPDATE topic_rankings
         SET score = $1, updated_at = NOW()
         WHERE topic_id = $2
         "#,
-        current_score_a + 15.0,
-        topic_a_id
     )
+    .bind(current_score_a + 15.0)
+    .bind(topic_a_id)
     .execute(&pool)
     .await
     .unwrap();
 
-    sqlx::query!(
+    query(
         r#"
         UPDATE topic_rankings
         SET score = $1, updated_at = NOW()
         WHERE topic_id = $2
         "#,
-        current_score_b - 15.0,
-        topic_b_id
     )
+    .bind(current_score_b - 15.0)
+    .bind(topic_b_id)
     .execute(&pool)
     .await
     .unwrap();
 
     // Verify updated scores
-    let updated_score_a = sqlx::query!(
+    let updated_score_a: f64 = query_scalar(
         r#"
         SELECT score
         FROM topic_rankings
         WHERE topic_id = $1
         "#,
-        topic_a_id
     )
+    .bind(topic_a_id)
     .fetch_one(&pool)
     .await
-    .unwrap()
-    .score;
+    .unwrap();
 
-    let updated_score_b = sqlx::query!(
+    let updated_score_b: f64 = query_scalar(
         r#"
         SELECT score
         FROM topic_rankings
         WHERE topic_id = $1
         "#,
-        topic_b_id
     )
+    .bind(topic_b_id)
     .fetch_one(&pool)
     .await
-    .unwrap()
-    .score;
+    .unwrap();
 
     assert_eq!(updated_score_a, current_score_a + 15.0);
     assert_eq!(updated_score_b, current_score_b - 15.0);
 
     // Update the ranks based on scores
-    sqlx::query!(
+    query(
         r#"
         WITH ranked_topics AS (
             SELECT
@@ -375,33 +375,35 @@ async fn test_round_pairing_and_voting() {
         SET rank = rt.new_rank
         FROM ranked_topics rt
         WHERE tr.topic_id = rt.topic_id
-        "#
+        "#,
     )
     .execute(&pool)
     .await
     .unwrap();
 
     // Verify ranks
-    let ranks = sqlx::query!(
+    let ranks = query_as::<_, (Uuid, i64, f64)>(
         r#"
         SELECT topic_id, rank, score
         FROM topic_rankings
         ORDER BY rank ASC
-        "#
+        "#,
     )
     .fetch_all(&pool)
     .await
     .unwrap();
 
     // Check if Topic A has rank 1 (it won)
-    let topic_a_rank = ranks.iter()
-        .find(|r| r.topic_id == topic_a_id)
-        .map(|r| r.rank)
+    let topic_a_rank = ranks
+        .iter()
+        .find(|(id, _, _)| id == &topic_a_id)
+        .map(|(_, rank, _)| *rank)
         .unwrap_or(0);
 
-    let topic_b_rank = ranks.iter()
-        .find(|r| r.topic_id == topic_b_id)
-        .map(|r| r.rank)
+    let topic_b_rank = ranks
+        .iter()
+        .find(|(id, _, _)| id == &topic_b_id)
+        .map(|(_, rank, _)| *rank)
         .unwrap_or(0);
 
     assert_eq!(topic_a_rank, 1);
@@ -425,22 +427,22 @@ async fn test_top_topics() {
     let scores = vec![1600.0, 1550.0, 1525.0, 1450.0, 1400.0];
 
     for (i, topic_id) in topic_ids.iter().enumerate() {
-        sqlx::query!(
+        query(
             r#"
             UPDATE topic_rankings
             SET score = $1, updated_at = NOW()
             WHERE topic_id = $2
             "#,
-            scores[i],
-            topic_id
         )
+        .bind(scores[i])
+        .bind(topic_id)
         .execute(&pool)
         .await
         .unwrap();
     }
 
     // Update ranks
-    sqlx::query!(
+    query(
         r#"
         WITH ranked_topics AS (
             SELECT
@@ -453,21 +455,21 @@ async fn test_top_topics() {
         SET rank = rt.new_rank
         FROM ranked_topics rt
         WHERE tr.topic_id = rt.topic_id
-        "#
+        "#,
     )
     .execute(&pool)
     .await
     .unwrap();
 
     // Get top 3 topics
-    let top_topics = sqlx::query!(
+    let top_topics = query_as::<_, (Uuid, i64, f64, String)>(
         r#"
         SELECT tr.topic_id, tr.rank, tr.score, t.title
         FROM topic_rankings tr
         JOIN topics t ON tr.topic_id = t.id
         ORDER BY tr.score DESC
         LIMIT 3
-        "#
+        "#,
     )
     .fetch_all(&pool)
     .await
@@ -477,13 +479,13 @@ async fn test_top_topics() {
     assert_eq!(top_topics.len(), 3);
 
     // Verify order
-    assert_eq!(top_topics[0].rank, 1);
-    assert_eq!(top_topics[1].rank, 2);
-    assert_eq!(top_topics[2].rank, 3);
+    assert_eq!(top_topics[0].1, 1);
+    assert_eq!(top_topics[1].1, 2);
+    assert_eq!(top_topics[2].1, 3);
 
     // Verify scores are in descending order
-    assert!(top_topics[0].score > top_topics[1].score);
-    assert!(top_topics[1].score > top_topics[2].score);
+    assert!(top_topics[0].2 > top_topics[1].2);
+    assert!(top_topics[1].2 > top_topics[2].2);
 }
 
 #[tokio::test]
@@ -491,7 +493,7 @@ async fn test_active_round() {
     let pool = get_pool().await;
 
     // Clear any existing rounds
-    sqlx::query!("DELETE FROM rounds").execute(&pool).await.unwrap();
+    query("DELETE FROM rounds").execute(&pool).await.unwrap();
 
     // Create a completed round
     let _completed_round_id = insert_test_round(&pool, "completed").await;
@@ -500,19 +502,19 @@ async fn test_active_round() {
     let active_round_id = insert_test_round(&pool, "active").await;
 
     // Query for the active round
-    let active_round = sqlx::query!(
+    let (round_id_db, status_db) = query_as::<_, (Uuid, String)>(
         r#"
         SELECT id, status
         FROM rounds
         WHERE status = 'active'
         LIMIT 1
-        "#
+        "#,
     )
     .fetch_one(&pool)
     .await
     .unwrap();
 
     // Verify we got the active round
-    assert_eq!(active_round.id, active_round_id);
-    assert_eq!(active_round.status, "active");
+    assert_eq!(round_id_db, active_round_id);
+    assert_eq!(status_db, "active");
 }
