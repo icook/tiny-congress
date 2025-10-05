@@ -15,7 +15,7 @@ build:
         buildArgs:
           BUILDKIT_INLINE_CACHE: "1"
         cacheFrom:
-          - "tc-api-dev:cache-{{.ENV.BRANCH_NAME}}"
+          - "tc-api-dev:cache-main"
           - "tc-api-dev:cache"
     - image: postgres
       context: .
@@ -24,7 +24,7 @@ build:
         buildArgs:
           BUILDKIT_INLINE_CACHE: "1"
         cacheFrom:
-          - "postgres:cache-{{.ENV.BRANCH_NAME}}"
+          - "postgres:cache-main"
           - "postgres:cache"
     - image: tc-ui-dev
       context: ./web/
@@ -33,7 +33,7 @@ build:
         buildArgs:
           BUILDKIT_INLINE_CACHE: "1"
         cacheFrom:
-          - "tc-ui-dev:cache-{{.ENV.BRANCH_NAME}}"
+          - "tc-ui-dev:cache-main"
           - "tc-ui-dev:cache"
 deploy:
   helm:
@@ -53,10 +53,17 @@ deploy:
 test:
   - image: tc-api-dev
     custom:
-      - command: cd service && cargo test --test api_tests --test graphql_tests --test model_tests -- --test-threads=1 --nocapture
+      - command: >-
+          docker run --rm
+          ${SKAFFOLD_DEFAULT_REPO}/tc-api-dev:${GITHUB_SHA}
+          /bin/sh -lc "cd /usr/src/app && /usr/local/cargo/bin/cargo test --test api_tests --test graphql_tests --test model_tests -- --test-threads=1 --nocapture"
   - image: tc-ui-dev
     custom:
-      - command: cd web && yarn install --frozen-lockfile && yarn test
+      - command: >-
+          docker run --rm
+          -e CI=true
+          ${SKAFFOLD_DEFAULT_REPO}/tc-ui-dev:${GITHUB_SHA}
+          /bin/sh -lc "cd /app && yarn test --watchAll=false"
 
 # Post-deploy verification: run integration tests against the live cluster
 verify:

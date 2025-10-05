@@ -76,35 +76,72 @@ jobs:
           echo "branch_slug=${branch}" >> "$GITHUB_OUTPUT"
           echo "BRANCH_NAME=${branch}" >> "$GITHUB_ENV"
 
-      - name: Build, deploy & verify (ci profile)
-        run: |
-          set -euo pipefail
-          skaffold run -p ${SKAFFOLD_PROFILE}
-          # skaffold verify will build and deploy first if needed, then run verification
-          # skaffold verify -p ${SKAFFOLD_PROFILE}
-
-      - name: Tag cache images (for cross-branch reuse)
-        if: ${{ github.event_name == 'push' }}
+      - name: Wait for prebuilt images
         env:
-          BRANCH_SLUG: ${{ steps.meta.outputs.branch_slug }}
+          REGISTRY: ghcr.io/${{ github.repository }}
         run: |
           set -euo pipefail
-          for img in tc-api-dev tc-ui-dev postgres; do
-            src="${SKAFFOLD_DEFAULT_REPO}/${img}:$(git rev-parse --short=12 HEAD)"
-            branch_dst="${SKAFFOLD_DEFAULT_REPO}/${img}:cache-${BRANCH_SLUG}"
+          images=(tc-api-dev tc-ui-dev postgres)
+          for img in "${images[@]}"; do
+            ref="${REGISTRY}/${img}:${GITHUB_SHA}"
+            echo "Waiting for ${ref} to be available"
+            for attempt in $(seq 1 30); do
+              if docker manifest inspect "${ref}" >/dev/null 2>&1; then
+                echo "Found ${ref}"
+                docker pull "${ref}"
+                kind load docker-image "${ref}" --name "${KIND_CLUSTER_NAME:-skaffold-ci}"
+                break
+              fi
 
-            echo "Tagging ${src} as ${branch_dst}"
-            docker pull "$src"
-            docker tag "$src" "$branch_dst"
-            docker push "$branch_dst"
+              if [[ ${attempt} -eq 30 ]]; then
+                echo "Timed out waiting for ${ref}"
+                exit 1
+              fi
 
-            if [[ "${GITHUB_REF}" == "refs/heads/main" ]]; then
-              main_dst="${SKAFFOLD_DEFAULT_REPO}/${img}:cache"
-              echo "Tagging ${src} as ${main_dst} (main branch)"
-              docker tag "$src" "$main_dst"
-              docker push "$main_dst"
-            fi
+              echo "Still waiting for ${ref} (attempt ${attempt})"
+              sleep 10
+            done
           done
+
+      - name: Prepare Skaffold image overrides
+        id: images
+        env:
+          REGISTRY: ghcr.io/${{ github.repository }}
+        run: |
+          set -euo pipefail
+          images=(tc-api-dev tc-ui-dev postgres)
+          artifacts_file="${RUNNER_TEMP}/skaffold-artifacts.json"
+          export REGISTRY
+          export GITHUB_SHA
+          export artifacts_file
+          jq -n --arg registry "$REGISTRY" --arg sha "$GITHUB_SHA" '
+            ["tc-api-dev", "tc-ui-dev", "postgres"]
+            | {builds: map({imageName: ., tag: ($registry + "/" + . + ":" + $sha)})}
+          ' > "$artifacts_file"
+          echo "Wrote ${artifacts_file} with $(jq '.builds | length' "$artifacts_file") entries"
+          echo "artifact_file=${artifacts_file}" >> "$GITHUB_OUTPUT"
+
+      - name: Run Skaffold tests
+        run: |
+          set -euo pipefail
+          skaffold test -p ${SKAFFOLD_PROFILE} --build-artifacts "${{ steps.images.outputs.artifact_file }}"
+
+      - name: Deploy with Skaffold
+        run: |
+          set -euo pipefail
+          skaffold deploy -p ${SKAFFOLD_PROFILE} --status-check=false --build-artifacts "${{ steps.images.outputs.artifact_file }}"
+
+      - name: Wait for deployments
+        run: |
+          set -euo pipefail
+          kubectl rollout status deployment/postgres --timeout=180s
+          kubectl rollout status deployment/tc --timeout=180s
+          kubectl rollout status deployment/tc-frontend --timeout=180s
+
+      - name: Run Skaffold verify
+        run: |
+          set -euo pipefail
+          skaffold verify -p ${SKAFFOLD_PROFILE} --build-artifacts "${{ steps.images.outputs.artifact_file }}"
 
       - name: Dump diagnostics on failure
         if: failure()
