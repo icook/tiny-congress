@@ -1,9 +1,9 @@
 # Repository Guidelines
 
 ## Default Delivery Flow
-- Create a feature branch (`feature/<slug>`) for every ticket before making changes.
+- Create a feature branch for every ticket before making changes; include the ticket number and a short, descriptive slug (e.g., `feature/TCK-123-update-copy`).
 - Implement the work, keep commits focused, and run the relevant backend (`cargo test`) and frontend (`yarn test`) suites.
-- Once everything passes locally, push the branch and open a PR that links the tracked issue and summarizes validation.
+- Once everything passes locally, push the branch and open a PR that links the tracked issue, fills out the Codex PR template, and explicitly notes `Opened by: Codex`.
 - Stick to this loop unless the issue description calls out an alternative rollout path.
 
 ## Project Structure & Module Organization
