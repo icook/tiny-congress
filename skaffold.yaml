@@ -59,7 +59,7 @@ test:
       - command: >-
           docker run --rm
           ${SKAFFOLD_DEFAULT_REPO}/tc-api-dev:${GITHUB_SHA}
-          /bin/sh -lc "cd /usr/src/app && /usr/local/cargo/bin/cargo test --test api_tests --test graphql_tests --test model_tests -- --test-threads=1 --nocapture"
+          /bin/sh -lc "cd /usr/src/app && cargo test --test api_tests --test graphql_tests --test model_tests -- --test-threads=1 --nocapture"
   - image: tc-ui-dev
     custom:
       - command: >-

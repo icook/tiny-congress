@@ -28,5 +28,11 @@ RUN --mount=type=cache,target=/usr/src/app/target \
   --mount=type=cache,target=/usr/local/cargo/git \
   sh -ec 'cargo build --bin tinycongress-api && install -m 0755 target/debug/tinycongress-api /usr/local/bin/tinycongress-api'
 
+# Precompile test binaries so CI containers can run them without rebuilding dependencies
+RUN --mount=type=cache,target=/usr/src/app/target \
+  --mount=type=cache,target=/usr/local/cargo/registry \
+  --mount=type=cache,target=/usr/local/cargo/git \
+  cargo test --no-run
+
 # Default command: run the dev-built binary from PATH
 CMD ["tinycongress-api"]
