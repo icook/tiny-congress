@@ -57,16 +57,11 @@ test:
   - image: tc-api-dev
     custom:
       - command: >-
-          docker run --rm
-          ${SKAFFOLD_DEFAULT_REPO}/tc-api-dev:${GITHUB_SHA}
-          /bin/sh -lc "cd /usr/src/app && /usr/local/cargo/bin/cargo test --test api_tests --test graphql_tests --test model_tests -- --test-threads=1 --nocapture"
+          docker run --rm "$IMAGE" /bin/sh -lc "cd /usr/src/app && /usr/local/cargo/bin/cargo test --test api_tests --test graphql_tests --test model_tests -- --test-threads=1 --nocapture"
   - image: tc-ui-dev
     custom:
       - command: >-
-          docker run --rm
-          -e CI=true
-          ${SKAFFOLD_DEFAULT_REPO}/tc-ui-dev:${GITHUB_SHA}
-          /bin/sh -lc "cd /app && yarn test --watchAll=false"
+          docker run --rm -e CI=true "$IMAGE" /bin/sh -lc "cd /app && yarn test --watchAll=false"
 
 # Post-deploy verification: run integration tests against the live cluster
 verify:
