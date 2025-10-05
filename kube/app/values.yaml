@@ -90,3 +90,9 @@ frontend:
   service:
     port: 5173
     targetPort: 5173
+
+postgres:
+  image:
+    repository: postgres
+    tag: "17"
+    pullPolicy: IfNotPresent
