@@ -70,7 +70,9 @@ jobs:
             ${{ env.REGISTRY }}/${{ matrix.image }}:branch-${{ steps.meta.outputs.branch_slug }}
           cache-from: |
             type=gha,scope=${{ matrix.image }}
+            type=gha,scope=${{ matrix.image }}-sccache
             type=registry,ref=${{ env.REGISTRY }}/${{ matrix.image }}:cache
           cache-to: |
             type=gha,scope=${{ matrix.image }},mode=max
+            type=gha,scope=${{ matrix.image }}-sccache,mode=max
             type=registry,ref=${{ env.REGISTRY }}/${{ matrix.image }}:cache,mode=max

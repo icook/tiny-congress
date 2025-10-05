@@ -11,34 +11,47 @@ COPY . .
 RUN cargo chef prepare --recipe-path recipe.json
 
 FROM chef AS cacher
-RUN cargo install sccache --locked
+ARG SCCACHE_VERSION=0.10.0
+ARG TARGETARCH
+RUN set -eux; \
+    case "${TARGETARCH}" in \
+      amd64) sccache_arch="x86_64-unknown-linux-musl" ;; \
+      arm64) sccache_arch="aarch64-unknown-linux-musl" ;; \
+      *) echo "unsupported TARGETARCH: ${TARGETARCH}" >&2; exit 1 ;; \
+    esac; \
+    curl -fsSL -o /tmp/sccache.tar.gz "https://github.com/mozilla/sccache/releases/download/v${SCCACHE_VERSION}/sccache-v${SCCACHE_VERSION}-${sccache_arch}.tar.gz"; \
+    tar -xzf /tmp/sccache.tar.gz -C /tmp; \
+    mv /tmp/sccache-v${SCCACHE_VERSION}-${sccache_arch}/sccache /usr/local/bin/sccache; \
+    chmod +x /usr/local/bin/sccache; \
+    rm -rf /tmp/sccache.tar.gz /tmp/sccache-v${SCCACHE_VERSION}-${sccache_arch}
 COPY --from=planner /usr/src/app/recipe.json recipe.json
-ENV RUSTC_WRAPPER=/usr/local/cargo/bin/sccache
+ENV RUSTC_WRAPPER=/usr/local/bin/sccache
 ENV SCCACHE_DIR=/usr/local/sccache
 ENV SCCACHE_CACHE_SIZE=10G
-RUN --mount=type=cache,id=service-sccache,target=/usr/local/sccache cargo chef cook --profile dev --recipe-path recipe.json
+RUN --mount=type=cache,id=service-sccache,sharing=locked,target=/usr/local/sccache cargo chef cook --profile dev --recipe-path recipe.json
 # Pre-install sqlx-cli so its dependencies stay cached with the chef layer
-RUN --mount=type=cache,id=service-sccache,target=/usr/local/sccache cargo install sqlx-cli --locked --features postgres
+RUN --mount=type=cache,id=service-sccache,sharing=locked,target=/usr/local/sccache cargo install sqlx-cli --locked --features postgres
 
 FROM rust:1.86 AS builder
 
 WORKDIR /usr/src/app
 ENV CARGO_HOME=/usr/local/cargo
 ENV CARGO_TARGET_DIR=/usr/src/app/target
-ENV RUSTC_WRAPPER=/usr/local/cargo/bin/sccache
+ENV RUSTC_WRAPPER=/usr/local/bin/sccache
 ENV SCCACHE_DIR=/usr/local/sccache
 ENV SCCACHE_CACHE_SIZE=10G
 
 COPY --from=cacher /usr/src/app/target target
 COPY --from=cacher /usr/local/cargo /usr/local/cargo
+COPY --from=cacher /usr/local/bin/sccache /usr/local/bin/sccache
 COPY . .
 
 ENV SQLX_OFFLINE=true
-RUN --mount=type=cache,id=service-sccache,target=/usr/local/sccache cargo sqlx prepare --check
-RUN --mount=type=cache,id=service-sccache,target=/usr/local/sccache sh -ec 'cargo build --bin tinycongress-api && install -m 0755 target/debug/tinycongress-api /usr/local/bin/tinycongress-api'
+RUN --mount=type=cache,id=service-sccache,sharing=locked,target=/usr/local/sccache cargo sqlx prepare --check
+RUN --mount=type=cache,id=service-sccache,sharing=locked,target=/usr/local/sccache sh -ec 'cargo build --bin tinycongress-api && install -m 0755 target/debug/tinycongress-api /usr/local/bin/tinycongress-api'
 
 # Precompile test binaries so CI containers can run them without rebuilding dependencies
-RUN --mount=type=cache,id=service-sccache,target=/usr/local/sccache cargo test --no-run
+RUN --mount=type=cache,id=service-sccache,sharing=locked,target=/usr/local/sccache cargo test --no-run
 
 # Default command: run the dev-built binary from PATH
 CMD ["tinycongress-api"]
