@@ -1,8 +1,24 @@
-FROM rust:1.86 as builder
+# Use cargo-chef to cache dependency builds between Docker layers
+FROM lukemathwalker/cargo-chef:latest-rust-1.86 AS chef
 
 WORKDIR /usr/src/app
+
+FROM chef AS planner
+COPY . .
+RUN cargo chef prepare --recipe-path recipe.json
+
+FROM chef AS cacher
+COPY --from=planner /usr/src/app/recipe.json recipe.json
+RUN cargo chef cook --release --recipe-path recipe.json
+
+FROM rust:1.86 AS builder
+
+WORKDIR /usr/src/app
+COPY --from=cacher /usr/src/app/target target
+COPY --from=cacher /usr/local/cargo /usr/local/cargo
 COPY . .
 
+ENV SQLX_OFFLINE=true
 RUN cargo install sqlx-cli --locked --features postgres
 RUN cargo sqlx prepare --check
 RUN cargo build --release
