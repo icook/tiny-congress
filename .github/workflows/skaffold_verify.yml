@@ -1,4 +1,4 @@
-name: container build
+name: skaffold verify
 
 on:
   push:
@@ -13,33 +13,52 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build-images:
-    name: Build ${{ matrix.image }} image
+  skaffold_verify:
+    name: Run skaffold verify
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - image: tc-api-dev
-            context: ./service
-            dockerfile: service/Dockerfile.dev
-          - image: tc-ui-dev
-            context: ./web
-            dockerfile: web/Dockerfile.dev
-          - image: postgres
-            context: .
-            dockerfile: dockerfiles/Dockerfile.postgres
     env:
-      REGISTRY: ghcr.io/${{ github.repository }}
+      SKAFFOLD_DEFAULT_REPO: ghcr.io/${{ github.repository }}
+      SKAFFOLD_PROFILE: ci
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Docker Buildx
+      - name: Set up Docker Buildx (for layer caching)
         uses: docker/setup-buildx-action@v3
+        with:
+          driver: docker-container
+
+      - name: Set up KinD cluster
+        uses: helm/kind-action@v1.10.0
+        with:
+          version: v0.22.0
+          kubectl_version: v1.30.0
+          cluster_name: skaffold-ci
+
+      - name: Install Skaffold
+        run: |
+          set -euo pipefail
+          SKAFFOLD_VERSION=v2.16.1
+          curl -fsSL -o skaffold https://storage.googleapis.com/skaffold/releases/${SKAFFOLD_VERSION}/skaffold-linux-amd64
+          echo "Installing skaffold ${SKAFFOLD_VERSION}"
+          sudo install skaffold /usr/local/bin/skaffold
+          skaffold version
+
+      - name: Warm yarn cache (UI tests in verify may run yarn during build)
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: 'web/.nvmrc'
+          cache: 'yarn'
+          cache-dependency-path: '**/yarn.lock'
+
+      - name: Show cluster info
+        run: |
+          kubectl version --client=true
+          kubectl cluster-info
+          kubectl get nodes -o wide
 
       - name: Login to GHCR
         uses: docker/login-action@v3
@@ -55,22 +74,46 @@ jobs:
           branch="${ref//[^a-zA-Z0-9_.-]/-}"
           branch="${branch,,}"
           echo "branch_slug=${branch}" >> "$GITHUB_OUTPUT"
+          echo "BRANCH_NAME=${branch}" >> "$GITHUB_ENV"
 
-      - name: Build & push ${{ matrix.image }}
-        uses: docker/build-push-action@v6
-        with:
-          context: ${{ matrix.context }}
-          file: ${{ matrix.dockerfile }}
-          push: true
-          platforms: linux/amd64
-          build-args: |
-            BUILDKIT_INLINE_CACHE=1
-          tags: |
-            ${{ env.REGISTRY }}/${{ matrix.image }}:${{ github.sha }}
-            ${{ env.REGISTRY }}/${{ matrix.image }}:branch-${{ steps.meta.outputs.branch_slug }}
-          cache-from: |
-            type=gha,scope=${{ matrix.image }}
-            type=registry,ref=${{ env.REGISTRY }}/${{ matrix.image }}:cache
-          cache-to: |
-            type=gha,scope=${{ matrix.image }},mode=max
-            type=registry,ref=${{ env.REGISTRY }}/${{ matrix.image }}:cache,mode=max
+      - name: Build, deploy & verify (ci profile)
+        run: |
+          set -euo pipefail
+          skaffold run -p ${SKAFFOLD_PROFILE}
+          # skaffold verify will build and deploy first if needed, then run verification
+          # skaffold verify -p ${SKAFFOLD_PROFILE}
+
+      - name: Tag cache images (for cross-branch reuse)
+        if: ${{ github.event_name == 'push' }}
+        env:
+          BRANCH_SLUG: ${{ steps.meta.outputs.branch_slug }}
+        run: |
+          set -euo pipefail
+          for img in tc-api-dev tc-ui-dev postgres; do
+            src="${SKAFFOLD_DEFAULT_REPO}/${img}:$(git rev-parse --short=12 HEAD)"
+            branch_dst="${SKAFFOLD_DEFAULT_REPO}/${img}:cache-${BRANCH_SLUG}"
+
+            echo "Tagging ${src} as ${branch_dst}"
+            docker pull "$src"
+            docker tag "$src" "$branch_dst"
+            docker push "$branch_dst"
+
+            if [[ "${GITHUB_REF}" == "refs/heads/main" ]]; then
+              main_dst="${SKAFFOLD_DEFAULT_REPO}/${img}:cache"
+              echo "Tagging ${src} as ${main_dst} (main branch)"
+              docker tag "$src" "$main_dst"
+              docker push "$main_dst"
+            fi
+          done
+
+      - name: Dump diagnostics on failure
+        if: failure()
+        run: |
+          echo '--- Pods ---'
+          kubectl get pods -A -o wide || true
+          echo '--- Services ---'
+          kubectl get svc -A || true
+          echo '--- Events ---'
+          kubectl get events -A --sort-by=.lastTimestamp || true
+          echo '--- Helm Releases ---'
+          kubectl get all -n default || true
