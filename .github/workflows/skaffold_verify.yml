@@ -19,6 +19,9 @@ jobs:
     permissions:
       contents: read
       packages: write
+    env:
+      SKAFFOLD_DEFAULT_REPO: ghcr.io/${{ github.repository }}
+      SKAFFOLD_PROFILE: ci
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -64,33 +67,98 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build, deploy & verify (ci profile)
-        env:
-          # Use the dedicated CI profile to build linux/amd64 images on GitHub runners
-          SKAFFOLD_PROFILE: ci
-          SKAFFOLD_DEFAULT_REPO: ghcr.io/${{ github.repository }}
+      - name: Compute branch slug
+        id: meta
         run: |
-          set -euo pipefail
-          skaffold run -p ${SKAFFOLD_PROFILE}
-          # skaffold verify will build and deploy first if needed, then run verification
-          # TODO FIXME
-          # skaffold verify -p ${SKAFFOLD_PROFILE}
+          ref="${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}"
+          branch="${ref//[^a-zA-Z0-9_.-]/-}"
+          branch="${branch,,}"
+          echo "branch_slug=${branch}" >> "$GITHUB_OUTPUT"
+          echo "BRANCH_NAME=${branch}" >> "$GITHUB_ENV"
 
-      - name: Tag cache images (default branch only)
-        if: github.ref == 'refs/heads/master'
+      - name: Wait for prebuilt images
         env:
-          SKAFFOLD_DEFAULT_REPO: ghcr.io/${{ github.repository }}
+          REGISTRY: ghcr.io/${{ github.repository }}
         run: |
           set -euo pipefail
-          # Tag latest built images as :cache for cross-branch reuse
-          for img in tc-api-dev tc-ui-dev postgres; do
-            src="${SKAFFOLD_DEFAULT_REPO}/${img}:$(git rev-parse --short=7 HEAD)"
-            dst="${SKAFFOLD_DEFAULT_REPO}/${img}:cache"
-            echo "Tagging ${src} as ${dst}"
-            docker pull "$src"
-            docker tag "$src" "$dst"
-            docker push "$dst"
+          images=(tc-api-dev tc-ui-dev postgres)
+          for img in "${images[@]}"; do
+            ref="${REGISTRY}/${img}:${GITHUB_SHA}"
+            echo "Waiting for ${ref} to be available"
+            for attempt in $(seq 1 30); do
+              if docker manifest inspect "${ref}" >/dev/null 2>&1; then
+                echo "Found ${ref}"
+                break
+              fi
+
+              if [[ ${attempt} -eq 30 ]]; then
+                echo "Timed out waiting for ${ref}"
+                exit 1
+              fi
+
+              echo "Still waiting for ${ref} (attempt ${attempt})"
+              sleep 10
+            done
           done
+
+      - name: Configure registry access for KinD
+        env:
+          REGISTRY: ghcr.io
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_ACTOR: ${{ github.actor }}
+        run: |
+          set -euo pipefail
+          kubectl create secret docker-registry ghcr-cred \
+            --namespace default \
+            --docker-server="${REGISTRY}" \
+            --docker-username="${GITHUB_ACTOR}" \
+            --docker-password="${GITHUB_TOKEN}" \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+          kubectl patch serviceaccount default \
+            -n default \
+            --type merge \
+            -p '{"imagePullSecrets":[{"name":"ghcr-cred"}]}'
+
+      - name: Prepare Skaffold image overrides
+        id: images
+        env:
+          REGISTRY: ghcr.io/${{ github.repository }}
+        run: |
+          set -euo pipefail
+          images=(tc-api-dev tc-ui-dev postgres)
+          artifacts_file="${RUNNER_TEMP}/skaffold-artifacts.json"
+          export REGISTRY
+          export GITHUB_SHA
+          export artifacts_file
+          jq -n --arg registry "$REGISTRY" --arg sha "$GITHUB_SHA" '
+            ["tc-api-dev", "tc-ui-dev", "postgres"]
+            | {builds: map({imageName: ., tag: ($registry + "/" + . + ":" + $sha)})}
+          ' > "$artifacts_file"
+          echo "Wrote ${artifacts_file} with $(jq '.builds | length' "$artifacts_file") entries"
+          echo "artifact_file=${artifacts_file}" >> "$GITHUB_OUTPUT"
+
+      - name: Run Skaffold tests
+        run: |
+          set -euo pipefail
+          skaffold test -p ${SKAFFOLD_PROFILE} --build-artifacts "${{ steps.images.outputs.artifact_file }}"
+
+      - name: Deploy with Skaffold
+        run: |
+          set -euo pipefail
+          skaffold deploy -p ${SKAFFOLD_PROFILE} --status-check=false --build-artifacts "${{ steps.images.outputs.artifact_file }}"
+
+      - name: Wait for deployments
+        run: |
+          set -euo pipefail
+          kubectl rollout status deployment/postgres --timeout=180s
+          kubectl rollout status deployment/tc --timeout=180s
+          kubectl rollout status deployment/tc-frontend --timeout=180s
+
+      - name: Run Skaffold verify
+        run: |
+          set -euo pipefail
+          skaffold verify -p ${SKAFFOLD_PROFILE} --build-artifacts "${{ steps.images.outputs.artifact_file }}"
 
       - name: Dump diagnostics on failure
         if: failure()
