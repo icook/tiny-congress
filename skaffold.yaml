@@ -61,7 +61,7 @@ test:
   - image: tc-ui-dev
     custom:
       - command: >-
-          docker run --rm -e CI=true "$IMAGE" /bin/sh -lc "cd /app && yarn test --watchAll=false"
+          docker run --rm -e CI=true "$IMAGE" /bin/sh -lc "cd /app && yarn test --watchAll=false && yarn playwright:test"
 
 # Post-deploy verification: run integration tests against the live cluster
 verify:

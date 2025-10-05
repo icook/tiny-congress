@@ -130,3 +130,8 @@ dist
 .pnp.*
 
 .DS_Store
+# Playwright artifacts
+playwright-report/
+playwright/.launches/
+.playwright/
+test-results/
