@@ -12,5 +12,13 @@ export default defineConfig({
     globals: true,
     environment: 'jsdom',
     setupFiles: './vitest.setup.mjs',
+    exclude: [
+      '**/node_modules/**',
+      '**/dist/**',
+      '**/.idea/**',
+      '**/.git/**',
+      '**/.cache/**',
+      'tests/e2e/**',
+    ],
   },
 });
