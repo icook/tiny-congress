@@ -141,14 +141,7 @@ jobs:
       - name: Deploy with Skaffold
         run: |
           set -euo pipefail
-          skaffold deploy -p ${SKAFFOLD_PROFILE} --status-check=false --build-artifacts "${{ steps.images.outputs.artifact_file }}"
-
-      - name: Wait for deployments
-        run: |
-          set -euo pipefail
-          kubectl rollout status deployment/postgres --timeout=180s
-          kubectl rollout status deployment/tc --timeout=180s
-          kubectl rollout status deployment/tc-frontend --timeout=180s
+          skaffold deploy -p ${SKAFFOLD_PROFILE} --status-check=true --build-artifacts "${{ steps.images.outputs.artifact_file }}"
 
       - name: Run Skaffold verify
         run: |
