@@ -41,6 +41,19 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      - name: Prepare sccache directory
+        run: mkdir -p .sccache
+
+      - name: Restore sccache cache
+        if: ${{ matrix.image == 'tc-api-dev' }}
+        id: restore-sccache
+        uses: actions/cache@v4
+        with:
+          path: .sccache
+          key: sccache-${{ runner.os }}-${{ matrix.image }}-${{ hashFiles('service/Cargo.lock', 'service/Dockerfile.dev') }}
+          restore-keys: |
+            sccache-${{ runner.os }}-${{ matrix.image }}-
+
       - name: Login to GHCR
         uses: docker/login-action@v3
         with:
@@ -57,6 +70,7 @@ jobs:
           echo "branch_slug=${branch}" >> "$GITHUB_OUTPUT"
 
       - name: Build & push ${{ matrix.image }}
+        id: build
         uses: docker/build-push-action@v6
         with:
           context: ${{ matrix.context }}
@@ -72,7 +86,9 @@ jobs:
             type=gha,scope=${{ matrix.image }}
             type=gha,scope=${{ matrix.image }}-sccache
             type=registry,ref=${{ env.REGISTRY }}/${{ matrix.image }}:cache
+            type=local,src=.sccache
           cache-to: |
             type=gha,scope=${{ matrix.image }},mode=max
             type=gha,scope=${{ matrix.image }}-sccache,mode=max
             type=registry,ref=${{ env.REGISTRY }}/${{ matrix.image }}:cache,mode=max
+            type=local,dest=.sccache,mode=max

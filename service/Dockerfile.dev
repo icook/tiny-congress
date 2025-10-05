@@ -51,7 +51,7 @@ RUN --mount=type=cache,id=service-sccache,sharing=locked,target=/usr/local/sccac
 RUN --mount=type=cache,id=service-sccache,sharing=locked,target=/usr/local/sccache sh -ec 'cargo build --bin tinycongress-api && install -m 0755 target/debug/tinycongress-api /usr/local/bin/tinycongress-api'
 
 # Precompile test binaries so CI containers can run them without rebuilding dependencies
-RUN --mount=type=cache,id=service-sccache,sharing=locked,target=/usr/local/sccache cargo test --no-run
+RUN --mount=type=cache,id=service-sccache,sharing=locked,target=/usr/local/sccache sh -ec 'cargo test --no-run; sccache --show-stats'
 
 # Default command: run the dev-built binary from PATH
 CMD ["tinycongress-api"]
