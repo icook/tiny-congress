@@ -47,12 +47,6 @@ jobs:
           sudo install skaffold /usr/local/bin/skaffold
           skaffold version
 
-      - name: Warm yarn cache (UI tests in verify may run yarn during build)
-        uses: actions/setup-node@v4
-        with:
-          node-version-file: 'web/.nvmrc'
-          cache: 'yarn'
-          cache-dependency-path: '**/yarn.lock'
 
       - name: Show cluster info
         run: |
