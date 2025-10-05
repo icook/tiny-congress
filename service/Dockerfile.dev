@@ -29,5 +29,7 @@ RUN sh -ec 'cargo build --bin tinycongress-api && install -m 0755 target/debug/t
 # Precompile test binaries so CI containers can run them without rebuilding dependencies
 RUN cargo test --no-run
 
+ENV PATH="/usr/local/cargo/bin:${PATH}"
+
 # Default command: run the dev-built binary from PATH
 CMD ["tinycongress-api"]
