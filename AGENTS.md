@@ -3,7 +3,9 @@
 ## Default Delivery Flow
 - Create a feature branch for every ticket before making changes; include the GitHub issue number and a short, descriptive slug (e.g., `feature/123-update-copy`).
 - Implement the work, keep commits focused, and run the relevant backend (`cargo test`) and frontend (`yarn test`) suites.
-- Once everything passes locally, push the branch and open a PR that links the tracked issue, fills out the Codex PR template, and explicitly notes `Opened by: Codex`.
+- Once everything passes locally, push the branch and open a draft PR that links the tracked issue, fills out the Codex PR template, and explicitly notes `Opened by: Codex`.
+- After the PR's automated checks succeed, mark it ready for review.
+- Wait for the Copilot review to land and respond to critiques when they are obviously sensible improvements.
 - Stick to this loop unless the issue description calls out an alternative rollout path.
 
 ## Project Structure & Module Organization
