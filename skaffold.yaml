@@ -48,6 +48,8 @@ deploy:
           image.tag: "{{.IMAGE_TAG_tc_api_dev}}"
           frontend.image.repository: "{{.IMAGE_REPO_tc_ui_dev}}"
           frontend.image.tag: "{{.IMAGE_TAG_tc_ui_dev}}"
+          postgres.image.repository: "{{.IMAGE_REPO_postgres}}"
+          postgres.image.tag: "{{.IMAGE_TAG_postgres}}"
         setValues:
           serviceAccount:
             create: false
