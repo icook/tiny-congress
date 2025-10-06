@@ -132,7 +132,7 @@ CI runs backend tests directly on the Actions runner so that we can surface indi
      RUST_TEST_THREADS=1 cargo llvm-cov --workspace --lcov --output-path coverage/rust.lcov -- -- --test-threads=1
    ```
 
-The generated `reports/` and `coverage/` directories mirror what the workflow uploads via `actions/upload-test-results` and `actions/upload-code-coverage`. They are ignored by git so you can iterate locally without polluting commits.
+The generated `reports/` and `coverage/` directories mirror what the workflow uploads via `EnricoMi/publish-unit-test-result-action` and `actions/upload-artifact`. They are ignored by git so you can iterate locally without polluting commits.
 
 ## API Schema
 
