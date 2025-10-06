@@ -3,12 +3,13 @@ set -euo pipefail
 
 COVERAGE_DIR="${COVERAGE_DIR:-/workspace/coverage}"
 REPORTS_DIR="${REPORTS_DIR:-/workspace/reports}"
-PROFILE_DIR="${PROFILE_DIR:-/usr/src/app/target/llvm-cov-target/profiles}"
+TARGET_LLVM_DIR="${TARGET_LLVM_DIR:-/usr/src/app/target/llvm-cov-target}"
+PROFILE_DIR="${PROFILE_DIR:-${TARGET_LLVM_DIR}/profiles}"
 
 mkdir -p "${COVERAGE_DIR}" "${REPORTS_DIR}"
 rm -f "${COVERAGE_DIR}/rust.lcov"
 
-rm -rf "${PROFILE_DIR}"
+rm -rf "${TARGET_LLVM_DIR}"
 mkdir -p "${PROFILE_DIR}"
 
 export PATH="${CARGO_BIN:-/usr/local/cargo/bin}:$PATH"
