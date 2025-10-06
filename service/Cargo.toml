@@ -17,7 +17,8 @@ async-graphql = "7.0"
 async-graphql-axum = "7.0"
 
 # Database
-sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "postgres", "chrono", "uuid", "json", "migrate"] }
+sqlx-core = { version = "0.8", default-features = false, features = ["_rt-tokio", "_tls-rustls-ring-webpki", "chrono", "uuid", "json", "migrate"] }
+sqlx-postgres = { version = "0.8", default-features = false, features = ["chrono", "uuid", "json", "migrate"] }
 
 # Utilities
 chrono = { version = "0.4", features = ["serde"] }
@@ -30,11 +31,9 @@ thiserror = "2.0"
 anyhow = "1.0"
 rand = "0.9"
 reqwest = { version = "0.12", features = ["json"] }
-backoff = { version = "0.4", features = ["tokio"] }
 
 [dev-dependencies]
 hyper = "1.6"
-sqlx-cli = "0.8.3"
 tower = { version = "0.5", features = ["util"] }
 
 [[bin]]
