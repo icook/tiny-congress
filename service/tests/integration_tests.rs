@@ -382,7 +382,7 @@ async fn test_round_pairing_and_voting() {
     .unwrap();
 
     // Verify ranks
-    let ranks = query_as::<_, (Uuid, i64, f64)>(
+    let ranks = query_as::<_, (Uuid, i32, f64)>(
         r#"
         SELECT topic_id, rank, score
         FROM topic_rankings
@@ -462,7 +462,7 @@ async fn test_top_topics() {
     .unwrap();
 
     // Get top 3 topics
-    let top_topics = query_as::<_, (Uuid, i64, f64, String)>(
+    let top_topics = query_as::<_, (Uuid, i32, f64, String)>(
         r#"
         SELECT tr.topic_id, tr.rank, tr.score, t.title
         FROM topic_rankings tr
