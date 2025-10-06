@@ -30,6 +30,9 @@ cargo test --locked \
 cargo2junit < "${REPORTS_DIR}/cargo-test.json" > "${REPORTS_DIR}/cargo-junit.xml"
 
 if [ ${status} -eq 0 ]; then
+  if find "${PROFILE_DIR}" -name '*.profraw' -print -quit | grep -q .; then
+    find "${PROFILE_DIR}" -name '*.profraw' -exec mv {} "${TARGET_LLVM_DIR}" \;
+  fi
   cargo llvm-cov report --lcov --output-path "${COVERAGE_DIR}/rust.lcov" --ignore-filename-regex '/usr/local/cargo'
 fi
 
