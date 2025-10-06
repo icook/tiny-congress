@@ -24,6 +24,7 @@
 - Full-stack verification: prefer `skaffold test -p ci` and `skaffold verify -p ci` (add `--build-artifacts <file>` when reusing prebuilt images) to mirror CI behavior; `skaffold dev -p dev` remains available for interactive loops.
 - CI monitoring: after pushing a branch, run `gh run watch --branch $(git rev-parse --abbrev-ref HEAD)` to stream workflow progress.
 - Rust Docker builds use cargo-chef stages by default; keep the planner/cacher/builder structure intact when editing `service/Dockerfile*` assets.
+- When tuning caches, remember Skaffold does not evaluate templates inside `cacheFrom`; add a profile or patch that swaps in shared tags (e.g., `cache-feature`) for feature branches instead of relying on `{{.ENV.*}}` expressions.
 
 ## Coding Style & Naming Conventions
 - Rust uses edition 2021 with rustfmt; keep modules snake_case and favor descriptive crate names.
