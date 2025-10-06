@@ -21,26 +21,43 @@ jobs:
       checks: write
       pull-requests: write
       id-token: write
-    services:
-      postgres:
-        image: postgres:17
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: tinycongress
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U postgres"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 10
     env:
       CARGO_TERM_COLOR: always
       DATABASE_URL: postgres://postgres:postgres@localhost:5432/tinycongress
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Build Postgres image with pgmq
+        run: docker build -t tinycongress-postgres -f dockerfiles/Dockerfile.postgres .
+
+      - name: Start Postgres
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: tinycongress
+        run: |
+          set -euo pipefail
+          docker run -d --name tinycongress-postgres \
+            -e POSTGRES_USER \
+            -e POSTGRES_PASSWORD \
+            -e POSTGRES_DB \
+            -p 5432:5432 \
+            tinycongress-postgres
+
+      - name: Wait for Postgres
+        run: |
+          set -euo pipefail
+          for i in {1..30}; do
+            if docker exec tinycongress-postgres pg_isready -U postgres >/dev/null 2>&1; then
+              echo "Postgres is ready"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Postgres did not become ready in time" >&2
+          docker logs tinycongress-postgres || true
+          exit 1
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -113,3 +130,11 @@ jobs:
         with:
           name: rust-coverage-lcov
           path: service/coverage/rust.lcov
+
+      - name: Dump Postgres logs
+        if: failure()
+        run: docker logs tinycongress-postgres
+
+      - name: Stop Postgres
+        if: always()
+        run: docker rm -f tinycongress-postgres
