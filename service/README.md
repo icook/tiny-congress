@@ -111,7 +111,7 @@ If you need to fall back to the pre-built binary (e.g. for profiling), set `DISA
 
 ## Test Reporting & Coverage
 
-CI runs backend tests directly on the Actions runner so that we can surface individual failures and coverage deltas on every pull request. You can reproduce the same artifacts locally:
+CI runs backend tests directly on the Actions runner so that we can surface individual failures and coverage deltas on every pull request. The JUnit report is published through `EnricoMi/publish-unit-test-result-action` so the Tests view and PR checks stay informative, and the LCOV output is attached as an artifact for download. You can reproduce the same artifacts locally:
 
 1. Ensure the required tooling is installed:
    ```bash

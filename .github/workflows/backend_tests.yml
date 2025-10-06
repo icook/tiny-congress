@@ -100,15 +100,16 @@ jobs:
           mkdir -p coverage
           cargo llvm-cov --workspace --lcov --output-path coverage/rust.lcov
 
-      - name: Upload test results
+      - name: Publish test results
         if: always()
-        uses: actions/upload-test-results@v1
+        uses: EnricoMi/publish-unit-test-result-action@v2
         with:
-          files: service/reports/*.xml
+          files: service/reports/cargo-junit.xml
+          check_name: Rust Tests
 
-      - name: Upload coverage report
+      - name: Upload coverage artifact
         if: always()
-        uses: actions/upload-code-coverage@v2
+        uses: actions/upload-artifact@v4
         with:
-          coverage-files: service/coverage/rust.lcov
-          tool: lcov
+          name: rust-coverage-lcov
+          path: service/coverage/rust.lcov
