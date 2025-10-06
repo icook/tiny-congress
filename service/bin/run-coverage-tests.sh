@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/usr/bin/env bash
 set -euo pipefail
 
 COVERAGE_DIR="${COVERAGE_DIR:-/workspace/coverage}"
