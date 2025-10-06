@@ -1,0 +1,114 @@
+name: backend tests
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - '**'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.number || github.sha }}
+  cancel-in-progress: true
+
+jobs:
+  rust-tests:
+    name: Run backend tests with coverage
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: write
+      pull-requests: write
+      id-token: write
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: tinycongress
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      CARGO_TERM_COLOR: always
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/tinycongress
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
+
+      - name: Prepare cargo bin cache directory
+        run: mkdir -p ~/.cargo/bin
+
+      - name: Cache cargo bin installs
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin
+          key: cargo-bin-${{ runner.os }}-llvmcov-v1
+
+      - name: Cache cargo builds
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            service
+
+      - name: Install coverage tooling
+        run: |
+          set -euo pipefail
+          if ! command -v cargo-llvm-cov >/dev/null 2>&1; then
+            cargo install --locked cargo-llvm-cov
+          fi
+          if ! command -v cargo2junit >/dev/null 2>&1; then
+            cargo install --locked cargo2junit
+          fi
+          if ! command -v cargo-objdump >/dev/null 2>&1; then
+            cargo install --locked cargo-binutils
+          fi
+
+      - name: Fetch dependencies
+        working-directory: service
+        run: cargo fetch --locked
+
+      - name: Run cargo test and capture JUnit
+        working-directory: service
+        run: |
+          set -euo pipefail
+          mkdir -p reports
+          set +e
+          cargo test --locked --message-format=json > reports/cargo-test.json
+          status=$?
+          set -e
+          cat reports/cargo-test.json | cargo2junit > reports/cargo-junit.xml
+          exit ${status}
+
+      - name: Generate coverage report
+        working-directory: service
+        env:
+          LLVM_PROFILE_FILE: coverage/coverage-%p-%m.profraw
+        run: |
+          set -euo pipefail
+          mkdir -p coverage
+          cargo llvm-cov --workspace --lcov --output-path coverage/rust.lcov
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-test-results@v1
+        with:
+          files: service/reports/*.xml
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-code-coverage@v2
+        with:
+          coverage-files: service/coverage/rust.lcov
+          tool: lcov
