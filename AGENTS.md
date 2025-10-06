@@ -27,6 +27,7 @@
 - Rust Docker builds use cargo-chef stages by default; keep the planner/cacher/builder structure intact when editing `service/Dockerfile*` assets.
 - When tuning caches, remember Skaffold does not evaluate templates inside `cacheFrom`; add a profile or patch that swaps in shared tags (e.g., `cache-feature`) for feature branches instead of relying on `{{.ENV.*}}` expressions.
 - Bake Rust test binaries into the dev image with `cargo test --no-run` and leave `/usr/local/cargo/bin` on the container `PATH` so `skaffold test` can invoke the prebuilt binaries without re-downloading dependencies.
+- `skaffold dev -p dev` expects the `cargo-watch` driven entrypoint (`service/bin/dev-entrypoint.sh`) and manual sync rules to keep pods hot; update the sync list when adding new Rust artifacts and export `DISABLE_CARGO_WATCH=1` only when the watcher truly gets in the way.
 
 ## Coding Style & Naming Conventions
 - Rust uses edition 2021 with rustfmt; keep modules snake_case and favor descriptive crate names.
