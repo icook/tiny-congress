@@ -122,14 +122,14 @@ CI runs backend tests directly on the Actions runner so that we can surface indi
 3. Generate JUnit results for GitHub's Tests tab:
    ```bash
    mkdir -p reports
-   cargo test --locked --message-format=json > reports/cargo-test.json
+   RUST_TEST_THREADS=1 cargo test --locked --message-format=json > reports/cargo-test.json
    cargo2junit < reports/cargo-test.json > reports/cargo-junit.xml
    ```
 4. Produce LCOV coverage matching CI output:
    ```bash
    mkdir -p coverage
    LLVM_PROFILE_FILE=coverage/coverage-%p-%m.profraw \
-     cargo llvm-cov --workspace --lcov --output-path coverage/rust.lcov
+     RUST_TEST_THREADS=1 cargo llvm-cov --workspace --lcov --output-path coverage/rust.lcov
    ```
 
 The generated `reports/` and `coverage/` directories mirror what the workflow uploads via `actions/upload-test-results` and `actions/upload-code-coverage`. They are ignored by git so you can iterate locally without polluting commits.
