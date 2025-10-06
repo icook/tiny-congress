@@ -119,20 +119,13 @@ CI runs backend tests directly on the Actions runner so that we can surface indi
    cargo install --locked cargo-llvm-cov cargo-binutils cargo2junit
    ```
 2. Start PostgreSQL (e.g. `docker-compose -f ../docker-compose.test.yml up`) and export `DATABASE_URL=postgres://postgres:postgres@localhost:5432/tinycongress` if you are not already pointing at a database with the schema applied.
-3. Generate JUnit results for GitHub's Tests tab:
+3. Generate JUnit results and coverage in one pass (mirrors the Skaffold test stage):
    ```bash
-   mkdir -p reports
-   RUST_TEST_THREADS=1 RUSTC_BOOTSTRAP=1 cargo test --locked -- -Z unstable-options --format json --report-time > reports/cargo-test.json
-   cargo2junit < reports/cargo-test.json > reports/cargo-junit.xml
-   ```
-4. Produce LCOV coverage matching CI output:
-   ```bash
-   mkdir -p coverage
-   LLVM_PROFILE_FILE=coverage/coverage-%p-%m.profraw \
-     RUST_TEST_THREADS=1 cargo llvm-cov --workspace --lcov --output-path coverage/rust.lcov -- -- --test-threads=1
+   mkdir -p coverage reports
+   (cd service && COVERAGE_DIR=../coverage REPORTS_DIR=../reports bin/run-coverage-tests.sh)
    ```
 
-The generated `reports/` and `coverage/` directories mirror what the workflow uploads via `EnricoMi/publish-unit-test-result-action` and `actions/upload-artifact`. They are ignored by git so you can iterate locally without polluting commits.
+The generated `reports/` and `coverage/` directories mirror what the Skaffold workflow uploads via `EnricoMi/publish-unit-test-result-action` and `actions/upload-artifact`. They are ignored by git so you can iterate locally without polluting commits.
 
 ## API Schema
 

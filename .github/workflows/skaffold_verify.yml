@@ -26,6 +26,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Prepare artifact directories
+        run: |
+          mkdir -p service/coverage
+          mkdir -p service/reports
+
       - name: Set up Docker Buildx (for layer caching)
         uses: docker/setup-buildx-action@v3
         with:
@@ -147,6 +152,20 @@ jobs:
         run: |
           set -euo pipefail
           skaffold verify -p ${SKAFFOLD_PROFILE} --build-artifacts "${{ steps.images.outputs.artifact_file }}"
+
+      - name: Publish backend test results
+        if: always() && hashFiles('service/reports/cargo-junit.xml') != ''
+        uses: EnricoMi/publish-unit-test-result-action@v2
+        with:
+          files: service/reports/cargo-junit.xml
+          check_name: Rust Tests
+
+      - name: Upload backend coverage artifact
+        if: always() && hashFiles('service/coverage/rust.lcov') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: rust-coverage-lcov
+          path: service/coverage/rust.lcov
 
       - name: Dump diagnostics on failure
         if: failure()

@@ -25,9 +25,12 @@ ENV SQLX_OFFLINE=true
 RUN cargo install sqlx-cli --locked --features postgres
 RUN if ! cargo install cargo-watch --locked; then cargo install cargo-watch; fi
 RUN cargo sqlx prepare --check
+RUN rustup component add llvm-tools-preview
+RUN cargo install --locked cargo-llvm-cov cargo2junit
 RUN sh -ec 'cargo build --bin tinycongress-api && install -m 0755 target/debug/tinycongress-api /usr/local/bin/tinycongress-api'
 
 RUN install -m 0755 bin/dev-entrypoint.sh /usr/local/bin/dev-entrypoint
+RUN install -m 0755 bin/run-coverage-tests.sh /usr/local/bin/run-coverage-tests
 
 # Precompile test binaries so CI containers can run them without rebuilding dependencies
 RUN cargo test --no-run
