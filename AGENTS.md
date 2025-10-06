@@ -47,3 +47,4 @@
 - Ensure PostgreSQL loads `CREATE EXTENSION pgmq;` before integration jobs.
 - Align Docker tags with `skaffold.yaml` profiles so preview, test, and prod images stay consistent.
 - Let KinD and the cluster pull from GHCR directly—create an image pull secret (e.g., `ghcr-cred`) and patch the default service account instead of preloading images with `kind load`, which only slowed the verify job.
+- GitHub Actions cannot share the `on:` trigger block between workflows; duplicate the push/pull_request stanza in each file or consolidate jobs into one workflow when you need identical triggers.
