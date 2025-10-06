@@ -103,8 +103,11 @@ skaffold dev -p dev
 
 This sets up a development environment with:
 1. Local PostgreSQL database
-2. Hot-reloading of the application on code changes
-3. Kubernetes deployment for realistic testing
+2. Hot-reloading of the Rust API via `cargo watch` when files change
+3. Skaffold file sync so local edits land in the container instantly
+4. Kubernetes deployment for realistic testing
+
+If you need to fall back to the pre-built binary (e.g. for profiling), set `DISABLE_CARGO_WATCH=1` in the deployment.
 
 ## API Schema
 

@@ -9,6 +9,7 @@
 - After the PR's automated checks succeed, mark it ready for review.
 - Wait for the Copilot review to land and respond to critiques when they are obviously sensible improvements.
 - Stick to this loop unless the issue description calls out an alternative rollout path.
+- When continuing a rebase in the CLI harness, run `GIT_EDITOR=true git rebase --continue`; otherwise Git attempts to launch `vim`, which hangs the workflow.
 
 ## Project Structure & Module Organization
 - `service/`: Rust GraphQL API, workers, and SQL migrations (`migrations/`). Tests live in `service/tests/` (`*_tests.rs`).
@@ -22,7 +23,7 @@
 - Frontend workflows: `cd web && yarn install` once, then `yarn dev` (Vite server), `yarn build` (production assets), `yarn preview` (smoke test).
 - Frontend quality gates: `yarn lint`, `yarn typecheck`, `yarn prettier`, `yarn vitest`; CI `yarn test` chains them.
 - Full-stack verification: prefer `skaffold test -p ci` and `skaffold verify -p ci` (add `--build-artifacts <file>` when reusing prebuilt images) to mirror CI behavior; `skaffold dev -p dev` remains available for interactive loops.
-- CI monitoring: after pushing a branch, run `gh run watch --branch $(git rev-parse --abbrev-ref HEAD)` to stream workflow progress.
+- CI monitoring: after pushing a branch, run `gh run list --branch $(git rev-parse --abbrev-ref HEAD) --limit 1` to grab the newest run ID, then `gh run watch <run-id>`; this CLI build lacks the `--branch` flag on `gh run watch`.
 - Rust Docker builds use cargo-chef stages by default; keep the planner/cacher/builder structure intact when editing `service/Dockerfile*` assets.
 
 ## Coding Style & Naming Conventions
