@@ -4,6 +4,7 @@
 - Always sync with `master` before starting work: `git checkout master && git pull --rebase`. When picking up a PR or ticket, rebase your working branch onto the refreshed `master` before any edits.
 - Create a feature branch for every ticket before making changes; include the GitHub issue number and a short, descriptive slug (e.g., `feature/123-update-copy`).
 - Implement the work, keep commits focused, and run the relevant backend (`cargo test`) and frontend (`yarn test`) suites.
+- Treat each major checkpoint on a PR (e.g., before opening, after rebasing, after addressing review) as a moment to leave a fresh status comment with what changed and what still needs attention.
 - Once everything passes locally, push the branch and open a draft PR that links the tracked issue, fills out the Codex PR template, and explicitly notes `Opened by: Codex`.
 - After the PR's automated checks succeed, mark it ready for review.
 - Wait for the Copilot review to land and respond to critiques when they are obviously sensible improvements.
@@ -20,7 +21,7 @@
 - Backend tests: `cargo test` for unit/API coverage; `./run_integration_tests.sh` or `docker-compose -f ../docker-compose.test.yml up --build` runs PostgreSQL-backed suites.
 - Frontend workflows: `cd web && yarn install` once, then `yarn dev` (Vite server), `yarn build` (production assets), `yarn preview` (smoke test).
 - Frontend quality gates: `yarn lint`, `yarn typecheck`, `yarn prettier`, `yarn vitest`; CI `yarn test` chains them.
-- Full-stack verification: `skaffold test -p test` and `skaffold dev -p dev` build images, deploy to Kubernetes, and exercise integrations.
+- Full-stack verification: prefer `skaffold test -p ci` and `skaffold verify -p ci` (add `--build-artifacts <file>` when reusing prebuilt images) to mirror CI behavior; `skaffold dev -p dev` remains available for interactive loops.
 - CI monitoring: after pushing a branch, run `gh run watch --branch $(git rev-parse --abbrev-ref HEAD)` to stream workflow progress.
 - Rust Docker builds use cargo-chef stages by default; keep the planner/cacher/builder structure intact when editing `service/Dockerfile*` assets.
 
@@ -32,7 +33,7 @@
 ## Testing Guidelines
 - Keep specs near code (`*_tests.rs`, `*.test.tsx`). Reuse fixtures before adding mocks.
 - Cover ranking, pairing, and voting flows when rules shift; add regression tests for reported bugs.
-- Run `cargo test` and `yarn test` before PRs; ensure `DATABASE_URL` points at PostgreSQL with `pgmq` enabled.
+- Run `skaffold test -p ci`, and `skaffold verify -p ci` (optionally reusing `--build-artifacts <file>`) before PRs
 
 ## Commit & Pull Request Guidelines
 - Match the concise, imperative commit log (e.g., `Migrate CI build to docker build-push`). Avoid bundling unrelated work.
