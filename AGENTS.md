@@ -25,6 +25,7 @@
 - CI monitoring: after pushing a branch, run `gh run watch --branch $(git rev-parse --abbrev-ref HEAD)` to stream workflow progress.
 - Rust Docker builds use cargo-chef stages by default; keep the planner/cacher/builder structure intact when editing `service/Dockerfile*` assets.
 - When tuning caches, remember Skaffold does not evaluate templates inside `cacheFrom`; add a profile or patch that swaps in shared tags (e.g., `cache-feature`) for feature branches instead of relying on `{{.ENV.*}}` expressions.
+- Bake Rust test binaries into the dev image with `cargo test --no-run` and leave `/usr/local/cargo/bin` on the container `PATH` so `skaffold test` can invoke the prebuilt binaries without re-downloading dependencies.
 
 ## Coding Style & Naming Conventions
 - Rust uses edition 2021 with rustfmt; keep modules snake_case and favor descriptive crate names.
@@ -45,3 +46,4 @@
 - Keep secrets out of version control; export `DATABASE_URL` and queue settings locally and in CI.
 - Ensure PostgreSQL loads `CREATE EXTENSION pgmq;` before integration jobs.
 - Align Docker tags with `skaffold.yaml` profiles so preview, test, and prod images stay consistent.
+- Let KinD and the cluster pull from GHCR directly—create an image pull secret (e.g., `ghcr-cred`) and patch the default service account instead of preloading images with `kind load`, which only slowed the verify job.
