@@ -6,6 +6,7 @@ REPORTS_DIR="${REPORTS_DIR:-/workspace/reports}"
 
 mkdir -p "${COVERAGE_DIR}" "${REPORTS_DIR}"
 
+export PATH="${CARGO_BIN:-/usr/local/cargo/bin}:$PATH"
 export LLVM_PROFILE_FILE="${COVERAGE_DIR}/coverage-%p-%m.profraw"
 DEFAULT_FLAGS="-C instrument-coverage -C link-dead-code -C overflow-checks=off"
 export RUSTFLAGS="${RUSTFLAGS:-$DEFAULT_FLAGS}"
