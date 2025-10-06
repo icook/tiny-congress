@@ -3,11 +3,16 @@ set -euo pipefail
 
 COVERAGE_DIR="${COVERAGE_DIR:-/workspace/coverage}"
 REPORTS_DIR="${REPORTS_DIR:-/workspace/reports}"
+PROFILE_DIR="${PROFILE_DIR:-/usr/src/app/target/llvm-cov-target/profiles}"
 
 mkdir -p "${COVERAGE_DIR}" "${REPORTS_DIR}"
+rm -f "${COVERAGE_DIR}/rust.lcov"
+
+rm -rf "${PROFILE_DIR}"
+mkdir -p "${PROFILE_DIR}"
 
 export PATH="${CARGO_BIN:-/usr/local/cargo/bin}:$PATH"
-export LLVM_PROFILE_FILE="${COVERAGE_DIR}/coverage-%p-%m.profraw"
+export LLVM_PROFILE_FILE="${PROFILE_DIR}/coverage-%p-%m.profraw"
 DEFAULT_FLAGS="-C instrument-coverage -C link-dead-code -C overflow-checks=off"
 export RUSTFLAGS="${RUSTFLAGS:-$DEFAULT_FLAGS}"
 export RUSTDOCFLAGS="${RUSTDOCFLAGS:-$DEFAULT_FLAGS}"
