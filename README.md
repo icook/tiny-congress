@@ -36,7 +36,7 @@ This guide gets you from a clean macOS to running TinyCongress locally.
 ## Core tooling
 
 ```bash
-brew install git gnupg jq
+brew install git gnupg jq shellcheck
 brew install --cask docker
 brew install kubectl minikube skaffold
 ```

@@ -17,6 +17,18 @@ build:
         cacheFrom:
           - "tc-api-dev:cache-main"
           - "tc-api-dev:cache"
+      sync:
+        manual:
+          - src: "src/**/*.rs"
+            dest: /usr/src/app
+          - src: "src/**/*.toml"
+            dest: /usr/src/app
+          - src: "migrations/**"
+            dest: /usr/src/app
+          - src: "Cargo.toml"
+            dest: /usr/src/app
+          - src: "Cargo.lock"
+            dest: /usr/src/app
     - image: postgres
       context: .
       docker:
