@@ -13,7 +13,7 @@
 ## Project Structure & Module Organization
 - `service/`: Rust GraphQL API, workers, and SQL migrations (`migrations/`). Tests live in `service/tests/` (`*_tests.rs`).
 - `web/`: React/Mantine client on Vite. Source under `web/src/`, shared mocks in `web/test-utils/`.
-- `doc/` and `adr/`: Architecture notes and decision records—refresh them when contracts change.
+- `doc/` and `adr/`: Architecture notes and decision records—refresh them when contracts change. Treat `doc/tickets/` entries as temporary scaffolding; once a ticket is opened, delete the scratch file so the issue tracker stays the single source of truth.
 - `dockerfiles/`, `docker-compose.test.yml`, `skaffold.yaml`, `kube/`: Container and Kubernetes assets for CI, integration, and demo environments.
 
 ## Build, Test, and Development Commands
