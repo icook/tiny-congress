@@ -22,7 +22,7 @@
 - Frontend workflows: `cd web && yarn install` once, then `yarn dev` (Vite server), `yarn build` (production assets), `yarn preview` (smoke test).
 - Frontend quality gates: `yarn lint`, `yarn typecheck`, `yarn prettier`, `yarn vitest`; CI `yarn test` chains them.
 - In CI the frontend dependencies install inside the Docker build, so runner-side Yarn cache steps (`actions/setup-node` caches) are wasted—lean on BuildKit layer caching or explicit cache mounts (`--mount=type=cache,target=/root/.yarn/berry/cache`) if installs feel slow.
-- Full-stack verification: prefer `skaffold test -p ci` and `skaffold verify -p ci` (add `--build-artifacts <file>` when reusing prebuilt images) to mirror CI behavior; `skaffold dev -p dev` remains available for interactive loops.
+- Full-stack verification: prefer `skaffold test -p ci` and `skaffold verify -p ci` (add `--build-artifacts <file>` when reusing prebuilt images) and let `skaffold deploy -p ci --status-check=true` gate rollouts; `skaffold dev -p dev` remains available for interactive loops.
 - CI monitoring: after pushing a branch, run `gh run watch --branch $(git rev-parse --abbrev-ref HEAD)` to stream workflow progress.
 - Rust Docker builds use cargo-chef stages by default; keep the planner/cacher/builder structure intact when editing `service/Dockerfile*` assets.
 - When tuning caches, remember Skaffold does not evaluate templates inside `cacheFrom`; add a profile or patch that swaps in shared tags (e.g., `cache-feature`) for feature branches instead of relying on `{{.ENV.*}}` expressions.
