@@ -3,6 +3,7 @@ use sqlx_core::{
     row::Row,
 };
 use sqlx_postgres::{PgPool, PgPoolOptions};
+use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 use tokio::time::sleep;
 use tracing::{info, warn};
@@ -38,9 +39,41 @@ pub async fn setup_database(database_url: &str) -> Result<PgPool, anyhow::Error>
         }
     };
 
-    // Run database migrations from the crate's migrations directory
-    let migrations_path = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/migrations"));
-    let migrator = Migrator::new(migrations_path).await?;
+    // Resolve the migrations directory in a way that works in release images too.
+    // Preference order:
+    //  1. MIGRATIONS_DIR env var (allows containers to mount migrations elsewhere)
+    //  2. ./migrations relative to the running binary
+    //  3. The compile-time manifest directory for local `cargo run`
+    let candidate_dirs = [
+        std::env::var_os("MIGRATIONS_DIR").map(PathBuf::from),
+        Some(PathBuf::from("./migrations")),
+        Some(PathBuf::from(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/migrations"
+        ))),
+    ];
+
+    let mut last_error = None;
+    let mut migrator = None;
+
+    for dir in candidate_dirs.into_iter().flatten() {
+        match Migrator::new(Path::new(&dir)).await {
+            Ok(found) => {
+                info!("Using migrations from {}", dir.display());
+                migrator = Some(found);
+                break;
+            }
+            Err(err) => {
+                last_error = Some((dir, err));
+            }
+        }
+    }
+
+    let migrator = migrator.ok_or_else(|| {
+        let (dir, err) = last_error.expect("migrations path resolution attempted");
+        anyhow::anyhow!("failed to load migrations from {}: {}", dir.display(), err)
+    })?;
+
     migrator.run(&pool).await?;
     info!("Migrations applied");
     Ok(pool)
