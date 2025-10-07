@@ -72,7 +72,7 @@ test:
     custom:
       - command: >-
           docker run --rm \
-            "$IMAGE" /bin/sh -lc '
+            "$IMAGE" /bin/bash -lc '
               set -euo pipefail \\
               && cd /usr/src/app \\
               && cargo test --locked \\
