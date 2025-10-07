@@ -34,7 +34,7 @@ RUN install -m 0755 bin/run-coverage-tests.sh /usr/local/bin/run-coverage-tests
 
 # Precompile test binaries so CI containers can run them without rebuilding dependencies
 RUN cargo test --no-run
-RUN cargo llvm-cov --no-run --tests
+RUN eval "$(cargo llvm-cov show-env --export-prefix)" && cargo llvm-cov --no-run --tests
 
 ENV PATH="/usr/local/cargo/bin:${PATH}"
 

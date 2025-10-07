@@ -72,13 +72,14 @@ test:
     custom:
       - command: >-
           docker run --rm \
-            -v $(pwd)/service/coverage:/workspace/coverage \
-            -v $(pwd)/service/reports:/workspace/reports \
-            -e COVERAGE_DIR=/workspace/coverage \
-            -e REPORTS_DIR=/workspace/reports \
             "$IMAGE" /bin/sh -lc '
-              cd /usr/src/app \\
-              && run-coverage-tests
+              set -euo pipefail \\
+              && cd /usr/src/app \\
+              && cargo test --locked \\
+                   --test api_tests \\
+                   --test graphql_tests \\
+                   --test model_tests \\
+                   -- --test-threads=1 --nocapture
             '
   - image: tc-ui-dev
     custom:

@@ -155,6 +155,23 @@ jobs:
           set -euo pipefail
           skaffold verify -p ${SKAFFOLD_PROFILE} --build-artifacts "${{ steps.images.outputs.artifact_file }}"
 
+      - name: Collect coverage (unit + integration)
+        run: |
+          set -euo pipefail
+          kubectl port-forward svc/postgres 5432:5432 >/tmp/pf.log 2>&1 &
+          pf_pid=$!
+          trap "kill ${pf_pid}" EXIT
+          sleep 5
+          (
+            cd service
+            COVERAGE_DIR="$PWD/coverage" \
+            REPORTS_DIR="$PWD/reports" \
+            TEST_TARGETS="api_tests graphql_tests model_tests integration_tests" \
+            TEST_FLAGS="--test-threads=1 --nocapture -Z unstable-options --format json --report-time" \
+            DATABASE_URL=postgres://postgres:postgres@localhost:5432/prioritization \
+              bin/run-coverage-tests.sh
+          )
+
       - name: Publish backend test results
         if: always() && hashFiles('service/reports/cargo-junit.xml') != ''
         uses: EnricoMi/publish-unit-test-result-action@v2
