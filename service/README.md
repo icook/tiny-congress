@@ -111,21 +111,14 @@ If you need to fall back to the pre-built binary (e.g. for profiling), set `DISA
 
 ## Test Reporting & Coverage
 
-CI runs backend tests directly on the Actions runner so that we can surface individual failures and coverage deltas on every pull request. The JUnit report is published through `EnricoMi/publish-unit-test-result-action` so the Tests view and PR checks stay informative, and the LCOV output is attached as an artifact for download. You can reproduce the same artifacts locally (we rely on `RUSTC_BOOTSTRAP=1` to access the unstable JSON harness format without installing nightly):
+Skaffold's `test` phase now calls `bin/run-coverage-tests.sh`, which emits a JUnit stream for the Tests tab and an LCOV artifact for coverage widgets. You can mirror the CI workflow locally once dependencies are installed (`rustup component add llvm-tools-preview` and `cargo install --locked cargo-llvm-cov cargo2junit`):
 
-1. Ensure the required tooling is installed:
-   ```bash
-   rustup component add llvm-tools-preview
-   cargo install --locked cargo-llvm-cov cargo-binutils cargo2junit
-   ```
-2. Start PostgreSQL (e.g. `docker-compose -f ../docker-compose.test.yml up`) and export `DATABASE_URL=postgres://postgres:postgres@localhost:5432/tinycongress` if you are not already pointing at a database with the schema applied.
-3. Generate JUnit results and coverage in one pass (mirrors the Skaffold test stage):
-   ```bash
-   mkdir -p coverage reports
-   (cd service && COVERAGE_DIR=../coverage REPORTS_DIR=../reports bin/run-coverage-tests.sh)
-   ```
+```bash
+mkdir -p coverage reports
+(cd service && COVERAGE_DIR=../coverage REPORTS_DIR=../reports bin/run-coverage-tests.sh)
+```
 
-The generated `reports/` and `coverage/` directories mirror what the Skaffold workflow uploads via `EnricoMi/publish-unit-test-result-action` and `actions/upload-artifact`. They are ignored by git so you can iterate locally without polluting commits.
+Those directories match the artifacts uploaded in CI and are ignored by git so repeated local runs stay clean.
 
 ## API Schema
 

@@ -71,7 +71,15 @@ test:
   - image: tc-api-dev
     custom:
       - command: >-
-          docker run --rm -v $(pwd)/service/coverage:/workspace/coverage -v $(pwd)/service/reports:/workspace/reports "$IMAGE" /bin/sh -lc "cd /usr/src/app && COVERAGE_DIR=/workspace/coverage REPORTS_DIR=/workspace/reports run-coverage-tests"
+          docker run --rm \
+            -v $(pwd)/service/coverage:/workspace/coverage \
+            -v $(pwd)/service/reports:/workspace/reports \
+            -e COVERAGE_DIR=/workspace/coverage \
+            -e REPORTS_DIR=/workspace/reports \
+            "$IMAGE" /bin/sh -lc '
+              cd /usr/src/app \\
+              && run-coverage-tests
+            '
   - image: tc-ui-dev
     custom:
       - command: >-
