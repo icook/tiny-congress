@@ -75,7 +75,7 @@ test:
   - image: tc-ui-dev
     custom:
       - command: >-
-          docker run --rm -e CI=true "$IMAGE" /bin/sh -lc "cd /app && yarn test --watchAll=false && yarn playwright:test"
+          IMAGE="$IMAGE" web/scripts/docker-playwright-ci.sh
 
 # Post-deploy verification: run integration tests against the live cluster
 verify:
