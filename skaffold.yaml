@@ -70,17 +70,7 @@ deploy:
 test:
   - image: tc-api-dev
     custom:
-      - command: >-
-          docker run --rm \
-            "$IMAGE" /bin/bash -lc '
-              set -euo pipefail \\
-              && cd /usr/src/app \\
-              && cargo test --locked \\
-                   --test api_tests \\
-                   --test graphql_tests \\
-                   --test model_tests \\
-                   -- --test-threads=1 --nocapture
-            '
+      - command: IMAGE="$IMAGE" ./service/bin/skaffold-unit-tests.sh
   - image: tc-ui-dev
     custom:
       - command: >-
@@ -88,14 +78,9 @@ test:
 
 # Post-deploy verification: run integration tests against the live cluster
 verify:
-  - name: integration-tests
-    container:
-      name: integration-tests
-      image: tc-api-dev
-      command: ["/bin/sh"]
-      args: ["-lc", "cd /usr/src/app && DATABASE_URL=postgres://postgres:postgres@postgres:5432/prioritization /usr/local/cargo/bin/cargo test --test integration_tests -- --test-threads=1 --nocapture"]
-    executionMode:
-      kubernetesCluster: {}
+  - name: backend-integration
+    custom:
+      - command: IMAGE="$IMAGE" ./service/bin/skaffold-integration-tests.sh
 
 # Ensure Postgres is reachable from localhost for developer workflows
 portForward:

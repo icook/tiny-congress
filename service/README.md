@@ -111,14 +111,24 @@ If you need to fall back to the pre-built binary (e.g. for profiling), set `DISA
 
 ## Test Reporting & Coverage
 
-Skaffold's `test` phase now calls `bin/run-coverage-tests.sh`, which emits a JUnit stream for the Tests tab and an LCOV artifact for coverage widgets. You can mirror the CI workflow locally once dependencies are installed (`rustup component add llvm-tools-preview` and `cargo install --locked cargo-llvm-cov cargo2junit`):
+Skaffold now invokes small wrapper scripts so each stage produces coverage exactly once:
+
+- `skaffold test` calls `service/bin/skaffold-unit-tests.sh`, which runs the unit/API suites inside the `tc-api-dev` image and writes `service/coverage/backend-unit.lcov` plus a matching JUnit stream.
+- `skaffold verify` calls `service/bin/skaffold-integration-tests.sh`, port-forwarding the in-cluster Postgres service before running the integration suite and emitting `service/coverage/backend-integration.lcov`.
+- The workflow merges those traces into `service/coverage/rust.lcov`, so downstream consumers still see a single artifact.
+
+To mirror the CI loop locally, build the dev image (`docker build -t tc-api-dev:local -f service/Dockerfile.dev service`) and then:
 
 ```bash
-mkdir -p coverage reports
-(cd service && COVERAGE_DIR=../coverage REPORTS_DIR=../reports bin/run-coverage-tests.sh)
+IMAGE=tc-api-dev:local ./service/bin/skaffold-unit-tests.sh
+DATABASE_URL=postgres://postgres:postgres@localhost:5432/prioritization \
+  TEST_TARGETS="api_tests graphql_tests model_tests integration_tests" \
+  COVERAGE_DIR=service/coverage REPORTS_DIR=service/reports \
+  LCOV_FILE=backend-integration.lcov REPORT_BASENAME=backend-integration \
+  ./service/bin/run-coverage-tests.sh
 ```
 
-Those directories match the artifacts uploaded in CI and are ignored by git so repeated local runs stay clean.
+If you have a Kubernetes cluster handy you can run `./service/bin/skaffold-integration-tests.sh` instead of the second command—the script will handle the port-forward automatically. Coverage and report directories stay ignored by git so repeated local runs remain clean.
 
 ## API Schema
 

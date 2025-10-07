@@ -3,9 +3,11 @@ set -euo pipefail
 
 COVERAGE_DIR="${COVERAGE_DIR:-$(pwd)/coverage}"
 REPORTS_DIR="${REPORTS_DIR:-$(pwd)/reports}"
+LCOV_FILE="${LCOV_FILE:-rust.lcov}"
+REPORT_BASENAME="${REPORT_BASENAME:-cargo}"
 
 mkdir -p "${COVERAGE_DIR}" "${REPORTS_DIR}"
-rm -f "${COVERAGE_DIR}/rust.lcov"
+rm -f "${COVERAGE_DIR}/${LCOV_FILE}"
 
 export PATH="${CARGO_BIN:-/usr/local/cargo/bin}:$PATH"
 eval "$(cargo llvm-cov show-env --export-prefix)"
@@ -23,12 +25,14 @@ done
 read -r -a FLAG_ARR <<< "${TEST_FLAGS}"
 
 status=0
-cargo test --locked "${TARGET_ARGS[@]}" -- "${FLAG_ARR[@]}" > "${REPORTS_DIR}/cargo-test.json" || status=$?
+JSON_REPORT="${REPORTS_DIR}/${REPORT_BASENAME}-test.json"
+JUNIT_REPORT="${REPORTS_DIR}/${REPORT_BASENAME}-junit.xml"
+cargo test --locked "${TARGET_ARGS[@]}" -- "${FLAG_ARR[@]}" > "${JSON_REPORT}" || status=$?
 
-cargo2junit < "${REPORTS_DIR}/cargo-test.json" > "${REPORTS_DIR}/cargo-junit.xml"
+cargo2junit < "${JSON_REPORT}" > "${JUNIT_REPORT}"
 
 if [ ${status} -eq 0 ]; then
-  cargo llvm-cov report --lcov --output-path "${COVERAGE_DIR}/rust.lcov" --ignore-filename-regex '/usr/local/cargo'
+  cargo llvm-cov report --lcov --output-path "${COVERAGE_DIR}/${LCOV_FILE}" --ignore-filename-regex '/usr/local/cargo'
 fi
 
 exit ${status}
