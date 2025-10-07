@@ -79,8 +79,41 @@ test:
 # Post-deploy verification: run integration tests against the live cluster
 verify:
   - name: backend-integration
-    custom:
-      - command: IMAGE="$IMAGE" ./service/bin/skaffold-integration-tests.sh
+    container:
+      name: backend-integration
+      image: tc-api-dev
+      command: ["/bin/bash"]
+      args:
+        - -lc
+        - |
+          set -euo pipefail
+          cd /usr/src/app
+          COVERAGE_DIR=/tmp/coverage \
+          REPORTS_DIR=/tmp/reports \
+          LCOV_FILE=backend-integration.lcov \
+          REPORT_BASENAME=backend-integration \
+          DATABASE_URL=postgres://postgres:postgres@postgres:5432/prioritization \
+          TEST_TARGETS="integration_tests" \
+          TEST_FLAGS="--test-threads=1 --nocapture -Z unstable-options --format json --report-time" \
+            bin/run-coverage-tests.sh
+
+          status=$?
+
+          if [[ -f /tmp/reports/backend-integration-junit.xml ]]; then
+            echo "BEGIN_BACKEND_INTEGRATION_JUNIT"
+            base64 /tmp/reports/backend-integration-junit.xml
+            echo "END_BACKEND_INTEGRATION_JUNIT"
+          fi
+
+          if [[ -f /tmp/coverage/backend-integration.lcov ]]; then
+            echo "BEGIN_BACKEND_INTEGRATION_LCOV"
+            base64 /tmp/coverage/backend-integration.lcov
+            echo "END_BACKEND_INTEGRATION_LCOV"
+          fi
+
+          exit ${status}
+    executionMode:
+      kubernetesCluster: {}
 
 # Ensure Postgres is reachable from localhost for developer workflows
 portForward:
