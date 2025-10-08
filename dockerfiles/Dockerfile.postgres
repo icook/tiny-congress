@@ -1,19 +1,17 @@
 FROM postgres:17
 
-# Install build dependencies for postgres extensions
-RUN apt-get update \
-  && apt-get install -y postgresql-server-dev-17 pgxnclient \
-  libicu-dev build-essential
-
 # Ensure pg_config from Postgres 17 is preferred
 ENV PATH="/usr/lib/postgresql/17/bin:${PATH}"
 ENV PG_CONFIG=/usr/lib/postgresql/17/bin/pg_config
 
-# Install the pg_trgm extension (included in contrib)
-RUN apt-get install -y postgresql-contrib
-
-# Install pgmq extension using pgxn
-RUN pgxn install pgmq
+# Install pgmq extension and required contrib modules, then clean up build deps and apt cache.
+RUN set -eux; \
+    buildDeps='build-essential libicu-dev postgresql-server-dev-17 pgxnclient'; \
+    apt-get update; \
+    apt-get install --no-install-recommends -y $buildDeps postgresql-contrib; \
+    pgxn install pgmq; \
+    apt-get purge -y --auto-remove $buildDeps; \
+    rm -rf /var/lib/apt/lists/*
 
 # Set environment variables
 ENV POSTGRES_USER=postgres
