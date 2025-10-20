@@ -19,7 +19,7 @@
 
 ## Build, Test, and Development Commands
 - Backend loop: `cd service && cargo check`, `cargo fmt`, `cargo clippy --all-targets -- -D warnings` keep builds clean.
-- Backend tests: `cargo test` for unit/API coverage; `./run_integration_tests.sh` or `docker-compose -f ../docker-compose.test.yml up --build` runs PostgreSQL-backed suites.
+- Backend tests: rely on Skaffold pipelines (`skaffold build --file-output artifacts.json && skaffold test --build-artifacts artifacts.json`, or `skaffold verify -p ci`) so the Rust suites run against the built images.
 - Frontend workflows: `cd web && yarn install` once, then `yarn dev` (Vite server), `yarn build` (production assets), `yarn preview` (smoke test).
 - Frontend quality gates: `yarn lint`, `yarn typecheck`, `yarn prettier`, `yarn vitest`; CI `yarn test` chains them.
 - Full-stack verification: prefer `skaffold test -p ci` and `skaffold verify -p ci` (add `--build-artifacts <file>` when reusing prebuilt images) to mirror CI behavior; `skaffold dev -p dev` remains available for interactive loops.
@@ -35,6 +35,7 @@
 - Keep specs near code (`*_tests.rs`, `*.test.tsx`). Reuse fixtures before adding mocks.
 - Cover ranking, pairing, and voting flows when rules shift; add regression tests for reported bugs.
 - Run `skaffold test -p ci`, and `skaffold verify -p ci` (optionally reusing `--build-artifacts <file>`) before PRs
+- Treat the `testing local dev` LLM skill (`doc/skills/testing-local-dev.md`) as a pre-merge requirement for any MR that changes Skaffold configuration; document the results in the PR.
 
 ## Commit & Pull Request Guidelines
 - Match the concise, imperative commit log (e.g., `Migrate CI build to docker build-push`). Avoid bundling unrelated work.

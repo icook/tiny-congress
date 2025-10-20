@@ -66,32 +66,22 @@ npm start
 
 ### Running Integration Tests
 
-#### With Docker Compose
-
-To run integration tests with a PostgreSQL database in Docker:
+Use Skaffold so tests execute inside the same container images we ship:
 
 ```bash
-docker-compose -f docker-compose.test.yml up --build
+skaffold build --file-output artifacts.json
+skaffold test --build-artifacts artifacts.json
 ```
 
-This will:
-1. Start a PostgreSQL container
-2. Run the integration tests against the PostgreSQL database
-3. Output test results to the console
+This pair of commands builds the dev images, runs the backend unit/API/integration suites plus the frontend lint/type/test/build chain inside containers, and tears everything down when finished.
 
-#### With Skaffold
-
-To run integration tests with Kubernetes and Skaffold:
+For full Kubernetes parity (including port-forwards and verify hooks) run:
 
 ```bash
-skaffold test -p test
+skaffold verify -p ci
 ```
 
-This will:
-1. Build the Docker image
-2. Deploy the PostgreSQL and app pods
-3. Run the integration tests
-4. Clean up resources
+This profile mirrors CI by deploying to your local cluster before executing the integration tests.
 
 ### Development with Skaffold
 

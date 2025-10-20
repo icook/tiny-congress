@@ -5,6 +5,8 @@ metadata:
   name: prioritization-room
 build:
   local:
+    push: false
+    tryImportMissing: true
     useBuildkit: true
     concurrency: 3
   artifacts:
