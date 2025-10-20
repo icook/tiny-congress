@@ -42,6 +42,8 @@ spec:
               value: info
             - name: DATABASE_URL
               value: postgres://postgres:postgres@postgres:5432/prioritization
+            - name: REDIS_URL
+              value: redis://redis:6379/0
           livenessProbe:
             httpGet:
               path: /health

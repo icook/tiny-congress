@@ -49,3 +49,10 @@ brew install kubectl minikube skaffold
 minikube start
 skaffold dev --port-forward
 ```
+
+## Local services
+
+Skaffold port-forwards backing dependencies for convenience:
+
+- Postgres: `postgres://postgres:postgres@localhost:5432/prioritization`
+- Redis: `redis://localhost:6379/0` (no password)
