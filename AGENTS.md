@@ -10,6 +10,7 @@
 - Wait for the Copilot review to land and respond to critiques when they are obviously sensible improvements.
 - Stick to this loop unless the issue description calls out an alternative rollout path.
 - When continuing a rebase in the CLI harness, run `GIT_EDITOR=true git rebase --continue`; otherwise Git attempts to launch `vim`, which hangs the workflow.
+- Use the `gh` CLI for issue and PR management when requested, and pause for explicit approval before creating or modifying tracker items. Do not create placeholder entries under `doc/tickets/`; the GitHub tracker is the source of truth.
 
 ## Project Structure & Module Organization
 - `service/`: Rust GraphQL API, workers, and SQL migrations (`migrations/`). Tests live in `service/tests/` (`*_tests.rs`).

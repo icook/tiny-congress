@@ -96,3 +96,12 @@ postgres:
     repository: postgres
     tag: "17"
     pullPolicy: IfNotPresent
+
+redis:
+  image:
+    repository: redis
+    tag: "7.2"
+    pullPolicy: IfNotPresent
+  service:
+    port: 6379
+  resources: {}
