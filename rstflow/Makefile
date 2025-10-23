@@ -1,5 +1,5 @@
 VENV ?= .venv
-PYTHON ?= python3
+PYTHON ?= python3.12
 PIP ?= $(VENV)/bin/pip
 PYTEST ?= $(VENV)/bin/pytest
 COUNT ?= 100
