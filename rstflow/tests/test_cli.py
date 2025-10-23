@@ -92,3 +92,27 @@ def test_full_stub_pipeline_via_cli() -> None:
 
         assert snapshot_path.exists()
         assert "clusters" in snapshot_path.read_text()
+
+
+def test_rst_parse_isanlp_requires_dependency() -> None:
+    with runner.isolated_filesystem():
+        docs_path = Path("docs.jsonl")
+        docs_path.write_text(
+            '{"doc_id":"d1","topic_id":"t1","author_id":"u1","text":"Short text."}\n'
+        )
+
+        result = runner.invoke(
+            cli,
+            [
+                "rst-parse",
+                "--input",
+                str(docs_path),
+                "--output",
+                "rst.jsonl",
+                "--backend",
+                "isanlp",
+            ],
+        )
+
+        assert result.exit_code != 0
+        assert "isanlp-rst" in result.output.lower()

@@ -16,6 +16,11 @@ try:  # pragma: no cover - allow usage as package or script
     from .flatten_rst import flatten_trees
     from .rst_parse import RSTParser, parse_corpus
     from .synth_data import generate_docs
+    from .parsers import (
+        IsaNLPNotInstalledError,
+        IsaNLPParserAdapter,
+        IsaNLPRuntimeError,
+    )
 except ImportError:  # pragma: no cover
     from aggregate import aggregate_clusters  # type: ignore
     from attach_satellites import attach_satellites  # type: ignore
@@ -24,6 +29,21 @@ except ImportError:  # pragma: no cover
     from flatten_rst import flatten_trees  # type: ignore
     from rst_parse import RSTParser, parse_corpus  # type: ignore
     from synth_data import generate_docs  # type: ignore
+    try:  # pragma: no cover - when parsers package is unavailable
+        from parsers import (  # type: ignore
+            IsaNLPNotInstalledError,
+            IsaNLPParserAdapter,
+            IsaNLPRuntimeError,
+        )
+    except ImportError:  # pragma: no cover
+        IsaNLPParserAdapter = None  # type: ignore
+        IsaNLPNotInstalledError = None  # type: ignore
+        IsaNLPRuntimeError = None  # type: ignore
+
+if "IsaNLPParserAdapter" not in globals():  # pragma: no cover - safety net
+    IsaNLPParserAdapter = None  # type: ignore
+    IsaNLPNotInstalledError = None  # type: ignore
+    IsaNLPRuntimeError = None  # type: ignore
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -82,10 +102,33 @@ def _ensure_parent(path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
 
 
-def _resolve_parser(backend: str) -> RSTParser:
+def _resolve_parser(
+    backend: str,
+    *,
+    isanlp_model: str,
+    isanlp_version: str,
+    isanlp_device: int,
+    isanlp_relinventory: Optional[str],
+) -> RSTParser:
     lowered = backend.lower()
     if lowered == "stub":
         return SentenceSplitParser()
+    if lowered == "isanlp":
+        if IsaNLPParserAdapter is None:
+            raise click.UsageError(
+                "isanlp-rst is not installed. Install it via 'pip install isanlp-rst' to use the IsaNLP backend."
+            )
+        try:
+            return IsaNLPParserAdapter(
+                model_name=isanlp_model,
+                model_version=isanlp_version,
+                cuda_device=isanlp_device,
+                relinventory=isanlp_relinventory,
+            )
+        except IsaNLPNotInstalledError as exc:  # pragma: no cover - handled above
+            raise click.UsageError(str(exc)) from exc
+        except IsaNLPRuntimeError as exc:
+            raise click.ClickException(str(exc)) from exc
     raise click.BadParameter(f"Unsupported parser backend '{backend}'.")
 
 
@@ -199,15 +242,50 @@ def synth_data_cli(
     "-b",
     default="stub",
     show_default=True,
+    type=click.Choice(["stub", "isanlp"], case_sensitive=False),
     help="Parser backend to use (default: stub sentence splitter).",
+)
+@click.option(
+    "--isanlp-model",
+    default="tchewik/isanlp_rst_v3",
+    show_default=True,
+    help="IsaNLP Hugging Face model identifier.",
+)
+@click.option(
+    "--isanlp-version",
+    default="rstdt",
+    show_default=True,
+    help="IsaNLP model version (hf_model_version).",
+)
+@click.option(
+    "--isanlp-device",
+    default=-1,
+    show_default=True,
+    type=int,
+    help="CUDA device index (-1 for CPU).",
+)
+@click.option(
+    "--isanlp-relinventory",
+    default=None,
+    help="Optional IsaNLP relation inventory override.",
 )
 def rst_parse_cli(
     input: Path,  # noqa: A002
     output: Path,
     backend: str,
+    isanlp_model: str,
+    isanlp_version: str,
+    isanlp_device: int,
+    isanlp_relinventory: Optional[str],
 ) -> None:
     """Run the RST parser and materialise JSONL trees."""
-    parser = _resolve_parser(backend)
+    parser = _resolve_parser(
+        backend,
+        isanlp_model=isanlp_model,
+        isanlp_version=isanlp_version,
+        isanlp_device=isanlp_device,
+        isanlp_relinventory=isanlp_relinventory,
+    )
     _ensure_parent(output)
     parse_corpus(input_path=input, output_path=output, parser=parser)
     click.echo(f"Wrote parses to {output}")

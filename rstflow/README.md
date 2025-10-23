@@ -44,3 +44,14 @@ Chain the commands manually or script them for end-to-end execution; each stage 
 ## RST parsing quickstart
 
 `rst_parse.parse_corpus` expects a parser object with a `.parse(text)` method that returns data matching the `RSTParseResult` schema. This keeps the file-first pipeline flexible—you can swap in IsaNLP, DMRST, or a stub implementation for unit tests. The flatten stage (`flatten_rst.flatten_trees`) consumes the resulting JSONL and produces one row per EDU with nuclearity, relation, and optional span metadata.
+
+### Parser backends
+
+- `stub` (default): sentence splitter that keeps the pipeline runnable without external dependencies.
+- `isanlp`: uses the [IsaNLP RST parser](https://github.com/tchewik/isanlp_rst). Install it with `pip install isanlp-rst` and pass `--backend isanlp` to `rst-parse`. Optional flags:
+  - `--isanlp-model` (`tchewik/isanlp_rst_v3` by default)
+  - `--isanlp-version` (RST treebank version, defaults to `rstdt`)
+  - `--isanlp-device` (CUDA device index, `-1` for CPU)
+  - `--isanlp-relinventory` (relation inventory override)
+
+The IsaNLP adapter walks the returned binary tree and normalises it into the pipeline-friendly schema (EDUs, relations, and `root_edu`). If IsaNLP is not installed, the CLI surfaces a clear error instructing you to add the dependency.
