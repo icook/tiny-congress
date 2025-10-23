@@ -1,18 +1,14 @@
-"""Typer CLI entry points for the RSTFlow pipeline."""
+"""Click-based CLI entry points for the RSTFlow pipeline."""
 
 from __future__ import annotations
 
-import sys
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Optional
 
-import typer
+import click
 
-SRC_DIR = Path(__file__).resolve().parent
-if str(SRC_DIR) not in sys.path:  # pragma: no cover - runtime convenience
-    sys.path.insert(0, str(SRC_DIR))
-
-try:  # pragma: no cover
+try:  # pragma: no cover - allow usage as package or script
     from .aggregate import aggregate_clusters
     from .attach_satellites import attach_satellites
     from .cluster_nucleus import cluster_nuclei
@@ -28,6 +24,7 @@ except ImportError:  # pragma: no cover
     from flatten_rst import flatten_trees  # type: ignore
     from rst_parse import RSTParser, parse_corpus  # type: ignore
     from synth_data import generate_docs  # type: ignore
+
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = PROJECT_ROOT / "data"
@@ -46,12 +43,10 @@ DEFAULT_NUCLEUS_CLUSTERS = CLUSTER_DIR / "nucleus_clusters.json"
 DEFAULT_CLUSTER_WITH_SATELLITES = CLUSTER_DIR / "clusters_with_satellites.json"
 DEFAULT_SNAPSHOT = SNAPSHOT_DIR / "final_bullets.json"
 
-app = typer.Typer(help="RSTFlow pipeline CLI.")
-
 
 @dataclass
 class SentenceSplitParser:
-    """Fallback parser that splits on sentence boundaries."""
+    """Fallback parser that splits text on sentence boundaries."""
 
     name: str = "sentence_split"
     version: str = "0.1"
@@ -60,11 +55,12 @@ class SentenceSplitParser:
         sentences = [part.strip() for part in text.split(".") if part.strip()]
         edus = []
         relations = []
-        previous: str | None = None
+        previous: Optional[str] = None
+
         for index, sentence in enumerate(sentences, start=1):
             edu_id = f"e{index:03d}"
             edus.append({"edu_id": edu_id, "text": sentence})
-            if previous:
+            if previous is not None:
                 relations.append(
                     {
                         "child_id": edu_id,
@@ -74,277 +70,358 @@ class SentenceSplitParser:
                     }
                 )
             previous = edu_id
-        return {"edus": edus, "relations": relations, "root_edu": edus[0]["edu_id"] if edus else None}
+
+        return {
+            "edus": edus,
+            "relations": relations,
+            "root_edu": edus[0]["edu_id"] if edus else None,
+        }
+
+
+def _ensure_parent(path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
 
 
 def _resolve_parser(backend: str) -> RSTParser:
-    if backend == "stub":
+    lowered = backend.lower()
+    if lowered == "stub":
         return SentenceSplitParser()
-    raise typer.BadParameter(f"Unsupported parser backend '{backend}'.")
+    raise click.BadParameter(f"Unsupported parser backend '{backend}'.")
 
 
-@app.command("synth-data")
+@click.group(help="RSTFlow pipeline CLI.")
+def cli() -> None:
+    """Command group for the pipeline."""
+
+
+@cli.command("synth-data")
+@click.option(
+    "--count",
+    "-n",
+    default=100,
+    show_default=True,
+    type=click.IntRange(1),
+    help="Number of documents to generate.",
+)
+@click.option(
+    "--seed",
+    default=13,
+    show_default=True,
+    type=int,
+    help="Seed for deterministic generation.",
+)
+@click.option(
+    "--output",
+    "-o",
+    default=str(DEFAULT_DOCS),
+    show_default=True,
+    type=click.Path(path_type=Path, dir_okay=False, writable=True, resolve_path=True),
+    help="Destination JSONL file.",
+)
+@click.option(
+    "--backend",
+    "-b",
+    default="template",
+    show_default=True,
+    type=click.Choice(["template", "lmstudio"], case_sensitive=False),
+    help="Synthetic data backend.",
+)
+@click.option(
+    "--lmstudio-url",
+    default="http://127.0.0.1:1234/v1/chat/completions",
+    show_default=True,
+    help="LM Studio OpenAI-compatible completions endpoint.",
+)
+@click.option(
+    "--lmstudio-model",
+    default="openai/gpt-oss-20b",
+    show_default=True,
+    help="LM Studio model identifier.",
+)
+@click.option(
+    "--temperature",
+    default=0.8,
+    show_default=True,
+    type=float,
+    help="Sampling temperature for LM Studio backend.",
+)
+@click.option(
+    "--timeout",
+    default=120,
+    show_default=True,
+    type=click.IntRange(1),
+    help="HTTP timeout (seconds) for LM Studio backend.",
+)
 def synth_data_cli(
-    count: int = typer.Option(100, "--count", "-n", help="Number of documents to generate."),
-    seed: int = typer.Option(13, "--seed", help="Seed for deterministic generation."),
-    output: Path = typer.Option(
-        DEFAULT_DOCS,
-        "--output",
-        "-o",
-        file_okay=True,
-        dir_okay=False,
-        writable=True,
-        resolve_path=True,
-        help="Destination JSONL file.",
-    ),
-    backend: str = typer.Option(
-        "template",
-        "--backend",
-        "-b",
-        help="Synthetic data backend: 'template' or 'lmstudio'.",
-        case_sensitive=False,
-    ),
-    lmstudio_url: str = typer.Option(
-        "http://127.0.0.1:1234/v1/chat/completions",
-        "--lmstudio-url",
-        help="LM Studio OpenAI-compatible completions endpoint.",
-    ),
-    lmstudio_model: str = typer.Option(
-        "openai/gpt-oss-20b",
-        "--lmstudio-model",
-        help="LM Studio model identifier.",
-    ),
-    temperature: float = typer.Option(
-        0.8,
-        "--temperature",
-        help="Sampling temperature for LM Studio backend.",
-    ),
-    timeout: int = typer.Option(
-        120,
-        "--timeout",
-        help="HTTP timeout (seconds) for LM Studio backend.",
-    ),
+    count: int,
+    seed: int,
+    output: Path,
+    backend: str,
+    lmstudio_url: str,
+    lmstudio_model: str,
+    temperature: float,
+    timeout: int,
 ) -> None:
     """Generate synthetic civic-discourse documents."""
-    selected_backend = backend.lower()
+    _ensure_parent(output)
     generate_docs(
         output_path=output,
         count=count,
         seed=seed,
-        backend=selected_backend,
+        backend=backend.lower(),
         lmstudio_url=lmstudio_url,
         lmstudio_model=lmstudio_model,
         temperature=temperature,
         timeout=timeout,
     )
-    typer.echo(f"Wrote {count} documents to {output}")
+    click.echo(f"Wrote {count} documents to {output}")
 
 
-@app.command("rst-parse")
+@cli.command("rst-parse")
+@click.option(
+    "--input",
+    "-i",
+    default=str(DEFAULT_DOCS),
+    show_default=True,
+    type=click.Path(path_type=Path, exists=True, dir_okay=False, readable=True, resolve_path=True),
+    help="Input raw documents JSONL.",
+)
+@click.option(
+    "--output",
+    "-o",
+    default=str(DEFAULT_RST),
+    show_default=True,
+    type=click.Path(path_type=Path, dir_okay=False, writable=True, resolve_path=True),
+    help="Output path for RST parse JSONL.",
+)
+@click.option(
+    "--backend",
+    "-b",
+    default="stub",
+    show_default=True,
+    help="Parser backend to use (default: stub sentence splitter).",
+)
 def rst_parse_cli(
-    input_path: Path = typer.Option(
-        DEFAULT_DOCS,
-        "--input",
-        "-i",
-        exists=True,
-        readable=True,
-        resolve_path=True,
-        help="Input raw documents JSONL.",
-    ),
-    output_path: Path = typer.Option(
-        DEFAULT_RST,
-        "--output",
-        "-o",
-        resolve_path=True,
-        help="Output path for RST parse JSONL.",
-    ),
-    parser_backend: str = typer.Option(
-        "stub", "--backend", "-b", help="Parser backend to use (default: stub sentence splitter)."
-    ),
+    input: Path,  # noqa: A002
+    output: Path,
+    backend: str,
 ) -> None:
     """Run the RST parser and materialise JSONL trees."""
-    parser = _resolve_parser(parser_backend)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    parse_corpus(input_path=input_path, output_path=output_path, parser=parser)
-    typer.echo(f"Wrote parses to {output_path}")
+    parser = _resolve_parser(backend)
+    _ensure_parent(output)
+    parse_corpus(input_path=input, output_path=output, parser=parser)
+    click.echo(f"Wrote parses to {output}")
 
 
-@app.command("flatten")
+@cli.command("flatten")
+@click.option(
+    "--input",
+    "-i",
+    default=str(DEFAULT_RST),
+    show_default=True,
+    type=click.Path(path_type=Path, exists=True, dir_okay=False, readable=True, resolve_path=True),
+    help="RST parse JSONL file.",
+)
+@click.option(
+    "--output",
+    "-o",
+    default=str(DEFAULT_EDUS),
+    show_default=True,
+    type=click.Path(path_type=Path, dir_okay=False, writable=True, resolve_path=True),
+    help="Destination EDU JSONL file.",
+)
 def flatten_cli(
-    input_path: Path = typer.Option(
-        DEFAULT_RST,
-        "--input",
-        "-i",
-        exists=True,
-        readable=True,
-        resolve_path=True,
-        help="RST parse JSONL file.",
-    ),
-    output_path: Path = typer.Option(
-        DEFAULT_EDUS,
-        "--output",
-        "-o",
-        resolve_path=True,
-        help="Destination EDU JSONL file.",
-    ),
+    input: Path,  # noqa: A002
+    output: Path,
 ) -> None:
     """Flatten RST trees into EDU rows."""
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    flatten_trees(input_path=input_path, output_path=output_path)
-    typer.echo(f"Wrote flattened EDUs to {output_path}")
+    _ensure_parent(output)
+    flatten_trees(input_path=input, output_path=output)
+    click.echo(f"Wrote flattened EDUs to {output}")
 
 
-@app.command("embed")
+@cli.command("embed")
+@click.option(
+    "--input",
+    "-i",
+    default=str(DEFAULT_EDUS),
+    show_default=True,
+    type=click.Path(path_type=Path, exists=True, dir_okay=False, readable=True, resolve_path=True),
+    help="Flattened EDU JSONL.",
+)
+@click.option(
+    "--output-dir",
+    "-o",
+    "output_dir",
+    default=str(DEFAULT_EMBED),
+    show_default=True,
+    type=click.Path(path_type=Path, file_okay=False, resolve_path=True),
+    help="Directory to write embeddings and index metadata.",
+)
+@click.option(
+    "--model",
+    default="sentence-transformers/all-mpnet-base-v2",
+    show_default=True,
+    help="SentenceTransformer model to use. Use 'stub' for deterministic fallback.",
+)
+@click.option(
+    "--device",
+    default=None,
+    help="Device for inference (e.g., 'cpu' or 'cuda'). Defaults to auto detection.",
+)
 def embed_cli(
-    input_path: Path = typer.Option(
-        DEFAULT_EDUS,
-        "--input",
-        "-i",
-        exists=True,
-        readable=True,
-        resolve_path=True,
-        help="Flattened EDU JSONL.",
-    ),
-    output_dir: Path = typer.Option(
-        DEFAULT_EMBED,
-        "--output-dir",
-        "-o",
-        resolve_path=True,
-        help="Directory to write embeddings and index metadata.",
-    ),
-    model_name: str = typer.Option(
-        "sentence-transformers/all-mpnet-base-v2",
-        "--model",
-        help="SentenceTransformer model to use.",
-    ),
-    device: str = typer.Option(
-        None,
-        "--device",
-        help="Device for inference (e.g., cpu or cuda). Defaults to auto.",
-    ),
+    input: Path,  # noqa: A002
+    output_dir: Path,
+    model: str,
+    device: Optional[str],
 ) -> None:
-    """Generate embeddings for nucleus/satellite EDUs."""
+    """Generate embeddings for nucleus and satellite EDUs."""
+    output_dir.mkdir(parents=True, exist_ok=True)
     embed_edus(
-        input_path=input_path,
+        input_path=input,
         output_dir=output_dir,
-        model_name=model_name,
-        device=device,  # type: ignore[arg-type]
+        model_name=model,
+        device=device,
     )
-    typer.echo(f"Wrote embeddings under {output_dir}")
+    click.echo(f"Wrote embeddings under {output_dir}")
 
 
-@app.command("cluster")
+@cli.command("cluster")
+@click.option(
+    "--embeddings",
+    "-e",
+    default=str(DEFAULT_EMBED),
+    show_default=True,
+    type=click.Path(path_type=Path, file_okay=False, exists=True, resolve_path=True),
+    help="Embedding directory containing nucleus.npy and index.jsonl.",
+)
+@click.option(
+    "--output",
+    "-o",
+    default=str(DEFAULT_NUCLEUS_CLUSTERS),
+    show_default=True,
+    type=click.Path(path_type=Path, dir_okay=False, writable=True, resolve_path=True),
+    help="Destination JSON file for nucleus clusters.",
+)
+@click.option(
+    "--k",
+    default=5,
+    show_default=True,
+    type=click.IntRange(1),
+    help="Number of clusters to form.",
+)
+@click.option(
+    "--seed",
+    default=13,
+    show_default=True,
+    type=int,
+    help="Random seed for clustering.",
+)
 def cluster_cli(
-    embeddings_dir: Path = typer.Option(
-        DEFAULT_EMBED,
-        "--embeddings",
-        "-e",
-        exists=True,
-        resolve_path=True,
-        help="Embedding directory containing nucleus.npy and index.jsonl.",
-    ),
-    output_path: Path = typer.Option(
-        DEFAULT_NUCLEUS_CLUSTERS,
-        "--output",
-        "-o",
-        resolve_path=True,
-        help="Destination JSON file for nucleus clusters.",
-    ),
-    k: int = typer.Option(
-        5,
-        "--k",
-        min=1,
-        help="Number of clusters to form.",
-    ),
-    seed: int = typer.Option(13, "--seed", help="Random seed for clustering."),
+    embeddings: Path,
+    output: Path,
+    k: int,
+    seed: int,
 ) -> None:
     """Cluster nucleus embeddings."""
-    output_path.parent.mkdir(parents=True, exist_ok=True)
+    _ensure_parent(output)
     cluster_nuclei(
-        embeddings_path=embeddings_dir,
-        output_path=output_path,
+        embeddings_path=embeddings,
+        output_path=output,
         k=k,
         seed=seed,
     )
-    typer.echo(f"Wrote nucleus clusters to {output_path}")
+    click.echo(f"Wrote nucleus clusters to {output}")
 
 
-@app.command("attach")
+@cli.command("attach")
+@click.option(
+    "--embeddings",
+    "-e",
+    default=str(DEFAULT_EMBED),
+    show_default=True,
+    type=click.Path(path_type=Path, file_okay=False, exists=True, resolve_path=True),
+    help="Embedding directory with nucleus/satellite vectors and index.",
+)
+@click.option(
+    "--clusters",
+    "-c",
+    default=str(DEFAULT_NUCLEUS_CLUSTERS),
+    show_default=True,
+    type=click.Path(path_type=Path, dir_okay=False, exists=True, resolve_path=True),
+    help="Nucleus cluster JSON produced by the cluster stage.",
+)
+@click.option(
+    "--output",
+    "-o",
+    default=str(DEFAULT_CLUSTER_WITH_SATELLITES),
+    show_default=True,
+    type=click.Path(path_type=Path, dir_okay=False, writable=True, resolve_path=True),
+    help="Destination JSON file with clusters and satellite assignments.",
+)
+@click.option(
+    "--metric",
+    default="cosine",
+    show_default=True,
+    type=click.Choice(["cosine", "dot"], case_sensitive=False),
+    help="Similarity metric for nearest-cluster fallback.",
+)
 def attach_cli(
-    embeddings_dir: Path = typer.Option(
-        DEFAULT_EMBED,
-        "--embeddings",
-        "-e",
-        exists=True,
-        resolve_path=True,
-        help="Embedding directory with nucleus/satellite vectors and index.",
-    ),
-    clusters_path: Path = typer.Option(
-        DEFAULT_NUCLEUS_CLUSTERS,
-        "--clusters",
-        "-c",
-        exists=True,
-        resolve_path=True,
-        help="Nucleus cluster JSON produced by the cluster stage.",
-    ),
-    output_path: Path = typer.Option(
-        DEFAULT_CLUSTER_WITH_SATELLITES,
-        "--output",
-        "-o",
-        resolve_path=True,
-        help="Destination JSON file with clusters and satellite assignments.",
-    ),
+    embeddings: Path,
+    clusters: Path,
+    output: Path,
+    metric: str,
 ) -> None:
     """Attach satellites to nucleus clusters."""
-    output_path.parent.mkdir(parents=True, exist_ok=True)
+    _ensure_parent(output)
     attach_satellites(
-        embeddings_dir=embeddings_dir,
-        clusters_path=clusters_path,
-        output_path=output_path,
+        embeddings_dir=embeddings,
+        clusters_path=clusters,
+        output_path=output,
+        metric=metric.lower(),  # type: ignore[arg-type]
     )
-    typer.echo(f"Wrote cluster assignments to {output_path}")
+    click.echo(f"Wrote cluster assignments to {output}")
 
 
-@app.command("aggregate")
+@cli.command("aggregate")
+@click.option(
+    "--flat",
+    "-f",
+    default=str(DEFAULT_EDUS),
+    show_default=True,
+    type=click.Path(path_type=Path, dir_okay=False, exists=True, resolve_path=True),
+    help="Flattened EDU JSONL file.",
+)
+@click.option(
+    "--clusters",
+    "-c",
+    default=str(DEFAULT_CLUSTER_WITH_SATELLITES),
+    show_default=True,
+    type=click.Path(path_type=Path, dir_okay=False, exists=True, resolve_path=True),
+    help="Cluster JSON augmented with satellite assignments.",
+)
+@click.option(
+    "--output",
+    "-o",
+    default=str(DEFAULT_SNAPSHOT),
+    show_default=True,
+    type=click.Path(path_type=Path, dir_okay=False, writable=True, resolve_path=True),
+    help="Destination aggregate snapshot JSON.",
+)
 def aggregate_cli(
-    flattened_path: Path = typer.Option(
-        DEFAULT_EDUS,
-        "--flat",
-        "-f",
-        exists=True,
-        resolve_path=True,
-        help="Flattened EDU JSONL file.",
-    ),
-    clusters_with_satellites_path: Path = typer.Option(
-        DEFAULT_CLUSTER_WITH_SATELLITES,
-        "--clusters",
-        "-c",
-        exists=True,
-        resolve_path=True,
-        help="Cluster JSON augmented with satellite assignments.",
-    ),
-    output_path: Path = typer.Option(
-        DEFAULT_SNAPSHOT,
-        "--output",
-        "-o",
-        resolve_path=True,
-        help="Destination aggregate snapshot JSON.",
-    ),
+    flat: Path,
+    clusters: Path,
+    output: Path,
 ) -> None:
     """Aggregate clusters into final bullet structure."""
-    output_path.parent.mkdir(parents=True, exist_ok=True)
+    _ensure_parent(output)
     aggregate_clusters(
-        flattened_path=flattened_path,
-        clusters_with_satellites_path=clusters_with_satellites_path,
-        output_path=output_path,
+        flattened_path=flat,
+        clusters_with_satellites_path=clusters,
+        output_path=output,
     )
-    typer.echo(f"Wrote aggregate snapshot to {output_path}")
-
-
-def run() -> None:
-    """Entrypoint when invoking via `python -m`."""
-    app()
+    click.echo(f"Wrote aggregate snapshot to {output}")
 
 
 if __name__ == "__main__":
-    run()
+    cli()

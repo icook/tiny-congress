@@ -106,3 +106,18 @@ def test_embed_edus_handles_empty_category(tmp_path: Path) -> None:
 
     index = read_jsonl(output_dir / "index.jsonl")[0]
     assert index["counts"]["satellite"] == 0
+
+
+def test_embed_stub_model_without_explicit_embedder(tmp_path: Path) -> None:
+    input_path = _write_flattened(tmp_path)
+    output_dir = tmp_path / "embeddings"
+
+    embed_edus(
+        input_path=input_path,
+        output_dir=output_dir,
+        model_name="stub",
+        embedder=None,
+    )
+
+    nucleus = np.load(output_dir / "nucleus.npy")
+    assert nucleus.shape[1] == 4  # stub dimension

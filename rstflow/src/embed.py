@@ -28,6 +28,9 @@ def _ensure_embedder(
     if embedder is not None:
         return embedder
 
+    if model_name == "stub":
+        return _StubEmbedder()
+
     from sentence_transformers import SentenceTransformer  # pragma: no cover
 
     return SentenceTransformer(model_name, device=device)
@@ -46,6 +49,34 @@ def _encode_texts(embedder: Embedder, texts: list[str]) -> np.ndarray:
     if isinstance(vectors, list):
         vectors = np.asarray(vectors, dtype=np.float32)
     return vectors
+
+
+class _StubEmbedder:
+    """Deterministic fallback embedder for lightweight testing."""
+
+    def encode(self, sentences: list[str], **kwargs) -> np.ndarray:
+        if not sentences:
+            return np.zeros((0, 0), dtype=np.float32)
+
+        vectors = []
+        for sentence in sentences:
+            length = len(sentence)
+            tokens = sentence.lower().split()
+            vector = np.array(
+                [
+                    length / 100.0,
+                    (sum(ord(ch) for ch in sentence) % 97) / 97.0,
+                    (len(tokens) % 13) / 13.0,
+                    (sum(len(token) for token in tokens) % 17) / 17.0,
+                ],
+                dtype=np.float32,
+            )
+            norm = np.linalg.norm(vector)
+            if norm > 0:
+                vector = vector / norm
+            vectors.append(vector)
+
+        return np.vstack(vectors)
 
 
 def embed_edus(
