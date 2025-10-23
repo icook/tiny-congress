@@ -1,0 +1,12 @@
+typer==0.12.*
+orjson==3.*
+pydantic==2.*
+numpy==2.*
+pandas==2.*
+sentence-transformers==3.*
+umap-learn==0.5.*
+hdbscan==0.8.*
+scikit-learn==1.5.*
+torch>=2.2,<3
+transformers>=4.42,<5
+isanlp-rst==3.*
