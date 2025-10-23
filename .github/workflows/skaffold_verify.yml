@@ -19,6 +19,7 @@ jobs:
     permissions:
       contents: read
       packages: write
+      checks: write
     env:
       SKAFFOLD_DEFAULT_REPO: ghcr.io/${{ github.repository }}
       SKAFFOLD_PROFILE: ci
@@ -137,6 +138,33 @@ jobs:
         run: |
           set -euo pipefail
           skaffold test -p ${SKAFFOLD_PROFILE} --build-artifacts "${{ steps.images.outputs.artifact_file }}"
+
+      - name: Publish Playwright test report
+        if: always() && hashFiles('web/reports/playwright.xml') != ''
+        uses: EnricoMi/publish-unit-test-result-action@v2
+        with:
+          files: web/reports/playwright.xml
+          report_individual_runs: true
+          check_name: Playwright E2E
+          comment_mode: off
+
+      - name: Upload Playwright coverage
+        if: always() && hashFiles('web/coverage/playwright/lcov.info') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-coverage
+          path: web/coverage/playwright/lcov.info
+
+      - name: Upload Playwright artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-artifacts
+          if-no-files-found: warn
+          path: |
+            web/test-results
+            web/reports/playwright.xml
+            web/coverage/playwright
 
       - name: Deploy with Skaffold
         run: |
