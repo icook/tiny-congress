@@ -35,9 +35,46 @@ def synth_data_cli(
         resolve_path=True,
         help="Destination JSONL file.",
     ),
+    backend: str = typer.Option(
+        "template",
+        "--backend",
+        "-b",
+        help="Synthetic data backend: 'template' or 'lmstudio'.",
+        case_sensitive=False,
+    ),
+    lmstudio_url: str = typer.Option(
+        "http://127.0.0.1:1234/v1/chat/completions",
+        "--lmstudio-url",
+        help="LM Studio OpenAI-compatible completions endpoint.",
+    ),
+    lmstudio_model: str = typer.Option(
+        "openai/gpt-oss-20b",
+        "--lmstudio-model",
+        help="LM Studio model identifier.",
+    ),
+    temperature: float = typer.Option(
+        0.8,
+        "--temperature",
+        help="Sampling temperature for LM Studio backend.",
+    ),
+    timeout: int = typer.Option(
+        120,
+        "--timeout",
+        help="HTTP timeout (seconds) for LM Studio backend.",
+    ),
 ) -> None:
     """Generate synthetic civic-discourse documents."""
-    generate_docs(output_path=output, count=count, seed=seed)
+    selected_backend = backend.lower()
+    generate_docs(
+        output_path=output,
+        count=count,
+        seed=seed,
+        backend=selected_backend,
+        lmstudio_url=lmstudio_url,
+        lmstudio_model=lmstudio_model,
+        temperature=temperature,
+        timeout=timeout,
+    )
     typer.echo(f"Wrote {count} documents to {output}")
 
 

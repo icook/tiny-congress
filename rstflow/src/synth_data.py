@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import json
 import random
+import re
+from collections.abc import Iterator, Sequence
 from pathlib import Path
-from collections.abc import Sequence
-from typing import Iterator, TypeVar
+from typing import TypeVar
+
+import requests
 
 try:  # pragma: no cover - import fallbacks for direct module usage
     from .io_utils import write_jsonl
@@ -178,14 +182,82 @@ def _doc_records(
         yield doc
 
 
+def _generate_template_docs(count: int, seed: int) -> Iterator[dict[str, str]]:
+    for doc in _doc_records(count=count, seed=seed):
+        yield doc.model_dump()
+
+
+def _call_lmstudio(
+    *,
+    count: int,
+    base_url: str,
+    model: str,
+    temperature: float,
+    timeout: int,
+) -> list[dict[str, str]]:
+    system_prompt = "You generate civic discourse comments in JSON Lines format."
+    user_prompt = (
+        f"Create exactly {count} JSON Lines entries about dense urban parking debates. "
+        "Each line must be a JSON object with keys doc_id (d000001 onwards), "
+        "topic_id (topic.parking-ban-main-st or topic.bike-boulevard-elm), "
+        "author_id (u_0001 style), and text (2-3 sentences using connectors like "
+        "However, Because, Instead). Reply with ONLY those JSON objects, no markdown or prose."
+    )
+
+    payload = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        "temperature": temperature,
+        "max_tokens": 4096,
+    }
+
+    response = requests.post(base_url, json=payload, timeout=timeout)
+    response.raise_for_status()
+    content = response.json()["choices"][0]["message"]["content"].strip()
+    normalized = re.sub(r"}\s*{", "}\n{", content)
+    lines = [line.strip() for line in normalized.splitlines() if line.strip()]
+
+    if len(lines) != count:
+        raise RuntimeError(f"Expected {count} lines from LM Studio, got {len(lines)}")
+
+    records: list[dict[str, str]] = []
+    for line in lines:
+        parsed = json.loads(line)
+        doc = RawDocument.model_validate(parsed)
+        records.append(doc.model_dump())
+
+    return records
+
+
 def generate_docs(
     output_path: Path,
     count: int,
     seed: int = 13,
+    backend: str = "template",
+    *,
+    lmstudio_url: str = "http://127.0.0.1:1234/v1/chat/completions",
+    lmstudio_model: str = "openai/gpt-oss-20b",
+    temperature: float = 0.8,
+    timeout: int = 120,
 ) -> None:
     """Generate synthetic civic discourse documents."""
     if count < 0:
         raise ValueError("count must be non-negative")
 
-    docs = (doc.model_dump() for doc in _doc_records(count=count, seed=seed))
+    if backend == "template":
+        docs = _generate_template_docs(count=count, seed=seed)
+    elif backend == "lmstudio":
+        docs = _call_lmstudio(
+            count=count,
+            base_url=lmstudio_url,
+            model=lmstudio_model,
+            temperature=temperature,
+            timeout=timeout,
+        )
+    else:
+        raise ValueError(f"Unsupported backend '{backend}'")
+
     write_jsonl(output_path, docs)

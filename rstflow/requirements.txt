@@ -10,3 +10,4 @@ scikit-learn==1.5.*
 torch>=2.2,<3
 transformers>=4.42,<5
 isanlp-rst==3.*
+requests==2.32.*
