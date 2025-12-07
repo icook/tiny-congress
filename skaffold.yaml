@@ -9,6 +9,8 @@ build:
     tryImportMissing: true
     useBuildkit: true
     concurrency: 3
+  platforms:
+    - "linux/arm64"
   artifacts:
     - image: tc-api-dev
       context: ./service/
@@ -98,7 +100,7 @@ portForward:
     localPort: 5432
   - resourceType: service
     resourceName: tc
-    port: 80
+    port: 8080
     localPort: 8080
   - resourceType: deployment
     resourceName: tc-frontend
@@ -127,4 +129,5 @@ profiles:
     build:
       local:
         push: true
-        useBuildkit: true
+      platforms:
+        - "linux/amd64"
