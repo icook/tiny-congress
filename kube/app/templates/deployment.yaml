@@ -4,6 +4,7 @@ metadata:
   name: {{ include "app.fullname" . }}
   labels:
     {{- include "app.labels" . | nindent 4 }}
+    app.kubernetes.io/component: api
 spec:
   {{- if not .Values.autoscaling.enabled }}
   replicas: {{ .Values.replicaCount }}
@@ -11,6 +12,7 @@ spec:
   selector:
     matchLabels:
       {{- include "app.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: api
   template:
     metadata:
       {{- with .Values.podAnnotations }}
@@ -19,6 +21,7 @@ spec:
       {{- end }}
       labels:
         {{- include "app.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: api
     spec:
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
@@ -73,15 +76,18 @@ metadata:
   name: {{ include "app.fullname" . }}-frontend
   labels:
     {{- include "app.labels" . | nindent 4 }}
+    app.kubernetes.io/component: frontend
 spec:
   replicas: {{ .Values.frontend.replicas | default 1 }}
   selector:
     matchLabels:
       {{- include "app.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: frontend
   template:
     metadata:
       labels:
         {{- include "app.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: frontend
     spec:
       containers:
         - name: {{ .Chart.Name }}-frontend
