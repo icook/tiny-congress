@@ -9,6 +9,8 @@ build:
     tryImportMissing: true
     useBuildkit: true
     concurrency: 3
+  platforms:
+    - "linux/arm64"
   artifacts:
     - image: tc-api-dev
       context: ./service/
@@ -77,7 +79,7 @@ test:
   - image: tc-ui-dev
     custom:
       - command: >-
-          docker run --rm -e CI=true "$IMAGE" /bin/sh -lc "cd /app && yarn test --watchAll=false && yarn playwright:test"
+          docker run --rm -e CI=true "$IMAGE" /bin/sh -lc "cd /app && yarn test --watchAll=false && PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=0 yarn playwright install --with-deps chromium && yarn playwright:test"
 
 # Post-deploy verification: run integration tests against the live cluster
 verify:
@@ -98,7 +100,7 @@ portForward:
     localPort: 5432
   - resourceType: service
     resourceName: tc
-    port: 80
+    port: 8080
     localPort: 8080
   - resourceType: deployment
     resourceName: tc-frontend
@@ -127,4 +129,5 @@ profiles:
     build:
       local:
         push: true
-        useBuildkit: true
+      platforms:
+        - "linux/amd64"

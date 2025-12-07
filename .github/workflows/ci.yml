@@ -1,0 +1,259 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - '**'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.number || github.sha }}
+  cancel-in-progress: true
+
+env:
+  REGISTRY: ghcr.io/${{ github.repository }}
+
+jobs:
+  # ============================================================
+  # JOB 1: Build all container images in parallel
+  # ============================================================
+  build-images:
+    name: Build ${{ matrix.image }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: tc-api-dev
+            context: ./service
+            dockerfile: service/Dockerfile.dev
+          - image: tc-ui-dev
+            context: ./web
+            dockerfile: web/Dockerfile.dev
+          - image: postgres
+            context: .
+            dockerfile: dockerfiles/Dockerfile.postgres
+    outputs:
+      tc-api-dev-tag: ${{ steps.meta.outputs.tc-api-dev-tag }}
+      tc-ui-dev-tag: ${{ steps.meta.outputs.tc-ui-dev-tag }}
+      postgres-tag: ${{ steps.meta.outputs.postgres-tag }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compute tags
+        id: tags
+        run: |
+          ref="${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}"
+          branch="${ref//[^a-zA-Z0-9_.-]/-}"
+          branch="${branch,,}"
+          echo "branch_slug=${branch}" >> "$GITHUB_OUTPUT"
+          echo "sha_tag=${{ env.REGISTRY }}/${{ matrix.image }}:${{ github.sha }}" >> "$GITHUB_OUTPUT"
+          echo "branch_tag=${{ env.REGISTRY }}/${{ matrix.image }}:branch-${branch}" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push ${{ matrix.image }}
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          push: true
+          platforms: linux/amd64
+          build-args: |
+            BUILDKIT_INLINE_CACHE=1
+          tags: |
+            ${{ steps.tags.outputs.sha_tag }}
+            ${{ steps.tags.outputs.branch_tag }}
+          cache-from: |
+            type=gha,scope=${{ matrix.image }}
+            type=registry,ref=${{ env.REGISTRY }}/${{ matrix.image }}:cache
+          cache-to: |
+            type=gha,scope=${{ matrix.image }},mode=max
+            type=registry,ref=${{ env.REGISTRY }}/${{ matrix.image }}:cache,mode=max
+
+      - name: Export image metadata
+        id: meta
+        run: |
+          echo "${{ matrix.image }}-tag=${{ steps.tags.outputs.sha_tag }}" >> "$GITHUB_OUTPUT"
+
+  # ============================================================
+  # JOB 2: Aggregate image metadata from matrix
+  # ============================================================
+  collect-image-metadata:
+    name: Collect image metadata
+    runs-on: ubuntu-latest
+    needs: build-images
+    outputs:
+      artifacts_json: ${{ steps.generate.outputs.artifacts_json }}
+    steps:
+      - name: Generate Skaffold artifacts JSON
+        id: generate
+        run: |
+          artifacts=$(cat <<'EOF'
+          {
+            "builds": [
+              {"imageName": "tc-api-dev", "tag": "${{ env.REGISTRY }}/tc-api-dev:${{ github.sha }}"},
+              {"imageName": "tc-ui-dev", "tag": "${{ env.REGISTRY }}/tc-ui-dev:${{ github.sha }}"},
+              {"imageName": "postgres", "tag": "${{ env.REGISTRY }}/postgres:${{ github.sha }}"}
+            ]
+          }
+          EOF
+          )
+          artifacts_escaped=$(echo "$artifacts" | jq -c .)
+          echo "artifacts_json=${artifacts_escaped}" >> "$GITHUB_OUTPUT"
+        env:
+          REGISTRY: ghcr.io/${{ github.repository }}
+
+  # ============================================================
+  # JOB 3: Run Skaffold test/deploy/verify
+  # ============================================================
+  skaffold-verify:
+    name: Skaffold verify
+    runs-on: ubuntu-latest
+    needs: collect-image-metadata
+    permissions:
+      contents: read
+      packages: read
+      checks: write
+    env:
+      SKAFFOLD_DEFAULT_REPO: ghcr.io/${{ github.repository }}
+      SKAFFOLD_PROFILE: ci
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver: docker-container
+
+      - name: Set up KinD cluster
+        uses: helm/kind-action@v1.10.0
+        with:
+          version: v0.22.0
+          kubectl_version: v1.30.0
+          cluster_name: skaffold-ci
+
+      - name: Cache Skaffold
+        id: cache-skaffold
+        uses: actions/cache@v4
+        with:
+          path: /usr/local/bin/skaffold
+          key: skaffold-v2.16.1
+
+      - name: Install Skaffold
+        if: steps.cache-skaffold.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          SKAFFOLD_VERSION=v2.16.1
+          curl -fsSL -o skaffold https://storage.googleapis.com/skaffold/releases/${SKAFFOLD_VERSION}/skaffold-linux-amd64
+          sudo install skaffold /usr/local/bin/skaffold
+
+      - name: Verify Skaffold installation
+        run: skaffold version
+
+      - name: Show cluster info
+        run: |
+          kubectl version --client=true
+          kubectl cluster-info
+          kubectl get nodes -o wide
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure registry access for KinD
+        run: |
+          set -euo pipefail
+          kubectl create secret docker-registry ghcr-cred \
+            --namespace default \
+            --docker-server=ghcr.io \
+            --docker-username="${{ github.actor }}" \
+            --docker-password="${{ secrets.GITHUB_TOKEN }}" \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+          kubectl patch serviceaccount default \
+            -n default \
+            --type merge \
+            -p '{"imagePullSecrets":[{"name":"ghcr-cred"}]}'
+
+      - name: Write Skaffold artifacts file
+        id: artifacts
+        run: |
+          set -euo pipefail
+          artifacts_file="${RUNNER_TEMP}/skaffold-artifacts.json"
+          echo '${{ needs.collect-image-metadata.outputs.artifacts_json }}' > "$artifacts_file"
+          echo "Artifacts file contents:"
+          cat "$artifacts_file"
+          echo "file=${artifacts_file}" >> "$GITHUB_OUTPUT"
+
+      - name: Run Skaffold tests
+        run: |
+          set -euo pipefail
+          skaffold test -p ${SKAFFOLD_PROFILE} --build-artifacts "${{ steps.artifacts.outputs.file }}"
+
+      - name: Publish Playwright test report
+        if: always() && hashFiles('web/reports/playwright.xml') != ''
+        uses: EnricoMi/publish-unit-test-result-action@v2
+        with:
+          files: web/reports/playwright.xml
+          report_individual_runs: true
+          check_name: Playwright E2E
+          comment_mode: off
+
+      - name: Upload Playwright coverage
+        if: always() && hashFiles('web/coverage/playwright/lcov.info') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-coverage
+          path: web/coverage/playwright/lcov.info
+
+      - name: Upload Playwright artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-artifacts
+          if-no-files-found: warn
+          path: |
+            web/test-results
+            web/reports/playwright.xml
+            web/coverage/playwright
+
+      - name: Deploy with Skaffold
+        run: |
+          set -euo pipefail
+          skaffold deploy -p ${SKAFFOLD_PROFILE} --status-check=true --build-artifacts "${{ steps.artifacts.outputs.file }}"
+
+      - name: Run Skaffold verify
+        run: |
+          set -euo pipefail
+          skaffold verify -p ${SKAFFOLD_PROFILE} --build-artifacts "${{ steps.artifacts.outputs.file }}"
+
+      - name: Dump diagnostics on failure
+        if: failure()
+        run: |
+          echo '--- Pods ---'
+          kubectl get pods -A -o wide || true
+          echo '--- Services ---'
+          kubectl get svc -A || true
+          echo '--- Events ---'
+          kubectl get events -A --sort-by=.lastTimestamp || true
+          echo '--- All Resources ---'
+          kubectl get all -n default || true
