@@ -46,6 +46,25 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Cache Rust dependencies
+        if: matrix.image == 'tc-api-dev'
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: service -> target
+          cache-on-failure: true
+          shared-key: rust-deps
+
+      - name: Cache Yarn dependencies
+        if: matrix.image == 'tc-ui-dev'
+        uses: actions/cache@v4
+        with:
+          path: |
+            web/.yarn/cache
+            ~/.cache/yarn
+          key: yarn-${{ hashFiles('web/yarn.lock') }}
+          restore-keys: |
+            yarn-
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
