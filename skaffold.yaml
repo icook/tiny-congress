@@ -79,7 +79,7 @@ test:
   - image: tc-ui-dev
     custom:
       - command: >-
-          docker run --rm -e CI=true -v "$PWD/web/reports:/app/reports" -v "$PWD/web/test-results:/app/test-results" -v "$PWD/web/coverage:/app/coverage" "$IMAGE" /bin/sh -lc "cd /app && yarn test --watchAll=false && PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=0 yarn playwright install --with-deps chromium && yarn playwright:test"
+          docker run --rm -e CI=true -v "$PWD/web/reports:/app/reports" -v "$PWD/web/test-results:/app/test-results" "$IMAGE" /bin/sh -lc "cd /app && yarn test --watchAll=false && PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=0 yarn playwright install --with-deps chromium && yarn playwright:test"
 
 # Post-deploy verification: run integration tests against the live cluster
 verify:
