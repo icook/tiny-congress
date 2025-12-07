@@ -135,3 +135,4 @@ playwright-report/
 playwright/.launches/
 .playwright/
 test-results/
+reports/

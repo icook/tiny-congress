@@ -204,6 +204,10 @@ jobs:
           cat "$artifacts_file"
           echo "file=${artifacts_file}" >> "$GITHUB_OUTPUT"
 
+      - name: Prepare test output directories
+        run: |
+          mkdir -p web/reports web/test-results web/coverage/playwright
+
       - name: Run Skaffold tests
         run: |
           set -euo pipefail
