@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process';
 import fs from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 
 async function run(command, args, options = {}) {
@@ -11,7 +12,16 @@ async function run(command, args, options = {}) {
     });
 
     child.on('error', reject);
-    child.on('close', (code) => resolve(code ?? 0));
+    child.on('close', (code, signal) => {
+      if (signal) {
+        const signalNumber = os.constants.signals[signal];
+        const signalExitCode = signalNumber ? 128 + signalNumber : 128;
+        resolve(signalExitCode);
+        return;
+      }
+
+      resolve(code ?? 0);
+    });
   });
 }
 
