@@ -4,11 +4,20 @@ WORKDIR /app
 # Enable corepack for Yarn Berry
 RUN corepack enable
 
+# Skip Playwright browser downloads unless explicitly requested.
+ARG INSTALL_PLAYWRIGHT_BROWSERS=false
+ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+
 # Install dependencies (context is ./web)
 COPY .yarn/ ./.yarn/
 COPY .yarnrc.yml package.json yarn.lock ./
-RUN yarn install --immutable
-RUN npx playwright install --with-deps chromium
+RUN if [ "$INSTALL_PLAYWRIGHT_BROWSERS" = "true" ]; then \
+      unset PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD; \
+    fi; \
+    yarn install --immutable
+RUN if [ "$INSTALL_PLAYWRIGHT_BROWSERS" = "true" ]; then \
+      npx playwright install --with-deps chromium; \
+    fi
 
 # Copy the rest of the app
 COPY . ./
