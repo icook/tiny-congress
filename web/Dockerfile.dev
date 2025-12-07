@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1.4
 FROM node:20-slim
 WORKDIR /app
 
@@ -11,7 +12,9 @@ ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
 # Install dependencies (context is ./web)
 COPY .yarn/ ./.yarn/
 COPY .yarnrc.yml package.json yarn.lock ./
-RUN if [ "$INSTALL_PLAYWRIGHT_BROWSERS" = "true" ]; then \
+RUN --mount=type=cache,id=tc-ui-yarn-cache,target=/app/.yarn/cache \
+    --mount=type=cache,id=tc-ui-yarn-global-cache,target=/root/.cache/yarn \
+    if [ "$INSTALL_PLAYWRIGHT_BROWSERS" = "true" ]; then \
       unset PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD; \
     fi; \
     yarn install --immutable

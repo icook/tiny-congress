@@ -1,7 +1,11 @@
+# syntax=docker/dockerfile:1.4
+
 # Use cargo-chef to share dependency layers between builds
 FROM lukemathwalker/cargo-chef:latest-rust-1.86 AS chef
 
 WORKDIR /usr/src/app
+ENV CARGO_HOME=/usr/local/cargo
+ENV CARGO_TARGET_DIR=/usr/src/app/target
 
 FROM chef AS planner
 COPY . .
@@ -9,7 +13,10 @@ RUN cargo chef prepare --recipe-path recipe.json
 
 FROM chef AS cacher
 COPY --from=planner /usr/src/app/recipe.json recipe.json
-RUN cargo chef cook --recipe-path recipe.json
+RUN --mount=type=cache,id=tc-api-dev-target,target=/usr/src/app/target \
+    --mount=type=cache,id=tc-api-dev-registry,target=/usr/local/cargo/registry \
+    --mount=type=cache,id=tc-api-dev-git,target=/usr/local/cargo/git \
+    cargo chef cook --recipe-path recipe.json
 
 FROM rust:1.86 AS builder
 
@@ -17,20 +24,30 @@ WORKDIR /usr/src/app
 ENV CARGO_HOME=/usr/local/cargo
 ENV CARGO_TARGET_DIR=/usr/src/app/target
 
-COPY --from=cacher /usr/src/app/target target
-COPY --from=cacher /usr/local/cargo /usr/local/cargo
 COPY . .
 
 ENV SQLX_OFFLINE=true
-RUN cargo install sqlx-cli --locked --features postgres
-RUN if ! cargo install cargo-watch --locked; then cargo install cargo-watch; fi
-RUN cargo sqlx prepare --check
-RUN sh -ec 'cargo build --bin tinycongress-api && install -m 0755 target/debug/tinycongress-api /usr/local/bin/tinycongress-api'
+RUN --mount=type=cache,id=tc-api-dev-target,target=/usr/src/app/target \
+    --mount=type=cache,id=tc-api-dev-registry,target=/usr/local/cargo/registry \
+    --mount=type=cache,id=tc-api-dev-git,target=/usr/local/cargo/git \
+    cargo install sqlx-cli --locked --features postgres && \
+    (cargo install cargo-watch --locked || cargo install cargo-watch)
+RUN --mount=type=cache,id=tc-api-dev-target,target=/usr/src/app/target \
+    --mount=type=cache,id=tc-api-dev-registry,target=/usr/local/cargo/registry \
+    --mount=type=cache,id=tc-api-dev-git,target=/usr/local/cargo/git \
+    cargo sqlx prepare --check
+RUN --mount=type=cache,id=tc-api-dev-target,target=/usr/src/app/target \
+    --mount=type=cache,id=tc-api-dev-registry,target=/usr/local/cargo/registry \
+    --mount=type=cache,id=tc-api-dev-git,target=/usr/local/cargo/git \
+    sh -ec 'cargo build --bin tinycongress-api && install -m 0755 target/debug/tinycongress-api /usr/local/bin/tinycongress-api'
 
 RUN install -m 0755 bin/dev-entrypoint.sh /usr/local/bin/dev-entrypoint
 
 # Precompile test binaries so CI containers can run them without rebuilding dependencies
-RUN cargo test --no-run
+RUN --mount=type=cache,id=tc-api-dev-target,target=/usr/src/app/target \
+    --mount=type=cache,id=tc-api-dev-registry,target=/usr/local/cargo/registry \
+    --mount=type=cache,id=tc-api-dev-git,target=/usr/local/cargo/git \
+    cargo test --no-run
 
 ENV PATH="/usr/local/cargo/bin:${PATH}"
 
