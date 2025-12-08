@@ -86,6 +86,9 @@ test:
 # Post-deploy verification: run integration tests against the live cluster
 verify:
   - name: integration-tests
+    container:
+      name: integration-tests
+      image: tc-api-dev
     executionMode:
       kubernetesCluster:
         jobManifestPath: kube/verify/integration-tests-job.yaml
