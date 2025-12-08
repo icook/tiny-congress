@@ -9,8 +9,16 @@ import {
   IconUser,
 } from '@tabler/icons-react';
 import { Link, useRouterState } from '@tanstack/react-router';
-import { Box, Group, Text, UnstyledButton } from '@mantine/core';
-import classes from './Navbar.module.css';
+import {
+  Box,
+  Group,
+  Image,
+  NavLink,
+  Stack,
+  Text,
+  useComputedColorScheme,
+  useMantineTheme,
+} from '@mantine/core';
 
 const navLinks = [
   { icon: IconHome2, label: 'Home', path: '/' },
@@ -27,36 +35,45 @@ export function Navbar() {
   const currentPath = useRouterState({
     select: (state) => state.location.pathname,
   });
+  const theme = useMantineTheme();
+  const colorScheme = useComputedColorScheme();
 
-  const links = navLinks.map((link) => {
-    const isActive =
-      link.path === currentPath || (link.path !== '/' && currentPath.startsWith(link.path));
+  const borderColor = colorScheme === 'dark' ? theme.colors.dark[4] : theme.colors.gray[3];
 
-    return (
-      <UnstyledButton
-        component={Link}
-        to={link.path}
-        className={classes.navLink}
-        data-active={isActive || undefined}
-        key={link.label}
-      >
-        <Group gap="sm">
-          <link.icon size={20} stroke={1.5} />
-          <Text>{link.label}</Text>
-        </Group>
-      </UnstyledButton>
-    );
-  });
+  const isActive = (path: string) =>
+    path === currentPath || (path !== '/' && currentPath.startsWith(path));
 
   return (
-    <nav className={classes.navbar}>
-      <div className={classes.header}>
-        <Box p="md">
-          <img src="/src/logo.png" alt="Logo" className={classes.logo} />
-        </Box>
-      </div>
+    <Stack
+      component="nav"
+      h="100%"
+      gap="md"
+      p="md"
+      bg="var(--mantine-color-body)"
+      style={{ borderRight: `1px solid ${borderColor}` }}
+    >
+      <Box pb="sm" mb="xs" style={{ borderBottom: `1px solid ${borderColor}` }}>
+        <Group gap="xs">
+          <Image src="/src/logo.png" alt="TinyCongress logo" h={32} w="auto" fit="contain" />
+          <Text fw={700} c="dimmed">
+            TinyCongress
+          </Text>
+        </Group>
+      </Box>
 
-      <div className={classes.navLinks}>{links}</div>
-    </nav>
+      <Stack gap={4} style={{ flex: 1 }}>
+        {navLinks.map((link) => (
+          <NavLink
+            key={link.label}
+            component={Link}
+            to={link.path}
+            label={link.label}
+            leftSection={<link.icon size={18} stroke={1.5} />}
+            active={isActive(link.path)}
+            fw={500}
+          />
+        ))}
+      </Stack>
+    </Stack>
   );
 }

@@ -1,8 +1,7 @@
 import { Outlet } from '@tanstack/react-router';
-import { AppShell, Burger, Group } from '@mantine/core';
+import { AppShell, Burger, Group, Image, Text } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { Navbar } from '../components/Navbar/Navbar';
-import classes from './Layout.module.css';
 
 export function Layout() {
   const [opened, { toggle }] = useDisclosure();
@@ -14,10 +13,10 @@ export function Layout() {
       padding="md"
     >
       <AppShell.Header>
-        <Group h="100%" px="md">
+        <Group h="100%" px="md" gap="sm">
           <Burger opened={opened} onClick={toggle} hiddenFrom="sm" size="sm" />
-          <img src="/src/logo.png" alt="Logo" className={classes.logo} />
-          TinyCongress
+          <Image src="/src/logo.png" alt="TinyCongress logo" h={32} w="auto" />
+          <Text fw={700}>TinyCongress</Text>
         </Group>
       </AppShell.Header>
       <AppShell.Navbar>
