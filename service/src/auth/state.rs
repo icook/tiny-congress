@@ -65,7 +65,7 @@ mod tests {
         let retrieved = store.take("state-1").await;
 
         assert!(retrieved.is_some());
-        assert_eq!(retrieved.unwrap().secret(), verifier_secret);
+        assert_eq!(retrieved.unwrap().secret(), &verifier_secret);
 
         // State should be removed after retrieval
         assert!(store.take("state-1").await.is_none());
