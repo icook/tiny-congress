@@ -206,7 +206,7 @@ jobs:
 
       - name: Prepare test output directories
         run: |
-          mkdir -p web/reports web/test-results
+          mkdir -p web/reports web/test-results web/coverage/playwright
 
       - name: Run Skaffold tests
         run: |
@@ -222,6 +222,35 @@ jobs:
           check_name: Playwright E2E
           comment_mode: off
 
+      - name: Upload Playwright coverage
+        if: always() && hashFiles('web/coverage/playwright/lcov.info') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-coverage
+          path: web/coverage/playwright/lcov.info
+
+      - name: Summarize Playwright coverage
+        if: always() && hashFiles('web/coverage/playwright/coverage-summary.json') != ''
+        run: |
+          node - <<'EOF'
+          import fs from 'node:fs';
+          import path from 'node:path';
+
+          const summaryPath = path.join(process.cwd(), 'web/coverage/playwright/coverage-summary.json');
+          const summary = JSON.parse(fs.readFileSync(summaryPath, 'utf8')).total;
+          const rows = [
+            ['Lines', `${summary.lines.pct}%`, summary.lines.covered, summary.lines.total],
+            ['Statements', `${summary.statements.pct}%`, summary.statements.covered, summary.statements.total],
+            ['Functions', `${summary.functions.pct}%`, summary.functions.covered, summary.functions.total],
+            ['Branches', `${summary.branches.pct}%`, summary.branches.covered, summary.branches.total],
+          ].map((cells) => `| ${cells.join(' | ')} |`).join('\n');
+
+          const header = '| Metric | Pct | Covered | Total |';
+          const separator = '| --- | --- | --- | --- |';
+          const body = `### Playwright coverage\n${header}\n${separator}\n${rows}\n`;
+          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, body);
+          EOF
+
       - name: Upload Playwright artifacts
         if: always()
         uses: actions/upload-artifact@v4
@@ -231,6 +260,7 @@ jobs:
           path: |
             web/test-results
             web/reports/playwright.xml
+            web/coverage/playwright
 
       - name: Deploy with Skaffold
         run: |
