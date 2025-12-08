@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: test-artifacts-exporter
+spec:
+  restartPolicy: Never
+  volumes:
+    - name: test-artifacts
+      persistentVolumeClaim:
+        claimName: test-artifacts-pvc
+  containers:
+    - name: exporter
+      image: alpine:3.20
+      command: ["sh", "-c"]
+      args: ["sleep 3600"]
+      volumeMounts:
+        - name: test-artifacts
+          mountPath: /artifacts

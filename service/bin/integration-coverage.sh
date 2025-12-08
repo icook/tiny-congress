@@ -15,12 +15,13 @@ export DATABASE_URL
 : "${DATABASE_URL:?DATABASE_URL is required}"
 
 EXPORT_LCOV_BASE64="${EXPORT_LCOV_BASE64:-1}"
+ARTIFACTS_DIR="${ARTIFACTS_DIR:-coverage}"
 
-mkdir -p coverage
+mkdir -p "$ARTIFACTS_DIR"
 rm -rf /usr/src/app/target "$CARGO_TARGET_DIR"
 cargo llvm-cov clean --workspace
 cargo llvm-cov --lcov \
-  --output-path coverage/backend-integration.lcov \
+  --output-path "${ARTIFACTS_DIR}/backend-integration.lcov" \
   --remap-path-prefix \
   --test integration_tests \
   -- --test-threads=1 --nocapture
@@ -29,7 +30,7 @@ if [[ "${EXPORT_LCOV_BASE64:-0}" != "0" ]]; then
   marker_start="BEGIN_INTEGRATION_LCOV"
   marker_end="END_INTEGRATION_LCOV"
   echo "${marker_start}"
-  gzip -c coverage/backend-integration.lcov | base64 | tr -d '\n'
+  gzip -c "${ARTIFACTS_DIR}/backend-integration.lcov" | base64 | tr -d '\n'
   echo
   echo "${marker_end}"
 fi

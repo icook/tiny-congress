@@ -214,6 +214,9 @@ jobs:
             --type merge \
             -p '{"imagePullSecrets":[{"name":"ghcr-cred"}]}'
 
+      - name: Apply PVC for test artifacts
+        run: kubectl apply -f kube/verify/test-artifacts-pvc.yaml
+
       - name: Write Skaffold artifacts file
         id: artifacts
         run: |
@@ -291,31 +294,24 @@ jobs:
       - name: Run Skaffold verify
         run: |
           set -euo pipefail
-          log_file="${RUNNER_TEMP}/skaffold-verify.log"
+          skaffold verify -p ${SKAFFOLD_PROFILE} --build-artifacts "${{ steps.artifacts.outputs.file }}"
 
-          if skaffold verify -p ${SKAFFOLD_PROFILE} --build-artifacts "${{ steps.artifacts.outputs.file }}" | tee "$log_file" | sed '/BEGIN_INTEGRATION_LCOV/,/END_INTEGRATION_LCOV/d'; then
-            status=0
-          else
-            status=$?
-          fi
+      - name: Start exporter pod for integration artifacts
+        if: always()
+        run: |
+          kubectl apply -f kube/verify/test-artifacts-exporter.yaml
+          kubectl wait --for=condition=Ready pod/test-artifacts-exporter --timeout=60s
 
-          start_marker="BEGIN_INTEGRATION_LCOV"
-          end_marker="END_INTEGRATION_LCOV"
+      - name: Copy integration artifacts
+        if: always()
+        run: |
           mkdir -p service/coverage
+          kubectl cp test-artifacts-exporter:/artifacts/. service/coverage
+          ls -la service/coverage
 
-          if grep -q "$start_marker" "$log_file"; then
-            payload=$(awk "/$start_marker/{flag=1;next}/$end_marker/{flag=0}flag" "$log_file" | sed 's/^\\[integration-tests\\][[:space:]]*//' | tr -d '\n' || true)
-            if [ -n "$payload" ]; then
-              echo "$payload" | base64 --decode | gunzip > service/coverage/backend-integration.lcov
-              echo "Integration coverage written to service/coverage/backend-integration.lcov"
-            else
-              echo "Integration coverage markers found but payload was empty" >&2
-            fi
-          else
-            echo "Integration coverage markers not found in Skaffold verify output" >&2
-          fi
-
-          exit $status
+      - name: Cleanup exporter pod
+        if: always()
+        run: kubectl delete pod test-artifacts-exporter || true
 
       - name: Upload Rust coverage to Codecov
         if: always()
