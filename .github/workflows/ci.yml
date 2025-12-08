@@ -226,7 +226,8 @@ jobs:
 
       - name: Prepare test output directories
         run: |
-          mkdir -p web/reports web/test-results web/coverage/playwright
+          mkdir -p web/reports web/test-results web/coverage/playwright service/coverage
+          rm -f service/coverage/backend-unit.lcov service/coverage/backend-integration.lcov
 
       - name: Run Skaffold tests
         run: |
@@ -290,7 +291,41 @@ jobs:
       - name: Run Skaffold verify
         run: |
           set -euo pipefail
-          skaffold verify -p ${SKAFFOLD_PROFILE} --build-artifacts "${{ steps.artifacts.outputs.file }}"
+          log_file="${RUNNER_TEMP}/skaffold-verify.log"
+
+          if skaffold verify -p ${SKAFFOLD_PROFILE} --build-artifacts "${{ steps.artifacts.outputs.file }}" | tee "$log_file"; then
+            status=0
+          else
+            status=$?
+          fi
+
+          start_marker="BEGIN_INTEGRATION_LCOV"
+          end_marker="END_INTEGRATION_LCOV"
+          mkdir -p service/coverage
+
+          if grep -q "$start_marker" "$log_file"; then
+            payload=$(awk "/$start_marker/{flag=1;next}/$end_marker/{flag=0}flag" "$log_file" | tr -d '\n' || true)
+            if [ -n "$payload" ]; then
+              echo "$payload" | base64 --decode > service/coverage/backend-integration.lcov
+              echo "Integration coverage written to service/coverage/backend-integration.lcov"
+            else
+              echo "Integration coverage markers found but payload was empty" >&2
+            fi
+          else
+            echo "Integration coverage markers not found in Skaffold verify output" >&2
+          fi
+
+          exit $status
+
+      - name: Upload Rust coverage to Codecov
+        if: always()
+        uses: codecov/codecov-action@v5
+        with:
+          files: ./service/coverage/backend-unit.lcov,./service/coverage/backend-integration.lcov
+          flags: rust
+          name: rust-coverage
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false
 
       - name: Dump diagnostics on failure
         if: failure()

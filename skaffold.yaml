@@ -75,7 +75,9 @@ test:
   - image: tc-api-dev
     custom:
       - command: >-
-          docker run --rm "$IMAGE" /bin/sh /usr/src/app/bin/test.sh
+          docker run --rm
+          -v "$PWD/service/coverage:/usr/src/app/coverage"
+          "$IMAGE" /bin/sh -lc "cd /usr/src/app && ./bin/unit-coverage.sh"
   - image: tc-ui-dev
     custom:
       - command: >-
@@ -88,7 +90,7 @@ verify:
       name: integration-tests
       image: tc-api-dev
       command: ["/bin/sh"]
-      args: ["/usr/src/app/bin/integration-test.sh"]
+      args: ["-lc", "cd /usr/src/app && ./bin/integration-coverage.sh"]
     executionMode:
       kubernetesCluster: {}
 
