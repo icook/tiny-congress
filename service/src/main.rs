@@ -2,6 +2,7 @@ use async_graphql::{EmptySubscription, Schema};
 use axum::{http::StatusCode, response::IntoResponse, routing::get, Extension, Router};
 use std::net::SocketAddr;
 use tinycongress_api::{
+    config::AppConfig,
     db::{create_seed_data, setup_database},
     graphql::{graphql_handler, graphql_playground, MutationRoot, QueryRoot},
 };
@@ -25,12 +26,11 @@ async fn main() -> Result<(), anyhow::Error> {
         "tinycongress-api starting up"
     );
 
-    // Database connection
-    let database_url = std::env::var("DATABASE_URL")
-        .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:5432/tinycongress".to_string());
+    let config = AppConfig::from_env()?;
 
+    // Database connection
     tracing::info!("Connecting to database...");
-    let pool = setup_database(&database_url).await?;
+    let pool = setup_database(&config.database_url).await?;
 
     // Create seed data
     tracing::info!("Setting up seed data...");
@@ -39,6 +39,7 @@ async fn main() -> Result<(), anyhow::Error> {
     // Create the GraphQL schema
     let schema = Schema::build(QueryRoot, MutationRoot, EmptySubscription)
         .data(pool.clone()) // Pass the database pool to the schema
+        .data(config.clone())
         .finish();
 
     // Build the API
@@ -49,7 +50,8 @@ async fn main() -> Result<(), anyhow::Error> {
         .route("/health", get(health_check))
         // Add the schema to the extension
         .layer(Extension(schema))
-        .layer(Extension(pool));
+        .layer(Extension(pool))
+        .layer(Extension(config));
 
     // Start the server
     let port = std::env::var("PORT")
