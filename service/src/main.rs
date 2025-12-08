@@ -1,15 +1,9 @@
-use axum::{
-    routing::get,
-    Router,
-    Extension,
-    http::StatusCode,
-    response::IntoResponse,
-};
-use std::net::SocketAddr;
 use async_graphql::{EmptySubscription, Schema};
+use axum::{http::StatusCode, response::IntoResponse, routing::get, Extension, Router};
+use std::net::SocketAddr;
 use tinycongress_api::{
-    graphql::{QueryRoot, MutationRoot, graphql_playground, graphql_handler},
-    db::{setup_database, create_seed_data},
+    db::{create_seed_data, setup_database},
+    graphql::{graphql_handler, graphql_playground, MutationRoot, QueryRoot},
 };
 
 // Health check handler

@@ -1,2 +1,2 @@
-pub mod graphql;
 pub mod db;
+pub mod graphql;
