@@ -24,4 +24,4 @@ docker run --rm \
   -v "$ARTIFACT_ROOT/playwright-report:/app/playwright-report" \
   -v "$ARTIFACT_ROOT/test-results:/app/test-results" \
   "$IMAGE" \
-  /bin/sh -lc "cd /app && PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=0 yarn playwright install --with-deps chromium && yarn test --watchAll=false && yarn playwright:ci"
+  /bin/sh -lc "/app/bin/test.sh"
