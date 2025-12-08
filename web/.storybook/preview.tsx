@@ -1,12 +1,10 @@
 import '@mantine/core/styles.css';
 
-import React, { useEffect } from 'react';
-import { addons } from '@storybook/preview-api';
+import React, { useCallback, useEffect } from 'react';
 import { DARK_MODE_EVENT_NAME } from 'storybook-dark-mode';
+import { addons } from 'storybook/preview-api';
 import { MantineProvider, useMantineColorScheme } from '@mantine/core';
 import { theme } from '../src/theme';
-
-const channel = addons.getChannel();
 
 export const parameters = {
   layout: 'fullscreen',
@@ -17,12 +15,17 @@ export const parameters = {
 
 function ColorSchemeWrapper({ children }: { children: React.ReactNode }) {
   const { setColorScheme } = useMantineColorScheme();
-  const handleColorScheme = (value: boolean) => setColorScheme(value ? 'dark' : 'light');
+  // useCallback keeps the handler stable so the dark-mode listener doesn't re-register on every render.
+  const handleColorScheme = useCallback(
+    (value: boolean) => setColorScheme(value ? 'dark' : 'light'),
+    [setColorScheme]
+  );
 
   useEffect(() => {
+    const channel = addons.getChannel();
     channel.on(DARK_MODE_EVENT_NAME, handleColorScheme);
     return () => channel.off(DARK_MODE_EVENT_NAME, handleColorScheme);
-  }, [channel]);
+  }, [handleColorScheme]);
 
   return children;
 }

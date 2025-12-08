@@ -1,0 +1,6 @@
+{
+  "//": "Dedicated TypeScript program for ESLint so config/test/storybook files are type-checked without polluting the main compiler inputs.",
+  "extends": "./tsconfig.json",
+  "include": ["src", "test-utils", "tests", ".storybook/**/*", "playwright.config.ts"],
+  "exclude": ["dist", "node_modules", ".yarn", ".turbo", "coverage", ".nyc_output"]
+}
