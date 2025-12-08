@@ -39,8 +39,10 @@ const providers: { id: OAuthProvider; label: string; description: string }[] = [
 
 export function LoginPage() {
   const { loginWithProvider, status, error } = useAuth();
-  const { search } = useRouterState({ select: (state) => state.location });
-  const nextPath = typeof search.next === 'string' && search.next ? search.next : '/dashboard';
+  const search = useRouterState({ select: (state) => state.location.search });
+  const typedSearch = search as Record<string, unknown>;
+  const nextPath =
+    typeof typedSearch.next === 'string' && typedSearch.next ? typedSearch.next : '/dashboard';
 
   const authenticating = status === 'authenticating';
 

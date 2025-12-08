@@ -8,15 +8,16 @@ import type { OAuthProvider } from '../auth/types';
 export function OAuthCallbackPage() {
   const { completeOAuth, status, error } = useAuth();
   const navigate = useNavigate();
-  const { search } = useRouterState({ select: (state) => state.location });
+  const search = useRouterState({ select: (state) => state.location.search });
+  const typedSearch = search as Record<string, unknown>;
 
-  const code = typeof search.code === 'string' ? search.code : null;
-  const stateParam = typeof search.state === 'string' ? search.state : undefined;
+  const code = typeof typedSearch.code === 'string' ? typedSearch.code : null;
+  const stateParam = typeof typedSearch.state === 'string' ? typedSearch.state : undefined;
   const providerParam =
-    typeof search.provider === 'string' && isKnownProvider(search.provider)
-      ? search.provider
+    typeof typedSearch.provider === 'string' && isKnownProvider(typedSearch.provider)
+      ? typedSearch.provider
       : undefined;
-  const nextFromQuery = typeof search.next === 'string' ? search.next : undefined;
+  const nextFromQuery = typeof typedSearch.next === 'string' ? typedSearch.next : undefined;
 
   const [localError, setLocalError] = useState<string | null>(null);
   const [completed, setCompleted] = useState(false);

@@ -1,36 +1,12 @@
-import {
-  createMemoryHistory,
-  createRootRoute,
-  createRoute,
-  createRouter,
-  Outlet,
-  RouterProvider,
-} from '@tanstack/react-router';
+import { createMemoryHistory, createRouter, RouterProvider } from '@tanstack/react-router';
 import { render, screen } from '@test-utils';
+import { routeTree } from '../../Router';
 import { Welcome } from './Welcome';
-
-const rootRoute = createRootRoute({
-  component: () => <Outlet />,
-});
-
-const welcomeRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: '/',
-  component: Welcome,
-});
-
-const routeTree = rootRoute.addChildren([welcomeRoute]);
 
 const router = createRouter({
   routeTree,
   history: createMemoryHistory({ initialEntries: ['/'] }),
 });
-
-declare module '@tanstack/react-router' {
-  interface Register {
-    router: typeof router;
-  }
-}
 
 describe('Welcome component', () => {
   it('renders OAuth call-to-action', async () => {

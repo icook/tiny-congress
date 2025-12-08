@@ -49,7 +49,7 @@ const loginCallbackRoute = createRoute({
   component: OAuthCallbackPage,
 });
 
-const routeTree = rootRoute.addChildren([
+export const routeTree = rootRoute.addChildren([
   homeRoute,
   dashboardRoute,
   conversationsRoute,
@@ -62,7 +62,7 @@ const routeTree = rootRoute.addChildren([
   createPlaceholderRoute('settings', 'Settings', 'Settings page content'),
 ]);
 
-const router = createRouter({ routeTree });
+export const router = createRouter({ routeTree });
 
 declare module '@tanstack/react-router' {
   interface Register {

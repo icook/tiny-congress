@@ -104,13 +104,19 @@ export function normalizeSession(data: any, provider?: OAuthProvider): AuthSessi
 
   const token = data.token ?? data.accessToken ?? data.access_token;
   const refreshToken = data.refreshToken ?? data.refresh_token;
-  const rawUser: AuthUser = data.user ?? data.profile ?? {};
+  const rawUser = (data.user ?? data.profile ?? {}) as Record<string, unknown>;
 
   const user: AuthUser = {
-    id: rawUser.id ?? rawUser.sub ?? '',
-    name: rawUser.name ?? rawUser.email ?? '',
-    email: rawUser.email,
-    avatarUrl: rawUser.avatarUrl ?? rawUser.avatar_url ?? rawUser.picture,
+    id: (rawUser.id as string | undefined) ?? (rawUser.sub as string | undefined) ?? '',
+    name:
+      (rawUser.name as string | undefined) ??
+      (rawUser.email as string | undefined) ??
+      '',
+    email: rawUser.email as string | undefined,
+    avatarUrl:
+      (rawUser.avatarUrl as string | undefined) ??
+      (rawUser.avatar_url as string | undefined) ??
+      (rawUser.picture as string | undefined),
   };
 
   if (!token || !user.id || !user.name) {
