@@ -8,7 +8,7 @@ This template comes with the following features:
 - [TypeScript](https://www.typescriptlang.org/)
 - [Storybook](https://storybook.js.org/)
 - [Vitest](https://vitest.dev/) setup with [React Testing Library](https://testing-library.com/docs/react-testing-library/intro)
-- ESLint setup with [eslint-config-mantine](https://github.com/mantinedev/eslint-config-mantine)
+- ESLint setup with [eslint-config-mantine](https://github.com/mantinedev/eslint-config-mantine) plus type-aware React hooks linting and targeted rules for Vitest, Playwright, Testing Library, and Storybook
 
 ## npm scripts
 
