@@ -6,6 +6,9 @@ cd "$ROOT_DIR"
 
 export PATH="/usr/local/cargo/bin:${HOME}/.cargo/bin:${PATH}"
 
+CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-/tmp/target}"
+export CARGO_TARGET_DIR
+
 DATABASE_URL_DEFAULT="postgres://postgres:postgres@postgres:5432/prioritization"
 DATABASE_URL="${DATABASE_URL:-$DATABASE_URL_DEFAULT}"
 export DATABASE_URL
@@ -14,6 +17,7 @@ export DATABASE_URL
 EXPORT_LCOV_BASE64="${EXPORT_LCOV_BASE64:-1}"
 
 mkdir -p coverage
+rm -rf /usr/src/app/target "$CARGO_TARGET_DIR"
 cargo llvm-cov clean --workspace
 cargo llvm-cov --lcov \
   --output-path coverage/backend-integration.lcov \
