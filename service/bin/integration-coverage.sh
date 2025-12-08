@@ -4,6 +4,8 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
+export PATH="/usr/local/cargo/bin:${HOME}/.cargo/bin:${PATH}"
+
 DATABASE_URL_DEFAULT="postgres://postgres:postgres@postgres:5432/prioritization"
 DATABASE_URL="${DATABASE_URL:-$DATABASE_URL_DEFAULT}"
 export DATABASE_URL

@@ -4,6 +4,8 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
+export PATH="/usr/local/cargo/bin:${HOME}/.cargo/bin:${PATH}"
+
 mkdir -p coverage
 cargo llvm-cov clean --workspace
 cargo llvm-cov --lcov \
