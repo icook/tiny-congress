@@ -1,9 +1,12 @@
+use crate::auth::OAuthService;
 use async_graphql::http::{playground_source, GraphQLPlaygroundConfig};
-use async_graphql::{Context, EmptySubscription, Object, Schema, SimpleObject, ID};
+use async_graphql::{Context, EmptySubscription, Enum, Object, Result, Schema, SimpleObject, ID};
 use async_graphql_axum::{GraphQLRequest, GraphQLResponse};
 use axum::extract::Extension;
 use axum::response::{Html, IntoResponse};
 use chrono::Utc;
+use oauth2::{AuthorizationCode, TokenResponse};
+use tracing::error;
 
 // Define the schema type with Query and Mutation roots
 pub type ApiSchema = Schema<QueryRoot, MutationRoot, EmptySubscription>;
@@ -40,6 +43,24 @@ pub struct TopicRanking {
     pub rank: i32,
     pub score: f64,
     pub topic: Topic,
+}
+
+#[derive(Enum, Copy, Clone, Eq, PartialEq)]
+pub enum OAuthProvider {
+    Google,
+}
+
+#[derive(SimpleObject)]
+pub struct StartOAuthPayload {
+    pub auth_url: String,
+}
+
+#[derive(SimpleObject)]
+pub struct CompleteOAuthPayload {
+    pub access_token: String,
+    pub email: String,
+    pub email_verified: bool,
+    pub expires_at: Option<String>,
 }
 
 // Query root
@@ -114,6 +135,79 @@ impl MutationRoot {
             user_id, choice, pairing_id
         );
         true
+    }
+
+    async fn start_oauth(
+        &self,
+        ctx: &Context<'_>,
+        provider: OAuthProvider,
+    ) -> Result<StartOAuthPayload> {
+        let oauth_service = ctx.data::<OAuthService>()?;
+
+        let google = match provider {
+            OAuthProvider::Google => oauth_service
+                .google
+                .as_ref()
+                .ok_or_else(|| async_graphql::Error::new("Google OAuth not configured"))?,
+        };
+
+        let (auth_url, state, pkce_verifier) = google.authorization_url();
+        oauth_service
+            .state_store
+            .put(state.secret(), pkce_verifier)
+            .await;
+
+        Ok(StartOAuthPayload {
+            auth_url: auth_url.to_string(),
+        })
+    }
+
+    async fn complete_oauth(
+        &self,
+        ctx: &Context<'_>,
+        provider: OAuthProvider,
+        code: String,
+        state: String,
+    ) -> Result<CompleteOAuthPayload> {
+        let oauth_service = ctx.data::<OAuthService>()?;
+
+        let google = match provider {
+            OAuthProvider::Google => oauth_service
+                .google
+                .as_ref()
+                .ok_or_else(|| async_graphql::Error::new("Google OAuth not configured"))?,
+        };
+
+        let pkce_verifier = oauth_service
+            .state_store
+            .take(&state)
+            .await
+            .ok_or_else(|| async_graphql::Error::new("Invalid or expired OAuth state"))?;
+
+        let token_response = google
+            .exchange_code(AuthorizationCode::new(code), pkce_verifier)
+            .await
+            .map_err(|err| async_graphql::Error::new(err.to_string()))?;
+
+        let expires_at = token_response
+            .expires_in()
+            .and_then(|duration| chrono::Duration::from_std(duration).ok())
+            .map(|duration| (Utc::now() + duration).to_rfc3339());
+
+        let user_info = google
+            .fetch_user_info(token_response.access_token())
+            .await
+            .map_err(|err| {
+                error!(error = %err, "Failed to fetch Google user info");
+                async_graphql::Error::new("Failed to fetch user info from provider")
+            })?;
+
+        Ok(CompleteOAuthPayload {
+            access_token: token_response.access_token().secret().to_string(),
+            email: user_info.email,
+            email_verified: user_info.email_verified,
+            expires_at,
+        })
     }
 }
 

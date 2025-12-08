@@ -2,6 +2,7 @@ use async_graphql::{EmptySubscription, Schema};
 use axum::{http::StatusCode, response::IntoResponse, routing::get, Extension, Router};
 use std::net::SocketAddr;
 use tinycongress_api::{
+    auth::OAuthService,
     config::AppConfig,
     db::{create_seed_data, setup_database},
     graphql::{graphql_handler, graphql_playground, MutationRoot, QueryRoot},
@@ -27,6 +28,7 @@ async fn main() -> Result<(), anyhow::Error> {
     );
 
     let config = AppConfig::from_env()?;
+    let oauth_service = OAuthService::from_config(&config);
 
     // Database connection
     tracing::info!("Connecting to database...");
@@ -40,6 +42,7 @@ async fn main() -> Result<(), anyhow::Error> {
     let schema = Schema::build(QueryRoot, MutationRoot, EmptySubscription)
         .data(pool.clone()) // Pass the database pool to the schema
         .data(config.clone())
+        .data(oauth_service.clone())
         .finish();
 
     // Build the API
@@ -51,7 +54,8 @@ async fn main() -> Result<(), anyhow::Error> {
         // Add the schema to the extension
         .layer(Extension(schema))
         .layer(Extension(pool))
-        .layer(Extension(config));
+        .layer(Extension(config))
+        .layer(Extension(oauth_service));
 
     // Start the server
     let port = std::env::var("PORT")
