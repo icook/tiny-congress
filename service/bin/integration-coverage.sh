@@ -26,8 +26,10 @@ cargo llvm-cov --lcov \
   -- --test-threads=1 --nocapture
 
 if [[ "${EXPORT_LCOV_BASE64:-0}" != "0" ]]; then
-  echo "BEGIN_INTEGRATION_LCOV"
-  base64 coverage/backend-integration.lcov | tr -d '\n'
+  marker_start="BEGIN_INTEGRATION_LCOV"
+  marker_end="END_INTEGRATION_LCOV"
+  echo "${marker_start}"
+  gzip -c coverage/backend-integration.lcov | base64 | tr -d '\n'
   echo
-  echo "END_INTEGRATION_LCOV"
+  echo "${marker_end}"
 fi

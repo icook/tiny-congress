@@ -304,9 +304,9 @@ jobs:
           mkdir -p service/coverage
 
           if grep -q "$start_marker" "$log_file"; then
-            payload=$(awk "/$start_marker/{flag=1;next}/$end_marker/{flag=0}flag" "$log_file" | tr -d '\n' || true)
+            payload=$(awk "/$start_marker/{flag=1;next}/$end_marker/{flag=0}flag" "$log_file" | sed 's/^\\[integration-tests\\][[:space:]]*//' | tr -d '\n' || true)
             if [ -n "$payload" ]; then
-              echo "$payload" | base64 --decode > service/coverage/backend-integration.lcov
+              echo "$payload" | base64 --decode | gunzip > service/coverage/backend-integration.lcov
               echo "Integration coverage written to service/coverage/backend-integration.lcov"
             else
               echo "Integration coverage markers found but payload was empty" >&2
