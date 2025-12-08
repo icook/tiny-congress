@@ -1,7 +1,10 @@
 import { createRootRoute, createRoute, createRouter, RouterProvider } from '@tanstack/react-router';
+import { AuthGate } from './auth/AuthGate';
 import { DashboardPage } from './pages/Dashboard.page';
 import { HomePage } from './pages/Home.page';
 import { Layout } from './pages/Layout';
+import { LoginPage } from './pages/Login.page';
+import { OAuthCallbackPage } from './pages/OAuthCallback.page';
 import { ThreadedConversationPage } from './pages/ThreadedConversation.page';
 
 const rootRoute = createRootRoute({
@@ -17,19 +20,41 @@ const homeRoute = createRoute({
 const dashboardRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: 'dashboard',
-  component: DashboardPage,
+  component: () => (
+    <AuthGate>
+      <DashboardPage />
+    </AuthGate>
+  ),
 });
 
 const conversationsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: 'conversations',
-  component: ThreadedConversationPage,
+  component: () => (
+    <AuthGate>
+      <ThreadedConversationPage />
+    </AuthGate>
+  ),
+});
+
+const loginRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: 'login',
+  component: LoginPage,
+});
+
+const loginCallbackRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: 'login/callback',
+  component: OAuthCallbackPage,
 });
 
 const routeTree = rootRoute.addChildren([
   homeRoute,
   dashboardRoute,
   conversationsRoute,
+  loginRoute,
+  loginCallbackRoute,
   createPlaceholderRoute('analytics', 'Analytics', 'Analytics page content'),
   createPlaceholderRoute('releases', 'Releases', 'Releases page content'),
   createPlaceholderRoute('account', 'Account', 'Account page content'),
@@ -53,7 +78,11 @@ function createPlaceholderRoute(path: string, title: string, description: string
   return createRoute({
     getParentRoute: () => rootRoute,
     path,
-    component: () => <PlaceholderPage title={title} description={description} />,
+    component: () => (
+      <AuthGate>
+        <PlaceholderPage title={title} description={description} />
+      </AuthGate>
+    ),
   });
 }
 

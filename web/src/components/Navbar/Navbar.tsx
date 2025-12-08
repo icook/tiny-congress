@@ -4,6 +4,7 @@ import {
   IconFingerprint,
   IconGauge,
   IconHome2,
+  IconLock,
   IconMessages,
   IconSettings,
   IconUser,
@@ -19,22 +20,25 @@ import {
   useComputedColorScheme,
   useMantineTheme,
 } from '@mantine/core';
+import { useAuth } from '../../auth/AuthProvider';
 
 const navLinks = [
-  { icon: IconHome2, label: 'Home', path: '/' },
-  { icon: IconGauge, label: 'Dashboard', path: '/dashboard' },
-  { icon: IconMessages, label: 'Conversations', path: '/conversations' },
-  { icon: IconDeviceDesktopAnalytics, label: 'Analytics', path: '/analytics' },
-  { icon: IconCalendarStats, label: 'Releases', path: '/releases' },
-  { icon: IconUser, label: 'Account', path: '/account' },
-  { icon: IconFingerprint, label: 'Security', path: '/security' },
-  { icon: IconSettings, label: 'Settings', path: '/settings' },
+  { icon: IconHome2, label: 'Home', path: '/', requiresAuth: false },
+  { icon: IconGauge, label: 'Dashboard', path: '/dashboard', requiresAuth: true },
+  { icon: IconMessages, label: 'Conversations', path: '/conversations', requiresAuth: true },
+  { icon: IconDeviceDesktopAnalytics, label: 'Analytics', path: '/analytics', requiresAuth: true },
+  { icon: IconCalendarStats, label: 'Releases', path: '/releases', requiresAuth: true },
+  { icon: IconUser, label: 'Account', path: '/account', requiresAuth: true },
+  { icon: IconFingerprint, label: 'Security', path: '/security', requiresAuth: true },
+  { icon: IconSettings, label: 'Settings', path: '/settings', requiresAuth: true },
 ];
 
 export function Navbar() {
   const currentPath = useRouterState({
     select: (state) => state.location.pathname,
   });
+  const { status } = useAuth();
+  const isAuthenticated = status === 'authenticated';
   const theme = useMantineTheme();
   const colorScheme = useComputedColorScheme();
 
@@ -70,6 +74,11 @@ export function Navbar() {
             label={link.label}
             leftSection={<link.icon size={18} stroke={1.5} />}
             active={isActive(link.path)}
+            description={!isAuthenticated && link.requiresAuth ? 'Sign in required' : undefined}
+            disabled={!isAuthenticated && link.requiresAuth}
+            rightSection={
+              !isAuthenticated && link.requiresAuth ? <IconLock size={14} stroke={1.5} /> : null
+            }
             fw={500}
           />
         ))}
