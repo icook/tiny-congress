@@ -206,7 +206,7 @@ jobs:
 
       - name: Prepare test output directories
         run: |
-          mkdir -p web/reports web/test-results
+          mkdir -p web/reports web/test-results web/coverage/playwright
 
       - name: Run Skaffold tests
         run: |
@@ -222,6 +222,13 @@ jobs:
           check_name: Playwright E2E
           comment_mode: off
 
+      - name: Upload Playwright coverage
+        if: always() && hashFiles('web/coverage/playwright/lcov.info') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-coverage
+          path: web/coverage/playwright/lcov.info
+
       - name: Upload Playwright artifacts
         if: always()
         uses: actions/upload-artifact@v4
@@ -231,6 +238,7 @@ jobs:
           path: |
             web/test-results
             web/reports/playwright.xml
+            web/coverage/playwright
 
       - name: Deploy with Skaffold
         run: |
