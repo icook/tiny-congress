@@ -28,7 +28,7 @@ This template comes with the following features:
 - `vitest:watch` – starts vitest watch
 - `test` – runs `typecheck`, `prettier`, `lint`, `vitest` and `build`
 - `playwright:test` – executes Chromium end-to-end tests (without code coverage instrumentation)
-- `playwright:report` – merges any `.nyc_output` artifacts into `coverage/playwright/lcov.info`
+- `playwright:report` – merges `.nyc_output` artifacts into `coverage/playwright/` (LCOV, HTML, JSON, text)
 - `playwright:clean` – removes previous Playwright junit, coverage, and trace artifacts
 - `playwright:ci` – convenience wrapper that cleans artifacts, runs `playwright:test` with coverage, then calls `playwright:report`
 
@@ -44,11 +44,13 @@ CI publishes Playwright results to GitHub's Tests and coverage dashboards using 
 
 1. `cd web`
 2. Run `yarn playwright:ci`
-3. Inspect the `coverage/playwright/lcov.info` file directly or emit a textual summary with
-   `yarn playwright:report --reporter=text-summary`
+3. Inspect coverage in `coverage/playwright/`:
+   - `lcov.info` for ingestion by GitHub and external tools
+   - `index.html` (HTML report) for browsing locally or via the CI artifact
+   - `coverage-summary.json` / text-summary emitted to the console
 
 During CI (or whenever `PLAYWRIGHT_COVERAGE=true`), Vite instruments compiled assets and the E2E
 fixtures persist per-test coverage under `.nyc_output/`. `nyc report` converts that data into
-`coverage/playwright/lcov.info`, which GitHub Actions uploads to the repository coverage dashboard.
-JUnit metadata lives under `reports/`, while any failure artifacts (traces/videos) land in
-`test-results/`.
+`coverage/playwright/` outputs (LCOV, HTML, JSON, text). GitHub Actions uploads the LCOV file,
+includes the summary in the job output, and ships HTML + traces/videos/junit via artifacts under
+`web/coverage/playwright`, `reports/`, and `test-results/`.

@@ -16,7 +16,7 @@
     "vitest": "vitest run",
     "vitest:watch": "vitest",
     "playwright:test": "playwright test",
-    "playwright:report": "nyc report --reporter=lcov --report-dir coverage/playwright",
+    "playwright:report": "nyc report --reporter=lcov --reporter=html --reporter=text-summary --reporter=json-summary --report-dir coverage/playwright",
     "playwright:clean": "node ./scripts/reset-playwright-coverage.mjs",
     "playwright:ci": "node ./scripts/run-playwright-ci.mjs",
     "test": "npm run typecheck && npm run prettier && npm run lint && npm run vitest && npm run build",
