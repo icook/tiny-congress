@@ -1,6 +1,8 @@
 import { Anchor, Text, Title } from '@mantine/core';
 import classes from './Welcome.module.css';
 
+// CSS module kept for responsive hero sizing that Mantine props alone cannot match; see ADR 0001.
+
 export function Welcome() {
   return (
     <>

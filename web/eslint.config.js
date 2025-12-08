@@ -60,6 +60,46 @@ export default tseslint.config(
   },
 
   {
+    // Guard against introducing competing styling systems; keep Mantine-first (see doc/style/STYLE_GUIDE.md).
+    files: ['src/**/*.{ts,tsx}', 'test-utils/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-imports': [
+        'warn',
+        {
+          paths: [
+            {
+              name: 'tailwindcss',
+              message: 'Use Mantine components and props instead of adding Tailwind (ADR 0001).',
+            },
+            {
+              name: 'styled-components',
+              message: 'Do not add styled-components; prefer Mantine props per doc/style/STYLE_GUIDE.md.',
+            },
+            {
+              name: '@emotion/react',
+              message: 'Avoid Emotion; follow Mantine-first styling (ADR 0001).',
+            },
+            {
+              name: '@emotion/styled',
+              message: 'Avoid Emotion; follow Mantine-first styling (ADR 0001).',
+            },
+            {
+              name: '@mui/material',
+              message: 'Do not mix MUI with Mantine; stick to the Mantine-first model.',
+            },
+          ],
+          patterns: [
+            {
+              group: ['@emotion/*', '@mui/*'],
+              message: 'Do not introduce new styling systems; use Mantine primitives and the shared theme.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+
+  {
     // Tighten unit test hygiene (Vitest globals, Testing Library patterns, jest-dom assertions).
     files: testFiles,
     plugins: {
