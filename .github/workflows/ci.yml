@@ -36,11 +36,41 @@ jobs:
         run: cargo fmt --all -- --check
 
   # ============================================================
+  # JOB 0b: Lint web (ESLint)
+  # ============================================================
+  lint-web:
+    name: Lint web (ESLint)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: yarn
+          cache-dependency-path: web/yarn.lock
+
+      - name: Enable corepack
+        run: corepack enable
+
+      - name: Install dependencies
+        working-directory: web
+        run: yarn install --immutable
+
+      - name: Run ESLint
+        working-directory: web
+        run: yarn eslint
+
+  # ============================================================
   # JOB 1: Build all container images in parallel
   # ============================================================
   build-images:
     name: Build ${{ matrix.image }}
-    needs: lint
+    needs:
+      - lint
+      - lint-web
     runs-on: ubuntu-latest
     permissions:
       contents: read
