@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import {
   IconCalendarStats,
   IconDeviceDesktopAnalytics,
@@ -9,7 +8,7 @@ import {
   IconSettings,
   IconUser,
 } from '@tabler/icons-react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useRouterState } from '@tanstack/react-router';
 import { Box, Group, Text, UnstyledButton } from '@mantine/core';
 import classes from './Navbar.module.css';
 
@@ -25,33 +24,29 @@ const navLinks = [
 ];
 
 export function Navbar() {
-  const location = useLocation();
-  const currentPath = location.pathname;
+  const currentPath = useRouterState({
+    select: (state) => state.location.pathname,
+  });
 
-  // Find active link based on current path
-  const currentLink =
-    navLinks.find(
-      (link) =>
-        link.path === currentPath || (link.path !== '/' && currentPath.startsWith(link.path))
-    ) || navLinks[0];
+  const links = navLinks.map((link) => {
+    const isActive =
+      link.path === currentPath || (link.path !== '/' && currentPath.startsWith(link.path));
 
-  const [active, setActive] = useState(currentLink.label);
-
-  const links = navLinks.map((link) => (
-    <UnstyledButton
-      component={Link}
-      to={link.path}
-      onClick={() => setActive(link.label)}
-      className={classes.navLink}
-      data-active={link.label === active || currentPath === link.path || undefined}
-      key={link.label}
-    >
-      <Group gap="sm">
-        <link.icon size={20} stroke={1.5} />
-        <Text>{link.label}</Text>
-      </Group>
-    </UnstyledButton>
-  ));
+    return (
+      <UnstyledButton
+        component={Link}
+        to={link.path}
+        className={classes.navLink}
+        data-active={isActive || undefined}
+        key={link.label}
+      >
+        <Group gap="sm">
+          <link.icon size={20} stroke={1.5} />
+          <Text>{link.label}</Text>
+        </Group>
+      </UnstyledButton>
+    );
+  });
 
   return (
     <nav className={classes.navbar}>
