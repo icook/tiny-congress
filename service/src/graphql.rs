@@ -1,4 +1,7 @@
-use crate::auth::OAuthService;
+use crate::{
+    auth::{issue_session_token, upsert_oauth_identity, OAuthService},
+    config::AppConfig,
+};
 use async_graphql::http::{playground_source, GraphQLPlaygroundConfig};
 use async_graphql::{Context, EmptySubscription, Enum, Object, Result, Schema, SimpleObject, ID};
 use async_graphql_axum::{GraphQLRequest, GraphQLResponse};
@@ -6,6 +9,8 @@ use axum::extract::Extension;
 use axum::response::{Html, IntoResponse};
 use chrono::Utc;
 use oauth2::{AuthorizationCode, TokenResponse};
+use serde_json::json;
+use sqlx_postgres::PgPool;
 use tracing::error;
 
 // Define the schema type with Query and Mutation roots
@@ -57,10 +62,11 @@ pub struct StartOAuthPayload {
 
 #[derive(SimpleObject)]
 pub struct CompleteOAuthPayload {
-    pub access_token: String,
+    pub session_token: String,
+    pub session_expires_at: String,
+    pub user_id: ID,
     pub email: String,
     pub email_verified: bool,
-    pub expires_at: Option<String>,
 }
 
 // Query root
@@ -170,6 +176,12 @@ impl MutationRoot {
         state: String,
     ) -> Result<CompleteOAuthPayload> {
         let oauth_service = ctx.data::<OAuthService>()?;
+        let pool = ctx.data::<PgPool>()?;
+        let config = ctx.data::<AppConfig>()?;
+        let jwt_secret = config
+            .jwt
+            .as_ref()
+            .ok_or_else(|| async_graphql::Error::new("JWT secret not configured"))?;
 
         let google = match provider {
             OAuthProvider::Google => oauth_service
@@ -189,11 +201,6 @@ impl MutationRoot {
             .await
             .map_err(|err| async_graphql::Error::new(err.to_string()))?;
 
-        let expires_at = token_response
-            .expires_in()
-            .and_then(|duration| chrono::Duration::from_std(duration).ok())
-            .map(|duration| (Utc::now() + duration).to_rfc3339());
-
         let user_info = google
             .fetch_user_info(token_response.access_token())
             .await
@@ -202,11 +209,32 @@ impl MutationRoot {
                 async_graphql::Error::new("Failed to fetch user info from provider")
             })?;
 
+        let user = upsert_oauth_identity(
+            pool,
+            "google",
+            &user_info.sub,
+            &user_info.email,
+            user_info.email_verified,
+            json!(&user_info),
+        )
+        .await
+        .map_err(|err| {
+            error!(error = %err, "Failed to upsert OAuth identity");
+            async_graphql::Error::new("Failed to persist OAuth identity")
+        })?;
+
+        let (session_token, session_expires_at) =
+            issue_session_token(&user, "google", &jwt_secret.secret).map_err(|err| {
+                error!(error = %err, "Failed to issue session token");
+                async_graphql::Error::new("Failed to issue session token")
+            })?;
+
         Ok(CompleteOAuthPayload {
-            access_token: token_response.access_token().secret().to_string(),
-            email: user_info.email,
-            email_verified: user_info.email_verified,
-            expires_at,
+            session_token,
+            session_expires_at: session_expires_at.to_rfc3339(),
+            user_id: ID::from(user.id.to_string()),
+            email: user.email,
+            email_verified: user.email_verified,
         })
     }
 }

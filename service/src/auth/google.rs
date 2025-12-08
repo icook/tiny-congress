@@ -16,8 +16,9 @@ pub struct GoogleOAuthProvider {
     client: BasicClient,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, serde::Serialize)]
 pub struct GoogleUserInfo {
+    pub sub: String,
     pub email: String,
     #[serde(default)]
     pub email_verified: bool,
