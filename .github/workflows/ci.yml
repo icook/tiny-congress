@@ -17,10 +17,30 @@ env:
 
 jobs:
   # ============================================================
+  # JOB 0: Lint Rust formatting
+  # ============================================================
+  lint:
+    name: Lint Rust formatting
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+
+      - name: Check formatting
+        working-directory: service
+        run: cargo fmt --all -- --check
+
+  # ============================================================
   # JOB 1: Build all container images in parallel
   # ============================================================
   build-images:
     name: Build ${{ matrix.image }}
+    needs: lint
     runs-on: ubuntu-latest
     permissions:
       contents: read

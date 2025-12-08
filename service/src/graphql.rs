@@ -1,8 +1,8 @@
+use async_graphql::http::{playground_source, GraphQLPlaygroundConfig};
 use async_graphql::{Context, EmptySubscription, Object, Schema, SimpleObject, ID};
-use async_graphql::http::{GraphQLPlaygroundConfig, playground_source};
 use async_graphql_axum::{GraphQLRequest, GraphQLResponse};
-use axum::response::{Html, IntoResponse};
 use axum::extract::Extension;
+use axum::response::{Html, IntoResponse};
 use chrono::Utc;
 
 // Define the schema type with Query and Mutation roots
@@ -78,7 +78,7 @@ impl QueryRoot {
         // Mock implementation
         let limit = limit.unwrap_or(5);
         let mut rankings = Vec::new();
-        
+
         for i in 1..=limit {
             rankings.push(TopicRanking {
                 topic_id: ID::from(format!("topic-{}", i)),
@@ -91,7 +91,7 @@ impl QueryRoot {
                 },
             });
         }
-        
+
         rankings
     }
 }
@@ -101,23 +101,27 @@ pub struct MutationRoot;
 
 #[Object]
 impl MutationRoot {
-    async fn submit_vote(&self, _ctx: &Context<'_>, pairing_id: ID, user_id: ID, choice: ID) -> bool {
+    async fn submit_vote(
+        &self,
+        _ctx: &Context<'_>,
+        pairing_id: ID,
+        user_id: ID,
+        choice: ID,
+    ) -> bool {
         // Mock implementation
-        println!("Vote received: user {:?} voted for {:?} in pairing {:?}", user_id, choice, pairing_id);
+        println!(
+            "Vote received: user {:?} voted for {:?} in pairing {:?}",
+            user_id, choice, pairing_id
+        );
         true
     }
 }
 
 // GraphQL playground handler
 pub async fn graphql_playground() -> impl IntoResponse {
-    Html(playground_source(
-        GraphQLPlaygroundConfig::new("/graphql")
-    ))
+    Html(playground_source(GraphQLPlaygroundConfig::new("/graphql")))
 }
 
-pub async fn graphql_handler(
-    schema: Extension<ApiSchema>,
-    req: GraphQLRequest,
-) -> GraphQLResponse {
+pub async fn graphql_handler(schema: Extension<ApiSchema>, req: GraphQLRequest) -> GraphQLResponse {
     schema.execute(req.into_inner()).await.into()
 }
