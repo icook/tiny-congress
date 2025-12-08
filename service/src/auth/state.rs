@@ -59,12 +59,13 @@ mod tests {
     async fn stores_and_retrieves_pkce_verifier() {
         let store = OAuthStateStore::new(Duration::from_secs(60));
         let verifier = PkceCodeVerifier::new("test-verifier".to_string());
+        let verifier_secret = verifier.secret().to_owned();
 
-        store.put("state-1", verifier.clone()).await;
+        store.put("state-1", verifier).await;
         let retrieved = store.take("state-1").await;
 
         assert!(retrieved.is_some());
-        assert_eq!(retrieved.unwrap().secret(), verifier.secret());
+        assert_eq!(retrieved.unwrap().secret(), verifier_secret);
 
         // State should be removed after retrieval
         assert!(store.take("state-1").await.is_none());
@@ -75,7 +76,7 @@ mod tests {
         let store = OAuthStateStore::new(Duration::from_millis(10));
         let verifier = PkceCodeVerifier::new("short-lived".to_string());
 
-        store.put("state-2", verifier.clone()).await;
+        store.put("state-2", verifier).await;
         tokio::time::sleep(Duration::from_millis(30)).await;
 
         assert!(store.take("state-2").await.is_none());
