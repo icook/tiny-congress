@@ -22,9 +22,6 @@ export default defineConfig({
     ignoreHTTPSErrors: true,
     trace: 'retain-on-failure',
     video: 'retain-on-failure',
-    coverage: {
-      provider: 'v8',
-    },
   },
   projects: [
     {
