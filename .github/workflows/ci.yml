@@ -293,7 +293,7 @@ jobs:
           set -euo pipefail
           log_file="${RUNNER_TEMP}/skaffold-verify.log"
 
-          if skaffold verify -p ${SKAFFOLD_PROFILE} --build-artifacts "${{ steps.artifacts.outputs.file }}" | tee "$log_file"; then
+          if skaffold verify -p ${SKAFFOLD_PROFILE} --build-artifacts "${{ steps.artifacts.outputs.file }}" | tee "$log_file" | sed '/BEGIN_INTEGRATION_LCOV/,/END_INTEGRATION_LCOV/d'; then
             status=0
           else
             status=$?
