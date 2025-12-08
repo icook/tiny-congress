@@ -7,7 +7,9 @@ const redirectPath =
   (import.meta.env.VITE_OAUTH_REDIRECT_PATH as string | undefined | null) ?? '/login/callback';
 
 function cleanBaseUrl(value?: string | null) {
-  if (!value) return '';
+  if (!value) {
+    return '';
+  }
   return value.endsWith('/') ? value.slice(0, -1) : value;
 }
 
@@ -67,7 +69,9 @@ export async function exchangeOAuthCode(params: ExchangeParams): Promise<AuthSes
 }
 
 export async function revokeSession(session: AuthSession | null, baseUrl?: string) {
-  if (!session) return;
+  if (!session) {
+    return;
+  }
 
   const url = `${cleanBaseUrl(baseUrl ?? apiBaseFromEnv)}/auth/logout`;
 
@@ -79,8 +83,8 @@ export async function revokeSession(session: AuthSession | null, baseUrl?: strin
         Authorization: `Bearer ${session.token}`,
       },
     });
-  } catch (error) {
-    console.warn('Failed to revoke session', error);
+  } catch {
+    // Revocation failures are non-fatal for local state; ignore.
   }
 }
 
@@ -94,7 +98,9 @@ async function safeReadError(response: Response): Promise<string | null> {
 }
 
 export function normalizeSession(data: any, provider?: OAuthProvider): AuthSession {
-  if (!data) throw new Error('Empty authentication payload');
+  if (!data) {
+    throw new Error('Empty authentication payload');
+  }
 
   const token = data.token ?? data.accessToken ?? data.access_token;
   const refreshToken = data.refreshToken ?? data.refresh_token;

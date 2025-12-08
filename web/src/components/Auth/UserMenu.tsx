@@ -117,7 +117,9 @@ export function UserMenu() {
 function buildNextPath(pathname: string, search: Record<string, unknown>) {
   const params = new URLSearchParams();
   Object.entries(search ?? {}).forEach(([key, value]) => {
-    if (value === undefined || value === null) return;
+    if (value === undefined || value === null) {
+      return;
+    }
     params.set(key, String(value));
   });
 

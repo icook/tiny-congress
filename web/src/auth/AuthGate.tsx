@@ -9,7 +9,9 @@ export function AuthGate({ children }: { children: ReactNode }) {
   const location = useRouterState({ select: (state) => state.location });
 
   useEffect(() => {
-    if (status !== 'unauthenticated' && status !== 'error') return;
+    if (status !== 'unauthenticated' && status !== 'error') {
+      return;
+    }
 
     const searchString = stringifySearch(location.search);
     const next = searchString ? `${location.pathname}?${searchString}` : location.pathname;
@@ -49,7 +51,9 @@ function stringifySearch(search: Record<string, unknown> | undefined) {
   const params = new URLSearchParams();
 
   Object.entries(search ?? {}).forEach(([key, value]) => {
-    if (value === undefined || value === null) return;
+    if (value === undefined || value === null) {
+      return;
+    }
     params.set(key, String(value));
   });
 

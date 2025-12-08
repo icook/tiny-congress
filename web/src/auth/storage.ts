@@ -12,7 +12,9 @@ type StoredOAuthRequest = {
 };
 
 function safeParse<T>(value: string | null): T | null {
-  if (!value) return null;
+  if (!value) {
+    return null;
+  }
 
   try {
     return JSON.parse(value) as T;
@@ -23,7 +25,9 @@ function safeParse<T>(value: string | null): T | null {
 
 export function readStoredSession(): AuthSession | null {
   const stored = safeParse<AuthSession>(localStorage.getItem(SESSION_KEY));
-  if (!stored?.token || !stored?.user) return null;
+  if (!stored?.token || !stored?.user) {
+    return null;
+  }
   return stored;
 }
 
@@ -53,14 +57,18 @@ export function rememberOAuthRequest(
 }
 
 export function consumeOAuthRequest(state: string | undefined): StoredOAuthRequest | null {
-  if (!state) return null;
+  if (!state) {
+    return null;
+  }
 
   const states = readOAuthStates();
   const record = states[state];
   delete states[state];
   persistOAuthStates(states);
 
-  if (!record) return null;
+  if (!record) {
+    return null;
+  }
 
   const isExpired = Date.now() - record.createdAt > OAUTH_STATE_TTL_MS;
   return isExpired ? null : record;
