@@ -1,76 +1,67 @@
-import { createBrowserRouter, RouterProvider } from 'react-router-dom';
+import { createRootRoute, createRoute, createRouter, RouterProvider } from '@tanstack/react-router';
 import { DashboardPage } from './pages/Dashboard.page';
 import { HomePage } from './pages/Home.page';
 import { Layout } from './pages/Layout';
 import { ThreadedConversationPage } from './pages/ThreadedConversation.page';
 
-const router = createBrowserRouter([
-  {
-    path: '/',
-    element: <Layout />,
-    children: [
-      {
-        path: '',
-        element: <HomePage />,
-      },
-      {
-        path: 'dashboard',
-        element: <DashboardPage />,
-      },
-      {
-        path: 'conversations',
-        element: <ThreadedConversationPage />,
-      },
-      // Placeholder routes for the other nav items
-      {
-        path: 'analytics',
-        element: (
-          <div>
-            <h1>Analytics</h1>
-            <p>Analytics page content</p>
-          </div>
-        ),
-      },
-      {
-        path: 'releases',
-        element: (
-          <div>
-            <h1>Releases</h1>
-            <p>Releases page content</p>
-          </div>
-        ),
-      },
-      {
-        path: 'account',
-        element: (
-          <div>
-            <h1>Account</h1>
-            <p>Account page content</p>
-          </div>
-        ),
-      },
-      {
-        path: 'security',
-        element: (
-          <div>
-            <h1>Security</h1>
-            <p>Security page content</p>
-          </div>
-        ),
-      },
-      {
-        path: 'settings',
-        element: (
-          <div>
-            <h1>Settings</h1>
-            <p>Settings page content</p>
-          </div>
-        ),
-      },
-    ],
-  },
+const rootRoute = createRootRoute({
+  component: Layout,
+});
+
+const homeRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/',
+  component: HomePage,
+});
+
+const dashboardRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: 'dashboard',
+  component: DashboardPage,
+});
+
+const conversationsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: 'conversations',
+  component: ThreadedConversationPage,
+});
+
+const routeTree = rootRoute.addChildren([
+  homeRoute,
+  dashboardRoute,
+  conversationsRoute,
+  createPlaceholderRoute('analytics', 'Analytics', 'Analytics page content'),
+  createPlaceholderRoute('releases', 'Releases', 'Releases page content'),
+  createPlaceholderRoute('account', 'Account', 'Account page content'),
+  createPlaceholderRoute('security', 'Security', 'Security page content'),
+  createPlaceholderRoute('settings', 'Settings', 'Settings page content'),
 ]);
+
+const router = createRouter({ routeTree });
+
+declare module '@tanstack/react-router' {
+  interface Register {
+    router: typeof router;
+  }
+}
 
 export function Router() {
   return <RouterProvider router={router} />;
+}
+
+function createPlaceholderRoute(path: string, title: string, description: string) {
+  return createRoute({
+    getParentRoute: () => rootRoute,
+    path,
+    component: () => <PlaceholderPage title={title} description={description} />,
+  });
+}
+
+function PlaceholderPage({ title, description }: { title: string; description: string }) {
+  return (
+    <div>
+      <h1>{title}</h1>
+      <p>{description}</p>
+    </div>
+  );
 }
