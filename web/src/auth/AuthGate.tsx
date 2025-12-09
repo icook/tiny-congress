@@ -1,6 +1,6 @@
 import { ReactNode, useEffect } from 'react';
-import { Center, Loader, Stack, Text } from '@mantine/core';
 import { useNavigate, useRouterState } from '@tanstack/react-router';
+import { Center, Loader, Stack, Text } from '@mantine/core';
 import { useAuth } from './AuthProvider';
 
 export function AuthGate({ children }: { children: ReactNode }) {

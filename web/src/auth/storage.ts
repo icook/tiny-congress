@@ -40,7 +40,9 @@ export function clearStoredSession() {
 }
 
 function readOAuthStates(): Record<string, StoredOAuthRequest> {
-  return safeParse<Record<string, StoredOAuthRequest>>(sessionStorage.getItem(OAUTH_STATE_KEY)) ?? {};
+  return (
+    safeParse<Record<string, StoredOAuthRequest>>(sessionStorage.getItem(OAUTH_STATE_KEY)) ?? {}
+  );
 }
 
 function persistOAuthStates(states: Record<string, StoredOAuthRequest>) {
@@ -49,7 +51,7 @@ function persistOAuthStates(states: Record<string, StoredOAuthRequest>) {
 
 export function rememberOAuthRequest(
   state: string,
-  payload: Omit<StoredOAuthRequest, 'createdAt'>,
+  payload: Omit<StoredOAuthRequest, 'createdAt'>
 ) {
   const states = readOAuthStates();
   states[state] = { ...payload, createdAt: Date.now() };

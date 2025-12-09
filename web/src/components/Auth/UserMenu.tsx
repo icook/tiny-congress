@@ -98,11 +98,7 @@ export function UserMenu() {
         >
           Account
         </Menu.Item>
-        <Menu.Item
-          component={Link}
-          to="/settings"
-          leftSection={<IconUserQuestion size={16} />}
-        >
+        <Menu.Item component={Link} to="/settings" leftSection={<IconUserQuestion size={16} />}>
           Session preferences
         </Menu.Item>
         <Menu.Divider />

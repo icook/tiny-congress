@@ -23,9 +23,7 @@ export function Layout() {
       <AppShell.Header>
         <Group h="100%" px="md" gap="sm" justify="space-between">
           <Group gap="sm">
-            {!isAuthPage && (
-              <Burger opened={opened} onClick={toggle} hiddenFrom="sm" size="sm" />
-            )}
+            {!isAuthPage && <Burger opened={opened} onClick={toggle} hiddenFrom="sm" size="sm" />}
             <Image src="/src/logo.png" alt="TinyCongress logo" h={32} w="auto" />
             <Text fw={700}>TinyCongress</Text>
           </Group>

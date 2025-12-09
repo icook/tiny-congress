@@ -1,7 +1,7 @@
 import type { AuthSession, AuthUser, OAuthProvider } from './types';
 
 const apiBaseFromEnv = cleanBaseUrl(
-  (import.meta.env.VITE_API_BASE_URL as string | undefined | null) ?? '',
+  (import.meta.env.VITE_API_BASE_URL as string | undefined | null) ?? ''
 );
 const redirectPath =
   (import.meta.env.VITE_OAUTH_REDIRECT_PATH as string | undefined | null) ?? '/login/callback';
@@ -25,7 +25,7 @@ export function getRedirectUri() {
 export function buildOAuthStartUrl(
   provider: OAuthProvider,
   state: string,
-  options?: { baseUrl?: string; redirectUri?: string },
+  options?: { baseUrl?: string; redirectUri?: string }
 ) {
   const baseUrl = cleanBaseUrl(options?.baseUrl ?? apiBaseFromEnv);
   const redirectUri = options?.redirectUri ?? getRedirectUri();
@@ -108,10 +108,7 @@ export function normalizeSession(data: any, provider?: OAuthProvider): AuthSessi
 
   const user: AuthUser = {
     id: (rawUser.id as string | undefined) ?? (rawUser.sub as string | undefined) ?? '',
-    name:
-      (rawUser.name as string | undefined) ??
-      (rawUser.email as string | undefined) ??
-      '',
+    name: (rawUser.name as string | undefined) ?? (rawUser.email as string | undefined) ?? '',
     email: rawUser.email as string | undefined,
     avatarUrl:
       (rawUser.avatarUrl as string | undefined) ??

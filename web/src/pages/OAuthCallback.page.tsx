@@ -1,5 +1,5 @@
-import { IconAlertTriangle, IconCircleCheck, IconLock } from '@tabler/icons-react';
 import { useEffect, useState } from 'react';
+import { IconAlertTriangle, IconCircleCheck, IconLock } from '@tabler/icons-react';
 import { useNavigate, useRouterState } from '@tanstack/react-router';
 import { Button, Center, Container, Loader, Paper, Stack, Text, Title } from '@mantine/core';
 import { useAuth } from '../auth/AuthProvider';
@@ -53,12 +53,7 @@ export function OAuthCallbackPage() {
     <Container size="sm" py="xl">
       <Paper radius="lg" withBorder shadow="md" p="xl">
         <Stack gap="md" align="center">
-          <Center
-            w={70}
-            h={70}
-            bg="var(--mantine-color-body)"
-            style={{ borderRadius: '50%' }}
-          >
+          <Center w={70} h={70} bg="var(--mantine-color-body)" style={{ borderRadius: '50%' }}>
             {showError ? (
               <IconAlertTriangle size={32} color="var(--mantine-color-red-6)" />
             ) : isLoading ? (

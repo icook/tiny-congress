@@ -34,24 +34,19 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<AuthSession | null>(() => readStoredSession());
-  const [status, setStatus] = useState<AuthStatus>(
-    session ? 'authenticated' : 'unauthenticated',
-  );
+  const [status, setStatus] = useState<AuthStatus>(session ? 'authenticated' : 'unauthenticated');
   const [error, setError] = useState<string | null>(null);
 
-  const loginWithProvider = useCallback(
-    (provider: OAuthProvider, nextPath?: string) => {
-      setError(null);
-      setStatus('authenticating');
+  const loginWithProvider = useCallback((provider: OAuthProvider, nextPath?: string) => {
+    setError(null);
+    setStatus('authenticating');
 
-      const state = crypto.randomUUID?.() ?? Math.random().toString(36).slice(2);
-      rememberOAuthRequest(state, { provider, redirectUri: getRedirectUri(), nextPath });
+    const state = crypto.randomUUID?.() ?? Math.random().toString(36).slice(2);
+    rememberOAuthRequest(state, { provider, redirectUri: getRedirectUri(), nextPath });
 
-      const startUrl = buildOAuthStartUrl(provider, state);
-      window.location.assign(startUrl);
-    },
-    [],
-  );
+    const startUrl = buildOAuthStartUrl(provider, state);
+    window.location.assign(startUrl);
+  }, []);
 
   const completeOAuth = useCallback(
     async ({ code, state, provider }: CompleteOAuthParams): Promise<CompleteOAuthResult> => {
@@ -90,7 +85,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         throw err;
       }
     },
-    [],
+    []
   );
 
   const logout = useCallback(async () => {
@@ -113,7 +108,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       completeOAuth,
       logout,
     }),
-    [status, session, error, loginWithProvider, completeOAuth, logout],
+    [status, session, error, loginWithProvider, completeOAuth, logout]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

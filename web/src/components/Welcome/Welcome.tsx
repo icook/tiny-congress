@@ -12,7 +12,12 @@ export function Welcome() {
     <Stack gap="md" align="center" mt={80}>
       <Title className={classes.title} ta="center">
         Welcome to{' '}
-        <Text inherit variant="gradient" component="span" gradient={{ from: 'indigo', to: 'violet' }}>
+        <Text
+          inherit
+          variant="gradient"
+          component="span"
+          gradient={{ from: 'indigo', to: 'violet' }}
+        >
           TinyCongress
         </Text>
       </Title>
