@@ -345,17 +345,15 @@ jobs:
         if: always()
         run: kubectl delete pod test-artifacts-exporter || true
 
-      - name: Upload Rust coverage to Codecov
+      - name: Upload Rust coverage artifacts
         if: always()
-        uses: codecov/codecov-action@v5
-        env:
-          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+        uses: actions/upload-artifact@v4
         with:
-          files: ./service/coverage/backend-unit.lcov,./service/coverage/backend-integration.lcov
-          flags: rust
           name: rust-coverage
-          token: ${{ secrets.CODECOV_TOKEN }}
-          fail_ci_if_error: false
+          if-no-files-found: warn
+          path: |
+            service/coverage/backend-unit.lcov
+            service/coverage/backend-integration.lcov
 
       - name: Dump diagnostics on failure
         if: failure()
