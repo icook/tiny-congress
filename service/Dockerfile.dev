@@ -1,5 +1,5 @@
 # Use cargo-chef to share dependency layers between builds
-FROM lukemathwalker/cargo-chef:latest-rust-1.86 AS chef
+FROM lukemathwalker/cargo-chef:latest-rust-1.91 AS chef
 
 WORKDIR /usr/src/app
 
@@ -7,25 +7,22 @@ FROM chef AS planner
 COPY . .
 RUN cargo chef prepare --recipe-path recipe.json
 
-FROM chef AS cacher
+FROM chef AS builder
+
+RUN rustup component add llvm-tools-preview
+WORKDIR /usr/src/app
+
 COPY --from=planner /usr/src/app/recipe.json recipe.json
 RUN cargo chef cook --recipe-path recipe.json
 
-FROM rust:1.86 AS builder
+COPY Cargo.toml Cargo.lock ./
+RUN cargo install sqlx-cli --locked --features postgres
+RUN cargo install cargo-watch --locked
+RUN cargo install cargo-llvm-cov --locked
 
-WORKDIR /usr/src/app
-ENV CARGO_HOME=/usr/local/cargo
-ENV CARGO_TARGET_DIR=/usr/src/app/target
-
-COPY --from=cacher /usr/src/app/target target
-COPY --from=cacher /usr/local/cargo /usr/local/cargo
 COPY . .
 
 ENV SQLX_OFFLINE=true
-RUN cargo install sqlx-cli --locked --features postgres
-RUN if ! cargo install cargo-watch --locked; then cargo install cargo-watch; fi
-RUN cargo install cargo-llvm-cov --locked --version 0.6.20
-RUN rustup component add llvm-tools-preview
 RUN cargo sqlx prepare --check
 RUN sh -ec 'cargo build --bin tinycongress-api && install -m 0755 target/debug/tinycongress-api /usr/local/bin/tinycongress-api'
 
