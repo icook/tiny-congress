@@ -1,7 +1,6 @@
 import { createMemoryHistory, createRouter, RouterProvider } from '@tanstack/react-router';
 import { render, screen } from '@test-utils';
 import { routeTree } from '../../Router';
-import { Welcome } from './Welcome';
 
 const router = createRouter({
   routeTree,
