@@ -46,7 +46,12 @@ CREATE EXTENSION pgmq;
 3. Set environment variables:
 ```
 export DATABASE_URL=postgres://username:password@localhost/prioritization
+export GOOGLE_CLIENT_ID=<google-oauth-client-id>
+export GOOGLE_CLIENT_SECRET=<google-oauth-client-secret>
+export GOOGLE_REDIRECT_URI=http://localhost:3000/api/oauth/google/callback
+export JWT_SECRET=<jwt-signing-secret>
 ```
+The Google values configure the OAuth client (PKCE-friendly) and the JWT secret will be used to sign short-lived session tokens.
 
 4. Run the server:
 ```
