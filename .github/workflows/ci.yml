@@ -215,7 +215,14 @@ jobs:
             -p '{"imagePullSecrets":[{"name":"ghcr-cred"}]}'
 
       - name: Apply PVC for test artifacts
-        run: kubectl apply -f kube/verify/test-artifacts-pvc.yaml
+        run: |
+          kubectl apply -f kube/verify/test-artifacts-pvc.yaml
+          echo "--- PVC Status ---"
+          kubectl get pvc test-artifacts-pvc -o wide
+          echo "--- PVC Description ---"
+          kubectl describe pvc test-artifacts-pvc
+          echo "--- StorageClasses ---"
+          kubectl get storageclass
 
       - name: Write Skaffold artifacts file
         id: artifacts
@@ -291,10 +298,31 @@ jobs:
           set -euo pipefail
           skaffold deploy -p ${SKAFFOLD_PROFILE} --status-check=true --build-artifacts "${{ steps.artifacts.outputs.file }}"
 
+      - name: Pre-verify PVC status
+        run: |
+          echo "--- PVC Status ---"
+          kubectl get pvc -o wide
+          echo "--- PVC Events ---"
+          kubectl describe pvc test-artifacts-pvc | grep -A 20 "Events:" || true
+
       - name: Run Skaffold verify
         run: |
           set -euo pipefail
           skaffold verify -p ${SKAFFOLD_PROFILE} --build-artifacts "${{ steps.artifacts.outputs.file }}"
+
+      - name: Post-verify Job diagnostics
+        if: always()
+        run: |
+          echo "--- Jobs ---"
+          kubectl get jobs -o wide || true
+          echo "--- Integration Job Description ---"
+          kubectl describe job integration-tests || true
+          echo "--- All Pods ---"
+          kubectl get pods -o wide || true
+          echo "--- Integration Pod Logs ---"
+          kubectl logs -l app=integration-tests --tail=100 || true
+          echo "--- PVC Status ---"
+          kubectl get pvc -o wide || true
 
       - name: Start exporter pod for integration artifacts
         if: always()
@@ -306,7 +334,11 @@ jobs:
         if: always()
         run: |
           mkdir -p service/coverage
+          echo "--- Files in PVC /artifacts ---"
+          kubectl exec test-artifacts-exporter -- ls -la /artifacts || true
+          echo "--- Copying artifacts ---"
           kubectl cp test-artifacts-exporter:/artifacts/. service/coverage
+          echo "--- Local service/coverage contents ---"
           ls -la service/coverage
 
       - name: Cleanup exporter pod
