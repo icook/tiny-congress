@@ -18,12 +18,13 @@ EXPORT_LCOV_BASE64="${EXPORT_LCOV_BASE64:-1}"
 ARTIFACTS_DIR="${ARTIFACTS_DIR:-coverage}"
 
 mkdir -p "$ARTIFACTS_DIR"
-rm -rf /usr/src/app/target "$CARGO_TARGET_DIR"
+# rm -rf /usr/src/app/target "$CARGO_TARGET_DIR"
 cargo llvm-cov clean --workspace
 cargo llvm-cov --lcov \
   --output-path "${ARTIFACTS_DIR}/backend-integration.lcov" \
   --remap-path-prefix \
   --test integration_tests \
+  --no-clean \
   -- --test-threads=1 --nocapture
 
 if [[ "${EXPORT_LCOV_BASE64:-0}" != "0" ]]; then

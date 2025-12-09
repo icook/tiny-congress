@@ -19,11 +19,11 @@ COPY Cargo.toml Cargo.lock ./
 RUN cargo install sqlx-cli --locked --features postgres
 RUN cargo install cargo-watch --locked
 RUN cargo install cargo-llvm-cov --locked
-RUN cargo sqlx prepare --check
 
 COPY . .
 
 ENV SQLX_OFFLINE=true
+RUN cargo sqlx prepare --check
 RUN sh -ec 'cargo build --bin tinycongress-api && install -m 0755 target/debug/tinycongress-api /usr/local/bin/tinycongress-api'
 
 RUN install -m 0755 bin/dev-entrypoint.sh /usr/local/bin/dev-entrypoint
