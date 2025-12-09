@@ -75,7 +75,9 @@ test:
   - image: tc-api-dev
     custom:
       - command: >-
-          docker run --rm "$IMAGE" /bin/sh /usr/src/app/bin/test.sh
+          docker run --rm
+          -v "$PWD/service/coverage:/usr/src/app/coverage"
+          "$IMAGE" /bin/sh -lc "cd /usr/src/app && ./bin/unit-coverage.sh"
   - image: tc-ui-dev
     custom:
       - command: >-
@@ -87,10 +89,11 @@ verify:
     container:
       name: integration-tests
       image: tc-api-dev
-      command: ["/bin/sh"]
-      args: ["/usr/src/app/bin/integration-test.sh"]
+      command: ["/bin/sh", "-lc"]
+      args: ["cd /usr/src/app && ./bin/integration-coverage.sh"]
     executionMode:
-      kubernetesCluster: {}
+      kubernetesCluster:
+        jobManifestPath: kube/verify/integration-tests-job.yaml
 
 # Ensure Postgres is reachable from localhost for developer workflows
 portForward:
