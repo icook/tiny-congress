@@ -13,6 +13,7 @@ RUN cargo chef cook --recipe-path recipe.json
 
 FROM rust:1.86 AS builder
 
+RUN rustup component add llvm-tools-preview
 WORKDIR /usr/src/app
 ENV CARGO_HOME=/usr/local/cargo
 ENV CARGO_TARGET_DIR=/usr/src/app/target
@@ -23,9 +24,8 @@ COPY . .
 
 ENV SQLX_OFFLINE=true
 RUN cargo install sqlx-cli --locked --features postgres
-RUN if ! cargo install cargo-watch --locked; then cargo install cargo-watch; fi
-RUN cargo install cargo-llvm-cov --locked --version 0.6.20
-RUN rustup component add llvm-tools-preview
+RUN cargo install cargo-watch --locked
+RUN cargo install cargo-llvm-cov --locked
 RUN cargo sqlx prepare --check
 RUN sh -ec 'cargo build --bin tinycongress-api && install -m 0755 target/debug/tinycongress-api /usr/local/bin/tinycongress-api'
 
