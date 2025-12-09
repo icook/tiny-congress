@@ -348,6 +348,8 @@ jobs:
       - name: Upload Rust coverage to Codecov
         if: always()
         uses: codecov/codecov-action@v5
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
         with:
           files: ./service/coverage/backend-unit.lcov,./service/coverage/backend-integration.lcov
           flags: rust
