@@ -42,3 +42,6 @@ tower = { version = "0.5", features = ["util"] }
 [[bin]]
 name = "client"
 path = "src/bin/client.rs"
+
+[patch.crates-io]
+ruzstd = { path = "vendor/ruzstd" }
