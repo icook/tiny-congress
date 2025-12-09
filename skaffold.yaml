@@ -89,6 +89,8 @@ verify:
     container:
       name: integration-tests
       image: tc-api-dev
+      command: ["/bin/sh", "-lc"]
+      args: ["cd /usr/src/app && ./bin/integration-coverage.sh"]
     executionMode:
       kubernetesCluster:
         jobManifestPath: kube/verify/integration-tests-job.yaml

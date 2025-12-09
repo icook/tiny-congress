@@ -14,10 +14,7 @@ spec:
         - name: integration-tests
           image: tc-api-dev
           command: ["/bin/sh", "-lc"]
-          args:
-            - |
-              cd /usr/src/app
-              ./bin/integration-coverage.sh
+          args: ["cd /usr/src/app && ./bin/integration-coverage.sh"]
           env:
             - name: DATABASE_URL
               value: postgres://postgres:postgres@postgres:5432/prioritization
