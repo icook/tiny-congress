@@ -36,10 +36,10 @@ jobs:
         run: cargo fmt --all -- --check
 
   # ============================================================
-  # JOB 0b: Lint web (ESLint)
+  # JOB 0b: Lint web
   # ============================================================
   lint-web:
-    name: Lint web (ESLint)
+    name: Lint web
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -59,9 +59,9 @@ jobs:
         working-directory: web
         run: yarn install --immutable
 
-      - name: Run ESLint
+      - name: Run Linters
         working-directory: web
-        run: yarn eslint
+        run: yarn lint
 
   # ============================================================
   # JOB 1: Build all container images in parallel

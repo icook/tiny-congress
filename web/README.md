@@ -21,12 +21,12 @@ This template comes with the following features:
 ### Testing scripts
 
 - `typecheck` – checks TypeScript types
-- `lint` – runs ESLint
+- `lint` – runs Prettier, ESLint, and Stylelint
 - `prettier` – checks files with Prettier
 - `prettier:write` – formats all files with Prettier
 - `vitest` – runs unit tests
 - `vitest:watch` – starts vitest watch
-- `test` – runs `typecheck`, `prettier`, `lint`, `vitest` and `build`
+- `test` – runs `typecheck`, `lint`, `vitest` and `build`
 - `playwright:test` – executes Chromium end-to-end tests (without code coverage instrumentation)
 - `playwright:report` – merges `.nyc_output` artifacts into `coverage/playwright/` (LCOV, HTML, JSON, text)
 - `playwright:clean` – removes previous Playwright junit, coverage, and trace artifacts
