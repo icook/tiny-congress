@@ -18,4 +18,5 @@ cargo llvm-cov --lcov \
   --test api_tests \
   --test graphql_tests \
   --test model_tests \
+  --test identity_event_store \
   -- --test-threads=1 --nocapture
