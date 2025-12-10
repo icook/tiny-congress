@@ -13,7 +13,7 @@ pub struct EnvelopeSigner {
     pub kid: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct SignedEnvelope {
     pub v: u8,
     pub payload_type: String,
@@ -23,7 +23,10 @@ pub struct SignedEnvelope {
 }
 
 impl SignedEnvelope {
-    /// Canonical bytes used for signing: payload_type + payload + signer.
+    /// Canonical bytes used for signing: `payload_type` + payload + signer.
+    ///
+    /// # Errors
+    /// Returns an error when canonicalization fails.
     pub fn canonical_signing_bytes(&self) -> Result<Vec<u8>, CryptoError> {
         let canonical_target = json!({
             "payload_type": self.payload_type,
@@ -35,11 +38,17 @@ impl SignedEnvelope {
     }
 
     /// Decode the signature from base64url.
+    ///
+    /// # Errors
+    /// Returns an error when the signature is not valid base64url.
     pub fn signature_bytes(&self) -> Result<Vec<u8>, CryptoError> {
         decode_base64url(&self.sig)
     }
 
-    /// Optional prev_hash extracted from payload (base64url).
+    /// Optional `prev_hash` extracted from payload (base64url).
+    ///
+    /// # Errors
+    /// Returns an error when `prev_hash` is present but not a base64url string.
     pub fn prev_hash_bytes(&self) -> Result<Option<Vec<u8>>, CryptoError> {
         match self.payload.get("prev_hash") {
             Some(Value::String(encoded)) => Ok(Some(decode_base64url(encoded)?)),
@@ -51,6 +60,10 @@ impl SignedEnvelope {
     }
 }
 
+/// Verify an envelope against a public key and embedded kid.
+///
+/// # Errors
+/// Returns an error when canonicalization, decoding, kid verification, or signature verification fails.
 pub fn verify_envelope(envelope: &SignedEnvelope, signer_pubkey: &[u8]) -> Result<(), CryptoError> {
     let canonical_bytes = envelope.canonical_signing_bytes()?;
     let sig_bytes = envelope.signature_bytes()?;

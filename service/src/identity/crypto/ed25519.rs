@@ -2,6 +2,10 @@ use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
 
 use super::CryptoError;
 
+/// Parse a public key from raw bytes.
+///
+/// # Errors
+/// Returns an error when the slice is not 32 bytes or cannot form a valid key.
 fn parse_public_key(public_key: &[u8]) -> Result<VerifyingKey, CryptoError> {
     let key_bytes: [u8; 32] = public_key
         .try_into()
@@ -10,6 +14,10 @@ fn parse_public_key(public_key: &[u8]) -> Result<VerifyingKey, CryptoError> {
         .map_err(|_| CryptoError::InvalidKey("invalid ed25519 public key".to_string()))
 }
 
+/// Parse a signature from raw bytes.
+///
+/// # Errors
+/// Returns an error when the slice is not 64 bytes.
 fn parse_signature(signature: &[u8]) -> Result<Signature, CryptoError> {
     let sig_bytes: [u8; 64] = signature
         .try_into()
@@ -18,6 +26,9 @@ fn parse_signature(signature: &[u8]) -> Result<Signature, CryptoError> {
 }
 
 /// Sign a message using a 32-byte secret key. Intended for tests and utilities.
+///
+/// # Errors
+/// Returns an error when the secret key is not the expected length.
 pub fn sign_message(message: &[u8], secret_key: &[u8]) -> Result<Vec<u8>, CryptoError> {
     let key_bytes: [u8; 32] = secret_key
         .try_into()
@@ -28,6 +39,9 @@ pub fn sign_message(message: &[u8], secret_key: &[u8]) -> Result<Vec<u8>, Crypto
 }
 
 /// Verify a message with a public key and raw signature bytes.
+///
+/// # Errors
+/// Returns an error when keys are invalid or verification fails.
 pub fn verify_signature(
     message: &[u8],
     public_key: &[u8],
