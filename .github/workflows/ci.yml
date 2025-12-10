@@ -161,9 +161,9 @@ jobs:
         env:
           BUILDX_CACHE_DIR: ${{ runner.temp }}/buildx-cache
           BUILD_PLATFORM: linux/amd64
-        BUILD_FILE: ${{ runner.temp }}/skaffold-build.json
         run: |
           set -euo pipefail
+          BUILD_FILE="${RUNNER_TEMP}/skaffold-build.json"
           skaffold build -p ${SKAFFOLD_PROFILE} --file-output "${BUILD_FILE}"
           echo "file=${BUILD_FILE}" >> "$GITHUB_OUTPUT"
 
