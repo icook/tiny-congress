@@ -1,17 +1,17 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: playwright-smoke
+  name: playwright
 spec:
   backoffLimit: 0
   template:
     metadata:
       labels:
-        app: playwright-smoke
+        app: playwright
     spec:
       restartPolicy: Never
       containers:
-        - name: playwright-smoke
+        - name: playwright
           image: tc-ui-dev
           command: ["/bin/sh", "-lc"]
           args:
@@ -22,7 +22,7 @@ spec:
 
               cd /app
               status=0
-              if ! /app/scripts/run-playwright-smoke.sh; then
+              if ! /app/scripts/run-playwright-all.sh; then
                 status=$?
               fi
 

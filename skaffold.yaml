@@ -99,17 +99,17 @@ verify:
     executionMode:
       kubernetesCluster:
         jobManifestPath: kube/verify/integration-tests-job.yaml
-  - name: playwright-smoke
+  - name: playwright
     container:
-      name: playwright-smoke
+      name: playwright
       image: tc-ui-dev
       command: ["/bin/sh", "-lc"]
       args:
         - |
-          cd /app && /app/scripts/run-playwright-smoke.sh
+          cd /app && /app/scripts/run-playwright-all.sh
     executionMode:
       kubernetesCluster:
-        jobManifestPath: kube/verify/playwright-smoke-job.yaml
+        jobManifestPath: kube/verify/playwright-job.yaml
 
 # Ensure Postgres is reachable from localhost for developer workflows
 portForward:
