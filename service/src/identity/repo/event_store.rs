@@ -66,6 +66,12 @@ pub async fn append_signed_event(
             if input.seqno != 1 {
                 return Err(anyhow!("first event must use seqno 1"));
             }
+            if input.envelope.prev_hash_bytes()?.is_some() {
+                return Err(anyhow!(
+                    "first event must not specify prev_hash for account {}",
+                    input.account_id
+                ));
+            }
         }
     }
 
