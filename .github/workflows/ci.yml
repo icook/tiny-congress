@@ -86,23 +86,15 @@ jobs:
           - image: tc-api-dev
             context: ./service
             dockerfile: service/Dockerfile.dev
-          - image: tc-api-release
-            context: ./service
-            dockerfile: service/Dockerfile
           - image: tc-ui-dev
             context: ./web
             dockerfile: web/Dockerfile.dev
-          - image: tc-ui-release
-            context: ./web
-            dockerfile: web/Dockerfile
           - image: postgres
             context: .
             dockerfile: dockerfiles/Dockerfile.postgres
     outputs:
       tc-api-dev-tag: ${{ steps.meta.outputs.tc-api-dev-tag }}
       tc-ui-dev-tag: ${{ steps.meta.outputs.tc-ui-dev-tag }}
-      tc-api-release-tag: ${{ steps.meta.outputs.tc-api-release-tag }}
-      tc-ui-release-tag: ${{ steps.meta.outputs.tc-ui-release-tag }}
       postgres-tag: ${{ steps.meta.outputs.postgres-tag }}
     steps:
       - name: Checkout
@@ -480,3 +472,67 @@ jobs:
           kubectl get events -A --sort-by=.lastTimestamp || true
           echo '--- All Resources ---'
           kubectl get all -n default || true
+
+  # ============================================================
+  # JOB 4: Build production images after verification
+  # ============================================================
+  build-release-images:
+    name: Build release ${{ matrix.image }}
+    needs:
+      - skaffold-verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: tc-api-release
+            context: ./service
+            dockerfile: service/Dockerfile
+          - image: tc-ui-release
+            context: ./web
+            dockerfile: web/Dockerfile
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compute tags
+        id: tags
+        run: |
+          ref="${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}"
+          branch="${ref//[^a-zA-Z0-9_.-]/-}"
+          branch="${branch,,}"
+          echo "branch_slug=${branch}" >> "$GITHUB_OUTPUT"
+          echo "sha_tag=${{ env.REGISTRY }}/${{ matrix.image }}:${{ github.sha }}" >> "$GITHUB_OUTPUT"
+          echo "branch_tag=${{ env.REGISTRY }}/${{ matrix.image }}:branch-${branch}" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push ${{ matrix.image }}
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          push: true
+          platforms: linux/amd64
+          build-args: |
+            BUILDKIT_INLINE_CACHE=1
+          tags: |
+            ${{ steps.tags.outputs.sha_tag }}
+            ${{ steps.tags.outputs.branch_tag }}
+          cache-from: |
+            type=gha,scope=${{ matrix.image }}
+            type=registry,ref=${{ env.REGISTRY }}/${{ matrix.image }}:cache
+          cache-to: |
+            type=gha,scope=${{ matrix.image }},mode=max
+            type=registry,ref=${{ env.REGISTRY }}/${{ matrix.image }}:cache,mode=max
