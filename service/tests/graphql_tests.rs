@@ -13,14 +13,14 @@ async fn execute_query(query: &str) -> Value {
 
 #[tokio::test]
 async fn test_current_round_query() {
-    let query = r#"
+    let query = r"
         {
             currentRound {
                 id
                 status
             }
         }
-    "#;
+    ";
 
     let result = execute_query(query).await;
 
@@ -39,7 +39,7 @@ async fn test_current_round_query() {
 
 #[tokio::test]
 async fn test_top_topics_query() {
-    let query = r#"
+    let query = r"
         {
             topTopics(limit: 3) {
                 rank
@@ -50,7 +50,7 @@ async fn test_top_topics_query() {
                 }
             }
         }
-    "#;
+    ";
 
     let result = execute_query(query).await;
 
