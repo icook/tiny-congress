@@ -131,6 +131,6 @@ profiles:
   - name: ci
     build:
       local:
-        push: true
+        push: false
       platforms:
         - "linux/amd64"
