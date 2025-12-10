@@ -78,6 +78,11 @@ pub fn verify_envelope(envelope: &SignedEnvelope, signer_pubkey: &[u8]) -> Resul
     Ok(())
 }
 
+#[inline]
+pub fn encode_base64url(bytes: &[u8]) -> String {
+    URL_SAFE_NO_PAD.encode(bytes)
+}
+
 fn decode_base64url(data: &str) -> Result<Vec<u8>, CryptoError> {
     URL_SAFE_NO_PAD
         .decode(data)
