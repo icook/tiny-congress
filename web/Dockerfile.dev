@@ -18,6 +18,8 @@ RUN yarn install --immutable
 # Copy the rest of the app
 COPY . ./
 
+RUN install -m 0755 bin/dev-entrypoint.sh /usr/local/bin/dev-entrypoint
+
 # Development environment setup
 ENV NODE_ENV=development
 ENV PORT=5173
@@ -26,4 +28,4 @@ ENV HOST=0.0.0.0
 # Expose development port
 EXPOSE 5173
 
-CMD ["yarn", "dev"]
+CMD ["/usr/local/bin/dev-entrypoint"]
