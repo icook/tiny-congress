@@ -49,6 +49,7 @@ pub struct QueryRoot;
 
 #[Object]
 impl QueryRoot {
+    #[allow(clippy::unused_async)]
     async fn build_info(&self, ctx: &Context<'_>) -> Result<BuildInfoObject> {
         let provider = ctx.data::<BuildInfoProvider>()?;
         Ok(provider.build_info())

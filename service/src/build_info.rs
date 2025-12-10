@@ -19,11 +19,13 @@ pub struct BuildInfoProvider {
 
 impl BuildInfoProvider {
     /// Construct a provider using environment variables, falling back to sensible defaults.
+    #[must_use]
     pub fn from_env() -> Self {
         Self::from_lookup(|key| env::var(key).ok())
     }
 
     /// Construct a provider using a custom lookup function (useful for tests).
+    #[must_use]
     pub fn from_lookup<F>(mut lookup: F) -> Self
     where
         F: FnMut(&str) -> Option<String>,
@@ -59,7 +61,7 @@ impl BuildInfoProvider {
 
 fn normalize_build_time(value: &str) -> Option<String> {
     DateTime::parse_from_rfc3339(value)
-        .or_else(|_| DateTime::parse_from_rfc3339(&format!("{}Z", value)))
+        .or_else(|_| DateTime::parse_from_rfc3339(&format!("{value}Z")))
         .map(|dt| dt.with_timezone(&Utc).to_rfc3339())
         .ok()
 }
