@@ -81,7 +81,7 @@ jobs:
       - lint-web
     permissions:
       contents: read
-      packages: read
+      packages: write
       checks: write
     env:
       SKAFFOLD_PROFILE: ci
@@ -112,6 +112,25 @@ jobs:
           key: buildx-${{ runner.os }}-${{ hashFiles('service/Dockerfile.dev', 'web/Dockerfile.dev', 'dockerfiles/Dockerfile.postgres') }}
           restore-keys: |
             buildx-${{ runner.os }}-
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pull Rust build cache
+        run: |
+          set -euo pipefail
+          for tag in cache cache-main; do
+            image="${REGISTRY}/tc-api-dev:${tag}"
+            if docker pull "$image"; then
+              docker tag "$image" "tc-api-dev:${tag}"
+            else
+              echo "Cache ${image} not found; continuing"
+            fi
+          done
 
       - name: Set up KinD cluster
         uses: helm/kind-action@v1.13.0
@@ -353,6 +372,40 @@ jobs:
           else:
               print(output)
           PY
+
+      - name: Publish Rust build cache
+        if: always()
+        run: |
+          set -euo pipefail
+          BUILD_FILE="${{ steps.build.outputs.file }}"
+          if [ -z "$BUILD_FILE" ] || [ ! -f "$BUILD_FILE" ]; then
+            echo "No skaffold build output available; skipping cache publish"
+            exit 0
+          fi
+
+          api_tag=$(jq -r '.builds[] | select(.imageName=="tc-api-dev") | .tag' "$BUILD_FILE")
+          if [ -z "$api_tag" ] || [ "$api_tag" = "null" ]; then
+            echo "No tc-api-dev tag found in skaffold build output" >&2
+            exit 0
+          fi
+
+          cache_tag="${REGISTRY}/tc-api-dev:cache"
+          docker tag "$api_tag" "$cache_tag"
+          if docker push "$cache_tag"; then
+            echo "Published Rust cache to ${cache_tag}"
+          else
+            echo "Skipping cache push for ${cache_tag} (likely permissions on forks)"
+          fi
+
+          if [ "${GITHUB_REF_NAME}" = "master" ]; then
+            cache_main_tag="${REGISTRY}/tc-api-dev:cache-main"
+            docker tag "$api_tag" "$cache_main_tag"
+            if docker push "$cache_main_tag"; then
+              echo "Published Rust cache to ${cache_main_tag}"
+            else
+              echo "Skipping cache push for ${cache_main_tag} (likely permissions on forks)"
+            fi
+          fi
 
       - name: Save Docker layer cache
         if: always()
