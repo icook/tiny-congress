@@ -29,11 +29,18 @@ jobs:
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          components: rustfmt
+          components: rustfmt, clippy
 
       - name: Check formatting
         working-directory: service
         run: cargo fmt --all -- --check
+
+      - name: Clippy
+        working-directory: service
+        run: |
+          # Dev-only tooling pulls in unstable deps (e.g., cargo-llvm-cov via ruzstd),
+          # so keep clippy scoped to library and binaries.
+          cargo clippy --all-features -- -D warnings
 
   # ============================================================
   # JOB 0b: Lint web
