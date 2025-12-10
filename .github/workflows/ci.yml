@@ -119,10 +119,27 @@ jobs:
             buildx-${{ runner.os }}-${{ github.ref_name }}-
             buildx-${{ runner.os }}-
 
+      - name: Prepare KinD config
+        env:
+          KIND_DATA_DIR: ${{ runner.temp }}/kind-data
+        run: |
+          mkdir -p "${KIND_DATA_DIR}"
+          cat > "${RUNNER_TEMP}/kind-config.yaml" <<EOF
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+nodes:
+- role: control-plane
+  extraMounts:
+    - hostPath: ${KIND_DATA_DIR}
+      containerPath: /var/lib/containerd
+EOF
+          echo "KIND_CONFIG=${RUNNER_TEMP}/kind-config.yaml" >> "$GITHUB_ENV"
+
       - name: Set up KinD cluster
         uses: helm/kind-action@v1.13.0
         with:
           cluster_name: ${{ env.KIND_CLUSTER_NAME }}
+          config: ${{ env.KIND_CONFIG }}
 
       - name: Cache Skaffold
         id: cache-skaffold
