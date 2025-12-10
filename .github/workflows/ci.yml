@@ -84,7 +84,6 @@ jobs:
       packages: read
       checks: write
     env:
-      SKAFFOLD_DEFAULT_REPO: ghcr.io/${{ github.repository }}
       SKAFFOLD_PROFILE: ci
       KIND_CLUSTER_NAME: skaffold-ci
       BUILD_PLATFORM: linux/amd64
