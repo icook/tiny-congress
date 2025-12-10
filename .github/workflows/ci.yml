@@ -184,6 +184,16 @@ jobs:
           skaffold build -p ${SKAFFOLD_PROFILE} --file-output "${BUILD_FILE}"
           echo "file=${BUILD_FILE}" >> "$GITHUB_OUTPUT"
 
+      - name: Load images into KinD
+        run: |
+          set -euo pipefail
+          build_file="${{ steps.build.outputs.file }}"
+          mapfile -t images < <(jq -r '.builds[].tag' "$build_file")
+          for image in "${images[@]}"; do
+            echo "Loading ${image} into KinD cluster ${KIND_CLUSTER_NAME}"
+            kind load docker-image --name "${KIND_CLUSTER_NAME}" "${image}"
+          done
+
       - name: Prepare test output directories
         run: |
           mkdir -p web/reports web/test-results web/coverage/playwright service/coverage
