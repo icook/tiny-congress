@@ -22,7 +22,8 @@ CREATE TABLE IF NOT EXISTS devices (
     last_seen_at TIMESTAMPTZ,
     revoked_at TIMESTAMPTZ,
     revocation_reason TEXT,
-    CONSTRAINT unique_device_kid_per_account UNIQUE (account_id, device_kid)
+    CONSTRAINT unique_device_kid_per_account UNIQUE (account_id, device_kid),
+    CONSTRAINT unique_device_per_account UNIQUE (account_id, id)
 );
 
 CREATE TABLE IF NOT EXISTS device_delegations (
