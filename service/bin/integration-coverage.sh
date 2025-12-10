@@ -24,6 +24,7 @@ cargo llvm-cov --lcov \
   --output-path "${ARTIFACTS_DIR}/backend-integration.lcov" \
   --remap-path-prefix \
   --test integration_tests \
+  --test identity_event_store \
   --no-clean \
   -- --test-threads=1 --nocapture
 
