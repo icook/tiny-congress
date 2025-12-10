@@ -18,6 +18,7 @@ async-graphql = "7.0"
 async-graphql-axum = "7.0"
 
 # Database
+sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio-rustls", "postgres", "macros", "chrono", "uuid", "json", "migrate"] }
 sqlx-core = { version = "0.8", default-features = false, features = ["_rt-tokio", "_tls-rustls-ring-webpki", "chrono", "uuid", "json", "migrate"] }
 sqlx-postgres = { version = "0.8", default-features = false, features = ["chrono", "uuid", "json", "migrate"] }
 
@@ -32,6 +33,12 @@ serde_json = "1.0"
 async-trait = "0.1"
 thiserror = "2.0"
 anyhow = "1.0"
+rand = "0.9"
+reqwest = { version = "0.12", features = ["json"] }
+ed25519-dalek = "2.1"
+sha2 = "0.10"
+base64 = "0.22"
+serde_jcs = "0.1"
 
 [dev-dependencies]
 hyper = "1.6"
