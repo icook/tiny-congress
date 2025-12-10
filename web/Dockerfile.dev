@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1.7-labs
 FROM node:20-slim
 WORKDIR /app
 
@@ -13,7 +14,8 @@ RUN corepack enable
 # Install dependencies (context is ./web)
 COPY .yarn/ ./.yarn/
 COPY .yarnrc.yml package.json yarn.lock ./
-RUN yarn install --immutable
+RUN --mount=type=cache,target=/root/.cache/yarn \
+    yarn install --immutable
 
 # Copy the rest of the app
 COPY . ./

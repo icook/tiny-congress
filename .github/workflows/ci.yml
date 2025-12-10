@@ -71,115 +71,12 @@ jobs:
         run: yarn lint
 
   # ============================================================
-  # JOB 1: Build all container images in parallel
-  # ============================================================
-  build-images:
-    name: Build ${{ matrix.image }}
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - image: tc-api-dev
-            context: ./service
-            dockerfile: service/Dockerfile.dev
-          - image: tc-ui-dev
-            context: ./web
-            dockerfile: web/Dockerfile.dev
-          - image: postgres
-            context: .
-            dockerfile: dockerfiles/Dockerfile.postgres
-    outputs:
-      tc-api-dev-tag: ${{ steps.meta.outputs.tc-api-dev-tag }}
-      tc-ui-dev-tag: ${{ steps.meta.outputs.tc-ui-dev-tag }}
-      postgres-tag: ${{ steps.meta.outputs.postgres-tag }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Login to GHCR
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Compute tags
-        id: tags
-        run: |
-          ref="${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}"
-          branch="${ref//[^a-zA-Z0-9_.-]/-}"
-          branch="${branch,,}"
-          echo "branch_slug=${branch}" >> "$GITHUB_OUTPUT"
-          echo "sha_tag=${{ env.REGISTRY }}/${{ matrix.image }}:${{ github.sha }}" >> "$GITHUB_OUTPUT"
-          echo "branch_tag=${{ env.REGISTRY }}/${{ matrix.image }}:branch-${branch}" >> "$GITHUB_OUTPUT"
-
-      - name: Build and push ${{ matrix.image }}
-        uses: docker/build-push-action@v6
-        with:
-          context: ${{ matrix.context }}
-          file: ${{ matrix.dockerfile }}
-          push: true
-          platforms: linux/amd64
-          build-args: |
-            BUILDKIT_INLINE_CACHE=1
-          tags: |
-            ${{ steps.tags.outputs.sha_tag }}
-            ${{ steps.tags.outputs.branch_tag }}
-          cache-from: |
-            type=gha,scope=${{ matrix.image }}
-            type=registry,ref=${{ env.REGISTRY }}/${{ matrix.image }}:cache
-          cache-to: |
-            type=gha,scope=${{ matrix.image }},mode=max
-            type=registry,ref=${{ env.REGISTRY }}/${{ matrix.image }}:cache,mode=max
-
-      - name: Export image metadata
-        id: meta
-        run: |
-          echo "${{ matrix.image }}-tag=${{ steps.tags.outputs.sha_tag }}" >> "$GITHUB_OUTPUT"
-
-  # ============================================================
-  # JOB 2: Aggregate image metadata from matrix
-  # ============================================================
-  collect-image-metadata:
-    name: Collect image metadata
-    runs-on: ubuntu-latest
-    needs: build-images
-    outputs:
-      artifacts_json: ${{ steps.generate.outputs.artifacts_json }}
-    steps:
-      - name: Generate Skaffold artifacts JSON
-        id: generate
-        run: |
-          artifacts=$(cat <<'EOF'
-          {
-            "builds": [
-              {"imageName": "tc-api-dev", "tag": "${{ env.REGISTRY }}/tc-api-dev:${{ github.sha }}"},
-              {"imageName": "tc-ui-dev", "tag": "${{ env.REGISTRY }}/tc-ui-dev:${{ github.sha }}"},
-              {"imageName": "postgres", "tag": "${{ env.REGISTRY }}/postgres:${{ github.sha }}"}
-            ]
-          }
-          EOF
-          )
-          artifacts_escaped=$(echo "$artifacts" | jq -c .)
-          echo "artifacts_json=${artifacts_escaped}" >> "$GITHUB_OUTPUT"
-        env:
-          REGISTRY: ghcr.io/${{ github.repository }}
-
-  # ============================================================
-  # JOB 3: Run Skaffold test/deploy/verify
+  # JOB 1: Run Skaffold build/test/deploy/verify
   # ============================================================
   skaffold-verify:
     name: Skaffold verify
     runs-on: ubuntu-latest
     needs:
-      - collect-image-metadata
       - lint
       - lint-web
     permissions:
@@ -189,6 +86,10 @@ jobs:
     env:
       SKAFFOLD_DEFAULT_REPO: ghcr.io/${{ github.repository }}
       SKAFFOLD_PROFILE: ci
+      KIND_CLUSTER_NAME: skaffold-ci
+      BUILDX_CACHE_DIR: ${{ runner.temp }}/buildx-cache
+      BUILD_CACHE_KEY: buildx-${{ runner.os }}-${{ github.ref_name }}
+      BUILD_PLATFORM: linux/amd64
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -205,10 +106,25 @@ jobs:
           docker-images: false
           swap-storage: false
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver: docker-container
+
+      - name: Restore Buildx cache
+        id: restore-buildx-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ env.BUILDX_CACHE_DIR }}
+          key: ${{ env.BUILD_CACHE_KEY }}-${{ github.run_id }}
+          restore-keys: |
+            ${{ env.BUILD_CACHE_KEY }}-
+            buildx-${{ runner.os }}-
+
       - name: Set up KinD cluster
         uses: helm/kind-action@v1.13.0
         with:
-          cluster_name: skaffold-ci
+          cluster_name: ${{ env.KIND_CLUSTER_NAME }}
 
       - name: Cache Skaffold
         id: cache-skaffold
@@ -234,28 +150,6 @@ jobs:
           kubectl cluster-info
           kubectl get nodes -o wide
 
-      - name: Login to GHCR
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Configure registry access for KinD
-        run: |
-          set -euo pipefail
-          kubectl create secret docker-registry ghcr-cred \
-            --namespace default \
-            --docker-server=ghcr.io \
-            --docker-username="${{ github.actor }}" \
-            --docker-password="${{ secrets.GITHUB_TOKEN }}" \
-            --dry-run=client -o yaml | kubectl apply -f -
-
-          kubectl patch serviceaccount default \
-            -n default \
-            --type merge \
-            -p '{"imagePullSecrets":[{"name":"ghcr-cred"}]}'
-
       - name: Apply PVC for test artifacts
         run: |
           kubectl apply -f kube/verify/test-artifacts-pvc.yaml
@@ -264,15 +158,14 @@ jobs:
           echo "--- PVC Description ---"
           kubectl describe pvc test-artifacts-pvc
 
-      - name: Write Skaffold artifacts file
-        id: artifacts
+      - name: Skaffold build (no push)
+        id: build
+        env:
+          BUILD_FILE: ${{ runner.temp }}/skaffold-build.json
         run: |
           set -euo pipefail
-          artifacts_file="${RUNNER_TEMP}/skaffold-artifacts.json"
-          echo '${{ needs.collect-image-metadata.outputs.artifacts_json }}' > "$artifacts_file"
-          echo "Artifacts file contents:"
-          cat "$artifacts_file"
-          echo "file=${artifacts_file}" >> "$GITHUB_OUTPUT"
+          skaffold build -p ${SKAFFOLD_PROFILE} --file-output "${BUILD_FILE}"
+          echo "file=${BUILD_FILE}" >> "$GITHUB_OUTPUT"
 
       - name: Prepare test output directories
         run: |
@@ -282,7 +175,7 @@ jobs:
       - name: Run Skaffold tests
         run: |
           set -euo pipefail
-          skaffold test -p ${SKAFFOLD_PROFILE} --build-artifacts "${{ steps.artifacts.outputs.file }}"
+          skaffold test -p ${SKAFFOLD_PROFILE} --build-artifacts "${{ steps.build.outputs.file }}"
 
       - name: Publish Playwright test report
         if: always() && hashFiles('web/reports/playwright.xml') != ''
@@ -336,12 +229,12 @@ jobs:
       - name: Deploy with Skaffold
         run: |
           set -euo pipefail
-          skaffold deploy -p ${SKAFFOLD_PROFILE} --status-check=true --build-artifacts "${{ steps.artifacts.outputs.file }}"
+          skaffold deploy -p ${SKAFFOLD_PROFILE} --status-check=true --build-artifacts "${{ steps.build.outputs.file }}"
 
       - name: Run Skaffold verify
         run: |
           set -euo pipefail
-          skaffold verify -p ${SKAFFOLD_PROFILE} --build-artifacts "${{ steps.artifacts.outputs.file }}"
+          skaffold verify -p ${SKAFFOLD_PROFILE} --build-artifacts "${{ steps.build.outputs.file }}"
 
       - name: Start exporter pod for integration artifacts
         if: always()
@@ -460,6 +353,13 @@ jobs:
           else:
               print(output)
           PY
+
+      - name: Save Buildx cache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ env.BUILDX_CACHE_DIR }}
+          key: ${{ env.BUILD_CACHE_KEY }}-${{ github.run_id }}
 
       - name: Dump diagnostics on failure
         if: failure()

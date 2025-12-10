@@ -131,6 +131,26 @@ profiles:
   - name: ci
     build:
       local:
-        push: true
+        push: false
+        concurrency: 1
       platforms:
         - "linux/amd64"
+      artifacts:
+        - image: tc-api-dev
+          custom:
+            buildCommand: ./hack/buildx-build.sh service/Dockerfile.dev service BUILDKIT_INLINE_CACHE=1
+            dependencies:
+              paths:
+                - service
+        - image: postgres
+          custom:
+            buildCommand: ./hack/buildx-build.sh dockerfiles/Dockerfile.postgres .
+            dependencies:
+              paths:
+                - dockerfiles
+        - image: tc-ui-dev
+          custom:
+            buildCommand: ./hack/buildx-build.sh web/Dockerfile.dev web BUILDKIT_INLINE_CACHE=1
+            dependencies:
+              paths:
+                - web
