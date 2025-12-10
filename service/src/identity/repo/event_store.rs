@@ -37,41 +37,38 @@ pub async fn append_signed_event(
     .fetch_optional(&mut *tx)
     .await?;
 
-    match previous {
-        Some(prev) => {
-            if input.seqno != prev.seqno + 1 {
-                return Err(anyhow!(
-                    "seqno out of order: expected {}, got {}",
-                    prev.seqno + 1,
-                    input.seqno
-                ));
+    if let Some(prev) = previous {
+        if input.seqno != prev.seqno + 1 {
+            return Err(anyhow!(
+                "seqno out of order: expected {}, got {}",
+                prev.seqno + 1,
+                input.seqno
+            ));
+        }
+
+        let expected_prev_hash = input
+            .envelope
+            .prev_hash_bytes()
+            .context("prev_hash missing for chained event")?;
+
+        match expected_prev_hash {
+            Some(value) if value == prev.canonical_bytes_hash => {}
+            Some(_) => {
+                return Err(anyhow!("prev_hash does not match previous link"));
             }
-
-            let expected_prev_hash = input
-                .envelope
-                .prev_hash_bytes()
-                .context("prev_hash missing for chained event")?;
-
-            match expected_prev_hash {
-                Some(value) if value == prev.canonical_bytes_hash => {}
-                Some(_) => {
-                    return Err(anyhow!("prev_hash does not match previous link"));
-                }
-                None => {
-                    return Err(anyhow!("prev_hash missing for seqno > 1"));
-                }
+            None => {
+                return Err(anyhow!("prev_hash missing for seqno > 1"));
             }
         }
-        None => {
-            if input.seqno != 1 {
-                return Err(anyhow!("first event must use seqno 1"));
-            }
-            if input.envelope.prev_hash_bytes()?.is_some() {
-                return Err(anyhow!(
-                    "first event must not specify prev_hash for account {}",
-                    input.account_id
-                ));
-            }
+    } else {
+        if input.seqno != 1 {
+            return Err(anyhow!("first event must use seqno 1"));
+        }
+        if input.envelope.prev_hash_bytes()?.is_some() {
+            return Err(anyhow!(
+                "first event must not specify prev_hash for account {}",
+                input.account_id
+            ));
         }
     }
 
