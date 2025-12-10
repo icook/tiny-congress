@@ -1,5 +1,10 @@
 import { defineConfig, devices } from '@playwright/test';
 
+const truthy = (value: string | undefined) =>
+  (value ?? '').toLowerCase() === 'true' || value === '1';
+
+const shouldStartWebServer = !truthy(process.env.PLAYWRIGHT_SKIP_WEB_SERVER);
+
 export default defineConfig({
   testDir: './tests/e2e',
   timeout: 30_000,
@@ -29,10 +34,12 @@ export default defineConfig({
       use: { ...devices['Desktop Chrome'] },
     },
   ],
-  webServer: {
-    command: 'yarn build && yarn preview --host 0.0.0.0 --port 4173 --strictPort',
-    url: 'http://127.0.0.1:4173',
-    reuseExistingServer: !process.env.CI,
-    timeout: 120_000,
-  },
+  webServer: shouldStartWebServer
+    ? {
+        command: 'yarn build && yarn preview --host 0.0.0.0 --port 4173 --strictPort',
+        url: 'http://127.0.0.1:4173',
+        reuseExistingServer: !process.env.CI,
+        timeout: 120_000,
+      }
+    : undefined,
 });

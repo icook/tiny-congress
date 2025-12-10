@@ -7,5 +7,6 @@
     clippy::unwrap_used
 )]
 
+pub mod build_info;
 pub mod db;
 pub mod graphql;

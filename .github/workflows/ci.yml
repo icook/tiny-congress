@@ -234,6 +234,19 @@ jobs:
           kubectl cluster-info
           kubectl get nodes -o wide
 
+      - name: Stamp build metadata
+        run: |
+          BUILD_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          APP_VERSION="${GITHUB_SHA}"
+          GIT_SHA="${GITHUB_SHA}"
+          {
+            echo "APP_VERSION=${APP_VERSION}"
+            echo "GIT_SHA=${GIT_SHA}"
+            echo "BUILD_TIME=${BUILD_TIME}"
+          } >> "$GITHUB_ENV"
+
+          APP_VERSION="${APP_VERSION}" GIT_SHA="${GIT_SHA}" BUILD_TIME="${BUILD_TIME}" ./scripts/write-build-info-values.sh
+
       - name: Login to GHCR
         uses: docker/login-action@v3
         with:
@@ -284,6 +297,72 @@ jobs:
           set -euo pipefail
           skaffold test -p ${SKAFFOLD_PROFILE} --build-artifacts "${{ steps.artifacts.outputs.file }}"
 
+      - name: Deploy with Skaffold
+        run: |
+          set -euo pipefail
+          skaffold deploy -p ${SKAFFOLD_PROFILE} --status-check=true --build-artifacts "${{ steps.artifacts.outputs.file }}"
+
+      - name: Verify build metadata env vars
+        run: |
+          check_env() {
+            local key="$1"
+            local expected="$2"
+            local value
+            value="$(kubectl get deploy tc -o "jsonpath={.spec.template.spec.containers[0].env[?(@.name=='${key}')].value}")"
+
+            if [ "$value" != "$expected" ]; then
+              echo "::error title=${key} mismatch::expected '${expected}', got '${value}'"
+              exit 1
+            fi
+          }
+
+          check_env "APP_VERSION" "${APP_VERSION}"
+          check_env "GIT_SHA" "${GIT_SHA}"
+          check_env "BUILD_TIME" "${BUILD_TIME}"
+
+      - name: Wait for deployments to rollout
+        run: |
+          kubectl rollout status deployment/tc --timeout=120s
+          kubectl rollout status deployment/tc-frontend --timeout=120s
+
+      - name: Start port-forwards for smoke tests
+        run: |
+          kubectl port-forward service/tc 8080:8080 >/tmp/pf-api.log 2>&1 &
+          echo $! > /tmp/pf-api.pid
+          kubectl port-forward deployment/tc-frontend 4173:5173 >/tmp/pf-ui.log 2>&1 &
+          echo $! > /tmp/pf-ui.pid
+          sleep 5
+          echo "PORT_FORWARD_API_PID=$(cat /tmp/pf-api.pid)" >> "$GITHUB_ENV"
+          echo "PORT_FORWARD_UI_PID=$(cat /tmp/pf-ui.pid)" >> "$GITHUB_ENV"
+
+      - name: Wait for forwarded services
+        run: |
+          ./scripts/wait-for-http.sh http://127.0.0.1:8080/health 120
+          ./scripts/wait-for-http.sh http://127.0.0.1:8080/graphql 120
+          ./scripts/wait-for-http.sh http://127.0.0.1:4173 180
+
+      - name: Pull UI image for smoke tests
+        run: docker pull "${REGISTRY}/tc-ui-dev:${GITHUB_SHA}"
+
+      - name: Run Playwright smoke tests
+        env:
+          PLAYWRIGHT_BASE_URL: http://127.0.0.1:4173
+          PLAYWRIGHT_API_URL: http://127.0.0.1:8080/graphql
+        run: |
+          IMAGE="${REGISTRY}/tc-ui-dev:${GITHUB_SHA}"
+          docker run --rm --network host \
+            -e CI=true \
+            -e PLAYWRIGHT_BASE_URL="${PLAYWRIGHT_BASE_URL}" \
+            -e PLAYWRIGHT_API_URL="${PLAYWRIGHT_API_URL}" \
+            -e PLAYWRIGHT_SKIP_WEB_SERVER=true \
+            -v "$PWD/web/.nyc_output:/app/.nyc_output" \
+            -v "$PWD/web/coverage/playwright:/app/coverage/playwright" \
+            -v "$PWD/web/reports:/app/reports" \
+            -v "$PWD/web/playwright-report:/app/playwright-report" \
+            -v "$PWD/web/test-results:/app/test-results" \
+            "$IMAGE" \
+            /bin/sh -lc "cd /app && yarn playwright:test --grep @smoke"
+
       - name: Publish Playwright test report
         if: always() && hashFiles('web/reports/playwright.xml') != ''
         uses: EnricoMi/publish-unit-test-result-action@v2
@@ -332,13 +411,20 @@ jobs:
             web/test-results
             web/reports/playwright.xml
             web/coverage/playwright
+            web/playwright-report
 
-      - name: Deploy with Skaffold
+      - name: Stop port-forwards
+        if: always()
         run: |
-          set -euo pipefail
-          skaffold deploy -p ${SKAFFOLD_PROFILE} --status-check=true --build-artifacts "${{ steps.artifacts.outputs.file }}"
+          for pid_file in /tmp/pf-api.pid /tmp/pf-ui.pid; do
+            if [ -f "$pid_file" ]; then
+              pid=$(cat "$pid_file")
+              kill "$pid" || true
+            fi
+          done
 
       - name: Run Skaffold verify
+        if: always() && steps.artifacts.outputs.file != ''
         run: |
           set -euo pipefail
           skaffold verify -p ${SKAFFOLD_PROFILE} --build-artifacts "${{ steps.artifacts.outputs.file }}"
@@ -472,6 +558,12 @@ jobs:
           kubectl get events -A --sort-by=.lastTimestamp || true
           echo '--- All Resources ---'
           kubectl get all -n default || true
+
+      - name: Skaffold delete
+        if: always() && steps.artifacts.outputs.file != ''
+        run: |
+          set -euo pipefail
+          skaffold delete -p ${SKAFFOLD_PROFILE} --build-artifacts "${{ steps.artifacts.outputs.file }}"
 
   # ============================================================
   # JOB 4: Build production images after verification

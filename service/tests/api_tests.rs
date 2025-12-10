@@ -5,11 +5,14 @@ use axum::{
     routing::get,
     Extension, Router,
 };
+use tinycongress_api::build_info::BuildInfoProvider;
 use tinycongress_api::graphql::{graphql_handler, graphql_playground, MutationRoot, QueryRoot};
 use tower::ServiceExt;
 
 fn create_test_app() -> Router {
-    let schema = Schema::build(QueryRoot, MutationRoot, EmptySubscription).finish();
+    let schema = Schema::build(QueryRoot, MutationRoot, EmptySubscription)
+        .data(BuildInfoProvider::from_env())
+        .finish();
 
     Router::new()
         .route("/graphql", get(graphql_playground).post(graphql_handler))

@@ -14,6 +14,12 @@ imagePullSecrets: []
 nameOverride: ""
 fullnameOverride: ""
 
+buildInfo:
+  appVersion: dev
+  gitSha: unknown
+  buildTime: unknown
+  message: ""
+
 serviceAccount:
   # Specifies whether a service account should be created
   create: true

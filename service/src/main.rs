@@ -8,12 +8,19 @@
 )]
 
 use async_graphql::{EmptySubscription, Schema};
-use axum::{http::StatusCode, response::IntoResponse, routing::get, Extension, Router};
+use axum::{
+    http::{Method, StatusCode},
+    response::IntoResponse,
+    routing::get,
+    Extension, Router,
+};
 use std::net::SocketAddr;
 use tinycongress_api::{
+    build_info::BuildInfoProvider,
     db::{create_seed_data, setup_database},
     graphql::{graphql_handler, graphql_playground, MutationRoot, QueryRoot},
 };
+use tower_http::cors::{Any, CorsLayer};
 
 // Health check handler
 async fn health_check() -> impl IntoResponse {
@@ -45,9 +52,19 @@ async fn main() -> Result<(), anyhow::Error> {
     tracing::info!("Setting up seed data...");
     create_seed_data(&pool).await?;
 
+    let build_info = BuildInfoProvider::from_env();
+    let build_info_snapshot = build_info.build_info();
+    tracing::info!(
+        version = %build_info_snapshot.version,
+        git_sha = %build_info_snapshot.git_sha,
+        build_time = %build_info_snapshot.build_time,
+        "resolved build metadata"
+    );
+
     // Create the GraphQL schema
     let schema = Schema::build(QueryRoot, MutationRoot, EmptySubscription)
         .data(pool.clone()) // Pass the database pool to the schema
+        .data(build_info)
         .finish();
 
     // Build the API
@@ -58,7 +75,13 @@ async fn main() -> Result<(), anyhow::Error> {
         .route("/health", get(health_check))
         // Add the schema to the extension
         .layer(Extension(schema))
-        .layer(Extension(pool));
+        .layer(Extension(pool))
+        .layer(
+            CorsLayer::new()
+                .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
+                .allow_headers(Any)
+                .allow_origin(Any),
+        );
 
     // Start the server
     let port = std::env::var("PORT")

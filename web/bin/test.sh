@@ -4,5 +4,4 @@ set -euo pipefail
 cd /app
 export CI=true
 
-yarn test --watchAll=false
-yarn playwright:ci
+yarn test
