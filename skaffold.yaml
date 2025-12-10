@@ -71,7 +71,9 @@ deploy:
           serviceAccount:
             create: false
 
-# Pre-deploy tests: run fast unit/API/UI tests only
+# PRE-DEPLOY TESTS (cluster not required)
+# - Rust: unit tests via bin/unit-coverage.sh (ARTIFACTS_DIR=service/coverage)
+# - Web: typecheck, lint, vitest, build (no Playwright here)
 test:
   - image: tc-api-dev
     custom:
@@ -82,9 +84,11 @@ test:
   - image: tc-ui-dev
     custom:
       - command: >-
-          IMAGE="$IMAGE" web/scripts/docker-playwright-ci.sh
+          IMAGE="$IMAGE" web/scripts/docker-unit-test-ci.sh
 
-# Post-deploy verification: run integration tests against the live cluster
+# POST-DEPLOY VERIFICATION (runs against the live cluster)
+# - Rust: integration tests against Postgres
+# - Web: Playwright smoke tests against the deployed frontend/API
 verify:
   - name: integration-tests
     container:
@@ -95,6 +99,17 @@ verify:
     executionMode:
       kubernetesCluster:
         jobManifestPath: kube/verify/integration-tests-job.yaml
+  - name: playwright-smoke
+    container:
+      name: playwright-smoke
+      image: tc-ui-dev
+      command: ["/bin/sh", "-lc"]
+      args:
+        - |
+          cd /app && /app/scripts/run-playwright-smoke.sh
+    executionMode:
+      kubernetesCluster:
+        jobManifestPath: kube/verify/playwright-smoke-job.yaml
 
 # Ensure Postgres is reachable from localhost for developer workflows
 portForward:
@@ -106,7 +121,7 @@ portForward:
     resourceName: tc
     port: 8080
     localPort: 8080
-  - resourceType: deployment
+  - resourceType: service
     resourceName: tc-frontend
     port: 5173
     localPort: 5173

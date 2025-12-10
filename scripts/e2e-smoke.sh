@@ -48,19 +48,18 @@ kubectl rollout status deployment/tc-frontend --timeout=120s
 echo "Starting port-forwards..."
 kubectl port-forward service/tc 8080:8080 >/tmp/pf-api.log 2>&1 &
 echo $! >/tmp/pf-api.pid
-kubectl port-forward deployment/tc-frontend 4173:5173 >/tmp/pf-ui.log 2>&1 &
+kubectl port-forward service/tc-frontend 5173:5173 >/tmp/pf-ui.log 2>&1 &
 echo $! >/tmp/pf-ui.pid
 sleep 5
 
 echo "Waiting for HTTP readiness..."
 "$ROOT_DIR/scripts/wait-for-http.sh" http://127.0.0.1:8080/health 120
 "$ROOT_DIR/scripts/wait-for-http.sh" http://127.0.0.1:8080/graphql 120
-"$ROOT_DIR/scripts/wait-for-http.sh" http://127.0.0.1:4173 180
+"$ROOT_DIR/scripts/wait-for-http.sh" http://127.0.0.1:5173 180
 
 echo "Running Playwright smoke (@smoke)..."
-PLAYWRIGHT_SKIP_WEB_SERVER=true \
-  PLAYWRIGHT_BASE_URL=http://127.0.0.1:4173 \
+PLAYWRIGHT_BASE_URL=http://127.0.0.1:5173 \
   PLAYWRIGHT_API_URL=http://127.0.0.1:8080/graphql \
-  yarn --cwd "$ROOT_DIR/web" playwright:test --grep @smoke
+  "$ROOT_DIR/web/scripts/run-playwright-smoke.sh"
 
 echo "Smoke test completed."

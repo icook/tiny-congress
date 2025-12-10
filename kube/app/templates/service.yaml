@@ -14,3 +14,23 @@ spec:
   selector:
     {{- include "app.selectorLabels" . | nindent 4 }}
     app.kubernetes.io/component: api
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "app.fullname" . }}-frontend
+  labels:
+    {{- include "app.labels" . | nindent 4 }}
+    app.kubernetes.io/component: frontend
+spec:
+  type: {{ .Values.frontend.service.type | default "ClusterIP" }}
+  ports:
+    - port: {{ .Values.frontend.service.port }}
+      targetPort: {{ .Values.frontend.service.targetPort | default .Values.frontend.service.port }}
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "app.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: frontend

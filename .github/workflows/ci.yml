@@ -325,43 +325,45 @@ jobs:
           kubectl rollout status deployment/tc --timeout=120s
           kubectl rollout status deployment/tc-frontend --timeout=120s
 
-      - name: Start port-forwards for smoke tests
+      - name: Run Skaffold verify
+        if: always() && steps.artifacts.outputs.file != ''
         run: |
-          kubectl port-forward service/tc 8080:8080 >/tmp/pf-api.log 2>&1 &
-          echo $! > /tmp/pf-api.pid
-          kubectl port-forward deployment/tc-frontend 4173:5173 >/tmp/pf-ui.log 2>&1 &
-          echo $! > /tmp/pf-ui.pid
-          sleep 5
-          echo "PORT_FORWARD_API_PID=$(cat /tmp/pf-api.pid)" >> "$GITHUB_ENV"
-          echo "PORT_FORWARD_UI_PID=$(cat /tmp/pf-ui.pid)" >> "$GITHUB_ENV"
+          set -euo pipefail
+          skaffold verify -p ${SKAFFOLD_PROFILE} --build-artifacts "${{ steps.artifacts.outputs.file }}"
 
-      - name: Wait for forwarded services
+      - name: Start exporter pod for integration artifacts
+        if: always()
         run: |
-          ./scripts/wait-for-http.sh http://127.0.0.1:8080/health 120
-          ./scripts/wait-for-http.sh http://127.0.0.1:8080/graphql 120
-          ./scripts/wait-for-http.sh http://127.0.0.1:4173 180
+          kubectl apply -f kube/verify/test-artifacts-exporter.yaml
+          kubectl wait --for=condition=Ready pod/test-artifacts-exporter --timeout=60s
 
-      - name: Pull UI image for smoke tests
-        run: docker pull "${REGISTRY}/tc-ui-dev:${GITHUB_SHA}"
-
-      - name: Run Playwright smoke tests
-        env:
-          PLAYWRIGHT_BASE_URL: http://127.0.0.1:4173
-          PLAYWRIGHT_API_URL: http://127.0.0.1:8080/graphql
+      - name: Copy integration artifacts
+        if: always()
         run: |
-          IMAGE="${REGISTRY}/tc-ui-dev:${GITHUB_SHA}"
-          docker run --rm --network host \
-            -e CI=true \
-            -e PLAYWRIGHT_BASE_URL="${PLAYWRIGHT_BASE_URL}" \
-            -e PLAYWRIGHT_API_URL="${PLAYWRIGHT_API_URL}" \
-            -e PLAYWRIGHT_SKIP_WEB_SERVER=true \
-            -v "$PWD/web/.nyc_output:/app/.nyc_output" \
-            -v "$PWD/web/coverage/playwright:/app/coverage/playwright" \
-            -v "$PWD/web/reports:/app/reports" \
-            -v "$PWD/web/playwright-report:/app/playwright-report" \
-            -v "$PWD/web/test-results:/app/test-results" \
-            "$IMAGE" \
-            /bin/sh -lc "cd /app && yarn playwright:test --grep @smoke"
+          set -euo pipefail
+          mkdir -p service/coverage web
+          tmp_dir="$(mktemp -d)"
+
+          echo "--- Files in PVC /artifacts ---"
+          kubectl exec test-artifacts-exporter -- ls -la /artifacts || true
+
+          echo "--- Copying artifacts to temp dir ${tmp_dir} ---"
+          kubectl cp test-artifacts-exporter:/artifacts/. "$tmp_dir"
+
+          if [ -f "$tmp_dir/backend-integration.lcov" ]; then
+            cp "$tmp_dir/backend-integration.lcov" service/coverage/backend-integration.lcov
+          fi
+
+          if [ -d "$tmp_dir/playwright" ]; then
+            echo "--- Syncing Playwright artifacts to web/ ---"
+            rm -rf web/.nyc_output web/coverage/playwright web/playwright-report web/reports web/test-results
+            cp -r "$tmp_dir/playwright/." web/
+          fi
+
+          echo "--- Local service/coverage contents ---"
+          ls -la service/coverage
+          echo "--- Local web Playwright artifacts ---"
+          ls -la web | sed -n '/coverage/,$p'
 
       - name: Publish Playwright test report
         if: always() && hashFiles('web/reports/playwright.xml') != ''
@@ -412,39 +414,6 @@ jobs:
             web/reports/playwright.xml
             web/coverage/playwright
             web/playwright-report
-
-      - name: Stop port-forwards
-        if: always()
-        run: |
-          for pid_file in /tmp/pf-api.pid /tmp/pf-ui.pid; do
-            if [ -f "$pid_file" ]; then
-              pid=$(cat "$pid_file")
-              kill "$pid" || true
-            fi
-          done
-
-      - name: Run Skaffold verify
-        if: always() && steps.artifacts.outputs.file != ''
-        run: |
-          set -euo pipefail
-          skaffold verify -p ${SKAFFOLD_PROFILE} --build-artifacts "${{ steps.artifacts.outputs.file }}"
-
-      - name: Start exporter pod for integration artifacts
-        if: always()
-        run: |
-          kubectl apply -f kube/verify/test-artifacts-exporter.yaml
-          kubectl wait --for=condition=Ready pod/test-artifacts-exporter --timeout=60s
-
-      - name: Copy integration artifacts
-        if: always()
-        run: |
-          mkdir -p service/coverage
-          echo "--- Files in PVC /artifacts ---"
-          kubectl exec test-artifacts-exporter -- ls -la /artifacts || true
-          echo "--- Copying artifacts ---"
-          kubectl cp test-artifacts-exporter:/artifacts/. service/coverage
-          echo "--- Local service/coverage contents ---"
-          ls -la service/coverage
 
       - name: Cleanup exporter pod
         if: always()

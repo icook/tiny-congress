@@ -21,7 +21,7 @@ export default defineConfig({
     ],
   ],
   use: {
-    baseURL: process.env.PLAYWRIGHT_BASE_URL ?? 'http://127.0.0.1:4173',
+    baseURL: process.env.PLAYWRIGHT_BASE_URL ?? 'http://127.0.0.1:5173',
     headless: true,
     viewport: { width: 1280, height: 720 },
     ignoreHTTPSErrors: true,
@@ -36,8 +36,8 @@ export default defineConfig({
   ],
   webServer: shouldStartWebServer
     ? {
-        command: 'yarn build && yarn preview --host 0.0.0.0 --port 4173 --strictPort',
-        url: 'http://127.0.0.1:4173',
+        command: 'yarn build && yarn preview --host 0.0.0.0 --port 5173 --strictPort',
+        url: 'http://127.0.0.1:5173',
         reuseExistingServer: !process.env.CI,
         timeout: 120_000,
       }

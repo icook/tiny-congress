@@ -1,0 +1,54 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: playwright-smoke
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        app: playwright-smoke
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: playwright-smoke
+          image: tc-ui-dev
+          command: ["/bin/sh", "-lc"]
+          args:
+            - |
+              set -euo pipefail
+              mkdir -p /artifacts/playwright
+              rm -rf /artifacts/playwright/*
+
+              cd /app
+              status=0
+              if ! /app/scripts/run-playwright-smoke.sh; then
+                status=$?
+              fi
+
+              for path in .nyc_output coverage/playwright playwright-report reports test-results; do
+                if [ -e "$path" ]; then
+                  dest="/artifacts/playwright/$path"
+                  mkdir -p "$(dirname "$dest")"
+                  rm -rf "$dest"
+                  cp -r "$path" "$dest"
+                fi
+              done
+
+              exit "$status"
+          env:
+            - name: CI
+              value: "true"
+            - name: PLAYWRIGHT_SKIP_WEB_SERVER
+              value: "true"
+            - name: PLAYWRIGHT_BASE_URL
+              value: http://tc-frontend:5173
+            - name: PLAYWRIGHT_API_URL
+              value: http://tc:8080/graphql
+          volumeMounts:
+            - name: test-artifacts
+              mountPath: /artifacts
+      volumes:
+        - name: test-artifacts
+          persistentVolumeClaim:
+            claimName: test-artifacts-pvc

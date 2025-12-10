@@ -1,6 +1,6 @@
 # Verify artifacts via PVC
 
-Integration tests now run as a Kubernetes Job that writes coverage to a shared PVC. The job manifest lives at `kube/verify/integration-tests-job.yaml` and mounts `test-artifacts-pvc` at `/artifacts` (where `backend-integration.lcov` is written).
+Integration tests now run as a Kubernetes Job that writes coverage to a shared PVC. The job manifest lives at `kube/verify/integration-tests-job.yaml` and mounts `test-artifacts-pvc` at `/artifacts` (where `backend-integration.lcov` is written). Playwright smoke tests are run as a separate verify job (`kube/verify/playwright-smoke-job.yaml`) that writes to `/artifacts/playwright/` (coverage, reports, test results).
 
 ## Local flow
 
@@ -18,6 +18,9 @@ kubectl wait --for=condition=Ready pod/test-artifacts-exporter --timeout=60s
 # Copy artifacts locally
 mkdir -p service/coverage
 kubectl cp test-artifacts-exporter:/artifacts/. service/coverage
+
+# Playwright smoke artifacts (coverage, reports, traces) live under
+# service/coverage/playwright after the copy.
 
 # Clean up the helper pod
 kubectl delete pod test-artifacts-exporter
