@@ -86,15 +86,23 @@ jobs:
           - image: tc-api-dev
             context: ./service
             dockerfile: service/Dockerfile.dev
+          - image: tc-api-release
+            context: ./service
+            dockerfile: service/Dockerfile
           - image: tc-ui-dev
             context: ./web
             dockerfile: web/Dockerfile.dev
+          - image: tc-ui-release
+            context: ./web
+            dockerfile: web/Dockerfile
           - image: postgres
             context: .
             dockerfile: dockerfiles/Dockerfile.postgres
     outputs:
       tc-api-dev-tag: ${{ steps.meta.outputs.tc-api-dev-tag }}
       tc-ui-dev-tag: ${{ steps.meta.outputs.tc-ui-dev-tag }}
+      tc-api-release-tag: ${{ steps.meta.outputs.tc-api-release-tag }}
+      tc-ui-release-tag: ${{ steps.meta.outputs.tc-ui-release-tag }}
       postgres-tag: ${{ steps.meta.outputs.postgres-tag }}
     steps:
       - name: Checkout
