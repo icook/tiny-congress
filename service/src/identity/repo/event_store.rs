@@ -14,6 +14,10 @@ pub struct AppendEventInput<'a> {
     pub signer_pubkey: &'a [u8],
 }
 
+/// Append a signed event while enforcing seqno, `prev_hash`, and signature validity.
+///
+/// # Errors
+/// Returns an error when seqnos are out of order, `prev_hash` mismatches, canonicalization fails, or the insert fails.
 pub async fn append_signed_event(
     pool: &PgPool,
     input: AppendEventInput<'_>,
@@ -21,13 +25,13 @@ pub async fn append_signed_event(
     let mut tx = pool.begin().await?;
 
     let previous = query_as::<_, SignedEventRow>(
-        r#"
+        r"
         SELECT seqno, event_type, canonical_bytes_hash, envelope_json
         FROM signed_events
         WHERE account_id = $1
         ORDER BY seqno DESC
         LIMIT 1
-        "#,
+        ",
     )
     .bind(input.account_id)
     .fetch_optional(&mut *tx)
@@ -77,10 +81,10 @@ pub async fn append_signed_event(
     let canonical_hash = Sha256::digest(&canonical_bytes).to_vec();
 
     query(
-        r#"
+        r"
         INSERT INTO signed_events (account_id, seqno, event_type, canonical_bytes_hash, envelope_json)
         VALUES ($1, $2, $3, $4, $5)
-        "#,
+        ",
     )
     .bind(input.account_id)
     .bind(input.seqno)
@@ -102,17 +106,21 @@ pub struct SignedEventRecord {
     pub envelope_json: serde_json::Value,
 }
 
+/// Fetch all signed events for an account ordered by seqno.
+///
+/// # Errors
+/// Returns an error when the query fails.
 pub async fn fetch_events(
     pool: &PgPool,
     account_id: Uuid,
 ) -> Result<Vec<SignedEventRecord>, anyhow::Error> {
     let rows = query_as::<_, SignedEventRow>(
-        r#"
+        r"
         SELECT seqno, event_type, canonical_bytes_hash, envelope_json
         FROM signed_events
         WHERE account_id = $1
         ORDER BY seqno ASC
-        "#,
+        ",
     )
     .bind(account_id)
     .fetch_all(pool)
