@@ -5,7 +5,7 @@ mod kid;
 
 pub use canonical::canonicalize_value;
 pub use ed25519::{sign_message, verify_signature};
-pub use envelope::{verify_envelope, EnvelopeSigner, SignedEnvelope};
+pub use envelope::{encode_base64url, verify_envelope, EnvelopeSigner, SignedEnvelope};
 pub use kid::derive_kid;
 
 #[derive(Debug, thiserror::Error)]
@@ -68,6 +68,33 @@ mod tests {
     }
 
     #[test]
+    fn sign_and_verify_matches_expected_signature() {
+        let (secret_key, public_key) = test_keypair();
+        let envelope = SignedEnvelope {
+            v: 1,
+            payload_type: "Test".to_string(),
+            payload: json!({"body": {"foo": "bar"}, "prev_hash": null}),
+            signer: EnvelopeSigner {
+                account_id: None,
+                device_id: None,
+                kid: derive_kid(&public_key),
+            },
+            sig: String::new(),
+        };
+
+        let signing_bytes = envelope.canonical_signing_bytes().unwrap();
+        let signature = sign_message(&signing_bytes, &secret_key).unwrap();
+        let encoded_sig = URL_SAFE_NO_PAD.encode(&signature);
+
+        // Assert the encoded signature is deterministic and verifies.
+        assert_eq!(
+            encoded_sig,
+            "hYIISBD5RFoDlp969r48FHviKhIjSfpR3K2aKKb3OAq7hffkI042G1mCvU3MD7AsGpFuzSeZOojtpIBU5gigCw"
+        );
+        verify_signature(&signing_bytes, &public_key, &signature).unwrap();
+    }
+
+    #[test]
     fn verify_envelope_checks_kid_and_signature() {
         let (secret_key, public_key) = test_keypair();
         let kid = derive_kid(&public_key);
@@ -91,11 +118,11 @@ mod tests {
 
         verify_envelope(&envelope, &public_key).unwrap();
 
-        // Tamper kid to trigger mismatch error
+        // Tamper kid; signature now fails because signer metadata changed
         let mut bad_envelope = envelope.clone();
         bad_envelope.signer.kid = "different".to_string();
         let result = verify_envelope(&bad_envelope, &public_key);
-        assert!(matches!(result, Err(CryptoError::KidMismatch)));
+        assert!(matches!(result, Err(CryptoError::VerificationFailed)));
     }
 
     #[test]
@@ -116,5 +143,51 @@ mod tests {
 
         let parsed = envelope.prev_hash_bytes().unwrap();
         assert!(parsed.is_some());
+    }
+
+    #[test]
+    fn invalid_base64_signature_fails() {
+        let (_, public_key) = test_keypair();
+        let kid = derive_kid(&public_key);
+        let envelope = SignedEnvelope {
+            v: 1,
+            payload_type: "Test".to_string(),
+            payload: json!({"body": {}}),
+            signer: EnvelopeSigner {
+                account_id: None,
+                device_id: None,
+                kid,
+            },
+            sig: "!!!not-base64!!!".to_string(),
+        };
+
+        let err = verify_envelope(&envelope, &public_key).unwrap_err();
+        assert!(matches!(err, CryptoError::InvalidFormat(_)));
+    }
+
+    #[test]
+    fn tampered_payload_rejected() {
+        let (secret_key, public_key) = test_keypair();
+        let kid = derive_kid(&public_key);
+        let mut envelope = SignedEnvelope {
+            v: 1,
+            payload_type: "Test".to_string(),
+            payload: json!({"body": {"foo": "bar"}, "prev_hash": null}),
+            signer: EnvelopeSigner {
+                account_id: None,
+                device_id: None,
+                kid,
+            },
+            sig: String::new(),
+        };
+
+        let signing_bytes = envelope.canonical_signing_bytes().unwrap();
+        let signature = sign_message(&signing_bytes, &secret_key).unwrap();
+        envelope.sig = URL_SAFE_NO_PAD.encode(signature);
+
+        // Tamper payload after signing
+        envelope.payload = json!({"body": {"foo": "baz"}, "prev_hash": null});
+        let err = verify_envelope(&envelope, &public_key).unwrap_err();
+        assert!(matches!(err, CryptoError::VerificationFailed));
     }
 }
