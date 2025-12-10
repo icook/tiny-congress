@@ -42,3 +42,13 @@ tower = { version = "0.5", features = ["util"] }
 [[bin]]
 name = "client"
 path = "src/bin/client.rs"
+
+[lints]
+[lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+nursery = { level = "warn", priority = -1 }
+missing_errors_doc = "warn"
+missing_panics_doc = "warn"
+module_name_repetitions = "allow"
+missing_docs_in_private_items = "allow"
+similar_names = "allow"

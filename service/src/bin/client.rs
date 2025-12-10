@@ -1,8 +1,18 @@
+#![deny(
+    clippy::expect_used,
+    clippy::panic,
+    clippy::todo,
+    clippy::unimplemented,
+    clippy::unwrap_used
+)]
+#![allow(clippy::print_stdout)]
+
 use std::time::Duration;
 use tokio::time;
 use uuid::Uuid;
 
 #[tokio::main]
+#[allow(clippy::too_many_lines)]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // This is a simple client to demonstrate subscribing to round updates
     // and interacting with the GraphQL API
@@ -13,12 +23,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Generate a random user ID for this client
     let user_id = Uuid::new_v4();
-    println!("Client user ID: {}", user_id);
+    println!("Client user ID: {user_id}");
 
     // Main client loop
     loop {
         // Query for the current round
-        let query = r#"
+        let query = r"
             query {
                 currentRound {
                     id
@@ -27,7 +37,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     status
                 }
             }
-        "#;
+        ";
 
         let resp = client
             .post(base_url)
@@ -41,14 +51,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         if let Some(round) = json["data"]["currentRound"].as_object() {
             let round_id = round["id"].as_str().unwrap_or_default();
-            println!("Current round: {}", round_id);
+            println!("Current round: {round_id}");
 
-            if !round_id.is_empty() {
-                // Query for the current pairing
+            if round_id.is_empty() {
+                println!("No active round found");
+            } else {
                 let pairing_query = format!(
                     r#"
                     query {{
-                        currentPairing(roundId: "{}")
+                        currentPairing(roundId: "{round_id}")
                         {{
                             id
                             topicA {{
@@ -63,8 +74,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             }}
                         }}
                     }}
-                "#,
-                    round_id
+                "#
                 );
 
                 let pairing_resp = client
@@ -82,7 +92,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     let topic_a = &pairing["topicA"];
                     let topic_b = &pairing["topicB"];
 
-                    println!("\nCurrent Pairing: {}", pairing_id);
+                    println!("\nCurrent Pairing: {pairing_id}");
                     println!(
                         "A: {} - {}",
                         topic_a["title"].as_str().unwrap_or_default(),
@@ -101,20 +111,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         topic_b["id"].as_str().unwrap_or_default()
                     };
 
-                    println!("Voting for: {}", choice);
+                    println!("Voting for: {choice}");
 
-                    // Submit the vote
                     let vote_mutation = format!(
                         r#"
                         mutation {{
                             submitVote(
-                                pairingId: "{}"
-                                userId: "{}"
-                                choice: "{}"
+                                pairingId: "{pairing_id}"
+                                userId: "{user_id}"
+                                choice: "{choice}"
                             )
                         }}
-                    "#,
-                        pairing_id, user_id, choice
+                    "#
                     );
 
                     let vote_resp = client
@@ -130,13 +138,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 } else {
                     println!("No current pairing found");
                 }
-            } else {
-                println!("No active round found");
             }
         }
 
         // Query top topics
-        let top_topics_query = r#"
+        let top_topics_query = r"
             query {
                 topTopics(limit: 5) {
                     rank
@@ -146,7 +152,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     }
                 }
             }
-        "#;
+        ";
 
         let topics_resp = client
             .post(base_url)

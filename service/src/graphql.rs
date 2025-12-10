@@ -4,6 +4,7 @@ use async_graphql_axum::{GraphQLRequest, GraphQLResponse};
 use axum::extract::Extension;
 use axum::response::{Html, IntoResponse};
 use chrono::Utc;
+use tracing::info;
 
 // Define the schema type with Query and Mutation roots
 pub type ApiSchema = Schema<QueryRoot, MutationRoot, EmptySubscription>;
@@ -57,10 +58,11 @@ impl QueryRoot {
         })
     }
 
-    async fn current_pairing(&self, _ctx: &Context<'_>, _round_id: ID) -> Option<Pairing> {
+    async fn current_pairing(&self, _ctx: &Context<'_>, round_id: ID) -> Option<Pairing> {
         // Mock implementation
+        let pairing_id = ID::from(format!("pairing-{}", round_id.as_str()));
         Some(Pairing {
-            id: ID::from("pairing-123"),
+            id: pairing_id,
             topic_a: Topic {
                 id: ID::from("topic-1"),
                 title: "Climate Change".to_string(),
@@ -81,13 +83,13 @@ impl QueryRoot {
 
         for i in 1..=limit {
             rankings.push(TopicRanking {
-                topic_id: ID::from(format!("topic-{}", i)),
+                topic_id: ID::from(format!("topic-{i}")),
                 rank: i,
-                score: 1500.0 - (i as f64 * 50.0),
+                score: f64::from(i).mul_add(-50.0, 1500.0),
                 topic: Topic {
-                    id: ID::from(format!("topic-{}", i)),
-                    title: format!("Issue #{}", i),
-                    description: format!("Description for issue #{}", i),
+                    id: ID::from(format!("topic-{i}")),
+                    title: format!("Issue #{i}"),
+                    description: format!("Description for issue #{i}"),
                 },
             });
         }
@@ -109,15 +111,18 @@ impl MutationRoot {
         choice: ID,
     ) -> bool {
         // Mock implementation
-        println!(
-            "Vote received: user {:?} voted for {:?} in pairing {:?}",
-            user_id, choice, pairing_id
+        info!(
+            user_id = %user_id.as_str(),
+            choice = %choice.as_str(),
+            pairing_id = %pairing_id.as_str(),
+            "vote received"
         );
         true
     }
 }
 
 // GraphQL playground handler
+#[allow(clippy::unused_async)]
 pub async fn graphql_playground() -> impl IntoResponse {
     Html(playground_source(GraphQLPlaygroundConfig::new("/graphql")))
 }

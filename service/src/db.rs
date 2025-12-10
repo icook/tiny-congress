@@ -8,7 +8,11 @@ use std::time::{Duration, Instant};
 use tokio::time::sleep;
 use tracing::{info, warn};
 
-/// Connect to the database and run migrations
+/// Connect to the database and run migrations.
+///
+/// # Errors
+/// Returns an error if the database connection cannot be established or
+/// migrations fail to run.
 pub async fn setup_database(database_url: &str) -> Result<PgPool, anyhow::Error> {
     let retry_deadline = Duration::from_secs(60); // overall retry budget
     let max_interval = Duration::from_secs(30); // cap single waits
@@ -69,9 +73,11 @@ pub async fn setup_database(database_url: &str) -> Result<PgPool, anyhow::Error>
         }
     }
 
-    let migrator = migrator.ok_or_else(|| {
-        let (dir, err) = last_error.expect("migrations path resolution attempted");
-        anyhow::anyhow!("failed to load migrations from {}: {}", dir.display(), err)
+    let migrator = migrator.ok_or_else(|| match last_error {
+        Some((dir, err)) => {
+            anyhow::anyhow!("failed to load migrations from {}: {}", dir.display(), err)
+        }
+        None => anyhow::anyhow!("failed to resolve migrations directory"),
     })?;
 
     migrator.run(&pool).await?;
@@ -79,20 +85,26 @@ pub async fn setup_database(database_url: &str) -> Result<PgPool, anyhow::Error>
     Ok(pool)
 }
 
-// Get the number of active rounds
+/// Get the number of active rounds.
+///
+/// # Errors
+/// Returns an error when the query fails to execute.
 pub async fn get_active_round_count(pool: &PgPool) -> Result<i64, SqlxError> {
     query_scalar::<_, i64>(
-        r#"
+        r"
         SELECT COUNT(*)
         FROM rounds
         WHERE status = 'active'
-        "#,
+        ",
     )
     .fetch_one(pool)
     .await
 }
 
-// Create seed data for testing
+/// Create seed data for testing and ensure at least one active round exists.
+///
+/// # Errors
+/// Returns an error when any database call fails.
 pub async fn create_seed_data(pool: &PgPool) -> Result<(), SqlxError> {
     // Create some topics if none exist
     let topics_count = query_scalar::<_, i64>("SELECT COUNT(*) FROM topics")
@@ -113,10 +125,10 @@ pub async fn create_seed_data(pool: &PgPool) -> Result<(), SqlxError> {
             let topic_id = uuid::Uuid::new_v4();
 
             query(
-                r#"
+                r"
                 INSERT INTO topics (id, title, description)
                 VALUES ($1, $2, $3)
-                "#,
+                ",
             )
             .bind(topic_id)
             .bind(title)
@@ -126,10 +138,10 @@ pub async fn create_seed_data(pool: &PgPool) -> Result<(), SqlxError> {
 
             // Add to rankings
             query(
-                r#"
+                r"
                 INSERT INTO topic_rankings (topic_id, rank, score)
                 VALUES ($1, 0, 1500.0)
-                "#,
+                ",
             )
             .bind(topic_id)
             .execute(pool)
@@ -146,10 +158,10 @@ pub async fn create_seed_data(pool: &PgPool) -> Result<(), SqlxError> {
         let end_time = now + chrono::Duration::minutes(10);
 
         query(
-            r#"
+            r"
             INSERT INTO rounds (id, start_time, end_time, status)
             VALUES ($1, $2, $3, $4)
-            "#,
+            ",
         )
         .bind(round_id)
         .bind(now)
@@ -160,11 +172,11 @@ pub async fn create_seed_data(pool: &PgPool) -> Result<(), SqlxError> {
 
         // Create pairings for the round
         let topics = query(
-            r#"
+            r"
             SELECT id FROM topics
             ORDER BY RANDOM()
             LIMIT 4
-            "#,
+            ",
         )
         .fetch_all(pool)
         .await?;
@@ -176,10 +188,10 @@ pub async fn create_seed_data(pool: &PgPool) -> Result<(), SqlxError> {
             let topic_b_id: uuid::Uuid = topics[1].try_get("id")?;
 
             query(
-                r#"
+                r"
                 INSERT INTO pairings (id, round_id, topic_a_id, topic_b_id)
                 VALUES ($1, $2, $3, $4)
-                "#,
+                ",
             )
             .bind(pairing_id)
             .bind(round_id)

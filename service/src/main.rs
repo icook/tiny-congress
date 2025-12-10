@@ -1,3 +1,12 @@
+#![deny(
+    clippy::expect_used,
+    clippy::panic,
+    clippy::print_stdout,
+    clippy::todo,
+    clippy::unimplemented,
+    clippy::unwrap_used
+)]
+
 use async_graphql::{EmptySubscription, Schema};
 use axum::{http::StatusCode, response::IntoResponse, routing::get, Extension, Router};
 use std::net::SocketAddr;
