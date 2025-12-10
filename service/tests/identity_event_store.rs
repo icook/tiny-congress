@@ -124,6 +124,14 @@ async fn append_events_enforces_prev_hash_and_seqno() {
 
     let events = fetch_events(&pool, account_id).await.unwrap();
     assert_eq!(events.len(), 2);
+    // Verify canonical hash stored matches computed hash
+    let expected_hash = Sha256::digest(
+        &first_envelope
+            .canonical_signing_bytes()
+            .expect("canonical bytes for first"),
+    )
+    .to_vec();
+    assert_eq!(events[0].canonical_bytes_hash, expected_hash);
 }
 
 #[tokio::test]
@@ -167,4 +175,80 @@ async fn reject_prev_hash_mismatch() {
     .expect_err("should reject prev hash mismatch");
 
     assert!(err.to_string().contains("prev_hash"));
+}
+
+#[tokio::test]
+async fn reject_seqno_gap_and_first_prev_hash() {
+    let database_url = std::env::var("DATABASE_URL")
+        .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:5432/tinycongress".to_string());
+    let pool = db::setup_database(&database_url).await.unwrap();
+    reset_identity_tables(&pool).await;
+
+    let account_id = create_account(&pool).await;
+    let signing_key = ed25519_dalek::SigningKey::from_bytes(&SECRET_KEY);
+    let public_key = signing_key.verifying_key();
+
+    // seqno gap
+    let skipped_envelope = make_envelope(account_id, 3, None);
+    let err = append_signed_event(
+        &pool,
+        AppendEventInput {
+            account_id,
+            seqno: 3,
+            event_type: "TestEvent".to_string(),
+            envelope: skipped_envelope,
+            signer_pubkey: public_key.as_bytes(),
+        },
+    )
+    .await
+    .expect_err("should reject seqno gaps");
+    assert!(err.to_string().contains("first event must use seqno 1"));
+
+    // first event with prev_hash present should be rejected
+    let envelope_with_prev = make_envelope(account_id, 1, Some(URL_SAFE_NO_PAD.encode([0u8; 32])));
+    let err = append_signed_event(
+        &pool,
+        AppendEventInput {
+            account_id,
+            seqno: 1,
+            event_type: "TestEvent".to_string(),
+            envelope: envelope_with_prev,
+            signer_pubkey: public_key.as_bytes(),
+        },
+    )
+    .await
+    .expect_err("should reject prev_hash on first event");
+    assert!(err
+        .to_string()
+        .contains("first event must not specify prev_hash"));
+}
+
+#[tokio::test]
+async fn reject_bad_signature() {
+    let database_url = std::env::var("DATABASE_URL")
+        .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:5432/tinycongress".to_string());
+    let pool = db::setup_database(&database_url).await.unwrap();
+    reset_identity_tables(&pool).await;
+
+    let account_id = create_account(&pool).await;
+    let signing_key = ed25519_dalek::SigningKey::from_bytes(&SECRET_KEY);
+    let public_key = signing_key.verifying_key();
+
+    let mut envelope = make_envelope(account_id, 1, None);
+    envelope.sig = URL_SAFE_NO_PAD.encode([9u8; 64]); // bad signature
+
+    let err = append_signed_event(
+        &pool,
+        AppendEventInput {
+            account_id,
+            seqno: 1,
+            event_type: "TestEvent".to_string(),
+            envelope,
+            signer_pubkey: public_key.as_bytes(),
+        },
+    )
+    .await
+    .expect_err("should reject bad signature");
+
+    assert!(err.to_string().contains("signature verification failed"));
 }
