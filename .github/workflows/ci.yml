@@ -87,8 +87,6 @@ jobs:
       SKAFFOLD_DEFAULT_REPO: ghcr.io/${{ github.repository }}
       SKAFFOLD_PROFILE: ci
       KIND_CLUSTER_NAME: skaffold-ci
-      BUILDX_CACHE_DIR: ${{ runner.temp }}/buildx-cache
-      BUILD_CACHE_KEY: buildx-${{ runner.os }}-${{ github.ref_name }}
       BUILD_PLATFORM: linux/amd64
     steps:
       - name: Checkout
@@ -115,10 +113,10 @@ jobs:
         id: restore-buildx-cache
         uses: actions/cache/restore@v4
         with:
-          path: ${{ env.BUILDX_CACHE_DIR }}
-          key: ${{ env.BUILD_CACHE_KEY }}-${{ github.run_id }}
+          path: ${{ runner.temp }}/buildx-cache
+          key: buildx-${{ runner.os }}-${{ github.ref_name }}-${{ github.run_id }}
           restore-keys: |
-            ${{ env.BUILD_CACHE_KEY }}-
+            buildx-${{ runner.os }}-${{ github.ref_name }}-
             buildx-${{ runner.os }}-
 
       - name: Set up KinD cluster
@@ -161,7 +159,9 @@ jobs:
       - name: Skaffold build (no push)
         id: build
         env:
-          BUILD_FILE: ${{ runner.temp }}/skaffold-build.json
+          BUILDX_CACHE_DIR: ${{ runner.temp }}/buildx-cache
+          BUILD_PLATFORM: linux/amd64
+        BUILD_FILE: ${{ runner.temp }}/skaffold-build.json
         run: |
           set -euo pipefail
           skaffold build -p ${SKAFFOLD_PROFILE} --file-output "${BUILD_FILE}"
@@ -358,8 +358,8 @@ jobs:
         if: always()
         uses: actions/cache/save@v4
         with:
-          path: ${{ env.BUILDX_CACHE_DIR }}
-          key: ${{ env.BUILD_CACHE_KEY }}-${{ github.run_id }}
+          path: ${{ runner.temp }}/buildx-cache
+          key: buildx-${{ runner.os }}-${{ github.ref_name }}-${{ github.run_id }}
 
       - name: Dump diagnostics on failure
         if: failure()
