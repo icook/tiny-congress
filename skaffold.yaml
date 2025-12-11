@@ -70,20 +70,23 @@ deploy:
           serviceAccount:
             create: false
 
-# Pre-deploy tests: run fast unit/API/UI tests only
+# Pre-deploy tests: run fast unit tests on host
 test:
   - image: tc-api-dev
     custom:
-      - command: >-
-          docker run --rm
-          -v "$PWD/service/coverage:/usr/src/app/coverage"
-          "$IMAGE" /bin/sh -lc "cd /usr/src/app && ./bin/unit-coverage.sh"
-  - image: tc-ui-dev
-    custom:
-      - command: >-
-          IMAGE="$IMAGE" web/scripts/docker-playwright-ci.sh
+      - command: |
+          cd service
+          mkdir -p coverage
+          cargo llvm-cov clean --workspace
+          cargo llvm-cov --lcov \
+            --output-path coverage/backend-unit.lcov \
+            --remap-path-prefix \
+            --test api_tests \
+            --test graphql_tests \
+            --test model_tests \
+            -- --test-threads=1 --nocapture
 
-# Post-deploy verification: run integration tests against the live cluster
+# Post-deploy verification: run integration and E2E tests against the live cluster
 verify:
   - name: integration-tests
     container:
@@ -94,6 +97,21 @@ verify:
     executionMode:
       kubernetesCluster:
         jobManifestPath: kube/verify/integration-tests-job.yaml
+  - name: playwright-e2e
+    custom:
+      - command: |
+          kubectl port-forward deployment/tc-frontend 5173:80 &
+          PF_PID=$!
+          timeout 60 bash -c 'until curl -sf http://localhost:5173 > /dev/null; do sleep 1; done'
+          cd web
+          node ./scripts/reset-playwright-coverage.mjs
+          CI=true PLAYWRIGHT_BASE_URL=http://localhost:5173 PLAYWRIGHT_COVERAGE=1 yarn playwright:test
+          TEST_EXIT=$?
+          if [ -d .nyc_output ]; then
+            yarn playwright:report || true
+          fi
+          kill $PF_PID 2>/dev/null || true
+          exit $TEST_EXIT
 
 # Ensure Postgres is reachable from localhost for developer workflows
 portForward:
@@ -134,3 +152,49 @@ profiles:
         push: true
       platforms:
         - "linux/amd64"
+      artifacts:
+        - image: tc-api-dev
+          context: ./service/
+          docker:
+            dockerfile: Dockerfile.dev
+            buildArgs:
+              BUILDKIT_INLINE_CACHE: "1"
+            cacheFrom:
+              - "tc-api-dev:cache-main"
+              - "tc-api-dev:cache"
+        - image: postgres
+          context: .
+          docker:
+            dockerfile: dockerfiles/Dockerfile.postgres
+            buildArgs:
+              BUILDKIT_INLINE_CACHE: "1"
+            cacheFrom:
+              - "postgres:cache-main"
+              - "postgres:cache"
+        - image: tc-ui-release
+          context: ./web/
+          docker:
+            dockerfile: Dockerfile
+            buildArgs:
+              BUILDKIT_INLINE_CACHE: "1"
+            cacheFrom:
+              - "tc-ui-release:cache-main"
+              - "tc-ui-release:cache"
+    deploy:
+      helm:
+        releases:
+          - name: tc
+            chartPath: kube/app
+            valuesFiles:
+              - kube/app/values.yaml
+            version: 0.1.0
+            setValueTemplates:
+              image.repository: "{{.IMAGE_REPO_tc_api_dev}}"
+              image.tag: "{{.IMAGE_TAG_tc_api_dev}}"
+              frontend.image.repository: "{{.IMAGE_REPO_tc_ui_release}}"
+              frontend.image.tag: "{{.IMAGE_TAG_tc_ui_release}}"
+              postgres.image.repository: "{{.IMAGE_REPO_postgres}}"
+              postgres.image.tag: "{{.IMAGE_TAG_postgres}}"
+            setValues:
+              serviceAccount:
+                create: false

@@ -86,15 +86,15 @@ jobs:
           - image: tc-api-dev
             context: ./service
             dockerfile: service/Dockerfile.dev
-          - image: tc-ui-dev
+          - image: tc-ui-release
             context: ./web
-            dockerfile: web/Dockerfile.dev
+            dockerfile: web/Dockerfile
           - image: postgres
             context: .
             dockerfile: dockerfiles/Dockerfile.postgres
     outputs:
       tc-api-dev-tag: ${{ steps.meta.outputs.tc-api-dev-tag }}
-      tc-ui-dev-tag: ${{ steps.meta.outputs.tc-ui-dev-tag }}
+      tc-ui-release-tag: ${{ steps.meta.outputs.tc-ui-release-tag }}
       postgres-tag: ${{ steps.meta.outputs.postgres-tag }}
     steps:
       - name: Checkout
@@ -161,7 +161,7 @@ jobs:
           {
             "builds": [
               {"imageName": "tc-api-dev", "tag": "${{ env.REGISTRY }}/tc-api-dev:${{ github.sha }}"},
-              {"imageName": "tc-ui-dev", "tag": "${{ env.REGISTRY }}/tc-ui-dev:${{ github.sha }}"},
+              {"imageName": "tc-ui-release", "tag": "${{ env.REGISTRY }}/tc-ui-release:${{ github.sha }}"},
               {"imageName": "postgres", "tag": "${{ env.REGISTRY }}/postgres:${{ github.sha }}"}
             ]
           }
@@ -274,6 +274,37 @@ jobs:
           cat "$artifacts_file"
           echo "file=${artifacts_file}" >> "$GITHUB_OUTPUT"
 
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
+
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@cargo-llvm-cov
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: service -> target
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: yarn
+          cache-dependency-path: web/yarn.lock
+
+      - name: Enable corepack
+        run: corepack enable
+
+      - name: Install web dependencies
+        working-directory: web
+        run: yarn install --immutable
+
+      - name: Install Playwright browsers
+        working-directory: web
+        run: yarn playwright install --with-deps chromium
+
       - name: Prepare test output directories
         run: |
           mkdir -p web/reports web/test-results web/coverage/playwright service/coverage
@@ -283,6 +314,16 @@ jobs:
         run: |
           set -euo pipefail
           skaffold test -p ${SKAFFOLD_PROFILE} --build-artifacts "${{ steps.artifacts.outputs.file }}"
+
+      - name: Deploy with Skaffold
+        run: |
+          set -euo pipefail
+          skaffold deploy -p ${SKAFFOLD_PROFILE} --status-check=true --build-artifacts "${{ steps.artifacts.outputs.file }}"
+
+      - name: Run Skaffold verify
+        run: |
+          set -euo pipefail
+          skaffold verify -p ${SKAFFOLD_PROFILE} --build-artifacts "${{ steps.artifacts.outputs.file }}"
 
       - name: Publish Playwright test report
         if: always() && hashFiles('web/reports/playwright.xml') != ''
@@ -332,16 +373,6 @@ jobs:
             web/test-results
             web/reports/playwright.xml
             web/coverage/playwright
-
-      - name: Deploy with Skaffold
-        run: |
-          set -euo pipefail
-          skaffold deploy -p ${SKAFFOLD_PROFILE} --status-check=true --build-artifacts "${{ steps.artifacts.outputs.file }}"
-
-      - name: Run Skaffold verify
-        run: |
-          set -euo pipefail
-          skaffold verify -p ${SKAFFOLD_PROFILE} --build-artifacts "${{ steps.artifacts.outputs.file }}"
 
       - name: Start exporter pod for integration artifacts
         if: always()
