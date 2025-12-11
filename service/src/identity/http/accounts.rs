@@ -140,7 +140,7 @@ pub async fn signup(
     }))
 }
 
-fn extract_device_id(envelope: &SignedEnvelope) -> Result<Uuid, (StatusCode, String)> {
+pub(crate) fn extract_device_id(envelope: &SignedEnvelope) -> Result<Uuid, (StatusCode, String)> {
     let value = envelope.payload.get("device_id").ok_or_else(|| {
         (
             StatusCode::BAD_REQUEST,
@@ -161,11 +161,11 @@ fn extract_device_id(envelope: &SignedEnvelope) -> Result<Uuid, (StatusCode, Str
     }
 }
 
-fn internal_error<E: std::fmt::Display>(err: E) -> (StatusCode, String) {
+pub(crate) fn internal_error<E: std::fmt::Display>(err: E) -> (StatusCode, String) {
     (StatusCode::INTERNAL_SERVER_ERROR, err.to_string())
 }
 
-fn decode_key(encoded: &str, field: &str) -> Result<Vec<u8>, (StatusCode, String)> {
+pub(crate) fn decode_key(encoded: &str, field: &str) -> Result<Vec<u8>, (StatusCode, String)> {
     base64::engine::general_purpose::URL_SAFE_NO_PAD
         .decode(encoded.as_bytes())
         .map_err(|_| (StatusCode::BAD_REQUEST, format!("invalid {field} encoding")))
