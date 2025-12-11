@@ -3,6 +3,7 @@ use axum::Router;
 
 pub mod accounts;
 pub mod devices;
+pub mod endorsements;
 pub mod sessions;
 
 pub fn router() -> Router {
@@ -10,6 +11,11 @@ pub fn router() -> Router {
         .route("/auth/signup", post(accounts::signup))
         .route("/auth/challenge", post(sessions::issue_challenge))
         .route("/auth/verify", post(sessions::verify_challenge))
+        .route("/endorsements", post(endorsements::create_endorsement))
+        .route(
+            "/endorsements/{id}/revoke",
+            post(endorsements::revoke_endorsement),
+        )
         .route("/me/devices/add", post(devices::add_device))
         .route(
             "/me/devices/{device_id}/revoke",
