@@ -194,18 +194,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Free disk space
-        uses: jlumbroso/free-disk-space@v1.3.1
-        with:
-          dotnet: true
-          haskell: true
-          # these are slow, and we don't need that much space
-          tool-cache: false
-          android: false
-          large-packages: false
-          docker-images: false
-          swap-storage: false
-
       - name: Install KinD tooling
         uses: helm/kind-action@v1.13.0
         with:
@@ -398,7 +386,6 @@ jobs:
           # Port-forward PostgreSQL
           kubectl port-forward svc/postgres 5432:5432 &
           PF_PG_PID=$!
-          timeout 60 bash -c 'until (echo > /dev/tcp/localhost/5432) >/dev/null 2>&1; do sleep 1; done' || true
 
           # Run integration tests
           cd service
