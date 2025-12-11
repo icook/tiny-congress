@@ -189,6 +189,7 @@ jobs:
     env:
       SKAFFOLD_DEFAULT_REPO: ghcr.io/${{ github.repository }}
       SKAFFOLD_PROFILE: ci
+      PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.cache/ms-playwright
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -205,10 +206,22 @@ jobs:
           docker-images: false
           swap-storage: false
 
-      - name: Set up KinD cluster
+      - name: Install KinD tooling
         uses: helm/kind-action@v1.13.0
         with:
+          install_only: true
           cluster_name: skaffold-ci
+
+      - name: Start KinD cluster in background
+        run: |
+          set -euo pipefail
+          KIND_LOG="${RUNNER_TEMP}/kind.log"
+          KIND_PID_FILE="${RUNNER_TEMP}/kind.pid"
+
+          echo "Starting KinD cluster skaffold-ci (logs: ${KIND_LOG})"
+          kind create cluster --name skaffold-ci --wait 0s >"${KIND_LOG}" 2>&1 &
+          KIND_PID=$!
+          echo "${KIND_PID}" > "${KIND_PID_FILE}"
 
       - name: Cache Skaffold
         id: cache-skaffold
@@ -228,33 +241,12 @@ jobs:
       - name: Verify Skaffold installation
         run: skaffold version
 
-      - name: Show cluster info
-        run: |
-          kubectl version --client=true
-          kubectl cluster-info
-          kubectl get nodes -o wide
-
       - name: Login to GHCR
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Configure registry access for KinD
-        run: |
-          set -euo pipefail
-          kubectl create secret docker-registry ghcr-cred \
-            --namespace default \
-            --docker-server=ghcr.io \
-            --docker-username="${{ github.actor }}" \
-            --docker-password="${{ secrets.GITHUB_TOKEN }}" \
-            --dry-run=client -o yaml | kubectl apply -f -
-
-          kubectl patch serviceaccount default \
-            -n default \
-            --type merge \
-            -p '{"imagePullSecrets":[{"name":"ghcr-cred"}]}'
 
       - name: Write Skaffold artifacts file
         id: artifacts
@@ -293,6 +285,13 @@ jobs:
         working-directory: web
         run: yarn install --immutable
 
+      - name: Cache Playwright browsers
+        id: cache-playwright
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.PLAYWRIGHT_BROWSERS_PATH }}
+          key: playwright-${{ runner.os }}-${{ hashFiles('web/yarn.lock') }}
+
       - name: Install Playwright browsers
         working-directory: web
         run: yarn playwright install --with-deps chromium
@@ -306,6 +305,43 @@ jobs:
         run: |
           set -euo pipefail
           skaffold test -p ${SKAFFOLD_PROFILE} --build-artifacts "${{ steps.artifacts.outputs.file }}"
+
+      - name: Wait for KinD readiness
+        run: |
+          set -euo pipefail
+          KIND_LOG="${RUNNER_TEMP}/kind.log"
+          KIND_PID_FILE="${RUNNER_TEMP}/kind.pid"
+
+          if [ -f "${KIND_PID_FILE}" ]; then
+            KIND_PID=$(cat "${KIND_PID_FILE}")
+            echo "Waiting for KinD (pid: ${KIND_PID}) to finish starting..."
+            if ! wait "${KIND_PID}"; then
+              echo "KinD failed to start; dumping logs."
+              cat "${KIND_LOG}"
+              exit 1
+            fi
+          fi
+
+          echo "Waiting for cluster API to become available..."
+          timeout 180 bash -c 'until kubectl cluster-info --context kind-skaffold-ci >/dev/null 2>&1; do sleep 5; done'
+          kubectl version --client=true
+          kubectl cluster-info
+          kubectl get nodes -o wide
+
+      - name: Configure registry access for KinD
+        run: |
+          set -euo pipefail
+          kubectl create secret docker-registry ghcr-cred \
+            --namespace default \
+            --docker-server=ghcr.io \
+            --docker-username="${{ github.actor }}" \
+            --docker-password="${{ secrets.GITHUB_TOKEN }}" \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+          kubectl patch serviceaccount default \
+            -n default \
+            --type merge \
+            -p '{"imagePullSecrets":[{"name":"ghcr-cred"}]}'
 
       - name: Deploy with Skaffold
         run: |
