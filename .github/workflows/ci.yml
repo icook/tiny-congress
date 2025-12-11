@@ -173,10 +173,10 @@ jobs:
           REGISTRY: ghcr.io/${{ github.repository }}
 
   # ============================================================
-  # JOB 3: Run Skaffold test/deploy/verify
+  # JOB 3: Run Skaffold test/deploy and host-based integration/E2E tests
   # ============================================================
-  skaffold-verify:
-    name: Skaffold verify
+  test-and-deploy:
+    name: Test and deploy
     runs-on: ubuntu-latest
     needs:
       - collect-image-metadata
@@ -215,7 +215,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: /usr/local/bin/skaffold
-          key: skaffold-v2.16.1
+          key: skaffold-v2.17.0
 
       - name: Install Skaffold
         if: steps.cache-skaffold.outputs.cache-hit != 'true'
@@ -255,14 +255,6 @@ jobs:
             -n default \
             --type merge \
             -p '{"imagePullSecrets":[{"name":"ghcr-cred"}]}'
-
-      - name: Apply PVC for test artifacts
-        run: |
-          kubectl apply -f kube/verify/test-artifacts-pvc.yaml
-          echo "--- PVC Status ---"
-          kubectl get pvc test-artifacts-pvc -o wide
-          echo "--- PVC Description ---"
-          kubectl describe pvc test-artifacts-pvc
 
       - name: Write Skaffold artifacts file
         id: artifacts
@@ -320,10 +312,47 @@ jobs:
           set -euo pipefail
           skaffold deploy -p ${SKAFFOLD_PROFILE} --status-check=true --build-artifacts "${{ steps.artifacts.outputs.file }}"
 
-      - name: Run Skaffold verify
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+
+      - name: Run Rust integration tests
         run: |
           set -euo pipefail
-          skaffold verify -p ${SKAFFOLD_PROFILE} --build-artifacts "${{ steps.artifacts.outputs.file }}"
+          # Port-forward PostgreSQL
+          kubectl port-forward svc/postgres 5432:5432 &
+          PF_PG_PID=$!
+          timeout 60 bash -c 'until pg_isready -h localhost -p 5432 > /dev/null 2>&1; do sleep 1; done' || true
+
+          # Run integration tests
+          cd service
+          DATABASE_URL=postgres://postgres:postgres@localhost:5432/prioritization \
+            ARTIFACTS_DIR=coverage \
+            ./bin/integration-coverage.sh
+
+          # Cleanup
+          kill $PF_PG_PID 2>/dev/null || true
+
+      - name: Run Playwright E2E tests
+        run: |
+          set -euo pipefail
+          # Port-forward frontend
+          kubectl port-forward deployment/tc-frontend 5173:80 &
+          PF_FRONTEND_PID=$!
+          timeout 60 bash -c 'until curl -sf http://localhost:5173 > /dev/null; do sleep 1; done'
+
+          # Run Playwright tests
+          cd web
+          node ./scripts/reset-playwright-coverage.mjs
+          CI=true PLAYWRIGHT_BASE_URL=http://localhost:5173 PLAYWRIGHT_COVERAGE=1 yarn playwright:test || TEST_EXIT=$?
+          if [ -d .nyc_output ]; then
+            yarn playwright:report || true
+          fi
+
+          # Cleanup
+          kill $PF_FRONTEND_PID 2>/dev/null || true
+          exit ${TEST_EXIT:-0}
 
       - name: Publish Playwright test report
         if: always() && hashFiles('web/reports/playwright.xml') != ''
@@ -373,27 +402,6 @@ jobs:
             web/test-results
             web/reports/playwright.xml
             web/coverage/playwright
-
-      - name: Start exporter pod for integration artifacts
-        if: always()
-        run: |
-          kubectl apply -f kube/verify/test-artifacts-exporter.yaml
-          kubectl wait --for=condition=Ready pod/test-artifacts-exporter --timeout=60s
-
-      - name: Copy integration artifacts
-        if: always()
-        run: |
-          mkdir -p service/coverage
-          echo "--- Files in PVC /artifacts ---"
-          kubectl exec test-artifacts-exporter -- ls -la /artifacts || true
-          echo "--- Copying artifacts ---"
-          kubectl cp test-artifacts-exporter:/artifacts/. service/coverage
-          echo "--- Local service/coverage contents ---"
-          ls -la service/coverage
-
-      - name: Cleanup exporter pod
-        if: always()
-        run: kubectl delete pod test-artifacts-exporter || true
 
       - name: Upload Rust coverage artifacts
         if: always()
@@ -503,4 +511,3 @@ jobs:
           kubectl get events -A --sort-by=.lastTimestamp || true
           echo '--- All Resources ---'
           kubectl get all -n default || true
-

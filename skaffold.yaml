@@ -86,33 +86,6 @@ test:
             --test model_tests \
             -- --test-threads=1 --nocapture
 
-# Post-deploy verification: run integration and E2E tests against the live cluster
-verify:
-  - name: integration-tests
-    container:
-      name: integration-tests
-      image: tc-api-release
-      command: ["/bin/sh", "-lc"]
-      args: ["cd /usr/src/app && ./bin/integration-coverage.sh"]
-    executionMode:
-      kubernetesCluster:
-        jobManifestPath: kube/verify/integration-tests-job.yaml
-  - name: playwright-e2e
-    custom:
-      - command: |
-          kubectl port-forward deployment/tc-frontend 5173:80 &
-          PF_PID=$!
-          timeout 60 bash -c 'until curl -sf http://localhost:5173 > /dev/null; do sleep 1; done'
-          cd web
-          node ./scripts/reset-playwright-coverage.mjs
-          CI=true PLAYWRIGHT_BASE_URL=http://localhost:5173 PLAYWRIGHT_COVERAGE=1 yarn playwright:test
-          TEST_EXIT=$?
-          if [ -d .nyc_output ]; then
-            yarn playwright:report || true
-          fi
-          kill $PF_PID 2>/dev/null || true
-          exit $TEST_EXIT
-
 # Ensure Postgres is reachable from localhost for developer workflows
 portForward:
   - resourceType: service
