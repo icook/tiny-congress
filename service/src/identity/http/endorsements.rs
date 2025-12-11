@@ -1,5 +1,5 @@
 use anyhow::anyhow;
-use axum::extract::Path;
+use axum::extract::{Path, Query};
 use axum::http::StatusCode;
 use axum::{Extension, Json};
 use serde::{Deserialize, Serialize};
@@ -29,6 +29,39 @@ pub struct EndorsementRevokeRequest {
     pub account_id: Uuid,
     pub device_id: Uuid,
     pub envelope: SignedEnvelope,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ListEndorsementsParams {
+    pub topic: Option<String>,
+}
+
+#[derive(Debug, Serialize, sqlx::FromRow)]
+pub struct EndorsementRecord {
+    pub id: Uuid,
+    pub author_account_id: Uuid,
+    pub author_device_id: Uuid,
+    pub subject_type: String,
+    pub subject_id: String,
+    pub topic: String,
+    pub magnitude: f64,
+    pub confidence: f64,
+    pub context: Option<String>,
+    pub tags: Option<Vec<String>>,
+    pub evidence_url: Option<String>,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+}
+
+#[derive(Debug, Serialize, sqlx::FromRow)]
+pub struct EndorsementAggregate {
+    pub subject_type: String,
+    pub subject_id: String,
+    pub topic: String,
+    pub n_total: i32,
+    pub n_pos: i32,
+    pub n_neg: i32,
+    pub sum_weight: f64,
+    pub weighted_mean: Option<f64>,
 }
 
 #[derive(Debug)]
@@ -94,9 +127,9 @@ pub async fn create_endorsement(
     .bind(endorsement_id)
     .bind(payload.account_id)
     .bind(payload.device_id)
-    .bind(parsed.subject_type)
-    .bind(parsed.subject_id)
-    .bind(parsed.topic)
+    .bind(&parsed.subject_type)
+    .bind(&parsed.subject_id)
+    .bind(&parsed.topic)
     .bind(parsed.magnitude)
     .bind(parsed.confidence)
     .bind(parsed.context)
@@ -106,6 +139,14 @@ pub async fn create_endorsement(
     .execute(&pool)
     .await
     .map_err(internal_error)?;
+
+    recompute_aggregate_and_reputation(
+        &pool,
+        &parsed.subject_type,
+        &parsed.subject_id,
+        &parsed.topic,
+    )
+    .await?;
 
     Ok(Json(EndorsementCreateResponse { endorsement_id }))
 }
@@ -182,7 +223,58 @@ pub async fn revoke_endorsement(
         ));
     }
 
+    let (subject_type, subject_id, topic) = sqlx::query_as::<_, (String, String, String)>(
+        "SELECT subject_type, subject_id, topic FROM endorsements WHERE id = $1",
+    )
+    .bind(endorsement_id)
+    .fetch_one(&pool)
+    .await
+    .map_err(internal_error)?;
+
+    recompute_aggregate_and_reputation(&pool, &subject_type, &subject_id, &topic).await?;
+
     Ok(StatusCode::NO_CONTENT)
+}
+
+/// List active endorsements for a subject, optionally filtered by topic, with aggregate.
+///
+/// # Errors
+/// Returns a 4xx when the query parameters are invalid; 500 on DB errors.
+pub async fn list_endorsements(
+    Path(subject_id): Path<Uuid>,
+    Query(params): Query<ListEndorsementsParams>,
+    Extension(pool): Extension<PgPool>,
+) -> Result<Json<(Vec<EndorsementRecord>, Option<EndorsementAggregate>)>, (StatusCode, String)> {
+    let topic_filter = params.topic.clone();
+    let rows = sqlx::query_as::<_, EndorsementRecord>(
+        r"
+        SELECT id, author_account_id, author_device_id, subject_type, subject_id, topic, magnitude, confidence, context, tags, evidence_url, created_at
+        FROM endorsements
+        WHERE subject_type = 'account' AND subject_id = $1 AND revoked_at IS NULL
+        AND ($2::text IS NULL OR topic = $2)
+        ORDER BY created_at DESC
+        ",
+    )
+    .bind(subject_id.to_string())
+    .bind(topic_filter.clone())
+    .fetch_all(&pool)
+    .await
+    .map_err(internal_error)?;
+
+    let aggregate = sqlx::query_as::<_, EndorsementAggregate>(
+        r"
+        SELECT subject_type, subject_id, topic, n_total, n_pos, n_neg, sum_weight, weighted_mean
+        FROM endorsement_aggregates
+        WHERE subject_type = 'account' AND subject_id = $1 AND ($2::text IS NULL OR topic = $2)
+        ",
+    )
+    .bind(subject_id.to_string())
+    .bind(topic_filter)
+    .fetch_optional(&pool)
+    .await
+    .map_err(internal_error)?;
+
+    Ok(Json((rows, aggregate)))
 }
 
 #[derive(Debug)]
@@ -381,7 +473,7 @@ async fn ensure_prev_hash_matches(
     envelope: &SignedEnvelope,
 ) -> Result<(), (StatusCode, String)> {
     let last = sqlx::query_as::<_, SignedEventRow>(
-        "SELECT seqno, canonical_bytes_hash FROM signed_events WHERE account_id = $1 ORDER BY seqno DESC LIMIT 1",
+        "SELECT canonical_bytes_hash FROM signed_events WHERE account_id = $1 ORDER BY seqno DESC LIMIT 1",
     )
     .bind(account_id)
     .fetch_optional(pool)
@@ -407,6 +499,106 @@ async fn ensure_prev_hash_matches(
             "first sigchain link must omit prev_hash".to_string(),
         ));
     }
+
+    Ok(())
+}
+
+async fn recompute_aggregate_and_reputation(
+    pool: &PgPool,
+    subject_type: &str,
+    subject_id: &str,
+    topic: &str,
+) -> Result<(), (StatusCode, String)> {
+    let stats = sqlx::query_as::<_, (i64, i64, i64, f64, f64)>(
+        r"
+        SELECT
+            COUNT(*) AS n_total,
+            COUNT(*) FILTER (WHERE magnitude > 0) AS n_pos,
+            COUNT(*) FILTER (WHERE magnitude < 0) AS n_neg,
+            COALESCE(SUM(confidence), 0) AS sum_weight,
+            COALESCE(SUM(magnitude * confidence), 0) AS weighted_sum
+        FROM endorsements
+        WHERE subject_type = $1 AND subject_id = $2 AND topic = $3 AND revoked_at IS NULL
+        ",
+    )
+    .bind(subject_type)
+    .bind(subject_id)
+    .bind(topic)
+    .fetch_one(pool)
+    .await
+    .map_err(internal_error)?;
+
+    let weighted_mean = if stats.3 > 0.0 {
+        Some(stats.4 / stats.3)
+    } else {
+        None
+    };
+
+    sqlx::query(
+        r"
+        INSERT INTO endorsement_aggregates (subject_type, subject_id, topic, n_total, n_pos, n_neg, sum_weight, weighted_mean)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        ON CONFLICT (subject_type, subject_id, topic)
+        DO UPDATE SET n_total = EXCLUDED.n_total,
+                      n_pos = EXCLUDED.n_pos,
+                      n_neg = EXCLUDED.n_neg,
+                      sum_weight = EXCLUDED.sum_weight,
+                      weighted_mean = EXCLUDED.weighted_mean,
+                      updated_at = NOW()
+        ",
+    )
+    .bind(subject_type)
+    .bind(subject_id)
+    .bind(topic)
+    .bind(stats.0)
+    .bind(stats.1)
+    .bind(stats.2)
+    .bind(stats.3)
+    .bind(weighted_mean)
+    .execute(pool)
+    .await
+    .map_err(internal_error)?;
+
+    if subject_type == "account" {
+        update_reputation(pool, subject_id).await?;
+    }
+
+    Ok(())
+}
+
+async fn update_reputation(pool: &PgPool, subject_id: &str) -> Result<(), (StatusCode, String)> {
+    // Simple heuristic: base 0.5 plus average of selected topics weighted_mean * 0.25 each.
+    let topics = vec!["trustworthy", "is_real_person"];
+    let rows = sqlx::query_as::<_, (String, Option<f64>)>(
+        "SELECT topic, weighted_mean FROM endorsement_aggregates WHERE subject_type = 'account' AND subject_id = $1 AND topic = ANY($2)",
+    )
+    .bind(subject_id)
+    .bind(&topics)
+    .fetch_all(pool)
+    .await
+    .map_err(internal_error)?;
+
+    let mut sum = 0.5f64;
+    for (_, mean) in rows {
+        if let Some(val) = mean {
+            sum += 0.25 * val.clamp(-1.0, 1.0);
+        }
+    }
+    let score = sum.clamp(0.0, 1.0);
+
+    sqlx::query(
+        r"
+        INSERT INTO reputation_scores (account_id, score, updated_at)
+        VALUES ($1, $2, NOW())
+        ON CONFLICT (account_id)
+        DO UPDATE SET score = EXCLUDED.score, updated_at = NOW()
+        ",
+    )
+    .bind(subject_id)
+    .bind(score)
+    .execute(pool)
+    .await
+    .map_err(internal_error)?;
 
     Ok(())
 }
