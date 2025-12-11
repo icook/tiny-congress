@@ -9,7 +9,7 @@ pub fn router() -> Router {
         .route("/auth/signup", post(accounts::signup))
         .route("/me/devices/add", post(devices::add_device))
         .route(
-            "/me/devices/:device_id/revoke",
+            "/me/devices/{device_id}/revoke",
             post(devices::revoke_device),
         )
 }
