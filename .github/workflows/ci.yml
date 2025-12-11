@@ -217,11 +217,19 @@ jobs:
           set -euo pipefail
           KIND_LOG="${RUNNER_TEMP}/kind.log"
           KIND_PID_FILE="${RUNNER_TEMP}/kind.pid"
+          KIND_STATUS_FILE="${RUNNER_TEMP}/kind.status"
+
+          echo "KIND_LOG=${KIND_LOG}" >> "$GITHUB_ENV"
+          echo "KIND_PID_FILE=${KIND_PID_FILE}" >> "$GITHUB_ENV"
+          echo "KIND_STATUS_FILE=${KIND_STATUS_FILE}" >> "$GITHUB_ENV"
 
           echo "Starting KinD cluster skaffold-ci (logs: ${KIND_LOG})"
-          kind create cluster --name skaffold-ci --wait 0s >"${KIND_LOG}" 2>&1 &
-          KIND_PID=$!
-          echo "${KIND_PID}" > "${KIND_PID_FILE}"
+          (
+            set +e
+            kind create cluster --name skaffold-ci --wait 0s >"${KIND_LOG}" 2>&1
+            echo $? > "${KIND_STATUS_FILE}"
+          ) &
+          echo $! > "${KIND_PID_FILE}"
 
       - name: Cache Skaffold
         id: cache-skaffold
@@ -309,18 +317,51 @@ jobs:
       - name: Wait for KinD readiness
         run: |
           set -euo pipefail
-          KIND_LOG="${RUNNER_TEMP}/kind.log"
-          KIND_PID_FILE="${RUNNER_TEMP}/kind.pid"
+          : "${KIND_LOG:?KIND_LOG not set}"
+          : "${KIND_PID_FILE:?KIND_PID_FILE not set}"
+          : "${KIND_STATUS_FILE:?KIND_STATUS_FILE not set}"
 
-          if [ -f "${KIND_PID_FILE}" ]; then
-            KIND_PID=$(cat "${KIND_PID_FILE}")
-            echo "Waiting for KinD (pid: ${KIND_PID}) to finish starting..."
-            if ! wait "${KIND_PID}"; then
-              echo "KinD failed to start; dumping logs."
-              cat "${KIND_LOG}"
-              exit 1
-            fi
+          if [ ! -f "${KIND_PID_FILE}" ]; then
+            echo "Missing KinD PID file; cannot wait for cluster startup."
+            exit 1
           fi
+
+          KIND_PID=$(cat "${KIND_PID_FILE}")
+          echo "Waiting for KinD (pid: ${KIND_PID}) to finish starting..."
+
+          timeout 300 bash -c '
+            pid="$0"
+            status_file="$1"
+            while true; do
+              if [ -f "${status_file}" ]; then
+                exit 0
+              fi
+              if ! kill -0 "${pid}" 2>/dev/null; then
+                exit 0
+              fi
+              sleep 5
+            done
+          ' "${KIND_PID}" "${KIND_STATUS_FILE}" || {
+            echo "KinD did not finish starting in time; dumping logs."
+            cat "${KIND_LOG}" || true
+            exit 1
+          }
+
+          if [ ! -f "${KIND_STATUS_FILE}" ]; then
+            echo "KinD status file missing after wait; dumping logs."
+            cat "${KIND_LOG}" || true
+            exit 1
+          fi
+
+          KIND_STATUS=$(cat "${KIND_STATUS_FILE}")
+          if [ "${KIND_STATUS}" != "0" ]; then
+            echo "KinD failed to start (exit ${KIND_STATUS}); dumping logs."
+            cat "${KIND_LOG}" || true
+            exit "${KIND_STATUS}"
+          fi
+
+          echo "KinD started successfully. Log tail:"
+          tail -n 20 "${KIND_LOG}" || true
 
           echo "Waiting for cluster API to become available..."
           timeout 180 bash -c 'until kubectl cluster-info --context kind-skaffold-ci >/dev/null 2>&1; do sleep 5; done'
