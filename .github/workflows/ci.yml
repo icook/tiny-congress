@@ -83,18 +83,18 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - image: tc-api-dev
+          - image: tc-api-release
             context: ./service
-            dockerfile: service/Dockerfile.dev
-          - image: tc-ui-dev
+            dockerfile: service/Dockerfile
+          - image: tc-ui-release
             context: ./web
-            dockerfile: web/Dockerfile.dev
+            dockerfile: web/Dockerfile
           - image: postgres
             context: .
             dockerfile: dockerfiles/Dockerfile.postgres
     outputs:
-      tc-api-dev-tag: ${{ steps.meta.outputs.tc-api-dev-tag }}
-      tc-ui-dev-tag: ${{ steps.meta.outputs.tc-ui-dev-tag }}
+      tc-api-release-tag: ${{ steps.meta.outputs.tc-api-release-tag }}
+      tc-ui-release-tag: ${{ steps.meta.outputs.tc-ui-release-tag }}
       postgres-tag: ${{ steps.meta.outputs.postgres-tag }}
     steps:
       - name: Checkout
@@ -160,8 +160,8 @@ jobs:
           artifacts=$(cat <<'EOF'
           {
             "builds": [
-              {"imageName": "tc-api-dev", "tag": "${{ env.REGISTRY }}/tc-api-dev:${{ github.sha }}"},
-              {"imageName": "tc-ui-dev", "tag": "${{ env.REGISTRY }}/tc-ui-dev:${{ github.sha }}"},
+              {"imageName": "tc-api-release", "tag": "${{ env.REGISTRY }}/tc-api-release:${{ github.sha }}"},
+              {"imageName": "tc-ui-release", "tag": "${{ env.REGISTRY }}/tc-ui-release:${{ github.sha }}"},
               {"imageName": "postgres", "tag": "${{ env.REGISTRY }}/postgres:${{ github.sha }}"}
             ]
           }
@@ -173,10 +173,10 @@ jobs:
           REGISTRY: ghcr.io/${{ github.repository }}
 
   # ============================================================
-  # JOB 3: Run Skaffold test/deploy/verify
+  # JOB 3: Run Skaffold test/deploy and host-based integration/E2E tests
   # ============================================================
-  skaffold-verify:
-    name: Skaffold verify
+  test-and-deploy:
+    name: Integration tests
     runs-on: ubuntu-latest
     needs:
       - collect-image-metadata
@@ -189,33 +189,33 @@ jobs:
     env:
       SKAFFOLD_DEFAULT_REPO: ghcr.io/${{ github.repository }}
       SKAFFOLD_PROFILE: ci
+      PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.cache/ms-playwright
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Free disk space
-        uses: jlumbroso/free-disk-space@v1.3.1
-        with:
-          dotnet: true
-          haskell: true
-          # these are slow, and we don't need that much space
-          tool-cache: false
-          android: false
-          large-packages: false
-          docker-images: false
-          swap-storage: false
-
-      - name: Set up KinD cluster
+      - name: Install KinD tooling
         uses: helm/kind-action@v1.13.0
         with:
+          install_only: true
           cluster_name: skaffold-ci
+
+      - name: Start KinD cluster in background
+        run: |
+          set -euo pipefail
+          KIND_LOG="${RUNNER_TEMP}/kind.log"
+
+          echo "KIND_LOG=${KIND_LOG}" >> "$GITHUB_ENV"
+
+          echo "Starting KinD cluster skaffold-ci (logs: ${KIND_LOG})"
+          kind create cluster --name skaffold-ci --wait 0s >"${KIND_LOG}" 2>&1 &
 
       - name: Cache Skaffold
         id: cache-skaffold
         uses: actions/cache@v4
         with:
           path: /usr/local/bin/skaffold
-          key: skaffold-v2.16.1
+          key: skaffold-v2.17.0
 
       - name: Install Skaffold
         if: steps.cache-skaffold.outputs.cache-hit != 'true'
@@ -228,18 +228,84 @@ jobs:
       - name: Verify Skaffold installation
         run: skaffold version
 
-      - name: Show cluster info
-        run: |
-          kubectl version --client=true
-          kubectl cluster-info
-          kubectl get nodes -o wide
-
       - name: Login to GHCR
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Write Skaffold artifacts file
+        id: artifacts
+        run: |
+          set -euo pipefail
+          artifacts_file="${RUNNER_TEMP}/skaffold-artifacts.json"
+          echo '${{ needs.collect-image-metadata.outputs.artifacts_json }}' > "$artifacts_file"
+          echo "Artifacts file contents:"
+          cat "$artifacts_file"
+          echo "file=${artifacts_file}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
+
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@cargo-llvm-cov
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: service -> target
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: yarn
+          cache-dependency-path: web/yarn.lock
+
+      - name: Enable corepack
+        run: corepack enable
+
+      - name: Install web dependencies
+        working-directory: web
+        run: yarn install --immutable
+
+      - name: Cache Playwright browsers
+        id: cache-playwright
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.PLAYWRIGHT_BROWSERS_PATH }}
+          key: playwright-${{ runner.os }}-${{ hashFiles('web/yarn.lock') }}
+
+      - name: Install Playwright browsers
+        working-directory: web
+        run: yarn playwright install --with-deps chromium
+
+      - name: Prepare test output directories
+        run: |
+          mkdir -p web/reports web/test-results web/coverage/playwright service/coverage
+          rm -f service/coverage/backend-unit.lcov service/coverage/backend-integration.lcov
+
+      - name: Run Skaffold tests
+        run: |
+          set -euo pipefail
+          skaffold test -p ${SKAFFOLD_PROFILE} --build-artifacts "${{ steps.artifacts.outputs.file }}"
+
+      - name: Wait for KinD readiness
+        run: |
+          set -euo pipefail
+          : "${KIND_LOG:?KIND_LOG not set}"
+          echo "Waiting for cluster API to become available..."
+          if ! timeout 180 bash -c 'until kubectl cluster-info --context kind-skaffold-ci >/dev/null 2>&1; do sleep 5; done'; then
+            echo "KinD did not finish starting in time; dumping logs."
+            cat "${KIND_LOG}" || true
+            exit 1
+          fi
+          kubectl version --client=true
+          kubectl cluster-info
+          kubectl get nodes -o wide
 
       - name: Configure registry access for KinD
         run: |
@@ -256,33 +322,49 @@ jobs:
             --type merge \
             -p '{"imagePullSecrets":[{"name":"ghcr-cred"}]}'
 
-      - name: Apply PVC for test artifacts
-        run: |
-          kubectl apply -f kube/verify/test-artifacts-pvc.yaml
-          echo "--- PVC Status ---"
-          kubectl get pvc test-artifacts-pvc -o wide
-          echo "--- PVC Description ---"
-          kubectl describe pvc test-artifacts-pvc
-
-      - name: Write Skaffold artifacts file
-        id: artifacts
+      - name: Deploy with Skaffold
         run: |
           set -euo pipefail
-          artifacts_file="${RUNNER_TEMP}/skaffold-artifacts.json"
-          echo '${{ needs.collect-image-metadata.outputs.artifacts_json }}' > "$artifacts_file"
-          echo "Artifacts file contents:"
-          cat "$artifacts_file"
-          echo "file=${artifacts_file}" >> "$GITHUB_OUTPUT"
+          skaffold deploy -p ${SKAFFOLD_PROFILE} --status-check=true --build-artifacts "${{ steps.artifacts.outputs.file }}"
 
-      - name: Prepare test output directories
-        run: |
-          mkdir -p web/reports web/test-results web/coverage/playwright service/coverage
-          rm -f service/coverage/backend-unit.lcov service/coverage/backend-integration.lcov
-
-      - name: Run Skaffold tests
+      - name: Run Rust integration tests
         run: |
           set -euo pipefail
-          skaffold test -p ${SKAFFOLD_PROFILE} --build-artifacts "${{ steps.artifacts.outputs.file }}"
+          # Ensure Postgres is ready before port-forwarding
+          kubectl wait --for=condition=available --timeout=180s deployment/postgres
+
+          # Port-forward PostgreSQL
+          kubectl port-forward svc/postgres 5432:5432 &
+          PF_PG_PID=$!
+
+          # Run integration tests
+          cd service
+          DATABASE_URL=postgres://postgres:postgres@localhost:5432/prioritization \
+            ARTIFACTS_DIR=coverage \
+            ./bin/integration-coverage.sh
+
+          # Cleanup
+          kill $PF_PG_PID 2>/dev/null || true
+
+      - name: Run Playwright E2E tests
+        run: |
+          set -euo pipefail
+          # Port-forward frontend
+          kubectl port-forward deployment/tc-frontend 5173:80 &
+          PF_FRONTEND_PID=$!
+          timeout 60 bash -c 'until curl -sf http://localhost:5173 > /dev/null; do sleep 1; done'
+
+          # Run Playwright tests
+          cd web
+          node ./scripts/reset-playwright-coverage.mjs
+          CI=true PLAYWRIGHT_BASE_URL=http://localhost:5173 PLAYWRIGHT_COVERAGE=1 yarn playwright:test || TEST_EXIT=$?
+          if [ -d .nyc_output ]; then
+            yarn playwright:report || true
+          fi
+
+          # Cleanup
+          kill $PF_FRONTEND_PID 2>/dev/null || true
+          exit ${TEST_EXIT:-0}
 
       - name: Publish Playwright test report
         if: always() && hashFiles('web/reports/playwright.xml') != ''
@@ -332,37 +414,6 @@ jobs:
             web/test-results
             web/reports/playwright.xml
             web/coverage/playwright
-
-      - name: Deploy with Skaffold
-        run: |
-          set -euo pipefail
-          skaffold deploy -p ${SKAFFOLD_PROFILE} --status-check=true --build-artifacts "${{ steps.artifacts.outputs.file }}"
-
-      - name: Run Skaffold verify
-        run: |
-          set -euo pipefail
-          skaffold verify -p ${SKAFFOLD_PROFILE} --build-artifacts "${{ steps.artifacts.outputs.file }}"
-
-      - name: Start exporter pod for integration artifacts
-        if: always()
-        run: |
-          kubectl apply -f kube/verify/test-artifacts-exporter.yaml
-          kubectl wait --for=condition=Ready pod/test-artifacts-exporter --timeout=60s
-
-      - name: Copy integration artifacts
-        if: always()
-        run: |
-          mkdir -p service/coverage
-          echo "--- Files in PVC /artifacts ---"
-          kubectl exec test-artifacts-exporter -- ls -la /artifacts || true
-          echo "--- Copying artifacts ---"
-          kubectl cp test-artifacts-exporter:/artifacts/. service/coverage
-          echo "--- Local service/coverage contents ---"
-          ls -la service/coverage
-
-      - name: Cleanup exporter pod
-        if: always()
-        run: kubectl delete pod test-artifacts-exporter || true
 
       - name: Upload Rust coverage artifacts
         if: always()

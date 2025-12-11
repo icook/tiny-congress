@@ -12,7 +12,7 @@ spec:
       restartPolicy: Never
       containers:
         - name: integration-tests
-          image: tc-api-dev
+          image: tc-api-release
           command: ["/bin/sh", "-lc"]
           args: ["cd /usr/src/app && ./bin/integration-coverage.sh"]
           env:

@@ -70,30 +70,21 @@ deploy:
           serviceAccount:
             create: false
 
-# Pre-deploy tests: run fast unit/API/UI tests only
+# Pre-deploy tests: run fast unit tests on host
 test:
-  - image: tc-api-dev
+  - image: tc-api-release
     custom:
-      - command: >-
-          docker run --rm
-          -v "$PWD/service/coverage:/usr/src/app/coverage"
-          "$IMAGE" /bin/sh -lc "cd /usr/src/app && ./bin/unit-coverage.sh"
-  - image: tc-ui-dev
-    custom:
-      - command: >-
-          IMAGE="$IMAGE" web/scripts/docker-playwright-ci.sh
-
-# Post-deploy verification: run integration tests against the live cluster
-verify:
-  - name: integration-tests
-    container:
-      name: integration-tests
-      image: tc-api-dev
-      command: ["/bin/sh", "-lc"]
-      args: ["cd /usr/src/app && ./bin/integration-coverage.sh"]
-    executionMode:
-      kubernetesCluster:
-        jobManifestPath: kube/verify/integration-tests-job.yaml
+      - command: |
+          cd service
+          mkdir -p coverage
+          cargo llvm-cov clean --workspace
+          cargo llvm-cov --lcov \
+            --output-path coverage/backend-unit.lcov \
+            --remap-path-prefix \
+            --test api_tests \
+            --test graphql_tests \
+            --test model_tests \
+            -- --test-threads=1 --nocapture
 
 # Ensure Postgres is reachable from localhost for developer workflows
 portForward:
@@ -134,3 +125,49 @@ profiles:
         push: true
       platforms:
         - "linux/amd64"
+      artifacts:
+        - image: tc-api-release
+          context: ./service/
+          docker:
+            dockerfile: Dockerfile
+            buildArgs:
+              BUILDKIT_INLINE_CACHE: "1"
+            cacheFrom:
+              - "tc-api-release:cache-main"
+              - "tc-api-release:cache"
+        - image: postgres
+          context: .
+          docker:
+            dockerfile: dockerfiles/Dockerfile.postgres
+            buildArgs:
+              BUILDKIT_INLINE_CACHE: "1"
+            cacheFrom:
+              - "postgres:cache-main"
+              - "postgres:cache"
+        - image: tc-ui-release
+          context: ./web/
+          docker:
+            dockerfile: Dockerfile
+            buildArgs:
+              BUILDKIT_INLINE_CACHE: "1"
+            cacheFrom:
+              - "tc-ui-release:cache-main"
+              - "tc-ui-release:cache"
+    deploy:
+      helm:
+        releases:
+          - name: tc
+            chartPath: kube/app
+            valuesFiles:
+              - kube/app/values.yaml
+            version: 0.1.0
+            setValueTemplates:
+              image.repository: "{{.IMAGE_REPO_tc_api_release}}"
+              image.tag: "{{.IMAGE_TAG_tc_api_release}}"
+              frontend.image.repository: "{{.IMAGE_REPO_tc_ui_release}}"
+              frontend.image.tag: "{{.IMAGE_TAG_tc_ui_release}}"
+              postgres.image.repository: "{{.IMAGE_REPO_postgres}}"
+              postgres.image.tag: "{{.IMAGE_TAG_postgres}}"
+            setValues:
+              serviceAccount:
+                create: false
