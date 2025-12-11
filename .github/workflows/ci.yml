@@ -175,7 +175,7 @@ jobs:
   # ============================================================
   # JOB 3: Run Skaffold test/deploy and host-based integration/E2E tests
   # ============================================================
-  test-and-deploy:
+  integration-tests:
     name: Integration tests
     runs-on: ubuntu-latest
     needs:
@@ -530,7 +530,7 @@ jobs:
   build-release-images:
     name: Build release ${{ matrix.image }}
     needs:
-      - skaffold-verify
+      - integration-tests
     runs-on: ubuntu-latest
     permissions:
       contents: read
