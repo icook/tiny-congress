@@ -2,6 +2,7 @@ import { createRootRoute, createRoute, createRouter, RouterProvider } from '@tan
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { Devices } from './features/identity/screens/Devices';
 import { Login } from './features/identity/screens/Login';
+import { Profile } from './features/identity/screens/Profile';
 import { Signup } from './features/identity/screens/Signup';
 import { AboutPage } from './pages/About.page';
 import { DashboardPage } from './pages/Dashboard.page';
@@ -55,6 +56,12 @@ const devicesRoute = createRoute({
   component: Devices,
 });
 
+const profileRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: 'account',
+  component: Profile,
+});
+
 const routeTree = rootRoute.addChildren([
   homeRoute,
   dashboardRoute,
@@ -63,9 +70,9 @@ const routeTree = rootRoute.addChildren([
   signupRoute,
   loginRoute,
   devicesRoute,
+  profileRoute,
   createPlaceholderRoute('analytics', 'Analytics', 'Analytics page content'),
   createPlaceholderRoute('releases', 'Releases', 'Releases page content'),
-  createPlaceholderRoute('account', 'Account', 'Account page content'),
   createPlaceholderRoute('security', 'Security', 'Security page content'),
   createPlaceholderRoute('settings', 'Settings', 'Settings page content'),
 ]);

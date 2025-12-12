@@ -191,3 +191,78 @@ export async function revokeDevice(
     body: JSON.stringify(request),
   });
 }
+
+// Profile and endorsement types and APIs
+
+export interface Profile {
+  account_id: string;
+  username: string;
+  tier: 'anonymous' | 'verified' | 'bonded' | 'vouched';
+  verification_state?: string;
+  created_at: string;
+}
+
+export interface SecurityPosture {
+  device_count: number;
+  active_device_count: number;
+  mfa_enabled: boolean;
+  recovery_policy_configured: boolean;
+  posture_label: 'weak' | 'ok' | 'strong';
+}
+
+export interface Endorsement {
+  id: string;
+  author_account_id: string;
+  author_device_id: string;
+  subject_type: string;
+  subject_id: string;
+  topic: string;
+  magnitude: number;
+  confidence: number;
+  context?: string;
+  tags?: string[];
+  evidence_url?: string;
+  created_at: string;
+}
+
+export interface EndorsementAggregate {
+  subject_type: string;
+  subject_id: string;
+  topic: string;
+  n_total: number;
+  n_pos: number;
+  n_neg: number;
+  sum_weight: number;
+  weighted_mean: number | null;
+}
+
+export interface ReputationScore {
+  account_id: string;
+  score: number;
+  updated_at: string;
+}
+
+export async function getProfile(accountId: string): Promise<Profile> {
+  return fetchJson<Profile>(`/users/${accountId}`);
+}
+
+export async function getSecurityPosture(
+  token: string,
+  accountId: string
+): Promise<SecurityPosture> {
+  return fetchJson<SecurityPosture>(`/users/${accountId}/security_posture`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+export async function getEndorsements(
+  accountId: string
+): Promise<[Endorsement[], EndorsementAggregate | null]> {
+  return fetchJson<[Endorsement[], EndorsementAggregate | null]>(
+    `/users/${accountId}/endorsements`
+  );
+}
+
+export async function getReputationScore(accountId: string): Promise<ReputationScore> {
+  return fetchJson<ReputationScore>(`/users/${accountId}/reputation`);
+}
