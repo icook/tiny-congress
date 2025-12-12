@@ -4,6 +4,7 @@ import { Devices } from './features/identity/screens/Devices';
 import { Endorsements } from './features/identity/screens/Endorsements';
 import { Login } from './features/identity/screens/Login';
 import { Profile } from './features/identity/screens/Profile';
+import { Recovery } from './features/identity/screens/Recovery';
 import { Signup } from './features/identity/screens/Signup';
 import { AboutPage } from './pages/About.page';
 import { DashboardPage } from './pages/Dashboard.page';
@@ -69,6 +70,12 @@ const endorsementsRoute = createRoute({
   component: Endorsements,
 });
 
+const recoveryRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: 'recovery',
+  component: Recovery,
+});
+
 const routeTree = rootRoute.addChildren([
   homeRoute,
   dashboardRoute,
@@ -79,9 +86,9 @@ const routeTree = rootRoute.addChildren([
   devicesRoute,
   profileRoute,
   endorsementsRoute,
+  recoveryRoute,
   createPlaceholderRoute('analytics', 'Analytics', 'Analytics page content'),
   createPlaceholderRoute('releases', 'Releases', 'Releases page content'),
-  createPlaceholderRoute('security', 'Security', 'Security page content'),
   createPlaceholderRoute('settings', 'Settings', 'Settings page content'),
 ]);
 

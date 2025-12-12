@@ -327,3 +327,120 @@ export async function revokeEndorsement(
     body: JSON.stringify(request),
   });
 }
+
+// Recovery policy types and APIs
+
+export interface RecoveryHelper {
+  helper_account_id: string;
+  helper_root_kid?: string | null;
+}
+
+export interface RecoveryPolicy {
+  policy_id: string;
+  threshold: number;
+  helpers: RecoveryHelper[];
+  created_at: string;
+  revoked_at?: string | null;
+}
+
+export interface RecoveryPolicyRequest {
+  account_id: string;
+  envelope: {
+    v: number;
+    payload_type: string;
+    payload: unknown;
+    signer: {
+      account_id?: string | null;
+      device_id?: string | null;
+      kid: string;
+    };
+    sig: string;
+  };
+}
+
+export interface RecoveryPolicyResponse {
+  policy_id: string;
+  threshold: number;
+  helpers: RecoveryHelper[];
+}
+
+export async function getRecoveryPolicy(accountId: string): Promise<RecoveryPolicy> {
+  return fetchJson<RecoveryPolicy>(
+    `/me/recovery_policy?account_id=${encodeURIComponent(accountId)}`
+  );
+}
+
+export async function setRecoveryPolicy(
+  request: RecoveryPolicyRequest
+): Promise<RecoveryPolicyResponse> {
+  return fetchJson<RecoveryPolicyResponse>('/me/recovery_policy', {
+    method: 'POST',
+    body: JSON.stringify(request),
+  });
+}
+
+export interface RecoveryApproval {
+  approval_id: string;
+  policy_id: string;
+  helper_account_id: string;
+  helper_device_id: string;
+  new_root_kid: string;
+  created_at: string;
+}
+
+export interface RecoveryApprovalRequest {
+  account_id: string;
+  helper_account_id: string;
+  helper_device_id: string;
+  policy_id: string;
+  envelope: {
+    v: number;
+    payload_type: string;
+    payload: unknown;
+    signer: {
+      account_id?: string | null;
+      device_id?: string | null;
+      kid: string;
+    };
+    sig: string;
+  };
+}
+
+export interface RecoveryApprovalResponse {
+  approval_id: string;
+}
+
+export async function approveRecovery(
+  request: RecoveryApprovalRequest
+): Promise<RecoveryApprovalResponse> {
+  return fetchJson<RecoveryApprovalResponse>('/recovery/approve', {
+    method: 'POST',
+    body: JSON.stringify(request),
+  });
+}
+
+export interface RootRotationRequest {
+  account_id: string;
+  envelope: {
+    v: number;
+    payload_type: string;
+    payload: unknown;
+    signer: {
+      account_id?: string | null;
+      device_id?: string | null;
+      kid: string;
+    };
+    sig: string;
+  };
+}
+
+export interface RootRotationResponse {
+  new_root_kid: string;
+}
+
+export async function rotateRoot(request: RootRotationRequest): Promise<RootRotationResponse> {
+  return fetchJson<RootRotationResponse>('/recovery/rotate_root', {
+    method: 'POST',
+    body: JSON.stringify(request),
+  });
+}
