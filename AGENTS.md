@@ -34,6 +34,7 @@ Key playbooks:
 Key interfaces:
 - `doc/interfaces/directory-conventions.md` - Where code lives
 - `doc/interfaces/naming-conventions.md` - How to name things
+- `doc/interfaces/branch-naming-conventions.md` - Branch naming standards
 - `doc/interfaces/agent-output-schema.md` - PR compliance format
 
 ## Build, Test, and Development Commands

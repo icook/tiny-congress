@@ -55,6 +55,7 @@ Complete before opening or marking PR ready for review.
 
 ## Git hygiene
 
+- [ ] Branch name follows convention (see `../interfaces/branch-naming-conventions.md`)
 - [ ] Commits are focused and atomic
 - [ ] Commit messages follow convention (imperative, concise)
 - [ ] Branch rebased on latest master

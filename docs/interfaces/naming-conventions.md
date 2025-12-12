@@ -61,12 +61,7 @@
 | Branch | `type/issue-slug` | `feature/123-add-voting` |
 | Commit | Imperative, concise | `Add vote counting endpoint` |
 
-Branch prefixes:
-- `feature/` - New functionality
-- `fix/` - Bug fixes
-- `refactor/` - Code restructuring
-- `docs/` - Documentation only
-- `ci/` - CI/CD changes
+For comprehensive branch naming rules, see `branch-naming-conventions.md`.
 
 ## Anti-patterns
 

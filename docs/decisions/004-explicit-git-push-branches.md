@@ -59,4 +59,5 @@ This is enforced as a hard constraint in AGENTS.md.
 ## References
 - Git push.default documentation: https://git-scm.com/docs/git-config#Documentation/git-config.txt-pushdefault
 - AGENTS.md § Prohibited Actions
+- `../interfaces/branch-naming-conventions.md` - Branch naming standards
 - Incident: Codex force-pushed master via bare `git push --force-with-lease`
