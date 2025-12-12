@@ -5,7 +5,7 @@
 - Exposing new data to the frontend
 
 ## Prerequisites
-- Backend compiles: `cd service && cargo check`
+- Backend compiles: `just build-backend`
 - Understanding of existing resolver patterns in `service/src/`
 
 ## Steps
@@ -54,8 +54,8 @@
 6. **Update frontend** to use new endpoint (see `web/src/`)
 
 ## Verification
-- [ ] `cargo test` passes
-- [ ] `cargo clippy --all-features -- -D warnings` clean
+- [ ] `just test-backend` passes
+- [ ] `just lint-backend` clean
 - [ ] Endpoint accessible via GraphQL playground
 - [ ] Frontend integration works
 

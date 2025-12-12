@@ -31,8 +31,8 @@
 5. Commit both the migration and updated `.sqlx/` files
 
 ## Verification
-- [ ] `cargo test` passes
-- [ ] `cargo check` passes (sqlx compile-time verification)
+- [ ] `just test-backend` passes
+- [ ] `just build-backend` passes (sqlx compile-time verification)
 - [ ] Migration is idempotent where possible
 - [ ] Rollback strategy documented if destructive
 
