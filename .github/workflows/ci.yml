@@ -366,16 +366,21 @@ jobs:
           # Cleanup
           kill $PF_PG_PID 2>/dev/null || true
 
+      - name: Build instrumented frontend for E2E tests
+        working-directory: web
+        run: PLAYWRIGHT_COVERAGE=1 yarn build
+
       - name: Run Playwright E2E tests
         run: |
           set -euo pipefail
-          # Port-forward frontend
-          kubectl port-forward deployment/tc-frontend 5173:80 &
-          PF_FRONTEND_PID=$!
+          cd web
+
+          # Start preview server with instrumented build
+          yarn preview --host 0.0.0.0 --port 5173 --strictPort &
+          PREVIEW_PID=$!
           timeout 60 bash -c 'until curl -sf http://localhost:5173 > /dev/null; do sleep 1; done'
 
           # Run Playwright tests
-          cd web
           node ./scripts/reset-playwright-coverage.mjs
           CI=true PLAYWRIGHT_BASE_URL=http://localhost:5173 PLAYWRIGHT_COVERAGE=1 yarn playwright:test || TEST_EXIT=$?
           if [ -d .nyc_output ]; then
@@ -383,7 +388,7 @@ jobs:
           fi
 
           # Cleanup
-          kill $PF_FRONTEND_PID 2>/dev/null || true
+          kill $PREVIEW_PID 2>/dev/null || true
           exit ${TEST_EXIT:-0}
 
       - name: Publish Playwright test report
