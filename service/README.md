@@ -84,6 +84,11 @@ skaffold build --file-output artifacts.json
 skaffold test --build-artifacts artifacts.json
 ```
 
+### Pre-push checklist
+
+- From `/service`, run `cargo fmt` and `cargo clippy --all-targets --all-features -- -D warnings` before pushing.
+- Run `RUST_TEST_THREADS=1 cargo test` against a local Postgres to mirror the integration flow used in CI.
+
 ## API Schema
 
 The GraphQL API provides:

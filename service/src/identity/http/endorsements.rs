@@ -68,6 +68,7 @@ pub struct EndorsementAggregate {
 struct ParsedEndorsementPayload {
     subject_type: String,
     subject_id: String,
+    subject_account_id: Option<Uuid>,
     topic: String,
     magnitude: f64,
     confidence: f64,
@@ -144,6 +145,7 @@ pub async fn create_endorsement(
         &pool,
         &parsed.subject_type,
         &parsed.subject_id,
+        parsed.subject_account_id,
         &parsed.topic,
     )
     .await?;
@@ -230,8 +232,25 @@ pub async fn revoke_endorsement(
     .fetch_one(&pool)
     .await
     .map_err(internal_error)?;
+    let subject_account_id = if subject_type == "account" {
+        Some(Uuid::parse_str(&subject_id).map_err(|_| {
+            (
+                StatusCode::BAD_REQUEST,
+                "subject_id must be a UUID for account endorsements".to_string(),
+            )
+        })?)
+    } else {
+        None
+    };
 
-    recompute_aggregate_and_reputation(&pool, &subject_type, &subject_id, &topic).await?;
+    recompute_aggregate_and_reputation(
+        &pool,
+        &subject_type,
+        &subject_id,
+        subject_account_id,
+        &topic,
+    )
+    .await?;
 
     Ok(StatusCode::NO_CONTENT)
 }
@@ -390,6 +409,16 @@ fn parse_endorsement_payload(
 ) -> Result<ParsedEndorsementPayload, (StatusCode, String)> {
     let subject_type = as_string(payload, "subject_type")?;
     let subject_id = as_string(payload, "subject_id")?;
+    let subject_account_id = if subject_type == "account" {
+        Some(Uuid::parse_str(&subject_id).map_err(|_| {
+            (
+                StatusCode::BAD_REQUEST,
+                "subject_id must be a UUID for account endorsements".to_string(),
+            )
+        })?)
+    } else {
+        None
+    };
     let topic = as_string(payload, "topic")?;
     let magnitude = as_f64(payload, "magnitude")?;
     let confidence = as_f64(payload, "confidence")?;
@@ -424,6 +453,7 @@ fn parse_endorsement_payload(
     Ok(ParsedEndorsementPayload {
         subject_type,
         subject_id,
+        subject_account_id,
         topic,
         magnitude,
         confidence,
@@ -507,6 +537,7 @@ async fn recompute_aggregate_and_reputation(
     pool: &PgPool,
     subject_type: &str,
     subject_id: &str,
+    subject_account_id: Option<Uuid>,
     topic: &str,
 ) -> Result<(), (StatusCode, String)> {
     let stats = sqlx::query_as::<_, (i64, i64, i64, f64, f64)>(
@@ -560,19 +591,26 @@ async fn recompute_aggregate_and_reputation(
     .map_err(internal_error)?;
 
     if subject_type == "account" {
-        update_reputation(pool, subject_id).await?;
+        if let Some(account_id) = subject_account_id {
+            update_reputation(pool, &account_id).await?;
+        } else {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                "account endorsements require a valid subject_id".to_string(),
+            ));
+        }
     }
 
     Ok(())
 }
 
-async fn update_reputation(pool: &PgPool, subject_id: &str) -> Result<(), (StatusCode, String)> {
+async fn update_reputation(pool: &PgPool, subject_id: &Uuid) -> Result<(), (StatusCode, String)> {
     // Simple heuristic: base 0.5 plus average of selected topics weighted_mean * 0.25 each.
     let topics = vec!["trustworthy", "is_real_person"];
     let rows = sqlx::query_as::<_, (String, Option<f64>)>(
         "SELECT topic, weighted_mean FROM endorsement_aggregates WHERE subject_type = 'account' AND subject_id = $1 AND topic = ANY($2)",
     )
-    .bind(subject_id)
+    .bind(subject_id.to_string())
     .bind(&topics)
     .fetch_all(pool)
     .await

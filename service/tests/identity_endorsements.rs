@@ -169,7 +169,16 @@ async fn endorsement_create_and_revoke() {
         )
         .await
         .unwrap();
-    assert_eq!(signup_resp.status(), 200);
+    let signup_status = signup_resp.status();
+    let signup_body = to_bytes(signup_resp.into_body(), 1024 * 1024)
+        .await
+        .unwrap();
+    assert!(
+        signup_status.is_success(),
+        "signup failed: {} {}",
+        signup_status,
+        String::from_utf8_lossy(&signup_body)
+    );
 
     let last_hash: Vec<u8> = sqlx::query_scalar(
         "SELECT canonical_bytes_hash FROM signed_events WHERE account_id = $1 ORDER BY seqno DESC LIMIT 1",
@@ -200,13 +209,17 @@ async fn endorsement_create_and_revoke() {
         )
         .await
         .unwrap();
-    assert_eq!(create_resp.status(), 200);
-    let create_json: serde_json::Value = serde_json::from_slice(
-        &to_bytes(create_resp.into_body(), 1024 * 1024)
-            .await
-            .unwrap(),
-    )
-    .unwrap();
+    let create_status = create_resp.status();
+    let create_body = to_bytes(create_resp.into_body(), 1024 * 1024)
+        .await
+        .unwrap();
+    assert!(
+        create_status.is_success(),
+        "endorsement creation failed: {} {}",
+        create_status,
+        String::from_utf8_lossy(&create_body)
+    );
+    let create_json: serde_json::Value = serde_json::from_slice(&create_body).unwrap();
     let endorsement_id = Uuid::parse_str(create_json["endorsement_id"].as_str().unwrap()).unwrap();
 
     let (stored_count,): (i64,) =
