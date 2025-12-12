@@ -222,6 +222,36 @@ clean:
     @echo "✓ Build artifacts cleaned"
 
 # =============================================================================
+# Git Workflows
+# =============================================================================
+
+# Push current branch and create a PR
+pr title body="":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    branch=$(git rev-parse --abbrev-ref HEAD)
+    echo "→ Pushing branch: $branch"
+    git push -u origin "$branch"
+    echo "→ Creating PR..."
+    gh pr create --title "{{title}}" --body "{{body}}"
+    pr_num=$(gh pr view --json number -q .number)
+    echo "✓ PR #$pr_num created: $(gh pr view --json url -q .url)"
+
+# Push current branch, create PR, and enable auto-merge
+pr-auto title body="":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    branch=$(git rev-parse --abbrev-ref HEAD)
+    echo "→ Pushing branch: $branch"
+    git push -u origin "$branch"
+    echo "→ Creating PR..."
+    gh pr create --title "{{title}}" --body "{{body}}"
+    pr_num=$(gh pr view --json number -q .number)
+    echo "→ Enabling auto-merge for PR #$pr_num..."
+    gh pr merge "$pr_num" --auto --merge
+    echo "✓ PR #$pr_num created with auto-merge enabled: $(gh pr view --json url -q .url)"
+
+# =============================================================================
 # Setup & Prerequisites
 # =============================================================================
 
