@@ -95,10 +95,7 @@ pub async fn fetch_attributes(
 }
 
 /// Compute security posture score based on device activity and factors
-pub async fn compute_security_posture_score(
-    pool: &PgPool,
-    account_id: Uuid,
-) -> Result<f64> {
+pub async fn compute_security_posture_score(pool: &PgPool, account_id: Uuid) -> Result<f64> {
     // Count active devices
     let active_devices = sqlx::query_scalar!(
         r#"

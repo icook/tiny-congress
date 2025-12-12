@@ -1,0 +1,39 @@
+# Gitleaks configuration for Tiny Congress
+# Prevents false positives on test vectors and example configurations
+
+[extend]
+# Use default gitleaks rules as base
+useDefault = true
+
+[allowlist]
+description = "Allowlist for test vectors and examples"
+
+# Ignore test keys and fixtures
+paths = [
+    '''tests/fixtures/.*''',
+    '''.*_test\.rs''',
+    '''.*\.test\.ts''',
+    '''.*\.spec\.ts''',
+]
+
+# Ignore example configuration files (not actual secrets)
+regexes = [
+    '''your-secret-key-here''',
+    '''test-secret-key-for-testing-only''',
+    '''example\.com''',
+    '''localhost''',
+    '''127\.0\.0\.1''',
+]
+
+# Ignore specific files that contain example/template data
+[[allowlist.paths]]
+description = "Environment example file"
+file = '''\.env\.example'''
+
+[[allowlist.paths]]
+description = "README examples"
+file = '''README\.md'''
+
+[[allowlist.paths]]
+description = "Documentation files"
+file = '''doc/.*\.md'''

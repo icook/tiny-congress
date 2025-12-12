@@ -7,8 +7,12 @@ use serde_json::Value;
 use sqlx::postgres::PgPool;
 use uuid::Uuid;
 
-use crate::identity::abuse::audit::{audit_endorsement_revoke, audit_endorsement_write, audit_rate_limit};
-use crate::identity::abuse::rate_limit::{check_rate_limit, increment_rate_limit, RateLimitConfig, RateLimitError};
+use crate::identity::abuse::audit::{
+    audit_endorsement_revoke, audit_endorsement_write, audit_rate_limit,
+};
+use crate::identity::abuse::rate_limit::{
+    check_rate_limit, increment_rate_limit, RateLimitConfig, RateLimitError,
+};
 use crate::identity::crypto::{derive_kid, encode_base64url, verify_envelope, SignedEnvelope};
 use crate::identity::repo::event_store::{append_signed_event, AppendEventInput};
 use crate::observability::{record_endorsement_revocation, record_endorsement_write};

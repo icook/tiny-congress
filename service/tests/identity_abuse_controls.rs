@@ -63,15 +63,8 @@ async fn test_rate_limit_account_limit() {
     }
 
     // 4th endorsement should fail with account limit
-    let result = check_rate_limit(
-        &pool,
-        account_id,
-        "account",
-        "subject3",
-        "topic3",
-        &config,
-    )
-    .await;
+    let result =
+        check_rate_limit(&pool, account_id, "account", "subject3", "topic3", &config).await;
 
     assert!(matches!(result, Err(RateLimitError::AccountLimit(3, 24))));
 }
@@ -111,7 +104,8 @@ async fn test_rate_limit_subject_topic_limit() {
 
     // First 2 endorsements to same subject/topic should succeed
     for _ in 0..2 {
-        let result = check_rate_limit(&pool, account_id, "account", subject_id, topic, &config).await;
+        let result =
+            check_rate_limit(&pool, account_id, "account", subject_id, topic, &config).await;
         assert!(result.is_ok());
 
         increment_rate_limit(&pool, account_id, "account", subject_id, topic)
@@ -173,9 +167,15 @@ async fn test_rate_limit_different_subjects_ok() {
         .await;
         assert!(result.is_ok());
 
-        increment_rate_limit(&pool, account_id, "account", &format!("subject{i}"), "topic")
-            .await
-            .unwrap();
+        increment_rate_limit(
+            &pool,
+            account_id,
+            "account",
+            &format!("subject{i}"),
+            "topic",
+        )
+        .await
+        .unwrap();
     }
 }
 

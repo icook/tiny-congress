@@ -191,10 +191,61 @@ export RUST_LOG=trace
 
 All authentication events, rate limit violations, and security events are logged with structured tracing.
 
+### Security Checks
+
+Run these security checks locally before pushing code:
+
+**Rust Security:**
+
+```bash
+cd service
+
+# Format check
+cargo fmt --all -- --check
+
+# Linting
+cargo clippy --all-targets --all-features -- -D warnings
+
+# Dependency vulnerability scan
+cargo install cargo-audit  # First time only
+cargo audit
+
+# Run all tests
+RUST_TEST_THREADS=1 cargo test
+```
+
+**Web Security (if working on frontend):**
+
+```bash
+cd web
+
+# Dependency vulnerability scan
+yarn audit --environment production
+
+# Linting
+yarn lint
+
+# Run all tests
+yarn test
+```
+
+**Secrets Scanning:**
+
+```bash
+# Install gitleaks (first time only)
+brew install gitleaks  # macOS
+# or download from https://github.com/gitleaks/gitleaks
+
+# Scan for secrets
+gitleaks detect --source . --verbose
+```
+
 ### Pre-push checklist
 
-- From `/service`, run `cargo fmt` and `cargo clippy --all-targets --all-features -- -D warnings` before pushing.
-- Run `RUST_TEST_THREADS=1 cargo test` against a local Postgres to mirror the integration flow used in CI.
+- Run security checks listed above
+- Ensure all tests pass
+- Verify no secrets are committed (check `.env` files are in `.gitignore`)
+- Review backup procedures in `doc/skills/backup.md` if modifying database schema
 
 ## API Schema
 

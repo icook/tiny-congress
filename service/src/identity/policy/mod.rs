@@ -12,5 +12,5 @@ pub mod attributes;
 pub mod evaluator;
 
 pub use ast::{Condition, Operator, Policy, Value};
-pub use attributes::{AttributeContext, fetch_attributes};
+pub use attributes::{fetch_attributes, AttributeContext};
 pub use evaluator::authorize;

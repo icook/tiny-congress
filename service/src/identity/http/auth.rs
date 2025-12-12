@@ -25,8 +25,12 @@ pub fn sign_session_token(claims: &SessionClaims) -> Result<String> {
         .context("SESSION_SIGNING_KEY environment variable not set")?;
 
     let header = Header::new(Algorithm::HS256);
-    let token = encode(&header, claims, &EncodingKey::from_secret(secret.as_bytes()))
-        .context("Failed to encode JWT")?;
+    let token = encode(
+        &header,
+        claims,
+        &EncodingKey::from_secret(secret.as_bytes()),
+    )
+    .context("Failed to encode JWT")?;
 
     Ok(token)
 }
@@ -42,9 +46,12 @@ pub fn verify_session_token(token: &str) -> Result<SessionClaims> {
     let mut validation = Validation::new(Algorithm::HS256);
     validation.validate_exp = true;
 
-    let token_data =
-        decode::<SessionClaims>(token, &DecodingKey::from_secret(secret.as_bytes()), &validation)
-            .context("Failed to decode JWT")?;
+    let token_data = decode::<SessionClaims>(
+        token,
+        &DecodingKey::from_secret(secret.as_bytes()),
+        &validation,
+    )
+    .context("Failed to decode JWT")?;
 
     Ok(token_data.claims)
 }

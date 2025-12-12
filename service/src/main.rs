@@ -18,8 +18,7 @@ use tinycongress_api::{
     build_info::BuildInfoProvider,
     db::setup_database,
     graphql::{graphql_handler, graphql_playground, MutationRoot, QueryRoot},
-    identity,
-    observability,
+    identity, observability,
 };
 use tower_http::cors::{Any, CorsLayer};
 

@@ -10,7 +10,9 @@ use uuid::Uuid;
 
 use crate::identity::crypto::{canonicalize_value, derive_kid, verify_envelope, verify_signature};
 use crate::identity::http::auth::{sign_session_token, SessionClaims};
-use crate::observability::{record_auth_failure, record_auth_success, record_revoked_device_attempt};
+use crate::observability::{
+    record_auth_failure, record_auth_success, record_revoked_device_attempt,
+};
 
 use super::accounts::{decode_key, internal_error};
 
