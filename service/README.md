@@ -99,6 +99,11 @@ This sets up a development environment with:
 
 If you need to fall back to the pre-built binary (e.g. for profiling), set `DISABLE_CARGO_WATCH=1` in the deployment.
 
+### Pre-push checklist
+
+- From `/service`, run `cargo fmt` and `cargo clippy --all-targets --all-features -- -D warnings` before pushing.
+- Run `RUST_TEST_THREADS=1 cargo test` against a local Postgres to mirror the integration flow used in CI.
+
 ## API Schema
 
 The GraphQL API provides:

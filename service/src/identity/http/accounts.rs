@@ -7,7 +7,7 @@ use sqlx::postgres::PgPool;
 use uuid::Uuid;
 
 use crate::identity::crypto::{derive_kid, verify_envelope, SignedEnvelope};
-use crate::identity::repo::event_store::{append_signed_event, AppendEventInput};
+use crate::identity::repo::event_store::{append_signed_event_in_tx, AppendEventInput};
 
 #[derive(Debug, Deserialize)]
 pub struct DeviceMetadata {
@@ -43,6 +43,7 @@ struct PreparedSignup {
     device_type: String,
     device_id: Uuid,
     delegation_envelope: SignedEnvelope,
+    account_id: Uuid,
 }
 
 /// Register a new account with a root key, first device, and delegation link.
@@ -55,21 +56,7 @@ pub async fn signup(
 ) -> Result<Json<SignupResponse>, (StatusCode, String)> {
     let prepared = prepare_signup_request(payload)?;
     let delegation_envelope = prepared.delegation_envelope.clone();
-    let account_id = Uuid::new_v4();
-
-    // Append sigchain link
-    append_signed_event(
-        &pool,
-        AppendEventInput {
-            account_id,
-            seqno: 1,
-            event_type: "AccountCreated".to_string(),
-            envelope: prepared.delegation_envelope.clone(),
-            signer_pubkey: &prepared.root_pubkey_bytes,
-        },
-    )
-    .await
-    .map_err(internal_error)?;
+    let account_id = prepared.account_id;
 
     // Persist account + device rows
     let mut tx = pool
@@ -88,6 +75,17 @@ pub async fn signup(
         return Err((StatusCode::CONFLICT, "username already exists".to_string()));
     }
 
+    let existing_account: Option<(Uuid,)> = sqlx::query_as("SELECT id FROM accounts WHERE id = $1")
+        .bind(account_id)
+        .fetch_optional(&mut *tx)
+        .await
+        .map_err(internal_error)?;
+
+    if existing_account.is_some() {
+        return Err((StatusCode::CONFLICT, "account already exists".to_string()));
+    }
+
+    // Create account row first so sigchain FK passes.
     sqlx::query(
         r"
         INSERT INTO accounts (id, username, root_kid, root_pubkey)
@@ -99,6 +97,19 @@ pub async fn signup(
     .bind(&prepared.root_kid)
     .bind(&prepared.root_pubkey_b64)
     .execute(&mut *tx)
+    .await
+    .map_err(internal_error)?;
+
+    append_signed_event_in_tx(
+        &mut tx,
+        AppendEventInput {
+            account_id,
+            seqno: 1,
+            event_type: "AccountCreated".to_string(),
+            envelope: prepared.delegation_envelope.clone(),
+            signer_pubkey: &prepared.root_pubkey_bytes,
+        },
+    )
     .await
     .map_err(internal_error)?;
 
@@ -182,6 +193,16 @@ fn prepare_signup_request(payload: SignupRequest) -> Result<PreparedSignup, (Sta
 
     // Basic envelope checks
     let device_id = extract_device_id(&payload.delegation_envelope)?;
+    let account_id = payload
+        .delegation_envelope
+        .signer
+        .account_id
+        .ok_or_else(|| {
+            (
+                StatusCode::BAD_REQUEST,
+                "delegation signer must include account_id".to_string(),
+            )
+        })?;
     if payload.delegation_envelope.signer.kid != root_kid {
         return Err((
             StatusCode::BAD_REQUEST,
@@ -219,5 +240,6 @@ fn prepare_signup_request(payload: SignupRequest) -> Result<PreparedSignup, (Sta
         device_type,
         device_id,
         delegation_envelope: payload.delegation_envelope,
+        account_id,
     })
 }
