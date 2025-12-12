@@ -1,4 +1,6 @@
-FROM node:20-slim
+# NODE_VERSION should match web/.nvmrc
+ARG NODE_VERSION=22
+FROM node:${NODE_VERSION}-slim
 WORKDIR /app
 
 # Install Playwright OS dependencies AND browser binary early (before app files)

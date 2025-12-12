@@ -232,12 +232,15 @@ setup:
     @echo "✓ Checking installed tools..."
     @just versions
     @echo ""
+    @just node-check
+    @echo ""
     @echo "Optional prerequisites for full-stack development:"
     @echo "  - Docker: $(docker --version 2>/dev/null || echo "NOT INSTALLED")"
     @echo "  - Skaffold: $(skaffold version 2>/dev/null || echo "NOT INSTALLED")"
     @echo "  - kubectl: $(kubectl version --client 2>/dev/null | head -1 || echo "NOT INSTALLED")"
     @echo ""
     @echo "For local development (no cluster needed):"
+    @echo "  just node-use      # Switch to correct Node version (requires nvm)"
     @echo "  just lint          # Lint all code"
     @echo "  just fmt           # Format all code"
     @echo "  just build         # Build backend + frontend"
@@ -250,6 +253,34 @@ setup:
     @echo "  just test-ci       # Run full test suite via Skaffold"
     @echo "  just dev           # Start full-stack dev environment"
     @echo ""
+
+# Check if Node version matches .nvmrc
+node-check:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    REQUIRED=$(cat web/.nvmrc)
+    CURRENT=$(node --version | sed 's/v//' | cut -d. -f1)
+    if [[ "$CURRENT" != "$REQUIRED" ]]; then
+        echo "⚠️  Node version mismatch!"
+        echo "   Required: Node $REQUIRED (see web/.nvmrc)"
+        echo "   Current:  Node $CURRENT ($(node --version))"
+        echo ""
+        echo "   Fix with: nvm use (in web/ directory)"
+        echo "         or: just node-use"
+    else
+        echo "✓ Node version: $(node --version) (matches .nvmrc)"
+    fi
+
+# Switch to Node version from .nvmrc (requires nvm)
+node-use:
+    @echo "Switching to Node version from web/.nvmrc..."
+    @echo "Run: cd web && nvm use"
+    @echo ""
+    @echo "Or add this to your shell profile for automatic switching:"
+    @echo '  # Auto-switch node version when entering directory with .nvmrc'
+    @echo '  autoload -U add-zsh-hook'
+    @echo '  load-nvmrc() { [[ -f .nvmrc ]] && nvm use; }'
+    @echo '  add-zsh-hook chpwd load-nvmrc'
 
 # =============================================================================
 # Database Commands
