@@ -10,3 +10,4 @@
 pub mod build_info;
 pub mod db;
 pub mod graphql;
+pub mod identity;
