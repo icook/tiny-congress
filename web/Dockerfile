@@ -1,5 +1,7 @@
 # Build stage
-FROM node:20-slim AS builder
+# NODE_VERSION should match web/.nvmrc
+ARG NODE_VERSION=22
+FROM node:${NODE_VERSION}-slim AS builder
 WORKDIR /app
 
 # Install dependencies
