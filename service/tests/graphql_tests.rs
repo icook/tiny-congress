@@ -21,7 +21,7 @@ async fn test_build_info_query() {
                 buildTime
             }
         }
-    "#;
+    ";
 
     let result = execute_query(query).await;
     let data = &result["data"];

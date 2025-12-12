@@ -30,10 +30,10 @@ async fn create_account(pool: &PgPool) -> Uuid {
     let root_kid = derive_kid(&root_pubkey);
 
     sqlx::query(
-        r#"
+        r"
         INSERT INTO accounts (id, username, root_kid, root_pubkey)
         VALUES ($1, $2, $3, $4)
-        "#,
+        ",
     )
     .bind(account_id)
     .bind(format!("user-{}", account_id.simple()))
@@ -46,7 +46,7 @@ async fn create_account(pool: &PgPool) -> Uuid {
     account_id
 }
 
-fn make_envelope(account_id: Uuid, seqno: i64, prev_hash_b64: Option<String>) -> SignedEnvelope {
+fn make_envelope(account_id: Uuid, seqno: i64, prev_hash_b64: Option<&str>) -> SignedEnvelope {
     let signing_key = ed25519_dalek::SigningKey::from_bytes(&SECRET_KEY);
     let public_key = signing_key.verifying_key();
     let kid = derive_kid(&public_key.to_bytes());
@@ -102,13 +102,13 @@ async fn append_events_enforces_prev_hash_and_seqno() {
 
     // Compute prev hash for second link
     let first_hash = Sha256::digest(
-        &first_envelope
+        first_envelope
             .canonical_signing_bytes()
             .expect("canonical bytes for first"),
     );
     let prev_hash_b64 = URL_SAFE_NO_PAD.encode(first_hash);
 
-    let second_envelope = make_envelope(account_id, 2, Some(prev_hash_b64));
+    let second_envelope = make_envelope(account_id, 2, Some(prev_hash_b64.as_str()));
     append_signed_event(
         &pool,
         AppendEventInput {
@@ -126,7 +126,7 @@ async fn append_events_enforces_prev_hash_and_seqno() {
     assert_eq!(events.len(), 2);
     // Verify canonical hash stored matches computed hash
     let expected_hash = Sha256::digest(
-        &first_envelope
+        first_envelope
             .canonical_signing_bytes()
             .expect("canonical bytes for first"),
     )
@@ -160,7 +160,7 @@ async fn reject_prev_hash_mismatch() {
     .expect("first append works");
 
     let bad_prev_hash = URL_SAFE_NO_PAD.encode([1u8; 32]);
-    let bad_envelope = make_envelope(account_id, 2, Some(bad_prev_hash));
+    let bad_envelope = make_envelope(account_id, 2, Some(&bad_prev_hash));
     let err = append_signed_event(
         &pool,
         AppendEventInput {
@@ -205,7 +205,8 @@ async fn reject_seqno_gap_and_first_prev_hash() {
     assert!(err.to_string().contains("first event must use seqno 1"));
 
     // first event with prev_hash present should be rejected
-    let envelope_with_prev = make_envelope(account_id, 1, Some(URL_SAFE_NO_PAD.encode([0u8; 32])));
+    let prev_hash = URL_SAFE_NO_PAD.encode([0u8; 32]);
+    let envelope_with_prev = make_envelope(account_id, 1, Some(prev_hash.as_str()));
     let err = append_signed_event(
         &pool,
         AppendEventInput {

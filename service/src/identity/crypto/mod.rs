@@ -25,6 +25,7 @@ pub enum CryptoError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use anyhow::Result;
     use base64::engine::general_purpose::URL_SAFE_NO_PAD;
     use base64::Engine;
     use serde_json::json;
@@ -44,11 +45,12 @@ mod tests {
     }
 
     #[test]
-    fn canonicalization_is_stable() {
+    fn canonicalization_is_stable() -> Result<()> {
         let value = json!({"b":2,"a":1});
-        let first = canonicalize_value(&value).unwrap();
-        let second = canonicalize_value(&value).unwrap();
+        let first = canonicalize_value(&value)?;
+        let second = canonicalize_value(&value)?;
         assert_eq!(first, second);
+        Ok(())
     }
 
     #[test]
@@ -60,15 +62,16 @@ mod tests {
     }
 
     #[test]
-    fn sign_and_verify_round_trip() {
+    fn sign_and_verify_round_trip() -> Result<()> {
         let (secret_key, public_key) = test_keypair();
         let message = b"hello world";
-        let sig = sign_message(message, &secret_key).unwrap();
-        verify_signature(message, &public_key, &sig).unwrap();
+        let sig = sign_message(message, &secret_key)?;
+        verify_signature(message, &public_key, &sig)?;
+        Ok(())
     }
 
     #[test]
-    fn sign_and_verify_matches_expected_signature() {
+    fn sign_and_verify_matches_expected_signature() -> Result<()> {
         let (secret_key, public_key) = test_keypair();
         let envelope = SignedEnvelope {
             v: 1,
@@ -82,8 +85,8 @@ mod tests {
             sig: String::new(),
         };
 
-        let signing_bytes = envelope.canonical_signing_bytes().unwrap();
-        let signature = sign_message(&signing_bytes, &secret_key).unwrap();
+        let signing_bytes = envelope.canonical_signing_bytes()?;
+        let signature = sign_message(&signing_bytes, &secret_key)?;
         let encoded_sig = URL_SAFE_NO_PAD.encode(&signature);
 
         // Assert the encoded signature is deterministic and verifies.
@@ -91,11 +94,12 @@ mod tests {
             encoded_sig,
             "hYIISBD5RFoDlp969r48FHviKhIjSfpR3K2aKKb3OAq7hffkI042G1mCvU3MD7AsGpFuzSeZOojtpIBU5gigCw"
         );
-        verify_signature(&signing_bytes, &public_key, &signature).unwrap();
+        verify_signature(&signing_bytes, &public_key, &signature)?;
+        Ok(())
     }
 
     #[test]
-    fn verify_envelope_checks_kid_and_signature() {
+    fn verify_envelope_checks_kid_and_signature() -> Result<()> {
         let (secret_key, public_key) = test_keypair();
         let kid = derive_kid(&public_key);
 
@@ -106,27 +110,28 @@ mod tests {
             signer: EnvelopeSigner {
                 account_id: None,
                 device_id: None,
-                kid: kid.clone(),
+                kid,
             },
             sig: String::new(), // filled below
         };
 
-        let signing_bytes = envelope.canonical_signing_bytes().unwrap();
-        let signature = sign_message(&signing_bytes, &secret_key).unwrap();
+        let signing_bytes = envelope.canonical_signing_bytes()?;
+        let signature = sign_message(&signing_bytes, &secret_key)?;
         let mut envelope = envelope;
         envelope.sig = URL_SAFE_NO_PAD.encode(signature);
 
-        verify_envelope(&envelope, &public_key).unwrap();
+        verify_envelope(&envelope, &public_key)?;
 
         // Tamper kid; signature now fails because signer metadata changed
-        let mut bad_envelope = envelope.clone();
+        let mut bad_envelope = envelope;
         bad_envelope.signer.kid = "different".to_string();
         let result = verify_envelope(&bad_envelope, &public_key);
         assert!(matches!(result, Err(CryptoError::VerificationFailed)));
+        Ok(())
     }
 
     #[test]
-    fn envelope_prev_hash_parses() {
+    fn envelope_prev_hash_parses() -> Result<()> {
         let (_, public_key) = test_keypair();
         let kid = derive_kid(&public_key);
         let envelope = SignedEnvelope {
@@ -138,11 +143,12 @@ mod tests {
                 device_id: None,
                 kid,
             },
-            sig: "".to_string(),
+            sig: String::new(),
         };
 
-        let parsed = envelope.prev_hash_bytes().unwrap();
+        let parsed = envelope.prev_hash_bytes()?;
         assert!(parsed.is_some());
+        Ok(())
     }
 
     #[test]
@@ -161,12 +167,12 @@ mod tests {
             sig: "!!!not-base64!!!".to_string(),
         };
 
-        let err = verify_envelope(&envelope, &public_key).unwrap_err();
-        assert!(matches!(err, CryptoError::InvalidFormat(_)));
+        let err = verify_envelope(&envelope, &public_key);
+        assert!(matches!(err, Err(CryptoError::InvalidFormat(_))));
     }
 
     #[test]
-    fn tampered_payload_rejected() {
+    fn tampered_payload_rejected() -> Result<()> {
         let (secret_key, public_key) = test_keypair();
         let kid = derive_kid(&public_key);
         let mut envelope = SignedEnvelope {
@@ -181,13 +187,14 @@ mod tests {
             sig: String::new(),
         };
 
-        let signing_bytes = envelope.canonical_signing_bytes().unwrap();
-        let signature = sign_message(&signing_bytes, &secret_key).unwrap();
+        let signing_bytes = envelope.canonical_signing_bytes()?;
+        let signature = sign_message(&signing_bytes, &secret_key)?;
         envelope.sig = URL_SAFE_NO_PAD.encode(signature);
 
         // Tamper payload after signing
         envelope.payload = json!({"body": {"foo": "baz"}, "prev_hash": null});
-        let err = verify_envelope(&envelope, &public_key).unwrap_err();
-        assert!(matches!(err, CryptoError::VerificationFailed));
+        let err = verify_envelope(&envelope, &public_key);
+        assert!(matches!(err, Err(CryptoError::VerificationFailed)));
+        Ok(())
     }
 }
