@@ -1,4 +1,5 @@
 import { createRootRoute, createRoute, createRouter, RouterProvider } from '@tanstack/react-router';
+import { AboutPage } from './pages/About.page';
 import { DashboardPage } from './pages/Dashboard.page';
 import { HomePage } from './pages/Home.page';
 import { Layout } from './pages/Layout';
@@ -26,10 +27,17 @@ const conversationsRoute = createRoute({
   component: ThreadedConversationPage,
 });
 
+const aboutRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: 'about',
+  component: AboutPage,
+});
+
 const routeTree = rootRoute.addChildren([
   homeRoute,
   dashboardRoute,
   conversationsRoute,
+  aboutRoute,
   createPlaceholderRoute('analytics', 'Analytics', 'Analytics page content'),
   createPlaceholderRoute('releases', 'Releases', 'Releases page content'),
   createPlaceholderRoute('account', 'Account', 'Account page content'),

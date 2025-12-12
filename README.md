@@ -49,3 +49,8 @@ brew install kubectl minikube skaffold
 minikube start
 skaffold dev --port-forward
 ```
+
+## Build metadata and smoke tests
+
+- The API exposes build details at `buildInfo { version gitSha buildTime message }` via the GraphQL endpoint.
+- Run `make e2e-smoke` to deploy with Skaffold, port-forward the UI (`5173`) and API (`8080`), and execute the Playwright `@smoke` check against `/about`. Set `SKAFFOLD_PROFILE` or `SKAFFOLD_ARTIFACTS_FILE` to reuse existing builds when needed.

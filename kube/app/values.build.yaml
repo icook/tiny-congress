@@ -1,0 +1,8 @@
+# Values that may be overridden at build/deploy time to inject metadata
+# into the running containers. CI rewrites this file with the current
+# commit SHA and build timestamp before invoking Skaffold.
+buildInfo:
+  appVersion: dev
+  gitSha: unknown
+  buildTime: unknown
+  message: ""
