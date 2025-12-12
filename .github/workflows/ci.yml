@@ -403,26 +403,17 @@ jobs:
           path: web/coverage/playwright/lcov.info
 
       - name: Summarize Playwright coverage
-        if: always() && hashFiles('web/coverage/playwright/coverage-summary.json') != ''
+        if: always()
+        working-directory: web
         run: |
-          node - <<'EOF'
-          import fs from 'node:fs';
-          import path from 'node:path';
-
-          const summaryPath = path.join(process.cwd(), 'web/coverage/playwright/coverage-summary.json');
-          const summary = JSON.parse(fs.readFileSync(summaryPath, 'utf8')).total;
-          const rows = [
-            ['Lines', `${summary.lines.pct}%`, summary.lines.covered, summary.lines.total],
-            ['Statements', `${summary.statements.pct}%`, summary.statements.covered, summary.statements.total],
-            ['Functions', `${summary.functions.pct}%`, summary.functions.covered, summary.functions.total],
-            ['Branches', `${summary.branches.pct}%`, summary.branches.covered, summary.branches.total],
-          ].map((cells) => `| ${cells.join(' | ')} |`).join('\n');
-
-          const header = '| Metric | Pct | Covered | Total |';
-          const separator = '| --- | --- | --- | --- |';
-          const body = `### Playwright coverage\n${header}\n${separator}\n${rows}\n`;
-          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, body);
-          EOF
+          if [ -d .nyc_output ]; then
+            {
+              echo "### Playwright coverage"
+              echo '```'
+              npx nyc report --reporter=text-summary 2>/dev/null || true
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       - name: Upload Playwright artifacts
         if: always()
@@ -433,6 +424,7 @@ jobs:
           path: |
             web/test-results
             web/reports/playwright.xml
+            web/playwright-report
             web/coverage/playwright
 
       - name: Upload Rust coverage artifacts
