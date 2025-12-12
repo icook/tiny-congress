@@ -1,38 +1,10 @@
-import { useEffect, useState } from 'react';
 import { IconAlertTriangle, IconInfoCircle } from '@tabler/icons-react';
+import { useQuery } from '@tanstack/react-query';
 import { Alert, Card, Group, Loader, Stack, Text, Title } from '@mantine/core';
-import { BuildInfo, fetchBuildInfo } from '../api/buildInfo';
-
-type LoadState =
-  | { status: 'loading' }
-  | { status: 'loaded'; data: BuildInfo }
-  | { status: 'error'; message: string };
+import { buildInfoQuery } from '../api/queries';
 
 export function AboutPage() {
-  const [state, setState] = useState<LoadState>({ status: 'loading' });
-
-  useEffect(() => {
-    let active = true;
-
-    fetchBuildInfo()
-      .then((data) => {
-        if (active) {
-          setState({ status: 'loaded', data });
-        }
-      })
-      .catch((error: Error) => {
-        if (active) {
-          setState({
-            status: 'error',
-            message: error.message || 'Unable to load build metadata',
-          });
-        }
-      });
-
-    return () => {
-      active = false;
-    };
-  }, []);
+  const { data, isPending, isError, error } = useQuery(buildInfoQuery);
 
   return (
     <Stack gap="md">
@@ -46,7 +18,7 @@ export function AboutPage() {
         backend revision.
       </Text>
 
-      {state.status === 'loading' && (
+      {isPending && (
         <Card shadow="sm" padding="lg" radius="md" withBorder data-testid="build-info-loading">
           <Group gap="sm">
             <Loader size="sm" />
@@ -55,25 +27,25 @@ export function AboutPage() {
         </Card>
       )}
 
-      {state.status === 'error' && (
+      {isError && (
         <Alert
           icon={<IconAlertTriangle size={16} />}
           title="Unable to load build info"
           color="red"
           data-testid="build-info-error"
         >
-          {state.message}
+          {error instanceof Error ? error.message : 'Unable to load build metadata'}
         </Alert>
       )}
 
-      {state.status === 'loaded' && (
+      {data && (
         <Card shadow="sm" padding="lg" radius="md" withBorder>
           <Stack gap="sm">
-            <Metric label="API Version" value={state.data.version} testId="api-version" />
-            <Metric label="Git SHA" value={state.data.gitSha} testId="api-git-sha" />
-            <Metric label="Build time" value={state.data.buildTime} testId="api-build-time" />
-            {state.data.message && (
-              <Metric label="Message" value={state.data.message} testId="api-build-message" />
+            <Metric label="API Version" value={data.version} testId="api-version" />
+            <Metric label="Git SHA" value={data.gitSha} testId="api-git-sha" />
+            <Metric label="Build time" value={data.buildTime} testId="api-build-time" />
+            {data.message && (
+              <Metric label="Message" value={data.message} testId="api-build-message" />
             )}
           </Stack>
         </Card>
