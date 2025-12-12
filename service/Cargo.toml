@@ -49,6 +49,14 @@ pedantic = { level = "warn", priority = -1 }
 nursery = { level = "warn", priority = -1 }
 missing_errors_doc = "warn"
 missing_panics_doc = "warn"
+# Stricter error handling
+unwrap_used = "warn"
+expect_used = "warn"
+# No debug/panic in production code
+dbg_macro = "warn"
+todo = "warn"
+unimplemented = "warn"
+# Allowed
 module_name_repetitions = "allow"
 missing_docs_in_private_items = "allow"
 similar_names = "allow"

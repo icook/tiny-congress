@@ -9,6 +9,7 @@ Complete before opening or marking PR ready for review.
 - [ ] No debug code (console.log, dbg!, println!)
 - [ ] No commented-out code without explanation
 - [ ] No TODO comments without linked issue
+- [ ] Rust code follows [rust-coding-standards.md](../interfaces/rust-coding-standards.md)
 
 ## Testing
 
