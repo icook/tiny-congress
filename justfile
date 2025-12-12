@@ -78,11 +78,11 @@ dev-backend:
 
 # Run frontend unit tests (if they exist)
 test-frontend:
-    cd web && yarn vitest run
+    cd web && yarn vitest
 
 # Run frontend unit tests in watch mode (if they exist)
 test-frontend-watch:
-    cd web && yarn vitest
+    cd web && yarn vitest:watch
 
 # Run full frontend test suite (typecheck + lint + vitest + build) - includes E2E via CI
 test-frontend-full:
