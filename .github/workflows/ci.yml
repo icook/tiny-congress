@@ -17,6 +17,26 @@ env:
 
 jobs:
   # ============================================================
+  # JOB: Validate agent compliance block in PR description
+  # ============================================================
+  agent-compliance:
+    name: Agent compliance check
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check agent compliance block
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: ./.github/scripts/check-agent-compliance.sh
+
+  # ============================================================
   # JOB 0: Lint Rust formatting
   # ============================================================
   lint:

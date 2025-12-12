@@ -14,8 +14,27 @@
 ## Project Structure & Module Organization
 - `service/`: Rust GraphQL API, workers, and SQL migrations (`migrations/`). Tests live in `service/tests/` (`*_tests.rs`).
 - `web/`: React/Mantine client on Vite. Source under `web/src/`, shared mocks in `web/test-utils/`.
-- `doc/` and `adr/`: Architecture notes and decision records—refresh them when contracts change. Treat `doc/tickets/` entries as temporary scaffolding; once a ticket is opened, delete the scratch file so the issue tracker stays the single source of truth.
-- `dockerfiles/`, `docker-compose.test.yml`, `skaffold.yaml`, `kube/`: Container and Kubernetes assets for CI, integration, and demo environments.
+- `dockerfiles/`, `skaffold.yaml`, `kube/`: Container and Kubernetes assets for CI, integration, and demo environments.
+
+## Documentation (Required Reading)
+Consult these before starting work:
+
+| Directory | Purpose | When to read |
+|-----------|---------|--------------|
+| `doc/playbooks/` | Step-by-step how-to guides | Before any unfamiliar task |
+| `doc/interfaces/` | Contracts, schemas, naming rules | Before writing new code |
+| `doc/decisions/` | ADRs explaining why decisions were made | When questioning existing patterns |
+| `doc/checklists/` | Pre-PR, pre-release, incident checklists | Before opening PRs or deploying |
+
+Key playbooks:
+- `doc/playbooks/adding-migration.md` - Database changes
+- `doc/playbooks/new-graphql-endpoint.md` - API changes
+- `doc/playbooks/debugging-ci-failure.md` - CI troubleshooting
+
+Key interfaces:
+- `doc/interfaces/directory-conventions.md` - Where code lives
+- `doc/interfaces/naming-conventions.md` - How to name things
+- `doc/interfaces/agent-output-schema.md` - PR compliance format
 
 ## Build, Test, and Development Commands
 - Backend loop: `cd service && cargo check`, `cargo fmt`, `cargo clippy --all-targets -- -D warnings` keep builds clean.
@@ -46,3 +65,37 @@
 - Keep secrets out of version control; export `DATABASE_URL` and queue settings locally and in CI.
 - Ensure PostgreSQL loads `CREATE EXTENSION pgmq;` before integration jobs.
 - Align Docker tags with `skaffold.yaml` profiles so preview, test, and prod images stay consistent.
+
+## Prohibited Actions (Hard Constraints)
+- DO NOT modify files outside `service/`, `web/`, `kube/`, `doc/`, or repo root configs
+- DO NOT add new database tables or migrations without explicit approval
+- DO NOT add dependencies without updating the appropriate lockfile (`Cargo.lock`, `yarn.lock`)
+- DO NOT push directly to `master`; all changes go through PRs
+- DO NOT skip CI checks or use `--no-verify` flags
+- DO NOT commit secrets, credentials, or `.env` files
+- DO NOT delete or rename existing public API endpoints without deprecation
+- DO NOT modify `skaffold.yaml` profiles without running the testing-local-dev skill
+- DO NOT run bare `git push`; ALWAYS specify the remote and branch explicitly: `git push origin <branch-name>`
+- DO NOT use `--force` or `--force-with-lease` without explicit branch: `git push --force-with-lease origin <branch-name>`
+
+## Agent Acknowledgement Contract
+Every agent-generated PR description MUST include this YAML block at the end:
+
+```yaml
+# --- Agent Compliance ---
+agent_compliance:
+  docs_read:
+    - AGENTS.md
+  constraints_followed: true
+  files_modified: []  # List paths actually changed
+  deviations:
+    - none  # Or explain any rule exceptions
+```
+
+CI will reject PRs missing this block or with malformed YAML. The `files_modified` list must match the actual diff.
+
+## Recovery Protocol
+If an agent violates these rules:
+1. Revert the offending commit: `git revert <sha>`
+2. Open an issue documenting the violation
+3. Update AGENTS.md if the rule was unclear
