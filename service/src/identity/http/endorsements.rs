@@ -7,6 +7,8 @@ use serde_json::Value;
 use sqlx::postgres::PgPool;
 use uuid::Uuid;
 
+use crate::identity::abuse::audit::{audit_endorsement_revoke, audit_endorsement_write, audit_rate_limit};
+use crate::identity::abuse::rate_limit::{check_rate_limit, increment_rate_limit, RateLimitConfig, RateLimitError};
 use crate::identity::crypto::{derive_kid, encode_base64url, verify_envelope, SignedEnvelope};
 use crate::identity::repo::event_store::{append_signed_event, AppendEventInput};
 
@@ -86,6 +88,7 @@ struct SignedEventRow {
 ///
 /// # Errors
 /// Returns 4xx when validation, delegation, or signature checks fail; 500 on persistence errors.
+#[allow(clippy::too_many_lines)]
 pub async fn create_endorsement(
     Extension(pool): Extension<PgPool>,
     Json(payload): Json<EndorsementCreateRequest>,
@@ -101,6 +104,57 @@ pub async fn create_endorsement(
     ensure_prev_hash_matches(&pool, payload.account_id, &payload.envelope).await?;
 
     let parsed = parse_endorsement_payload(&payload.envelope.payload)?;
+
+    // Check rate limits before proceeding
+    let rate_config = RateLimitConfig::default();
+    match check_rate_limit(
+        &pool,
+        payload.account_id,
+        &parsed.subject_type,
+        &parsed.subject_id,
+        &parsed.topic,
+        &rate_config,
+    )
+    .await
+    {
+        Ok(()) => {}
+        Err(RateLimitError::AccountLimit(count, hours)) => {
+            audit_rate_limit(
+                payload.account_id,
+                parsed.subject_type.clone(),
+                parsed.subject_id.clone(),
+                parsed.topic.clone(),
+                "account".to_string(),
+            );
+            return Err((
+                StatusCode::TOO_MANY_REQUESTS,
+                format!("Account rate limit exceeded: {count} endorsements in {hours} hours"),
+            ));
+        }
+        Err(RateLimitError::SubjectTopicLimit {
+            count,
+            window_hours,
+            ..
+        }) => {
+            audit_rate_limit(
+                payload.account_id,
+                parsed.subject_type.clone(),
+                parsed.subject_id.clone(),
+                parsed.topic.clone(),
+                "subject_topic".to_string(),
+            );
+            return Err((
+                StatusCode::TOO_MANY_REQUESTS,
+                format!(
+                    "Subject/topic rate limit exceeded: {count} endorsements in {window_hours} hours"
+                ),
+            ));
+        }
+        Err(e) => {
+            return Err(internal_error(e));
+        }
+    }
+
     let endorsement_id = Uuid::new_v4();
     let next_seqno = next_seqno(&pool, payload.account_id).await?;
 
@@ -149,6 +203,28 @@ pub async fn create_endorsement(
         &parsed.topic,
     )
     .await?;
+
+    // Increment rate limit counter
+    increment_rate_limit(
+        &pool,
+        payload.account_id,
+        &parsed.subject_type,
+        &parsed.subject_id,
+        &parsed.topic,
+    )
+    .await
+    .map_err(internal_error)?;
+
+    // Audit log the endorsement write
+    audit_endorsement_write(
+        payload.account_id,
+        payload.device_id,
+        parsed.subject_type,
+        parsed.subject_id,
+        parsed.topic,
+        parsed.magnitude,
+        parsed.confidence,
+    );
 
     Ok(Json(EndorsementCreateResponse { endorsement_id }))
 }
@@ -242,6 +318,9 @@ pub async fn revoke_endorsement(
     } else {
         None
     };
+
+    // Audit log the revocation
+    audit_endorsement_revoke(payload.account_id, payload.device_id, endorsement_id);
 
     recompute_aggregate_and_reputation(
         &pool,

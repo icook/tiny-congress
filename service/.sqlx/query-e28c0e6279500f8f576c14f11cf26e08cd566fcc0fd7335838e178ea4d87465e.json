@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO endorsement_rate_limits (account_id, subject_type, subject_id, topic, window_start, count)\n        VALUES ($1, 'account', 'subject', 'topic', NOW() - INTERVAL '10 days', 5)\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e28c0e6279500f8f576c14f11cf26e08cd566fcc0fd7335838e178ea4d87465e"
+}

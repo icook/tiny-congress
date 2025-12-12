@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT COALESCE(SUM(count), 0)::int as \"count!\"\n        FROM endorsement_rate_limits\n        WHERE account_id = $1\n          AND subject_type = $2\n          AND subject_id = $3\n          AND topic = $4\n          AND window_start >= $5\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "count!",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text",
+        "Text",
+        "Timestamptz"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "7ab95419e177320de1ddda996ecd1af631878e06329263666f4b36e3a33e8ee5"
+}

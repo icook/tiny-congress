@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        DELETE FROM endorsement_rate_limits\n        WHERE window_start < $1\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "cc80021c9028dccf6136527cfedcd0b2335ba91f2326a44674deb3842be5a5d5"
+}

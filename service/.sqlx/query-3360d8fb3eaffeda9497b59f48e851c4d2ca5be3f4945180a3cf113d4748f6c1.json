@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT COALESCE(SUM(count), 0)::int as \"count!\"\n        FROM endorsement_rate_limits\n        WHERE account_id = $1\n          AND window_start >= $2\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "count!",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Timestamptz"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "3360d8fb3eaffeda9497b59f48e851c4d2ca5be3f4945180a3cf113d4748f6c1"
+}

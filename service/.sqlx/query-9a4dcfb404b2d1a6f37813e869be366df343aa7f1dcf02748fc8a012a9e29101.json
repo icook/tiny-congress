@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO endorsement_rate_limits (account_id, subject_type, subject_id, topic, window_start, count)\n        VALUES ($1, $2, $3, $4, $5, 1)\n        ON CONFLICT (account_id, subject_type, subject_id, topic, window_start)\n        DO UPDATE SET count = endorsement_rate_limits.count + 1\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text",
+        "Text",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "9a4dcfb404b2d1a6f37813e869be366df343aa7f1dcf02748fc8a012a9e29101"
+}
