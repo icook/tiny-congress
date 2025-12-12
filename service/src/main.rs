@@ -9,8 +9,7 @@
 
 use async_graphql::{EmptySubscription, Schema};
 use axum::{
-    http::{Method, StatusCode},
-    response::IntoResponse,
+    http::Method,
     routing::get,
     Extension, Router,
 };
@@ -20,13 +19,9 @@ use tinycongress_api::{
     db::setup_database,
     graphql::{graphql_handler, graphql_playground, MutationRoot, QueryRoot},
     identity,
+    observability,
 };
 use tower_http::cors::{Any, CorsLayer};
-
-// Health check handler
-async fn health_check() -> impl IntoResponse {
-    StatusCode::OK
-}
 
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
@@ -45,6 +40,10 @@ async fn main() -> Result<(), anyhow::Error> {
     // Database connection
     let database_url = std::env::var("DATABASE_URL")
         .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:5432/tinycongress".to_string());
+
+    // Initialize metrics
+    tracing::info!("Initializing Prometheus metrics...");
+    let metrics_handle = observability::init_metrics();
 
     tracing::info!("Connecting to database...");
     let pool = setup_database(&database_url).await?;
@@ -69,11 +68,13 @@ async fn main() -> Result<(), anyhow::Error> {
         // GraphQL routes
         .route("/graphql", get(graphql_playground).post(graphql_handler))
         .merge(identity::http::router())
-        // Health check route
-        .route("/health", get(health_check))
-        // Add the schema to the extension
+        // Observability routes
+        .route("/health", get(observability::health_check))
+        .route("/metrics", get(observability::metrics_handler))
+        // Add shared state to extensions
         .layer(Extension(schema))
         .layer(Extension(pool))
+        .layer(Extension(metrics_handle))
         .layer(
             CorsLayer::new()
                 .allow_methods([Method::GET, Method::POST, Method::OPTIONS])

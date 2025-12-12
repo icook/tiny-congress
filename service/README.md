@@ -151,6 +151,46 @@ skaffold build --file-output artifacts.json
 skaffold test --build-artifacts artifacts.json
 ```
 
+### Observability
+
+The service exports Prometheus metrics at `/metrics` and provides a health check at `/health`.
+
+**Metrics Endpoints:**
+
+```bash
+# Health check (includes DB connectivity)
+curl http://localhost:8080/health
+
+# Prometheus metrics
+curl http://localhost:8080/metrics
+```
+
+**Available Metrics:**
+
+- `auth.success` - Counter for successful authentications
+- `auth.failure` - Counter for failed authentication attempts
+- `device.revoked_attempt` - Counter for attempts to use revoked devices
+- `endorsement.write` - Counter for endorsement creations
+- `endorsement.revocation` - Counter for endorsement revocations
+- `reducer.replay_seconds` - Histogram for reducer replay times
+
+**Logging:**
+
+Control log verbosity with the `RUST_LOG` environment variable:
+
+```bash
+# Info level (default)
+export RUST_LOG=info
+
+# Debug level for identity module
+export RUST_LOG=info,tinycongress_api::identity=debug
+
+# Trace level for all modules
+export RUST_LOG=trace
+```
+
+All authentication events, rate limit violations, and security events are logged with structured tracing.
+
 ### Pre-push checklist
 
 - From `/service`, run `cargo fmt` and `cargo clippy --all-targets --all-features -- -D warnings` before pushing.

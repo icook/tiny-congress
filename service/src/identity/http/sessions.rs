@@ -10,6 +10,7 @@ use uuid::Uuid;
 
 use crate::identity::crypto::{canonicalize_value, derive_kid, verify_envelope, verify_signature};
 use crate::identity::http::auth::{sign_session_token, SessionClaims};
+use crate::observability::{record_auth_failure, record_auth_success, record_revoked_device_attempt};
 
 use super::accounts::{decode_key, internal_error};
 
@@ -188,6 +189,7 @@ pub async fn verify_challenge(
     .ok_or_else(|| (StatusCode::NOT_FOUND, "device not found".to_string()))?;
 
     if device.2.is_some() {
+        record_revoked_device_attempt();
         return Err((StatusCode::FORBIDDEN, "device revoked".to_string()));
     }
 
@@ -234,6 +236,7 @@ pub async fn verify_challenge(
     let device_pubkey_bytes = decode_key(&device.1, "device_pubkey")?;
 
     verify_signature(&canonical, &device_pubkey_bytes, &signature).map_err(|_| {
+        record_auth_failure();
         (
             StatusCode::FORBIDDEN,
             "signature verification failed".to_string(),
@@ -261,6 +264,9 @@ pub async fn verify_challenge(
     };
 
     let token = sign_session_token(&claims).map_err(internal_error)?;
+
+    // Record successful authentication
+    record_auth_success();
 
     Ok(Json(VerifyResponse {
         session_id: payload.challenge_id,

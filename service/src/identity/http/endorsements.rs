@@ -11,6 +11,7 @@ use crate::identity::abuse::audit::{audit_endorsement_revoke, audit_endorsement_
 use crate::identity::abuse::rate_limit::{check_rate_limit, increment_rate_limit, RateLimitConfig, RateLimitError};
 use crate::identity::crypto::{derive_kid, encode_base64url, verify_envelope, SignedEnvelope};
 use crate::identity::repo::event_store::{append_signed_event, AppendEventInput};
+use crate::observability::{record_endorsement_revocation, record_endorsement_write};
 
 use super::accounts::{decode_key, internal_error};
 
@@ -215,7 +216,7 @@ pub async fn create_endorsement(
     .await
     .map_err(internal_error)?;
 
-    // Audit log the endorsement write
+    // Audit log and metric for endorsement write
     audit_endorsement_write(
         payload.account_id,
         payload.device_id,
@@ -225,6 +226,7 @@ pub async fn create_endorsement(
         parsed.magnitude,
         parsed.confidence,
     );
+    record_endorsement_write();
 
     Ok(Json(EndorsementCreateResponse { endorsement_id }))
 }
@@ -319,8 +321,9 @@ pub async fn revoke_endorsement(
         None
     };
 
-    // Audit log the revocation
+    // Audit log and metric for revocation
     audit_endorsement_revoke(payload.account_id, payload.device_id, endorsement_id);
+    record_endorsement_revocation();
 
     recompute_aggregate_and_reputation(
         &pool,
