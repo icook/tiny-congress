@@ -58,7 +58,6 @@ deploy:
         chartPath: kube/app
         valuesFiles:
           - kube/app/values.yaml
-          - kube/app/values.build.yaml
         version: 0.1.0
         setValueTemplates:
           image.repository: "{{.IMAGE_REPO_tc_api_dev}}"
@@ -168,7 +167,6 @@ profiles:
             chartPath: kube/app
             valuesFiles:
               - kube/app/values.yaml
-              - kube/app/values.build.yaml
             version: 0.1.0
             setValueTemplates:
               image.repository: "{{.IMAGE_REPO_tc_api_release}}"
