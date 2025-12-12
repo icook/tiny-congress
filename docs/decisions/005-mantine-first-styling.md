@@ -1,4 +1,4 @@
-# ADR 0001: Mantine-first styling
+# ADR-005: Mantine-first styling
 
 ## Status
 
@@ -35,7 +35,7 @@ Accepted
 
 ## References
 
-- Style policy: `doc/style/STYLE_GUIDE.md`
-- LLM extension guide: `doc/style/LLM_UI_GUIDE.md`
+- Style policy: `../style/STYLE_GUIDE.md`
+- LLM extension guide: `../style/LLM_UI_GUIDE.md`
 - Canonical theme: `web/src/theme/mantineTheme.ts`
 - Reference implementation: `web/src/components/Navbar/Navbar.tsx`

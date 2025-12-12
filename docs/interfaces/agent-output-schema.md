@@ -37,7 +37,7 @@ agent_compliance:
 agent_compliance:
   docs_read:
     - AGENTS.md
-    - doc/playbooks/adding-migration.md
+    - docs/playbooks/adding-migration.md
   constraints_followed: true
   files_modified:
     - service/migrations/20240115_add_status.sql
@@ -64,7 +64,7 @@ agent_compliance:
 # Missing AGENTS.md in docs_read
 agent_compliance:
   docs_read:
-    - doc/playbooks/adding-migration.md
+    - docs/playbooks/adding-migration.md
   constraints_followed: true
   files_modified: []
   deviations:

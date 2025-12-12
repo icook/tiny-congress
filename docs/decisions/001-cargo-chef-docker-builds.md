@@ -43,4 +43,4 @@ The build uses three stages:
 ## References
 - cargo-chef documentation: https://github.com/LukeMathWalker/cargo-chef
 - `service/Dockerfile` - implementation
-- `doc/playbooks/docker-layer-caching.md` - usage guide
+- `../playbooks/docker-layer-caching.md` - usage guide

@@ -55,4 +55,4 @@ Configuration in `skaffold.yaml` defines:
 ## References
 - Skaffold documentation: https://skaffold.dev/docs/
 - `skaffold.yaml` - configuration
-- `doc/playbooks/skaffold-profiles.md` - usage guide
+- `../playbooks/skaffold-profiles.md` - usage guide

@@ -4,7 +4,7 @@ You are extending the TinyCongress UI. Follow these instructions literally.
 
 - Start with Mantine components and props. Avoid writing CSS unless Mantine props cannot express the requirement.
 - Use the canonical theme in `web/src/theme/mantineTheme.ts` for colors, radius, spacing, and typography.
-- Consult [ADR 0001](../adr/adr-0001-mantine-first-styling.md) and `doc/style/STYLE_GUIDE.md` before choosing a pattern.
+- Consult [ADR-005](../decisions/005-mantine-first-styling.md) and `STYLE_GUIDE.md` before choosing a pattern.
 - If you keep or add CSS, keep it in a `.module.css` next to the component and add a short comment in the component explaining why CSS is required.
 - Reference `web/src/components/Navbar/Navbar.tsx` as the preferred Mantine-first example for navigation and layout.
 
@@ -30,11 +30,11 @@ You are extending the TinyCongress UI. Follow these instructions literally.
 ## Where to look
 
 - Tokens/theme defaults: `web/src/theme/mantineTheme.ts`
-- Policy and examples: `doc/style/STYLE_GUIDE.md`
+- Policy and examples: `STYLE_GUIDE.md`
 - Navigation reference: `web/src/components/Navbar/Navbar.tsx`
 
 ## If you think you need CSS
 
 1. Check if `Stack`, `Group`, `Flex`, `Grid`, or `SimpleGrid` with props solve it.
 2. If not, create a `.module.css` file next to the component.
-3. Add a short comment in the component (e.g., `// CSS kept for sticky scroll behavior; see ADR 0001`) so humans know why.
+3. Add a short comment in the component (e.g., `// CSS kept for sticky scroll behavior; see ADR-005`) so humans know why.

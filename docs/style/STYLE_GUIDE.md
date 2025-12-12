@@ -1,6 +1,6 @@
 # Styling Guide (Mantine-first)
 
-This guide operationalizes [ADR 0001: Mantine-first styling](../adr/adr-0001-mantine-first-styling.md). Use it when adding or revising UI.
+This guide operationalizes [ADR-005: Mantine-first styling](../decisions/005-mantine-first-styling.md). Use it when adding or revising UI.
 
 - Use Mantine components and style props first for layout, spacing, color, and typography.
 - Keep the canonical tokens in `web/src/theme/mantineTheme.ts`; adjust visual changes there instead of scattering overrides.

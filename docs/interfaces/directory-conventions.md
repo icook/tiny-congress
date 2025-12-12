@@ -38,11 +38,13 @@ tiny-congress/
 ├── dockerfiles/           # Shared Dockerfiles
 │   └── Dockerfile.postgres  # Postgres + pgmq
 │
-├── doc/                   # Documentation
+├── docs/                  # Documentation
 │   ├── playbooks/         # How-to guides
 │   ├── interfaces/        # Contracts and schemas
 │   ├── decisions/         # ADRs (why decisions were made)
-│   └── checklists/        # Pre-PR, release, incident
+│   ├── checklists/        # Pre-PR, release, incident
+│   ├── style/             # UI styling guidelines
+│   └── skills/            # LLM skills for specific tasks
 │
 └── .github/
     ├── workflows/         # CI/CD pipelines
@@ -62,8 +64,8 @@ tiny-congress/
 | Component test | Next to component | `web/src/components/VoteButton.test.tsx` |
 | E2E test | `web/tests/` | `web/tests/voting.spec.ts` |
 | K8s resource | `kube/app/templates/` | `kube/app/templates/cronjob.yaml` |
-| Playbook | `doc/playbooks/` | `doc/playbooks/adding-cronjob.md` |
-| ADR | `doc/decisions/` | `doc/decisions/003-use-pgmq.md` |
+| Playbook | `docs/playbooks/` | `docs/playbooks/adding-cronjob.md` |
+| ADR | `docs/decisions/` | `docs/decisions/003-use-pgmq.md` |
 
 ## Files that must stay in sync
 

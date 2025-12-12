@@ -60,7 +60,7 @@ export default tseslint.config(
   },
 
   {
-    // Guard against introducing competing styling systems; keep Mantine-first (see doc/style/STYLE_GUIDE.md).
+    // Guard against introducing competing styling systems; keep Mantine-first (see docs/style/STYLE_GUIDE.md).
     files: ['src/**/*.{ts,tsx}', 'test-utils/**/*.{ts,tsx}'],
     rules: {
       'no-restricted-imports': [
@@ -69,19 +69,19 @@ export default tseslint.config(
           paths: [
             {
               name: 'tailwindcss',
-              message: 'Use Mantine components and props instead of adding Tailwind (ADR 0001).',
+              message: 'Use Mantine components and props instead of adding Tailwind (ADR-005).',
             },
             {
               name: 'styled-components',
-              message: 'Do not add styled-components; prefer Mantine props per doc/style/STYLE_GUIDE.md.',
+              message: 'Do not add styled-components; prefer Mantine props per docs/style/STYLE_GUIDE.md.',
             },
             {
               name: '@emotion/react',
-              message: 'Avoid Emotion; follow Mantine-first styling (ADR 0001).',
+              message: 'Avoid Emotion; follow Mantine-first styling (ADR-005).',
             },
             {
               name: '@emotion/styled',
-              message: 'Avoid Emotion; follow Mantine-first styling (ADR 0001).',
+              message: 'Avoid Emotion; follow Mantine-first styling (ADR-005).',
             },
             {
               name: '@mui/material',

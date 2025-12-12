@@ -224,7 +224,7 @@ clean:
 # =============================================================================
 # Git Workflows
 # =============================================================================
-# See doc/interfaces/branch-naming-conventions.md for branch naming standards
+# See docs/interfaces/branch-naming-conventions.md for branch naming standards
 
 # Push current branch and create a PR
 pr title body="":

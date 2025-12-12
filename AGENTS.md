@@ -2,7 +2,7 @@
 
 ## Default Delivery Flow
 - Always sync with `master` before starting work: `git checkout master && git pull --rebase`. When picking up a PR or ticket, rebase your working branch onto the refreshed `master` before any edits.
-- Create a branch for every ticket before making changes following the conventions in `doc/interfaces/branch-naming-conventions.md` (e.g., `feature/123-update-copy`, `fix/456-login-redirect`).
+- Create a branch for every ticket before making changes following the conventions in `docs/interfaces/branch-naming-conventions.md` (e.g., `feature/123-update-copy`, `fix/456-login-redirect`).
 - Implement the work, keep commits focused, and run the relevant backend (`cargo test`) and frontend (`yarn test`) suites.
 - Treat each major checkpoint on a PR (e.g., before opening, after rebasing, after addressing review) as a moment to leave a fresh status comment with what changed and what still needs attention.
 - Once everything passes locally, push the branch and open a draft PR that links the tracked issue, fills out the Codex PR template, and explicitly notes `Opened by: Codex`.
@@ -21,21 +21,23 @@ Consult these before starting work:
 
 | Directory | Purpose | When to read |
 |-----------|---------|--------------|
-| `doc/playbooks/` | Step-by-step how-to guides | Before any unfamiliar task |
-| `doc/interfaces/` | Contracts, schemas, naming rules | Before writing new code |
-| `doc/decisions/` | ADRs explaining why decisions were made | When questioning existing patterns |
-| `doc/checklists/` | Pre-PR, pre-release, incident checklists | Before opening PRs or deploying |
+| `docs/playbooks/` | Step-by-step how-to guides | Before any unfamiliar task |
+| `docs/interfaces/` | Contracts, schemas, naming rules | Before writing new code |
+| `docs/decisions/` | ADRs explaining why decisions were made | When questioning existing patterns |
+| `docs/checklists/` | Pre-PR, pre-release, incident checklists | Before opening PRs or deploying |
+| `docs/style/` | UI styling guidelines (Mantine-first) | Before modifying frontend UI |
+| `docs/skills/` | LLM skills for specific tasks | When referenced by other docs |
 
 Key playbooks:
-- `doc/playbooks/adding-migration.md` - Database changes
-- `doc/playbooks/new-graphql-endpoint.md` - API changes
-- `doc/playbooks/debugging-ci-failure.md` - CI troubleshooting
+- `docs/playbooks/adding-migration.md` - Database changes
+- `docs/playbooks/new-graphql-endpoint.md` - API changes
+- `docs/playbooks/debugging-ci-failure.md` - CI troubleshooting
 
 Key interfaces:
-- `doc/interfaces/directory-conventions.md` - Where code lives
-- `doc/interfaces/naming-conventions.md` - How to name things
-- `doc/interfaces/branch-naming-conventions.md` - Branch naming standards
-- `doc/interfaces/agent-output-schema.md` - PR compliance format
+- `docs/interfaces/directory-conventions.md` - Where code lives
+- `docs/interfaces/naming-conventions.md` - How to name things
+- `docs/interfaces/branch-naming-conventions.md` - Branch naming standards
+- `docs/interfaces/agent-output-schema.md` - PR compliance format
 
 ## Build, Test, and Development Commands
 - Backend loop: `cd service && cargo check`, `cargo fmt`, `cargo clippy --all-targets -- -D warnings` keep builds clean.
@@ -55,12 +57,12 @@ Key interfaces:
 - Keep specs near code (`*_tests.rs`, `*.test.tsx`). Reuse fixtures before adding mocks.
 - Cover ranking, pairing, and voting flows when rules shift; add regression tests for reported bugs.
 - Run `skaffold test -p ci`, and `skaffold verify -p ci` (optionally reusing `--build-artifacts <file>`) before PRs
-- Treat the `testing local dev` LLM skill (`doc/skills/testing-local-dev.md`) as a pre-merge requirement for any MR that changes Skaffold configuration; document the results in the PR.
+- Treat the `testing local dev` LLM skill (`docs/skills/testing-local-dev.md`) as a pre-merge requirement for any MR that changes Skaffold configuration; document the results in the PR.
 
 ## Commit & Pull Request Guidelines
 - Match the concise, imperative commit log (e.g., `Migrate CI build to docker build-push`). Avoid bundling unrelated work.
 - PR descriptions should cover intent, risks, rollout, and linked issues. Add screenshots or GraphQL traces for UX or schema changes.
-- Call out env var updates and refresh `doc/` or `adr/` entries when system behavior evolves.
+- Call out env var updates and refresh `docs/` entries when system behavior evolves.
 
 ## Environment & Configuration Tips
 - Keep secrets out of version control; export `DATABASE_URL` and queue settings locally and in CI.
@@ -68,7 +70,7 @@ Key interfaces:
 - Align Docker tags with `skaffold.yaml` profiles so preview, test, and prod images stay consistent.
 
 ## Prohibited Actions (Hard Constraints)
-- DO NOT modify files outside `service/`, `web/`, `kube/`, `doc/`, or repo root configs
+- DO NOT modify files outside `service/`, `web/`, `kube/`, `docs/`, or repo root configs
 - DO NOT add new database tables or migrations without explicit approval
 - DO NOT add dependencies without updating the appropriate lockfile (`Cargo.lock`, `yarn.lock`)
 - DO NOT push directly to `master`; all changes go through PRs
