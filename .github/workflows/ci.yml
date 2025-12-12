@@ -221,6 +221,14 @@ jobs:
       - name: Verify Skaffold installation
         run: skaffold version
 
+      - name: Stamp build metadata
+        run: |
+          {
+            echo "BUILD_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo "APP_VERSION=${GITHUB_SHA}"
+            echo "GIT_SHA=${GITHUB_SHA}"
+          } >> "$GITHUB_ENV"
+
       - name: Login to GHCR
         uses: docker/login-action@v3
         with:
@@ -326,7 +334,8 @@ jobs:
       - name: Deploy with Skaffold
         run: |
           set -euo pipefail
-          skaffold deploy -p ${SKAFFOLD_PROFILE} --status-check=true --build-artifacts "${{ steps.artifacts.outputs.file }}"
+          skaffold deploy -p ${SKAFFOLD_PROFILE} --status-check=true \
+            --build-artifacts "${{ steps.artifacts.outputs.file }}"
 
       - name: Run Rust integration tests
         run: |
@@ -352,24 +361,32 @@ jobs:
         run: PLAYWRIGHT_COVERAGE=1 yarn build
 
       - name: Run Playwright E2E tests
+        working-directory: web
+        env:
+          CI: true
+          PLAYWRIGHT_COVERAGE: "1"
+          PLAYWRIGHT_BASE_URL: http://localhost:5173
+          PLAYWRIGHT_API_URL: http://localhost:8080/graphql
         run: |
           set -euo pipefail
-          cd web
 
-          # Start preview server with instrumented build
+          # Port-forward API from cluster
+          kubectl port-forward service/tc 8080:8080 &
+          PF_API_PID=$!
+          timeout 60 bash -c 'until curl -sf http://localhost:8080/health >/dev/null; do sleep 1; done'
+
+          # Start local preview server with instrumented build
           yarn preview --host 0.0.0.0 --port 5173 --strictPort &
           PREVIEW_PID=$!
-          timeout 60 bash -c 'until curl -sf http://localhost:5173 > /dev/null; do sleep 1; done'
+          timeout 60 bash -c 'until curl -sf http://localhost:5173 >/dev/null; do sleep 1; done'
 
-          # Run Playwright tests
+          # Run tests
           node ./scripts/reset-playwright-coverage.mjs
-          CI=true PLAYWRIGHT_BASE_URL=http://localhost:5173 PLAYWRIGHT_COVERAGE=1 yarn playwright:test || TEST_EXIT=$?
-          if [ -d .nyc_output ]; then
-            yarn playwright:report || true
-          fi
+          yarn playwright:test || TEST_EXIT=$?
+          [ -d .nyc_output ] && yarn playwright:report || true
 
           # Cleanup
-          kill $PREVIEW_PID 2>/dev/null || true
+          kill $PREVIEW_PID $PF_API_PID 2>/dev/null || true
           exit ${TEST_EXIT:-0}
 
       - name: Publish Playwright test report

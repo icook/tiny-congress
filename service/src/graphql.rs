@@ -1,5 +1,6 @@
+use crate::build_info::{BuildInfo as BuildInfoObject, BuildInfoProvider};
 use async_graphql::http::{playground_source, GraphQLPlaygroundConfig};
-use async_graphql::{Context, EmptySubscription, Object, Schema, SimpleObject, ID};
+use async_graphql::{Context, EmptySubscription, Object, Result, Schema, SimpleObject, ID};
 use async_graphql_axum::{GraphQLRequest, GraphQLResponse};
 use axum::extract::Extension;
 use axum::response::{Html, IntoResponse};
@@ -48,6 +49,12 @@ pub struct QueryRoot;
 
 #[Object]
 impl QueryRoot {
+    #[allow(clippy::unused_async)]
+    async fn build_info(&self, ctx: &Context<'_>) -> Result<BuildInfoObject> {
+        let provider = ctx.data::<BuildInfoProvider>()?;
+        Ok(provider.build_info())
+    }
+
     async fn current_round(&self, _ctx: &Context<'_>) -> Option<Round> {
         // Mock implementation
         Some(Round {

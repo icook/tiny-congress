@@ -70,7 +70,9 @@ deploy:
           serviceAccount:
             create: false
 
-# Pre-deploy tests: run fast unit tests on host
+# PRE-DEPLOY TESTS (cluster not required)
+# - Rust: unit tests via cargo llvm-cov
+# - Web: vitest unit tests
 test:
   - image: tc-api-release
     custom:
@@ -101,7 +103,7 @@ portForward:
     resourceName: tc
     port: 8080
     localPort: 8080
-  - resourceType: deployment
+  - resourceType: service
     resourceName: tc-frontend
     port: 5173
     localPort: 5173
@@ -173,6 +175,11 @@ profiles:
               frontend.image.tag: "{{.IMAGE_TAG_tc_ui_release}}"
               postgres.image.repository: "{{.IMAGE_REPO_postgres}}"
               postgres.image.tag: "{{.IMAGE_TAG_postgres}}"
+              buildInfo.appVersion: "{{ .APP_VERSION }}"
+              buildInfo.gitSha: "{{ .GIT_SHA }}"
+              buildInfo.buildTime: "{{ .BUILD_TIME }}"
             setValues:
               serviceAccount:
                 create: false
+              frontend.service.port: 80
+              frontend.service.targetPort: 80
