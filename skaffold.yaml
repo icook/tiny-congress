@@ -175,6 +175,9 @@ profiles:
               frontend.image.tag: "{{.IMAGE_TAG_tc_ui_release}}"
               postgres.image.repository: "{{.IMAGE_REPO_postgres}}"
               postgres.image.tag: "{{.IMAGE_TAG_postgres}}"
+              buildInfo.appVersion: "{{ .APP_VERSION }}"
+              buildInfo.gitSha: "{{ .GIT_SHA }}"
+              buildInfo.buildTime: "{{ .BUILD_TIME }}"
             setValues:
               serviceAccount:
                 create: false

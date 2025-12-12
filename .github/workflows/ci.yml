@@ -335,10 +335,7 @@ jobs:
         run: |
           set -euo pipefail
           skaffold deploy -p ${SKAFFOLD_PROFILE} --status-check=true \
-            --build-artifacts "${{ steps.artifacts.outputs.file }}" \
-            --set buildInfo.appVersion="${APP_VERSION}" \
-            --set buildInfo.gitSha="${GIT_SHA}" \
-            --set buildInfo.buildTime="${BUILD_TIME}"
+            --build-artifacts "${{ steps.artifacts.outputs.file }}"
 
       - name: Run Rust integration tests
         run: |
