@@ -1,6 +1,6 @@
 use anyhow::{anyhow, Context};
 use sha2::{Digest, Sha256};
-use sqlx::{query, query_as, PgPool};
+use sqlx::{query, query_as, PgPool, Postgres, Transaction};
 use uuid::Uuid;
 
 use crate::identity::crypto::{verify_envelope, CryptoError, SignedEnvelope};
@@ -23,7 +23,19 @@ pub async fn append_signed_event(
     input: AppendEventInput<'_>,
 ) -> Result<(), anyhow::Error> {
     let mut tx = pool.begin().await?;
+    append_signed_event_in_tx(&mut tx, input).await?;
+    tx.commit().await?;
+    Ok(())
+}
 
+/// Append a signed event using an existing transaction.
+///
+/// # Errors
+/// Returns an error when seqnos are out of order, `prev_hash` mismatches, canonicalization fails, or the insert fails.
+pub async fn append_signed_event_in_tx(
+    tx: &mut Transaction<'_, Postgres>,
+    input: AppendEventInput<'_>,
+) -> Result<(), anyhow::Error> {
     let previous = query_as::<_, SignedEventRow>(
         r"
         SELECT seqno, event_type, canonical_bytes_hash, envelope_json
@@ -34,7 +46,7 @@ pub async fn append_signed_event(
         ",
     )
     .bind(input.account_id)
-    .fetch_optional(&mut *tx)
+    .fetch_optional(&mut **tx)
     .await?;
 
     if let Some(prev) = previous {
@@ -94,10 +106,8 @@ pub async fn append_signed_event(
     .bind(&input.event_type)
     .bind(&canonical_hash)
     .bind(serde_json::to_value(&input.envelope)?)
-    .execute(&mut *tx)
+    .execute(&mut **tx)
     .await?;
-
-    tx.commit().await?;
     Ok(())
 }
 
