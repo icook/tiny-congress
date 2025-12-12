@@ -266,3 +266,64 @@ export async function getEndorsements(
 export async function getReputationScore(accountId: string): Promise<ReputationScore> {
   return fetchJson<ReputationScore>(`/users/${accountId}/reputation`);
 }
+
+// Endorsement creation and revocation
+
+export interface CreateEndorsementRequest {
+  account_id: string;
+  device_id: string;
+  envelope: {
+    v: number;
+    payload_type: string;
+    payload: unknown;
+    signer: {
+      account_id?: string | null;
+      device_id?: string | null;
+      kid: string;
+    };
+    sig: string;
+  };
+}
+
+export interface CreateEndorsementResponse {
+  endorsement_id: string;
+}
+
+export async function createEndorsement(
+  token: string,
+  request: CreateEndorsementRequest
+): Promise<CreateEndorsementResponse> {
+  return fetchJson<CreateEndorsementResponse>('/endorsements', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify(request),
+  });
+}
+
+export interface RevokeEndorsementRequest {
+  account_id: string;
+  device_id: string;
+  envelope: {
+    v: number;
+    payload_type: string;
+    payload: unknown;
+    signer: {
+      account_id?: string | null;
+      device_id?: string | null;
+      kid: string;
+    };
+    sig: string;
+  };
+}
+
+export async function revokeEndorsement(
+  token: string,
+  endorsementId: string,
+  request: RevokeEndorsementRequest
+): Promise<void> {
+  return fetchJson<void>(`/endorsements/${endorsementId}/revoke`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify(request),
+  });
+}
