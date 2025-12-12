@@ -51,6 +51,50 @@ The server will:
 - Run database migrations automatically
 - Start listening on port 8080 (or `PORT` env var)
 
+### Database Migrations
+
+This project uses SQLx for database migrations. Migrations are located in `service/migrations/` and define the schema for both the prioritization demo and the Phase 1 identity system.
+
+**Running Migrations:**
+
+```bash
+# Set your database URL
+export DATABASE_URL=postgres://postgres:postgres@localhost:5432/tinycongress
+
+# Run all pending migrations
+cd service
+sqlx migrate run
+```
+
+**Required PostgreSQL Extensions:**
+
+The database requires the `pgcrypto` extension for UUID generation:
+
+```sql
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+```
+
+**Resetting the Database for Tests:**
+
+To reset identity tables during development or testing:
+
+```bash
+# Drop and recreate all identity tables
+psql $DATABASE_URL -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;"
+
+# Re-run migrations
+sqlx migrate run
+```
+
+For integration tests, the test suite automatically manages schema via `TRUNCATE` statements to ensure isolation between tests.
+
+**Migration Files:**
+
+- `01_init.sql` - Initial prioritization demo schema
+- `02_identity_event_store.sql` - Sigchain event store for identity system
+- `03_identity_read_models.sql` - Identity read models (accounts, devices, endorsements, etc.)
+- `04_identity_rate_limits.sql` - Rate limiting tables for abuse controls
+
 ### Development with Skaffold
 
 For local development with Kubernetes:
