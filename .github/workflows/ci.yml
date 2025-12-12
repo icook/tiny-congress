@@ -447,90 +447,14 @@ jobs:
 
       - name: Summarize Rust coverage
         if: always()
-        run: |
-          python - <<'PY'
-          import os
-          import pathlib
-
-          summary_file = os.environ.get("GITHUB_STEP_SUMMARY")
-
-          paths = [
-              pathlib.Path("service/coverage/backend-unit.lcov"),
-              pathlib.Path("service/coverage/backend-integration.lcov"),
-          ]
-
-          def parse_lcov(path: pathlib.Path):
-              total = 0
-              covered = 0
-              if not path.exists():
-                  return total, covered
-              with path.open() as fh:
-                  for line in fh:
-                      if not line.startswith("DA:"):
-                          continue
-                      try:
-                          _, payload = line.strip().split(":", 1)
-                          line_no, count = payload.split(",", 1)
-                          count = int(count)
-                      except ValueError:
-                          continue
-                      total += 1
-                      if count > 0:
-                          covered += 1
-              return total, covered
-
-          def combine_unique(paths):
-              # Track unique file+line across all suites
-              seen = {}
-              for path in paths:
-                  if not path.exists():
-                      continue
-                  current_file = None
-                  with path.open() as fh:
-                      for line in fh:
-                          if line.startswith("SF:"):
-                              current_file = line.strip()[3:]
-                              continue
-                          if not line.startswith("DA:") or current_file is None:
-                              continue
-                          try:
-                              _, payload = line.strip().split(":", 1)
-                              line_no, count = payload.split(",", 1)
-                              count = int(count)
-                              line_no = int(line_no)
-                          except ValueError:
-                              continue
-                          key = (current_file, line_no)
-                          seen[key] = seen.get(key, False) or count > 0
-              total = len(seen)
-              covered = sum(1 for covered_line in seen.values() if covered_line)
-              return total, covered
-
-          rows = []
-          for path in paths:
-              total, covered = parse_lcov(path)
-              pct = (covered / total * 100) if total else 0.0
-              rows.append((path.stem, pct, covered, total))
-
-          combined_total, combined_covered = combine_unique(paths)
-          combined_pct = (combined_covered / combined_total * 100) if combined_total else 0.0
-
-          lines = []
-          lines.append("### Rust coverage")
-          lines.append("| Suite | Pct | Covered | Total |")
-          lines.append("| --- | --- | --- | --- |")
-          for name, pct, covered, total in rows:
-              lines.append(f"| {name} | {pct:.2f}% | {covered} | {total} |")
-          lines.append(f"| combined | {combined_pct:.2f}% | {combined_covered} | {combined_total} |")
-
-          output = "\n".join(lines) + "\n"
-
-          if summary_file:
-              with open(summary_file, "a", encoding="utf-8") as fh:
-                  fh.write(output)
-          else:
-              print(output)
-          PY
+        uses: zgosalvez/github-actions-report-lcov@v4
+        with:
+          coverage-files: |
+            service/coverage/backend-unit.lcov
+            service/coverage/backend-integration.lcov
+          minimum-coverage: 0
+          artifact-name: rust-coverage-report
+          working-directory: ./
 
       - name: Dump diagnostics on failure
         if: failure()
