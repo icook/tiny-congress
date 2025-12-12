@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO reputation_scores (account_id, score, posture_label)\n        VALUES ($1, 5.0, 'weak')\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d1a886bd7daa015355cc0a6aea635035b7a87d0adb0ae420e89c8e591211f8ea"
+}

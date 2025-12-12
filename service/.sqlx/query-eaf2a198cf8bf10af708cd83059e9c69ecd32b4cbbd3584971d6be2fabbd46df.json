@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO devices (id, account_id, device_kid, device_pubkey, name, type)\n        VALUES ($1, $2, 'device_kid', 'device_pubkey', 'Test Device', 'laptop')\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "eaf2a198cf8bf10af708cd83059e9c69ecd32b4cbbd3584971d6be2fabbd46df"
+}

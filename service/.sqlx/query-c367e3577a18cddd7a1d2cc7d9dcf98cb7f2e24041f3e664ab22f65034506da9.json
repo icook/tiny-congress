@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO accounts (id, username, root_kid, root_pubkey, tier, verification_state)\n        VALUES ($1, 'testuser', 'test_kid', 'test_pubkey', 'anonymous', 'none')\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "c367e3577a18cddd7a1d2cc7d9dcf98cb7f2e24041f3e664ab22f65034506da9"
+}

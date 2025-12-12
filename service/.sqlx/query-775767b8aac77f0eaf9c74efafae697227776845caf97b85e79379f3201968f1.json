@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT d.revoked_at,\n                   EXISTS(\n                       SELECT 1\n                       FROM device_delegations dd\n                       WHERE dd.account_id = $1\n                         AND dd.device_id = $2\n                         AND dd.revoked_at IS NULL\n                         AND (dd.expires_at IS NULL OR dd.expires_at > NOW())\n                   ) as \"has_active_delegation!\"\n            FROM devices d\n            WHERE d.account_id = $1 AND d.id = $2\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "revoked_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 1,
+        "name": "has_active_delegation!",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      true,
+      null
+    ]
+  },
+  "hash": "775767b8aac77f0eaf9c74efafae697227776845caf97b85e79379f3201968f1"
+}

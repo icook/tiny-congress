@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO device_delegations (account_id, device_id, delegation_envelope, issued_at)\n        VALUES ($1, $2, '{}'::jsonb, NOW())\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "63e09b9d4b8bc3619e2296d79b422569fb88a5ae79b6dc6de9628c0d9cda6214"
+}
