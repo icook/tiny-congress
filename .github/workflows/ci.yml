@@ -445,20 +445,21 @@ jobs:
             service/coverage/backend-unit.lcov
             service/coverage/backend-integration.lcov
 
-      - name: Install lcov
-        if: always()
-        run: sudo apt-get update && sudo apt-get install -y lcov
-
       - name: Summarize Rust coverage
         if: always()
-        uses: zgosalvez/github-actions-report-lcov@v4
-        with:
-          coverage-files: |
-            service/coverage/backend-unit.lcov
-            service/coverage/backend-integration.lcov
-          minimum-coverage: 0
-          artifact-name: rust-coverage-report
-          working-directory: ./
+        run: |
+          sudo apt-get update && sudo apt-get install -y lcov
+          {
+            echo "### Rust coverage"
+            echo ""
+            for file in service/coverage/backend-unit.lcov service/coverage/backend-integration.lcov; do
+              if [ -f "$file" ]; then
+                echo "#### $(basename $file .lcov)"
+                lcov --summary "$file" 2>&1 | grep -E "lines\.|functions\." || true
+                echo ""
+              fi
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Dump diagnostics on failure
         if: failure()
