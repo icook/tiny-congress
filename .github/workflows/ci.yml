@@ -460,9 +460,3 @@ jobs:
           kubectl get events -A --sort-by=.lastTimestamp || true
           echo '--- All Resources ---'
           kubectl get all -n default || true
-
-      - name: Skaffold delete
-        if: always() && steps.artifacts.outputs.file != ''
-        run: |
-          set -euo pipefail
-          skaffold delete -p ${SKAFFOLD_PROFILE}
