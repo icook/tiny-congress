@@ -29,6 +29,25 @@ The service uses:
 - Docker and Docker Compose (for containerized development)
 - Skaffold (for Kubernetes deployment)
 
+### Environment Variables
+
+The service requires the following environment variables:
+
+- **DATABASE_URL** (required): PostgreSQL connection string with PGMQ extension
+  - Example: `postgres://postgres:postgres@localhost:5432/tinycongress`
+  - Must have `CREATE EXTENSION pgmq;` available
+
+- **SESSION_SIGNING_KEY** (required): Secret key for signing JWT session tokens
+  - Example: `openssl rand -base64 32` (generate a random 32-byte key)
+  - Keep this secret and rotate regularly
+  - For development: any string works, but use a proper secret in production
+
+- **SESSION_SIGNING_KEY_OLD** (optional): Previous signing key for zero-downtime rotation
+  - Set this to the old key when rotating to maintain existing sessions
+  - Remove after all old tokens have expired
+
+See `.env.example` for a complete list of environment variables.
+
 ### Setup
 
 1. Create a PostgreSQL database:
@@ -36,12 +55,19 @@ The service uses:
 createdb tinycongress
 ```
 
-2. Set environment variables:
-```bash
-export DATABASE_URL=postgres://username:password@localhost/tinycongress
+2. Install required extensions:
+```sql
+CREATE EXTENSION IF NOT EXISTS pgmq;
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
 ```
 
-3. Run the server:
+3. Set environment variables:
+```bash
+export DATABASE_URL=postgres://postgres:postgres@localhost:5432/tinycongress
+export SESSION_SIGNING_KEY=$(openssl rand -base64 32)
+```
+
+4. Run the server:
 ```bash
 cargo run
 ```

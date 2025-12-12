@@ -9,6 +9,7 @@ use sqlx::postgres::PgPool;
 use uuid::Uuid;
 
 use crate::identity::crypto::{canonicalize_value, derive_kid, verify_envelope, verify_signature};
+use crate::identity::http::auth::{sign_session_token, SessionClaims};
 
 use super::accounts::{decode_key, internal_error};
 
@@ -38,6 +39,7 @@ pub struct VerifyRequest {
 #[derive(Debug, Serialize)]
 pub struct VerifyResponse {
     pub session_id: Uuid,
+    pub token: String,
     pub expires_at: chrono::DateTime<chrono::Utc>,
 }
 
@@ -248,8 +250,21 @@ pub async fn verify_challenge(
     .await
     .map_err(internal_error)?;
 
+    // Create and sign JWT session token
+    let claims = SessionClaims {
+        sub: payload.account_id,
+        device_id: payload.device_id,
+        session_id: payload.challenge_id,
+        iat: chrono::Utc::now().timestamp(),
+        exp: expires_at.timestamp(),
+        kid: None,
+    };
+
+    let token = sign_session_token(&claims).map_err(internal_error)?;
+
     Ok(Json(VerifyResponse {
         session_id: payload.challenge_id,
+        token,
         expires_at,
     }))
 }
