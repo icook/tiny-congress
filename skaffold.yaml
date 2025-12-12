@@ -85,6 +85,11 @@ test:
             --test graphql_tests \
             --test model_tests \
             -- --test-threads=1 --nocapture
+  - image: tc-ui-release
+    custom:
+      - command: |
+          cd web
+          CI=true yarn vitest
 
 # Ensure Postgres is reachable from localhost for developer workflows
 portForward:
