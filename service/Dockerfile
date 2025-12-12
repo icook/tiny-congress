@@ -1,5 +1,5 @@
 # Use cargo-chef to cache dependency builds between Docker layers
-FROM lukemathwalker/cargo-chef:latest-rust-1.86 AS chef
+FROM lukemathwalker/cargo-chef:latest-rust-1.91 AS chef
 
 WORKDIR /usr/src/app
 
@@ -11,7 +11,7 @@ FROM chef AS cacher
 COPY --from=planner /usr/src/app/recipe.json recipe.json
 RUN cargo chef cook --release --recipe-path recipe.json
 
-FROM rust:1.86 AS builder
+FROM rust:1.91 AS builder
 
 WORKDIR /usr/src/app
 COPY --from=cacher /usr/src/app/target target
