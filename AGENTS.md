@@ -2,7 +2,7 @@
 
 ## Default Delivery Flow
 - Always sync with `master` before starting work: `git checkout master && git pull --rebase`. When picking up a PR or ticket, rebase your working branch onto the refreshed `master` before any edits.
-- Create a feature branch for every ticket before making changes; include the GitHub issue number and a short, descriptive slug (e.g., `feature/123-update-copy`).
+- Create a branch for every ticket before making changes following the conventions in `doc/interfaces/branch-naming-conventions.md` (e.g., `feature/123-update-copy`, `fix/456-login-redirect`).
 - Implement the work, keep commits focused, and run the relevant backend (`cargo test`) and frontend (`yarn test`) suites.
 - Treat each major checkpoint on a PR (e.g., before opening, after rebasing, after addressing review) as a moment to leave a fresh status comment with what changed and what still needs attention.
 - Once everything passes locally, push the branch and open a draft PR that links the tracked issue, fills out the Codex PR template, and explicitly notes `Opened by: Codex`.
