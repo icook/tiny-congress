@@ -17,39 +17,36 @@ gh run view <run_id> --log-failed    # Show only failed steps
 
 | Job | Common cause | Quick fix |
 |-----|--------------|-----------|
-| `lint` | Formatting | `cd service && cargo fmt` |
-| `lint-web` | ESLint/TypeScript | `cd web && yarn lint --fix` |
+| `lint` | Formatting | `just fmt-backend` |
+| `lint-web` | ESLint/TypeScript | `just fmt-frontend` |
 | `build-images` | Dockerfile error | Check build context paths |
 | `integration-tests` | Test failure | See test output for assertion |
 | `agent-compliance` | Missing YAML block | Add compliance block to PR |
 
 ## Local reproduction
 
-### Rust lint failures
+### Lint failures
 ```bash
-cd service
-cargo fmt --all -- --check          # Check formatting
-cargo clippy --all-features -- -D warnings
-```
-
-### Web lint failures
-```bash
-cd web
-yarn lint                           # ESLint + Stylelint
-yarn typecheck                      # TypeScript
-yarn prettier --check .             # Formatting
+just lint              # Check all linting
+just fmt               # Fix all formatting
+just lint-backend      # Backend only
+just lint-frontend     # Frontend only
+just typecheck         # TypeScript type checking
 ```
 
 ### Integration test failures
 ```bash
 # Full CI simulation
+just test-ci
+
+# Or manually:
 skaffold build --file-output artifacts.json
 skaffold test -p ci --build-artifacts artifacts.json
 skaffold deploy -p ci --build-artifacts artifacts.json
 
 # Port-forward and run tests
 kubectl port-forward svc/postgres 5432:5432 &
-cd service && DATABASE_URL=postgres://postgres:postgres@localhost:5432/prioritization cargo test
+just test-backend
 ```
 
 ### Playwright E2E failures
@@ -76,7 +73,7 @@ gh run download <run_id> -n playwright-artifacts
 ## Verification after fix
 - [ ] Failure reproduces locally
 - [ ] Fix applied
-- [ ] `skaffold test -p ci` passes locally
+- [ ] `just test-ci` passes locally
 - [ ] Push and verify CI passes
 
 ## Common failures

@@ -14,17 +14,13 @@ Complete before opening or marking PR ready for review.
 
 - [ ] Tests added for new functionality
 - [ ] Tests updated for changed behavior
-- [ ] All tests pass locally:
-  - [ ] `cd service && cargo test`
-  - [ ] `cd web && yarn test`
+- [ ] All tests pass locally: `just test`
 - [ ] Manual testing completed for UI changes
 
 ## Linting
 
-- [ ] Rust: `cargo fmt --all -- --check`
-- [ ] Rust: `cargo clippy --all-features -- -D warnings`
-- [ ] Web: `yarn lint`
-- [ ] Web: `yarn typecheck`
+- [ ] All linting passes: `just lint`
+- [ ] Type checking passes: `just typecheck`
 
 ## Documentation
 
@@ -70,7 +66,7 @@ Complete before opening or marking PR ready for review.
 
 ## Final steps
 
-- [ ] `skaffold test -p ci` passes locally
+- [ ] `just test-ci` passes locally (full CI suite)
 - [ ] PR description explains why, not just what
 - [ ] Issue linked in PR description
 - [ ] Appropriate reviewers assigned

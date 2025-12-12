@@ -9,8 +9,8 @@
 
 | Type | Tool | Location | Run command |
 |------|------|----------|-------------|
-| Unit/Component | Vitest | `web/src/**/*.test.tsx` | `yarn vitest` |
-| E2E | Playwright | `web/tests/` | `yarn playwright:test` |
+| Unit/Component | Vitest | `web/src/**/*.test.tsx` | `just test-frontend` |
+| E2E | Playwright | `web/tests/` | `just test-frontend-e2e` |
 
 ## Vitest patterns
 
@@ -95,7 +95,7 @@ CI collects coverage for both test types:
 Coverage reports uploaded as artifacts.
 
 ## Verification
-- [ ] Tests pass locally: `yarn test`
+- [ ] Tests pass locally: `just test-frontend-full`
 - [ ] No flaky tests (run 3x)
 - [ ] Coverage not decreased
 - [ ] Tests isolated (no order dependency)

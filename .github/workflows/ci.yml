@@ -56,16 +56,11 @@ jobs:
         with:
           workspaces: service -> target
 
-      - name: Check formatting
-        working-directory: service
-        run: cargo fmt --all -- --check
+      - name: Install just
+        uses: extractions/setup-just@v2
 
-      - name: Clippy
-        working-directory: service
-        run: |
-          # Dev-only tooling pulls in unstable deps (e.g., cargo-llvm-cov via ruzstd),
-          # so keep clippy scoped to library and binaries.
-          cargo clippy --all-features -- -D warnings
+      - name: Lint backend
+        run: just lint-backend
 
   # ============================================================
   # JOB 0b: Lint web
@@ -87,13 +82,14 @@ jobs:
       - name: Enable corepack
         run: corepack enable
 
+      - name: Install just
+        uses: extractions/setup-just@v2
+
       - name: Install dependencies
-        working-directory: web
-        run: yarn install --immutable
+        run: just install-frontend
 
       - name: Run Linters
-        working-directory: web
-        run: yarn lint
+        run: just lint-frontend
 
   # ============================================================
   # JOB 1: Build all container images in parallel

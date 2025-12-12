@@ -24,9 +24,8 @@ cargo update -p <crate_name>    # Update specific crate
 
 ### After any change
 ```bash
-cargo check                     # Verify compilation
-cargo clippy --all-features -- -D warnings
-cargo test
+just lint-backend      # Format + clippy
+just test-backend      # Run tests
 ```
 
 ## Frontend (Node/Yarn)
@@ -47,10 +46,9 @@ yarn up '*'                     # Update all packages
 
 ### After any change
 ```bash
-yarn install --immutable        # Verify lockfile integrity
-yarn typecheck
-yarn lint
-yarn test
+just lint-frontend     # Prettier + ESLint + Stylelint
+just typecheck         # TypeScript checking
+just test-frontend     # Run tests
 ```
 
 ## CI cache invalidation
