@@ -1,5 +1,7 @@
 # Repository Guidelines
 
+This file is a concise index of rules and pointers—not detailed documentation. Target: ~100-150 lines. Move verbose explanations to `docs/` or directory READMEs.
+
 ## Default Delivery Flow
 - Always sync with `master` before starting work: `git checkout master && git pull --rebase`. When picking up a PR or ticket, rebase your working branch onto the refreshed `master` before any edits.
 - Create a branch for every ticket before making changes following the conventions in `docs/interfaces/branch-naming-conventions.md` (e.g., `feature/123-update-copy`, `fix/456-login-redirect`).
@@ -15,6 +17,16 @@
 - `service/`: Rust GraphQL API, workers, and SQL migrations (`migrations/`). Tests live in `service/tests/` (`*_tests.rs`).
 - `web/`: React/Mantine client on Vite. Source under `web/src/`, shared mocks in `web/test-utils/`.
 - `dockerfiles/`, `skaffold.yaml`, `kube/`: Container and Kubernetes assets for CI, integration, and demo environments.
+
+## Working Documents
+
+| Location | Purpose | Lifecycle |
+|----------|---------|-----------|
+| `.scratch/` | Ephemeral notes, analysis, brainstorming | Delete after task |
+| `.plan/` | Feature specs, tickets for large branches | Remove on merge to master |
+| `docs/` | Accepted documentation only | Permanent |
+
+See README in each directory for details. Never put scratch/analysis files in `docs/`.
 
 ## Documentation (Required Reading)
 Consult these before starting work:
