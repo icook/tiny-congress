@@ -1,5 +1,6 @@
 import { createRootRoute, createRoute, createRouter, RouterProvider } from '@tanstack/react-router';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { Devices } from './features/identity/screens/Devices';
 import { Login } from './features/identity/screens/Login';
 import { Signup } from './features/identity/screens/Signup';
 import { AboutPage } from './pages/About.page';
@@ -48,6 +49,12 @@ const loginRoute = createRoute({
   component: Login,
 });
 
+const devicesRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: 'devices',
+  component: Devices,
+});
+
 const routeTree = rootRoute.addChildren([
   homeRoute,
   dashboardRoute,
@@ -55,6 +62,7 @@ const routeTree = rootRoute.addChildren([
   aboutRoute,
   signupRoute,
   loginRoute,
+  devicesRoute,
   createPlaceholderRoute('analytics', 'Analytics', 'Analytics page content'),
   createPlaceholderRoute('releases', 'Releases', 'Releases page content'),
   createPlaceholderRoute('account', 'Account', 'Account page content'),

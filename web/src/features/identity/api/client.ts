@@ -115,3 +115,79 @@ export async function verifyChallenge(request: VerifyRequest): Promise<VerifyRes
     body: JSON.stringify(request),
   });
 }
+
+// Device management types and APIs
+
+export interface Device {
+  device_id: string;
+  device_kid: string;
+  device_metadata: {
+    name: string;
+    type: string;
+    os?: string;
+  };
+  created_at: string;
+  last_seen?: string;
+  revoked_at?: string;
+}
+
+export async function listDevices(token: string): Promise<Device[]> {
+  return fetchJson<Device[]>('/me/devices', {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+export interface AddDeviceRequest {
+  device_kid: string;
+  device_pubkey: string;
+  device_metadata: {
+    name: string;
+    type: string;
+    os?: string;
+  };
+  delegation_envelope: {
+    v: number;
+    payload_type: string;
+    payload: unknown;
+    signer: {
+      account_id?: string | null;
+      device_id?: string | null;
+      kid: string;
+    };
+    sig: string;
+  };
+}
+
+export async function addDevice(token: string, request: AddDeviceRequest): Promise<Device> {
+  return fetchJson<Device>('/me/devices/add', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify(request),
+  });
+}
+
+export interface RevokeDeviceRequest {
+  revocation_envelope: {
+    v: number;
+    payload_type: string;
+    payload: unknown;
+    signer: {
+      account_id?: string | null;
+      device_id?: string | null;
+      kid: string;
+    };
+    sig: string;
+  };
+}
+
+export async function revokeDevice(
+  token: string,
+  deviceId: string,
+  request: RevokeDeviceRequest
+): Promise<void> {
+  return fetchJson<void>(`/me/devices/${deviceId}/revoke`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify(request),
+  });
+}
