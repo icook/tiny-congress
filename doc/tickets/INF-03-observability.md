@@ -10,7 +10,7 @@ Deliverables
 Implementation plan
 1) Logging: use existing `tracing` setup in `service/src/main.rs`. Add spans in identity handlers (`auth`, `devices`, `endorsements`, `recovery`) including account_id/device_id where safe. Log signature verification failures with reason (non-canonical, bad signature, revoked device) at warn level.
 
-2) Metrics: add `metrics` crate + Prometheus exporter (e.g., `metrics-exporter-prometheus`) initialized in `main.rs`. Emit counters `auth.success`, `auth.failure`, `device.revoked_attempt`, `endorsement.write`, `endorsement.revocation`, `reducer.replay_seconds` (histogram).
+2) Metrics: add `metrics` crate + Prometheus exporter (e.g., `metrics-exporter-prometheus`) initialized in `main.rs` (commit updated `Cargo.lock`). Emit counters `auth.success`, `auth.failure`, `device.revoked_attempt`, `endorsement.write`, `endorsement.revocation`, `reducer.replay_seconds` (histogram).
 
 3) Health/probes: extend existing `/health` if needed to include DB connectivity status (simple query). Add `/metrics` endpoint guarded if necessary.
 

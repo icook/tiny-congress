@@ -13,7 +13,7 @@ Implementation plan (service)
    - `ast.rs` defining policy JSON AST (operators: and/or/not, eq, in, gte/lte).
    - `evaluator.rs` with `authorize(subject, action, resource, context) -> bool` applying AST or hardcoded defaults.
 
-2) Storage: add `policies` table if needed (policy_id, name, jsonb) or keep in-memory map for Phase 1. For now, store a small set inline and allow overrides via env flag.
+2) Storage: add `policies` table if needed (policy_id, name, jsonb) or keep in-memory map for Phase 1. For now, store a small set inline and allow overrides via env flag. If adding a table, coordinate with INF-01 to add migration.
 
 3) Integration: wrap endpoints with a helper `require(action, resource)` that pulls attributes for the caller (from session) and applies `authorize`. Examples: endorsement creation requires not revoked device; device revoke requires owner + root possession; recovery rotate requires threshold satisfied (handled earlier) plus posture >= minimal.
 

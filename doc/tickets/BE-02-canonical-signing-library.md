@@ -8,7 +8,7 @@ Deliverables
 - Negative tests that ensure tampering or non-canonical payloads are rejected.
 
 Implementation plan (service)
-1) Dependencies: add to `service/Cargo.toml`:
+1) Dependencies: add to `service/Cargo.toml` (and commit updated `Cargo.lock`):
    - `ed25519-dalek` for key parsing/sign/verify.
    - `sha2` for SHA-256.
    - `base64` with URL_SAFE_NO_PAD for base64url.

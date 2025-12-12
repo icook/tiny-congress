@@ -18,7 +18,7 @@ Implementation plan
 
 3) Local workflows: document in `service/README.md` how to run `sqlx migrate run` and how to reset identity tables for tests.
 
-4) CI/Skaffold: validate migrations inside `skaffold test -p ci`. If new tables require extensions (e.g., pgcrypto), add to init SQL and ensure containers include the extension.
+4) CI/Skaffold: validate migrations inside `skaffold test -p ci`. If new tables require extensions (e.g., pgcrypto), add to init SQL and ensure containers include the extension. Per AGENTS.md, run the `testing-local-dev` skill (`doc/skills/testing-local-dev.md`) before merging any changes that affect Skaffold configuration.
 
 5) Safety: if any migration is irreversible, annotate with a comment. Prefer separate migrations for destructive changes (dropping columns) even if not needed now.
 

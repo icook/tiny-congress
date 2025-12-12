@@ -9,7 +9,7 @@ Deliverables
 
 Implementation plan (service)
 1) Rate limiting:
-   - Implement middleware or helper in `service/src/identity/http/middleware.rs` using a simple in-DB counter or Redis (if available). For now, use Postgres: table `endorsement_rate_limits(account_id UUID, window_start TIMESTAMPTZ, count INT)` with upsert to enforce e.g., 50 endorsements/day per account and 10 per subject/topic/day. Add indexes on `(account_id, window_start)` and `(subject_id, window_start)`.
+   - Implement middleware or helper in `service/src/identity/http/middleware.rs` using a simple in-DB counter or Redis (if available). For now, use Postgres: table `endorsement_rate_limits(account_id UUID, window_start TIMESTAMPTZ, count INT)` with upsert to enforce e.g., 50 endorsements/day per account and 10 per subject/topic/day. Add indexes on `(account_id, window_start)` and `(subject_id, window_start)`. Note: schema defined in `04_identity_rate_limits.sql` from INF-01.
    - Apply check in `POST /endorsements` before append.
 
 2) Abuse heuristics: add check to block magnitude/confidence combos that look spammy (e.g., same subject/topic repeated). Emit warning logs with account_id.

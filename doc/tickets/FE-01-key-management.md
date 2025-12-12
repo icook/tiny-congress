@@ -8,7 +8,7 @@ Deliverables
 - Tests (Vitest) validating deterministic signing against backend vectors.
 
 Implementation plan (web)
-1) Library choice: use `@noble/ed25519` for pure-TS Ed25519 and `@noble/hashes/sha256` for kid derivation. Add base64url helper (e.g., `uint8arrays` or small util) to match backend.
+1) Library choice: use `@noble/ed25519` for pure-TS Ed25519 and `@noble/hashes/sha256` for kid derivation. Add base64url helper (e.g., `uint8arrays` or small util) to match backend. Commit updated `yarn.lock` with new dependencies.
 
 2) Folder structure: create `web/src/features/identity/keys/` containing:
    - `keyStore.ts`: handles persistence (IndexedDB via `idb-keyval` or `localforage`). Store device private key encrypted with a passphrase or OS-provided WebCrypto `crypto.subtle` AES-GCM; fall back to localStorage for demo with clear warnings.
