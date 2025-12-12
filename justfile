@@ -1,5 +1,23 @@
 # TinyCongress Development Toolchain
-# Run `just --list` to see all available recipes
+# Recipes aligned with AGENTS.md guidelines
+#
+# Quick Start:
+#   1. just setup           # Check prerequisites (one-time setup)
+#   2. just dev             # Start full-stack dev environment (requires Skaffold + cluster)
+#
+# Local Development (no cluster needed):
+#   - just lint             # Lint all code
+#   - just fmt              # Format all code
+#   - just test-backend     # Run backend unit tests
+#   - just build-backend    # Build backend
+#   - just dev-backend      # Start backend with hot reload
+#   - just dev-frontend     # Start Vite frontend dev server
+#
+# Full-Stack Testing (requires Docker + Kubernetes):
+#   - just test-full        # Build images, run all tests via Skaffold (mirrors CI)
+#   - just test-ci          # Alias for test-full
+#
+# Run `just --list` for complete recipe list
 
 # Default recipe - show help
 default:
@@ -17,13 +35,15 @@ test-backend:
 test-backend-cov:
     cd service && cargo llvm-cov --test api_tests --test graphql_tests --test model_tests
 
-# Run backend integration tests (requires running database)
+# Run backend integration tests via Skaffold (RECOMMENDED - requires Docker + Kubernetes)
 test-backend-integration:
-    cd service && cargo test --test integration_tests
+    @echo "Building images and running integration tests via Skaffold..."
+    skaffold build --file-output artifacts.json && skaffold test --build-artifacts artifacts.json
 
-# Run backend integration tests with coverage
-test-backend-integration-cov:
-    cd service && cargo llvm-cov --test integration_tests
+# Verify full test suite via Skaffold (CI mode - RECOMMENDED approach per AGENTS.md)
+verify-ci:
+    @echo "Running full CI verification (Skaffold, unit tests, integration tests, E2E)..."
+    skaffold verify -p ci
 
 # Check backend formatting
 lint-backend-fmt:
@@ -56,21 +76,21 @@ dev-backend:
 # Frontend (React/TypeScript) Commands
 # =============================================================================
 
-# Run frontend unit tests
+# Run frontend unit tests (if they exist)
 test-frontend:
     cd web && yarn vitest run
 
-# Run frontend unit tests in watch mode
+# Run frontend unit tests in watch mode (if they exist)
 test-frontend-watch:
     cd web && yarn vitest
 
-# Run frontend E2E tests with Playwright
-test-frontend-e2e:
-    cd web && yarn playwright:ci
-
-# Run full frontend test suite (typecheck + lint + vitest + build)
+# Run full frontend test suite (typecheck + lint + vitest + build) - includes E2E via CI
 test-frontend-full:
     cd web && yarn test
+
+# Run frontend E2E tests with Playwright (requires running backend/frontend)
+test-frontend-e2e:
+    cd web && yarn playwright:ci
 
 # Check frontend types
 typecheck-frontend:
@@ -104,79 +124,132 @@ build-frontend:
 dev-frontend:
     cd web && yarn dev
 
-# Run Storybook dev server
+# Run Storybook dev server (experimental - may have dependency issues)
 storybook:
     cd web && yarn storybook
-
-# Build Storybook
-storybook-build:
-    cd web && yarn storybook:build
 
 # Install frontend dependencies
 install-frontend:
     cd web && yarn install
 
 # =============================================================================
-# Skaffold / Kubernetes Commands
+# Full-Stack Development (Requires Skaffold + Kubernetes Cluster)
 # =============================================================================
 
-# Start full development environment with Skaffold
+# Start full development environment with Skaffold (hot reload, port forwarding)
+# Prerequisites: Docker, Skaffold, Kubernetes cluster (minikube/Docker Desktop)
 dev:
+    @echo "Starting full-stack dev with Skaffold..."
+    @echo "Prerequisites: ensure your Kubernetes cluster is running (e.g., minikube start)"
     skaffold dev -p dev --port-forward
 
-# Build all container images
+# Build all container images (for current profile)
 build-images:
+    @echo "Building container images..."
     skaffold build
 
-# Build images and output artifacts JSON
+# Build images and output artifacts JSON (for reuse with test)
 build-images-artifacts:
+    @echo "Building container images and writing artifacts..."
     skaffold build --file-output artifacts.json
-
-# Run Skaffold tests
-skaffold-test:
-    skaffold test
 
 # Deploy to local cluster
 deploy:
+    @echo "Deploying to Kubernetes cluster..."
     skaffold run -p dev
 
-# Deploy release images
+# Deploy release images to cluster
 deploy-release:
+    @echo "Deploying release images to cluster..."
     skaffold run -p release
 
-# Delete deployed resources
+# Delete all deployed resources from cluster
 undeploy:
+    @echo "Cleaning up Kubernetes resources..."
     skaffold delete
 
 # =============================================================================
-# Combined / Convenience Commands
+# Quality Checks (Local - No Cluster Required)
 # =============================================================================
 
-# Run all linting (backend + frontend)
+# Run all linting (backend + frontend) - no cluster required
 lint: lint-backend lint-frontend
+    @echo "✓ All linting passed"
 
 # Fix all formatting (backend + frontend)
 fmt: fmt-backend fmt-frontend
+    @echo "✓ All formatting applied"
 
-# Run all unit tests (backend + frontend)
+# Type check frontend
+typecheck: typecheck-frontend
+
+# Run all local unit tests (backend + frontend, if they exist)
 test: test-backend test-frontend
+    @echo "✓ Unit tests passed"
 
-# Run all tests with coverage
+# Run all unit tests with coverage
 test-cov: test-backend-cov test-frontend
+    @echo "✓ Coverage reports generated"
 
-# Build everything
+# Build everything locally (no images)
 build: build-backend build-frontend
+    @echo "✓ All builds successful"
 
-# Build everything (release)
+# Build everything in release mode
 build-release: build-backend-release build-frontend
+    @echo "✓ Release builds successful"
 
-# Run CI checks locally (lint + test + build)
-ci: lint test build
+# =============================================================================
+# Full-Stack Testing (Requires Docker + Kubernetes)
+# =============================================================================
+
+# Run full test suite via Skaffold (mirrors CI - RECOMMENDED per AGENTS.md)
+test-full: build-images-artifacts
+    @echo "Running full test suite via Skaffold..."
+    skaffold test --build-artifacts artifacts.json
+
+# Alias for test-full (CI-friendly naming)
+test-ci: test-full
+
+# =============================================================================
+# Utility Commands
+# =============================================================================
 
 # Clean build artifacts
 clean:
     cd service && cargo clean
     cd web && rm -rf node_modules/.cache dist .vite
+    @echo "✓ Build artifacts cleaned"
+
+# =============================================================================
+# Setup & Prerequisites
+# =============================================================================
+
+# Check prerequisites and display setup instructions
+setup:
+    @echo "=== TinyCongress Development Setup ==="
+    @echo ""
+    @echo "✓ Checking installed tools..."
+    @just versions
+    @echo ""
+    @echo "Optional prerequisites for full-stack development:"
+    @echo "  - Docker: $(docker --version 2>/dev/null || echo "NOT INSTALLED")"
+    @echo "  - Skaffold: $(skaffold version 2>/dev/null || echo "NOT INSTALLED")"
+    @echo "  - kubectl: $(kubectl version --client 2>/dev/null | head -1 || echo "NOT INSTALLED")"
+    @echo ""
+    @echo "For local development (no cluster needed):"
+    @echo "  just lint          # Lint all code"
+    @echo "  just fmt           # Format all code"
+    @echo "  just build         # Build backend + frontend"
+    @echo "  just test-backend  # Run backend unit tests"
+    @echo "  just dev-backend   # Start backend with hot reload"
+    @echo "  just dev-frontend  # Start Vite dev server"
+    @echo ""
+    @echo "For full-stack testing (requires Docker + Kubernetes):"
+    @echo "  minikube start     # Start local Kubernetes cluster"
+    @echo "  just test-ci       # Run full test suite via Skaffold"
+    @echo "  just dev           # Start full-stack dev environment"
+    @echo ""
 
 # =============================================================================
 # Database Commands
@@ -187,7 +260,7 @@ db-migrate:
     cd service && cargo run --bin tinycongress-api -- migrate
 
 # =============================================================================
-# Help / Info Commands
+# Info / Versions
 # =============================================================================
 
 # Show Rust version
