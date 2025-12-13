@@ -16,6 +16,12 @@
     "isolatedModules": true,
     "noEmit": true,
     "jsx": "react-jsx",
+
+    // Stricter type checking
+    "noUncheckedIndexedAccess": true,
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitOverride": true,
+
     "paths": {
       "@/*": ["./src/*"],
       "@test-utils": ["./test-utils"]

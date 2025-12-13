@@ -290,10 +290,13 @@ export function ThreadedConversation({ thread }: { thread: Thread }) {
         if (existingVoteIndex >= 0) {
           // Update existing vote
           const updatedVotes = [...branch.votes];
-          updatedVotes[existingVoteIndex] = {
-            ...updatedVotes[existingVoteIndex],
-            value,
-          };
+          const existingVote = updatedVotes[existingVoteIndex];
+          if (existingVote) {
+            updatedVotes[existingVoteIndex] = {
+              ...existingVote,
+              value,
+            };
+          }
           return { ...branch, votes: updatedVotes };
         }
 
@@ -349,12 +352,13 @@ export function ThreadedConversation({ thread }: { thread: Thread }) {
       (branch) => !branch.isSelected && !branch.isHidden && branch.isViable
     );
 
-    if (currentLevelBranches.length === 0) {
+    const firstBranch = currentLevelBranches[0];
+    if (currentLevelBranches.length === 0 || !firstBranch) {
       return;
     }
 
     // Find branch with highest score
-    let highestRatedBranch = currentLevelBranches[0];
+    let highestRatedBranch = firstBranch;
     let highestScore = calculateBranchScore(highestRatedBranch);
 
     currentLevelBranches.forEach((branch) => {
