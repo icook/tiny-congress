@@ -1,9 +1,4 @@
-import {
-  createRootRoute,
-  createRoute,
-  createRouter,
-  RouterProvider,
-} from '@tanstack/react-router';
+import { createRootRoute, createRoute, createRouter, RouterProvider } from '@tanstack/react-router';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { Devices } from './features/identity/screens/Devices';
 import { Endorsements } from './features/identity/screens/Endorsements';
@@ -114,11 +109,7 @@ export function Router() {
   );
 }
 
-function createPlaceholderRoute(
-  path: string,
-  title: string,
-  description: string
-) {
+function createPlaceholderRoute(path: string, title: string, description: string) {
   return createRoute({
     getParentRoute: () => rootRoute,
     path,
@@ -126,13 +117,7 @@ function createPlaceholderRoute(
   });
 }
 
-function PlaceholderPage({
-  title,
-  description,
-}: {
-  title: string;
-  description: string;
-}) {
+function PlaceholderPage({ title, description }: { title: string; description: string }) {
   return (
     <div>
       <h1>{title}</h1>
