@@ -208,13 +208,13 @@ jobs:
         uses: actions/cache@v4
         with:
           path: /usr/local/bin/skaffold
-          key: skaffold-v2.16.1
+          key: skaffold-v2.17.0
 
       - name: Install Skaffold
         if: steps.cache-skaffold.outputs.cache-hit != 'true'
         run: |
           set -euo pipefail
-          SKAFFOLD_VERSION=v2.16.1
+          SKAFFOLD_VERSION=v2.17.0
           curl -fsSL -o skaffold https://storage.googleapis.com/skaffold/releases/${SKAFFOLD_VERSION}/skaffold-linux-amd64
           sudo install skaffold /usr/local/bin/skaffold
 
