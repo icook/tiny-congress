@@ -25,9 +25,7 @@ build:
         manual:
           - src: "src/**/*.rs"
             dest: /usr/src/app
-          - src: "src/**/*.toml"
-            dest: /usr/src/app
-          - src: "migrations/**"
+          - src: "migrations/**/*"
             dest: /usr/src/app
           - src: "Cargo.toml"
             dest: /usr/src/app
@@ -51,6 +49,12 @@ build:
         cacheFrom:
           - "tc-ui-dev:cache-main"
           - "tc-ui-dev:cache"
+      sync:
+        manual:
+          - src: "src/**/*"
+            dest: /app
+          - src: "public/**/*"
+            dest: /app
 deploy:
   helm:
     releases:
@@ -109,12 +113,12 @@ portForward:
     localPort: 5173
 
 profiles:
+  # dev profile: uses dev Dockerfiles with hot-reload and file sync
+  # Requires KinD cluster: kind create cluster && skaffold dev
   - name: dev
     build:
       local:
         push: false
-    deploy:
-      kubectl: {}
   - name: release
     build:
       artifacts:

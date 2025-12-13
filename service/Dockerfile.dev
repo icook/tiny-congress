@@ -1,6 +1,6 @@
-# Use cargo-chef to share dependency layers between builds
+# syntax=docker/dockerfile:1.4
+# Dev Dockerfile with BuildKit cache mounts for fast rebuilds
 FROM lukemathwalker/cargo-chef:latest-rust-1.91 AS chef
-
 WORKDIR /usr/src/app
 
 FROM chef AS planner
@@ -10,21 +10,40 @@ RUN cargo chef prepare --recipe-path recipe.json
 FROM chef AS builder
 
 RUN rustup component add llvm-tools-preview
+
+# Install dev tools with cache mounts
+RUN --mount=type=cache,target=/usr/local/cargo/registry,id=cargo-registry \
+    --mount=type=cache,target=/usr/local/cargo/git,id=cargo-git \
+    cargo install sqlx-cli --locked --features postgres && \
+    cargo install cargo-watch --locked && \
+    cargo install cargo-llvm-cov --locked
+
 WORKDIR /usr/src/app
 
+# Cook dependencies with cache mounts
 COPY --from=planner /usr/src/app/recipe.json recipe.json
-RUN cargo chef cook --recipe-path recipe.json
+RUN --mount=type=cache,target=/usr/local/cargo/registry,id=cargo-registry \
+    --mount=type=cache,target=/usr/local/cargo/git,id=cargo-git \
+    --mount=type=cache,target=/usr/src/app/target,id=cargo-target-dev \
+    cargo chef cook --recipe-path recipe.json
 
-COPY Cargo.toml Cargo.lock ./
-RUN cargo install sqlx-cli --locked --features postgres
-RUN cargo install cargo-watch --locked
-RUN cargo install cargo-llvm-cov --locked
-
+# Copy source and build with cache mounts
 COPY . .
 
 ENV SQLX_OFFLINE=true
-RUN cargo sqlx prepare --check
-RUN sh -ec 'cargo build --bin tinycongress-api && install -m 0755 target/debug/tinycongress-api /usr/local/bin/tinycongress-api'
+
+# Check sqlx prepared queries with cache mounts
+RUN --mount=type=cache,target=/usr/local/cargo/registry,id=cargo-registry \
+    --mount=type=cache,target=/usr/local/cargo/git,id=cargo-git \
+    --mount=type=cache,target=/usr/src/app/target,id=cargo-target-dev \
+    cargo sqlx prepare --check
+
+# Build with cache mounts for fast incremental compilation
+RUN --mount=type=cache,target=/usr/local/cargo/registry,id=cargo-registry \
+    --mount=type=cache,target=/usr/local/cargo/git,id=cargo-git \
+    --mount=type=cache,target=/usr/src/app/target,id=cargo-target-dev \
+    cargo build --bin tinycongress-api && \
+    cp target/debug/tinycongress-api /usr/local/bin/tinycongress-api
 
 RUN install -m 0755 bin/dev-entrypoint.sh /usr/local/bin/dev-entrypoint
 
