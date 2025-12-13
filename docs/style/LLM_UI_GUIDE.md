@@ -27,11 +27,36 @@ You are extending the TinyCongress UI. Follow these instructions literally.
   - Combine `Select`, `SegmentedControl`, `Checkbox`, and `Button` components.
   - Apply `px`, `py`, `bg`, `radius`, `shadow="xs"` on a `Paper` instead of custom classes.
 
+## Data Validation
+
+Always validate external data (API responses) with Zod:
+
+- Define schemas in `web/src/api/schemas.ts`
+- Use `z.infer<typeof schema>` for TypeScript types
+- Call `.parse()` on API responses to validate at runtime
+- Example reference: `web/src/api/buildInfo.ts` and `web/src/api/schemas.ts`
+
+```typescript
+// In schemas.ts
+export const userSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  email: z.string().email(),
+});
+export type User = z.infer<typeof userSchema>;
+
+// In API function
+const data = await graphqlRequest<{ user: User }>(query);
+const result = userSchema.parse(data.user); // Throws if invalid
+return result;
+```
+
 ## Where to look
 
 - Tokens/theme defaults: `web/src/theme/mantineTheme.ts`
 - Policy and examples: `STYLE_GUIDE.md`
 - Navigation reference: `web/src/components/Navbar/Navbar.tsx`
+- Data validation: `web/src/api/schemas.ts`, `web/src/api/buildInfo.ts`
 
 ## If you think you need CSS
 

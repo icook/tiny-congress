@@ -362,6 +362,31 @@ jobs:
         working-directory: web
         run: PLAYWRIGHT_COVERAGE=1 yarn build
 
+      - name: Analyze bundle size
+        if: always()
+        working-directory: web
+        run: |
+          set -euo pipefail
+          {
+            echo "### Bundle Size"
+            echo ""
+            echo "| Asset | Size | Gzip |"
+            echo "|-------|------|------|"
+            find dist -type f \( -name "*.js" -o -name "*.css" \) -exec sh -c '
+              file="$1"
+              size=$(stat -f%z "$file" 2>/dev/null || stat -c%s "$file")
+              gzip_size=$(gzip -c "$file" | wc -c)
+              printf "| %s | %s | %s |\n" \
+                "$(basename "$file")" \
+                "$(numfmt --to=iec-i --suffix=B $size 2>/dev/null || echo "${size}B")" \
+                "$(numfmt --to=iec-i --suffix=B $gzip_size 2>/dev/null || echo "${gzip_size}B")"
+            ' _ {} \; | sort -k3 -h -r
+            echo ""
+            total_size=$(find dist -type f \( -name "*.js" -o -name "*.css" \) -exec stat -f%z {} + 2>/dev/null | awk '{sum+=$1} END {print sum}' || \
+                         find dist -type f \( -name "*.js" -o -name "*.css" \) -exec stat -c%s {} + | awk '{sum+=$1} END {print sum}')
+            echo "**Total:** $(numfmt --to=iec-i --suffix=B $total_size 2>/dev/null || echo "${total_size}B")"
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Run Playwright E2E tests
         working-directory: web
         env:
