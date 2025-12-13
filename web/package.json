@@ -9,6 +9,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+    "build:analyze": "ANALYZE=1 npm run build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "lint": "npm run prettier && npm run eslint && npm run stylelint",
@@ -77,6 +78,7 @@
     "postcss-simple-vars": "^7.0.1",
     "prettier": "^3.7.4",
     "prop-types": "^15.8.1",
+    "rollup-plugin-visualizer": "^6.0.5",
     "storybook": "^10.1.7",
     "storybook-dark-mode": "^4.0.2",
     "stylelint": "^16.26.1",

@@ -2,9 +2,11 @@ import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
 import istanbul from 'vite-plugin-istanbul';
 import tsconfigPaths from 'vite-tsconfig-paths';
+import { visualizer } from 'rollup-plugin-visualizer';
 
 const truthy = (value) => (value ?? '').toLowerCase() === 'true' || value === '1';
 const enablePlaywrightCoverage = truthy(process.env.PLAYWRIGHT_COVERAGE) || truthy(process.env.CI);
+const enableBundleAnalyzer = truthy(process.env.ANALYZE);
 
 export default defineConfig({
   plugins: [
@@ -17,6 +19,13 @@ export default defineConfig({
         cypress: false,
         requireEnv: false,
         forceBuildInstrument: true,
+      }),
+    enableBundleAnalyzer &&
+      visualizer({
+        filename: './dist/stats.html',
+        open: true,
+        gzipSize: true,
+        brotliSize: true,
       }),
   ].filter(Boolean),
   server: {
