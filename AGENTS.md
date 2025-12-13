@@ -41,11 +41,13 @@ Consult these before starting work:
 | `docs/skills/` | LLM skills for specific tasks | When referenced by other docs |
 
 Key playbooks:
+- `docs/playbooks/local-dev-setup.md` - Development environment options
 - `docs/playbooks/adding-migration.md` - Database changes
 - `docs/playbooks/new-graphql-endpoint.md` - API changes
 - `docs/playbooks/debugging-ci-failure.md` - CI troubleshooting
 
 Key interfaces:
+- `docs/interfaces/environment-variables.md` - Required and optional env vars
 - `docs/interfaces/directory-conventions.md` - Where code lives
 - `docs/interfaces/naming-conventions.md` - How to name things
 - `docs/interfaces/branch-naming-conventions.md` - Branch naming standards
