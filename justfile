@@ -260,11 +260,7 @@ pr-auto title body="":
 setup:
     @echo "=== TinyCongress Development Setup ==="
     @echo ""
-    @echo "✓ Checking installed tools..."
     @just versions
-    @echo ""
-    @just node-check
-    @just skaffold-check
     @echo ""
     @echo "Optional prerequisites for full-stack development:"
     @echo "  - Docker: $(docker --version 2>/dev/null || echo "NOT INSTALLED")"
@@ -284,46 +280,6 @@ setup:
     @echo "  just test-ci       # Run full test suite via Skaffold"
     @echo "  just dev           # Start full-stack dev environment"
     @echo ""
-
-# Check if Node version matches .nvmrc
-node-check:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    REQUIRED=$(cat web/.nvmrc)
-    CURRENT=$(node --version | sed 's/v//' | cut -d. -f1)
-    if [[ "$CURRENT" != "$REQUIRED" ]]; then
-        echo "⚠️  Node version mismatch!"
-        echo "   Required: Node $REQUIRED (see web/.nvmrc)"
-        echo "   Current:  Node $CURRENT ($(node --version))"
-        echo ""
-        echo "   Fix with: nvm use (in web/ directory)"
-        echo "         or: just node-use"
-    else
-        echo "✓ Node version: $(node --version) (matches .nvmrc)"
-    fi
-
-# Check if Skaffold version matches .skaffold-version
-skaffold-check:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    REQUIRED=$(cat .skaffold-version)
-    if ! command -v skaffold &>/dev/null; then
-        echo "⚠️  Skaffold not installed"
-        echo "   Required: v$REQUIRED (see .skaffold-version)"
-        echo ""
-        echo "   Install with: brew install skaffold"
-    else
-        CURRENT=$(skaffold version | sed 's/v//')
-        if [[ "$CURRENT" != "$REQUIRED" ]]; then
-            echo "⚠️  Skaffold version mismatch!"
-            echo "   Required: v$REQUIRED (see .skaffold-version)"
-            echo "   Current:  v$CURRENT"
-            echo ""
-            echo "   Fix with: brew upgrade skaffold"
-        else
-            echo "✓ Skaffold version: v$CURRENT (matches .skaffold-version)"
-        fi
-    fi
 
 # Switch to Node version from .nvmrc (requires nvm)
 node-use:
@@ -348,21 +304,35 @@ db-migrate:
 # Info / Versions
 # =============================================================================
 
-# Show Rust version
-rust-version:
-    rustc --version
-    cargo --version
+# Show tool versions and check against required versions
+versions:
+    #!/usr/bin/env bash
+    set -euo pipefail
 
-# Show Node version
-node-version:
-    node --version
-    yarn --version
+    echo "Rust:     $(rustc --version | cut -d' ' -f2)"
+    echo "Cargo:    $(cargo --version | cut -d' ' -f2)"
 
-# Show Skaffold version
-skaffold-version:
-    @skaffold version 2>/dev/null || echo "Skaffold: NOT INSTALLED"
+    # Node: check against web/.nvmrc
+    NODE_REQ=$(cat web/.nvmrc)
+    NODE_CUR=$(node --version | sed 's/v//' | cut -d. -f1)
+    if [[ "$NODE_CUR" != "$NODE_REQ" ]]; then
+        echo "Node:     v$NODE_CUR ⚠️  (requires $NODE_REQ, see web/.nvmrc)"
+    else
+        echo "Node:     $(node --version)"
+    fi
+    echo "Yarn:     $(yarn --version)"
 
-# Show all tool versions
-versions: rust-version node-version skaffold-version
-    @echo ""
-    @just --version
+    # Skaffold: check against .skaffold-version
+    SKAFFOLD_REQ=$(cat .skaffold-version)
+    if ! command -v skaffold &>/dev/null; then
+        echo "Skaffold: NOT INSTALLED ⚠️  (requires v$SKAFFOLD_REQ)"
+    else
+        SKAFFOLD_CUR=$(skaffold version | sed 's/v//')
+        if [[ "$SKAFFOLD_CUR" != "$SKAFFOLD_REQ" ]]; then
+            echo "Skaffold: v$SKAFFOLD_CUR ⚠️  (requires v$SKAFFOLD_REQ)"
+        else
+            echo "Skaffold: v$SKAFFOLD_CUR"
+        fi
+    fi
+
+    echo "Just:     $(just --version | cut -d' ' -f2)"
