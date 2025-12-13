@@ -1,3 +1,5 @@
+# syntax=docker/dockerfile:1.4
+# Dev Dockerfile with BuildKit cache mounts for fast rebuilds
 # NODE_VERSION should match web/.nvmrc
 ARG NODE_VERSION=22
 FROM node:${NODE_VERSION}-slim
@@ -6,16 +8,18 @@ WORKDIR /app
 # Install Playwright OS dependencies AND browser binary early (before app files)
 # Both cache well since Playwright version rarely changes
 # Pin this version - update when you bump Playwright in package.json
-RUN npx --yes playwright@1.56.0 install-deps chromium && \
+RUN --mount=type=cache,target=/root/.cache,id=playwright-cache \
+    npx --yes playwright@1.56.0 install-deps chromium && \
     npx --yes playwright@1.56.0 install chromium
 
 # Enable corepack for Yarn Berry
 RUN corepack enable
 
-# Install dependencies (context is ./web)
+# Install dependencies with cache mounts (context is ./web)
 COPY .yarn/ ./.yarn/
 COPY .yarnrc.yml package.json yarn.lock ./
-RUN yarn install --immutable
+RUN --mount=type=cache,target=/root/.yarn/berry/cache,id=yarn-cache \
+    yarn install --immutable
 
 # Copy the rest of the app
 COPY . ./
