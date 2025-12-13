@@ -2,16 +2,19 @@ import { render, screen } from '@test-utils';
 import { ErrorBoundary } from './ErrorBoundary';
 
 // Component that throws an error
-function ThrowError({ message = 'Test error' }: { message?: string }) {
+function ThrowError({ message = 'Test error' }: { message?: string }): never {
   throw new Error(message);
 }
 
 // Suppress console.error in tests to avoid cluttering test output
+// eslint-disable-next-line no-console
 const consoleError = console.error;
 beforeAll(() => {
+  // eslint-disable-next-line no-console
   console.error = vi.fn();
 });
 afterAll(() => {
+  // eslint-disable-next-line no-console
   console.error = consoleError;
 });
 

@@ -1,4 +1,4 @@
-import { type ReactNode } from 'react';
+import { type ErrorInfo, type ReactNode } from 'react';
 import { ErrorBoundary as ReactErrorBoundary } from 'react-error-boundary';
 import { ErrorFallback } from './ErrorFallback';
 
@@ -11,7 +11,7 @@ interface ErrorBoundaryProps {
   /**
    * Optional callback when error occurs
    */
-  onError?: (error: Error, info: { componentStack: string }) => void;
+  onError?: (error: Error, info: ErrorInfo) => void;
   /**
    * Context identifier for error logging (e.g., 'Router', 'QueryProvider', 'Dashboard')
    */
@@ -39,10 +39,12 @@ export function ErrorBoundary({
   onError,
   context = 'Application',
 }: ErrorBoundaryProps) {
-  const handleError = (error: Error, info: { componentStack: string }) => {
+  const handleError = (error: Error, info: ErrorInfo) => {
     // Log to console in development
     if (import.meta.env.DEV) {
+      // eslint-disable-next-line no-console
       console.error(`[ErrorBoundary:${context}] Error caught:`, error);
+      // eslint-disable-next-line no-console
       console.error('Component stack:', info.componentStack);
     }
 

@@ -1,5 +1,5 @@
-import { Alert, Button, Container, Stack, Text, Title } from '@mantine/core';
 import { IconAlertCircle, IconRefresh } from '@tabler/icons-react';
+import { Alert, Button, Container, Stack, Text, Title } from '@mantine/core';
 
 interface ErrorFallbackProps {
   /**
