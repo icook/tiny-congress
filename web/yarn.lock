@@ -6118,6 +6118,7 @@ __metadata:
     react-dom: "npm:^19.2.3"
     recharts: "npm:^2.15.0"
     rollup-plugin-visualizer: "npm:^6.0.5"
+    react-error-boundary: "npm:^6.0.0"
     storybook: "npm:^10.1.7"
     storybook-dark-mode: "npm:^4.0.2"
     stylelint: "npm:^16.26.1"
@@ -7098,6 +7099,17 @@ __metadata:
   peerDependencies:
     react: ^19.2.3
   checksum: 10c0/dc43f7ede06f46f3acc16ee83107c925530de9b91d1d0b3824583814746ff4c498ea64fd65cd83aba363205268adff52e2827c582634ae7b15069deaeabc4892
+  languageName: node
+  linkType: hard
+
+"react-error-boundary@npm:^6.0.0":
+  version: 6.0.0
+  resolution: "react-error-boundary@npm:6.0.0"
+  dependencies:
+    "@babel/runtime": "npm:^7.12.5"
+  peerDependencies:
+    react: ">=16.13.1"
+  checksum: 10c0/1914d600dee95a14f14af4afe9867b0d35c26c4f7826d23208800ba2a99728659029aad60a6ef95e13430b4d79c2c4c9b3585f50bf508450478760d2e4e732d8
   languageName: node
   linkType: hard
 

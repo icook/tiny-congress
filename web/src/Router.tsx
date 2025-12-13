@@ -1,4 +1,5 @@
 import { createRootRoute, createRoute, createRouter, RouterProvider } from '@tanstack/react-router';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { AboutPage } from './pages/About.page';
 import { DashboardPage } from './pages/Dashboard.page';
 import { HomePage } from './pages/Home.page';
@@ -54,7 +55,11 @@ declare module '@tanstack/react-router' {
 }
 
 export function Router() {
-  return <RouterProvider router={router} />;
+  return (
+    <ErrorBoundary context="Router">
+      <RouterProvider router={router} />
+    </ErrorBoundary>
+  );
 }
 
 function createPlaceholderRoute(path: string, title: string, description: string) {
