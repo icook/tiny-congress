@@ -1,3 +1,5 @@
+#![allow(clippy::float_cmp)]
+
 use async_graphql::ID;
 use chrono::Utc;
 use tinycongress_api::graphql::{Pairing, Round, Topic, TopicRanking};

@@ -19,6 +19,10 @@ This is a non-functional WIP monorepo for a web community.
 - CI cluster setup test running
 - Production image building
 
+## Pre-push checks
+
+- From `/service`, run `cargo fmt` and `cargo clippy --all-targets --all-features -- -D warnings`.
+
 # macOS Developer Setup
 
 This guide gets you from a clean macOS to running TinyCongress locally.
