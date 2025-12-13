@@ -33,8 +33,6 @@ rand = "0.9"
 reqwest = { version = "0.12", features = ["json"] }
 
 [dev-dependencies]
-cargo-llvm-cov = "0.6.21"
-cargo-watch = "8.5.3"
 hyper = "1.6"
 sqlx-cli = { version = "0.8.6", features = ["postgres"] }
 tower = { version = "0.5", features = ["util"] }
