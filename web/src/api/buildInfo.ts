@@ -1,11 +1,9 @@
 import { graphqlRequest } from './graphqlClient';
-
-export type BuildInfo = {
-  version: string;
-  gitSha: string;
-  buildTime: string;
-  message?: string | null;
-};
+import {
+  buildInfoQueryResultSchema,
+  type BuildInfo,
+  type BuildInfoQueryResult,
+} from './schemas';
 
 const BUILD_INFO_QUERY = `
   query BuildInfoQuery {
@@ -18,11 +16,13 @@ const BUILD_INFO_QUERY = `
   }
 `;
 
-type BuildInfoQueryResult = {
-  buildInfo: BuildInfo;
-};
-
 export async function fetchBuildInfo(): Promise<BuildInfo> {
   const data = await graphqlRequest<BuildInfoQueryResult>(BUILD_INFO_QUERY);
-  return data.buildInfo;
+
+  // Validate response at runtime
+  const result = buildInfoQueryResultSchema.parse(data);
+
+  return result.buildInfo;
 }
+
+export type { BuildInfo };
