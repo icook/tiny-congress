@@ -1,9 +1,5 @@
 import { graphqlRequest } from './graphqlClient';
-import {
-  buildInfoQueryResultSchema,
-  type BuildInfo,
-  type BuildInfoQueryResult,
-} from './schemas';
+import { buildInfoQueryResultSchema, type BuildInfo, type BuildInfoQueryResult } from './schemas';
 
 const BUILD_INFO_QUERY = `
   query BuildInfoQuery {

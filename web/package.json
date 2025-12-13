@@ -101,11 +101,11 @@
   },
   "lint-staged": {
     "*.{ts,tsx}": [
-      "eslint --cache --fix",
-      "prettier --write"
+      "npx eslint --cache --fix",
+      "npx prettier --write"
     ],
     "*.css": [
-      "stylelint --fix"
+      "npx stylelint --fix"
     ]
   }
 }
