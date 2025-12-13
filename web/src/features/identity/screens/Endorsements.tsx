@@ -3,8 +3,8 @@
  * Create and manage endorsements
  */
 
-import { Alert, Card, Stack, Text, Title } from '@mantine/core';
 import { IconThumbUp } from '@tabler/icons-react';
+import { Alert, Card, Stack, Text, Title } from '@mantine/core';
 import { EndorsementEditor } from '../components/EndorsementEditor';
 import { useSession } from '../state/session';
 

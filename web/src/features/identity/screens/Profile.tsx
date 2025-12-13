@@ -3,8 +3,8 @@
  * Display account information, tier, reputation, and endorsements
  */
 
-import { Alert, Badge, Card, Group, Progress, Stack, Text, Title } from '@mantine/core';
 import { IconAlertTriangle, IconShield, IconStar, IconUser } from '@tabler/icons-react';
+import { Alert, Badge, Card, Group, Progress, Stack, Text, Title } from '@mantine/core';
 import { useSession } from '../state/session';
 
 export function Profile() {
@@ -82,8 +82,8 @@ export function Profile() {
 
           <Alert color="blue">
             <Text size="sm">
-              Profile data endpoints not yet implemented. This will show real security posture,
-              tier information, and reputation once the backend endpoints are ready.
+              Profile data endpoints not yet implemented. This will show real security posture, tier
+              information, and reputation once the backend endpoints are ready.
             </Text>
           </Alert>
         </Stack>

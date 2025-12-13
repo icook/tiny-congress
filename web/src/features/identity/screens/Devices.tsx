@@ -4,18 +4,9 @@
  */
 
 import { useState } from 'react';
-import {
-  Alert,
-  Badge,
-  Button,
-  Card,
-  Group,
-  Stack,
-  Text,
-  TextInput,
-  Title,
-} from '@mantine/core';
 import { IconAlertTriangle, IconDevices, IconPlus } from '@tabler/icons-react';
+import { Alert, Badge, Button, Card, Group, Stack, Text, TextInput, Title } from '@mantine/core';
+import { useAddDevice } from '../api/queries';
 import {
   canonicalizeToBytes,
   encodeBase64Url,
@@ -26,7 +17,6 @@ import {
   storeDeviceKey,
   storedToKeyPair,
 } from '../keys';
-import { useAddDevice } from '../api/queries';
 import { useSession } from '../state/session';
 
 export function Devices() {
@@ -89,9 +79,7 @@ export function Devices() {
       await addDevice.mutateAsync({
         account_id: session.accountId,
         device_pubkey: encodeBase64Url(newDeviceKeyPair.publicKey),
-        device_metadata: deviceName
-          ? { name: deviceName, type: 'browser' }
-          : { type: 'browser' },
+        device_metadata: deviceName ? { name: deviceName, type: 'browser' } : { type: 'browser' },
         delegation_envelope: delegationEnvelope,
       });
 
@@ -142,7 +130,11 @@ export function Devices() {
             )}
 
             {addDevice.isError && (
-              <Alert icon={<IconAlertTriangle size={16} />} title="Failed to add device" color="red">
+              <Alert
+                icon={<IconAlertTriangle size={16} />}
+                title="Failed to add device"
+                color="red"
+              >
                 {addDevice.error?.message || 'An error occurred'}
               </Alert>
             )}

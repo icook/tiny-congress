@@ -4,11 +4,11 @@
  */
 
 import { useState } from 'react';
-import { Alert, Button, Card, Group, Stack, Text, TextInput, Title } from '@mantine/core';
 import { IconAlertTriangle } from '@tabler/icons-react';
 import { useNavigate } from '@tanstack/react-router';
-import { canonicalizeToBytes, encodeBase64Url, getDeviceKey, sign, storedToKeyPair } from '../keys';
+import { Alert, Button, Card, Group, Stack, Text, TextInput, Title } from '@mantine/core';
 import { useIssueChallenge, useVerifyChallenge } from '../api/queries';
+import { canonicalizeToBytes, encodeBase64Url, getDeviceKey, sign, storedToKeyPair } from '../keys';
 import { useSession } from '../state/session';
 
 export function Login() {
