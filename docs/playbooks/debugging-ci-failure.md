@@ -6,6 +6,16 @@
 
 ## Quick diagnosis
 
+### 0. Check for merge conflicts first
+**CI will NOT run if the PR has merge conflicts.** Always check this first:
+```bash
+gh pr view --json mergeable,mergeStateStatus
+# If "mergeable": "CONFLICTING", fix conflicts before debugging CI
+git fetch origin master && git rebase origin/master
+# Resolve conflicts, then force push
+git push --force-with-lease
+```
+
 ### 1. Identify the failing job
 ```bash
 gh run view --web                    # Open in browser
@@ -80,6 +90,7 @@ gh run download <run_id> -n playwright-artifacts
 
 | Error | Cause | Fix |
 |-------|-------|-----|
+| CI not running | Merge conflicts | `gh pr view --json mergeable` then rebase |
 | "KinD not ready" | Cluster timeout | Retry or check resource limits |
 | "image pull failed" | Registry auth | Check GHCR token permissions |
 | "connection refused" | Port-forward died | Restart port-forward |
