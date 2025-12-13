@@ -2,6 +2,8 @@
 
 This is a non-functional WIP monorepo for a web community.
 
+**Website**: [tinycongress.com](https://tinycongress.com) | **Landing Page Repo**: [tiny-congress-landing](https://github.com/icook/tiny-congress-landing)
+
 ## Core Components
 
 - `/web/`
