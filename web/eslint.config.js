@@ -29,6 +29,8 @@ export default tseslint.config(
       'storybook-static/**',
       '.yarn/**',
       'node_modules/**',
+      'src/api/generated/**', // Generated code from graphql-codegen
+      'codegen.ts', // GraphQL codegen config
     ],
   },
 

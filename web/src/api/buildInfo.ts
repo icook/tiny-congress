@@ -1,5 +1,6 @@
+import * as z from 'zod';
+import { BuildInfoSchema, type BuildInfo } from './generated/graphql';
 import { graphqlRequest } from './graphqlClient';
-import { buildInfoQueryResultSchema, type BuildInfo, type BuildInfoQueryResult } from './schemas';
 
 const BUILD_INFO_QUERY = `
   query BuildInfoQuery {
@@ -11,6 +12,13 @@ const BUILD_INFO_QUERY = `
     }
   }
 `;
+
+// Query result wrapper schema
+const buildInfoQueryResultSchema = z.object({
+  buildInfo: BuildInfoSchema,
+});
+
+type BuildInfoQueryResult = z.infer<typeof buildInfoQueryResultSchema>;
 
 export async function fetchBuildInfo(): Promise<BuildInfo> {
   const data = await graphqlRequest<BuildInfoQueryResult>(BUILD_INFO_QUERY);

@@ -1,0 +1,59 @@
+"""
+Build metadata exposed via GraphQL and logs.
+"""
+type BuildInfo {
+	version: String!
+	gitSha: String!
+	buildTime: String!
+	message: String
+}
+
+type MutationRoot {
+	submitVote(pairingId: ID!, userId: ID!, choice: ID!): Boolean!
+}
+
+type Pairing {
+	id: ID!
+	topicA: Topic!
+	topicB: Topic!
+}
+
+type QueryRoot {
+	buildInfo: BuildInfo!
+	currentRound: Round
+	currentPairing(roundId: ID!): Pairing
+	topTopics(limit: Int): [TopicRanking!]!
+}
+
+type Round {
+	id: ID!
+	startTime: String!
+	endTime: String!
+	status: String!
+}
+
+type Topic {
+	id: ID!
+	title: String!
+	description: String!
+}
+
+type TopicRanking {
+	topicId: ID!
+	rank: Int!
+	score: Float!
+	topic: Topic!
+}
+
+"""
+Directs the executor to include this field or fragment only when the `if` argument is true.
+"""
+directive @include(if: Boolean!) on FIELD | FRAGMENT_SPREAD | INLINE_FRAGMENT
+"""
+Directs the executor to skip this field or fragment when the `if` argument is true.
+"""
+directive @skip(if: Boolean!) on FIELD | FRAGMENT_SPREAD | INLINE_FRAGMENT
+schema {
+	query: QueryRoot
+	mutation: MutationRoot
+}

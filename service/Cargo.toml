@@ -41,6 +41,10 @@ tower = { version = "0.5", features = ["util"] }
 name = "client"
 path = "src/bin/client.rs"
 
+[[bin]]
+name = "export_schema"
+path = "src/bin/export_schema.rs"
+
 [lints]
 [lints.clippy]
 pedantic = { level = "warn", priority = -1 }
