@@ -64,5 +64,8 @@ export default defineConfig({
         lines: 50,
       },
     },
+    deps: {
+      inline: [/@noble\//],
+    },
   },
 });
