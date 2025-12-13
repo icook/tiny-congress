@@ -208,18 +208,20 @@ jobs:
         uses: actions/cache@v4
         with:
           path: /usr/local/bin/skaffold
-          key: skaffold-v2.16.1
+          key: skaffold-v${{ hashFiles('.skaffold-version') }}
 
       - name: Install Skaffold
         if: steps.cache-skaffold.outputs.cache-hit != 'true'
         run: |
           set -euo pipefail
-          SKAFFOLD_VERSION=v2.16.1
+          SKAFFOLD_VERSION=v$(cat .skaffold-version)
           curl -fsSL -o skaffold https://storage.googleapis.com/skaffold/releases/${SKAFFOLD_VERSION}/skaffold-linux-amd64
           sudo install skaffold /usr/local/bin/skaffold
 
       - name: Verify Skaffold installation
-        run: skaffold version
+        run: |
+          echo "Required: v$(cat .skaffold-version)"
+          echo "Installed: $(skaffold version)"
 
       - name: Stamp build metadata
         run: |
@@ -359,6 +361,31 @@ jobs:
       - name: Build instrumented frontend for E2E tests
         working-directory: web
         run: PLAYWRIGHT_COVERAGE=1 yarn build
+
+      - name: Analyze bundle size
+        if: always()
+        working-directory: web
+        run: |
+          set -euo pipefail
+          {
+            echo "### Bundle Size"
+            echo ""
+            echo "| Asset | Size | Gzip |"
+            echo "|-------|------|------|"
+            find dist -type f \( -name "*.js" -o -name "*.css" \) -exec sh -c '
+              file="$1"
+              size=$(stat -f%z "$file" 2>/dev/null || stat -c%s "$file")
+              gzip_size=$(gzip -c "$file" | wc -c)
+              printf "| %s | %s | %s |\n" \
+                "$(basename "$file")" \
+                "$(numfmt --to=iec-i --suffix=B $size 2>/dev/null || echo "${size}B")" \
+                "$(numfmt --to=iec-i --suffix=B $gzip_size 2>/dev/null || echo "${gzip_size}B")"
+            ' _ {} \; | sort -k3 -h -r
+            echo ""
+            total_size=$(find dist -type f \( -name "*.js" -o -name "*.css" \) -exec stat -f%z {} + 2>/dev/null | awk '{sum+=$1} END {print sum}' || \
+                         find dist -type f \( -name "*.js" -o -name "*.css" \) -exec stat -c%s {} + | awk '{sum+=$1} END {print sum}')
+            echo "**Total:** $(numfmt --to=iec-i --suffix=B $total_size 2>/dev/null || echo "${total_size}B")"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Run Playwright E2E tests
         working-directory: web

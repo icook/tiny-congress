@@ -163,7 +163,7 @@ export default tseslint.config(
       'scripts/**/*.{js,mjs,ts}',
       '.storybook/**/*.{js,ts}',
       'vite.config.mjs',
-      'postcss.config.cjs',
+      'postcss.config.mjs',
       'playwright.config.ts',
     ],
     languageOptions: {
