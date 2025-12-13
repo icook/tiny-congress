@@ -4,9 +4,10 @@
  */
 
 import { useState } from 'react';
-import { Alert, Button, Card, Group, Stack, Text, TextInput, Title } from '@mantine/core';
 import { IconAlertTriangle } from '@tabler/icons-react';
 import { useNavigate } from '@tanstack/react-router';
+import { Alert, Button, Card, Group, Stack, Text, TextInput, Title } from '@mantine/core';
+import { useSignup } from '../api/queries';
 import {
   canonicalizeToBytes,
   encodeBase64Url,
@@ -16,7 +17,6 @@ import {
   storeDeviceKey,
   storeRootKey,
 } from '../keys';
-import { useSignup } from '../api/queries';
 
 export function Signup() {
   const navigate = useNavigate();
@@ -66,9 +66,7 @@ export function Signup() {
         username: username.trim(),
         root_pubkey: encodeBase64Url(rootKeyPair.publicKey),
         device_pubkey: encodeBase64Url(deviceKeyPair.publicKey),
-        device_metadata: deviceName
-          ? { name: deviceName, type: 'browser' }
-          : { type: 'browser' },
+        device_metadata: deviceName ? { name: deviceName, type: 'browser' } : { type: 'browser' },
         delegation_envelope: delegationEnvelope,
       });
 
@@ -116,11 +114,7 @@ export function Signup() {
             />
 
             {signup.isError && (
-              <Alert
-                icon={<IconAlertTriangle size={16} />}
-                title="Signup failed"
-                color="red"
-              >
+              <Alert icon={<IconAlertTriangle size={16} />} title="Signup failed" color="red">
                 {signup.error?.message || 'An error occurred'}
               </Alert>
             )}
@@ -134,10 +128,7 @@ export function Signup() {
                 Already have an account?
               </Button>
 
-              <Button
-                type="submit"
-                loading={signup.isPending || isGeneratingKeys}
-              >
+              <Button type="submit" loading={signup.isPending || isGeneratingKeys}>
                 {isGeneratingKeys ? 'Generating keys...' : 'Sign Up'}
               </Button>
             </Group>

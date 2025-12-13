@@ -39,7 +39,12 @@ describe('canonical', () => {
     });
 
     it('should canonicalize nested arrays', () => {
-      expect(canonicalize([[1, 2], [3, 4]])).toBe('[[1,2],[3,4]]');
+      expect(
+        canonicalize([
+          [1, 2],
+          [3, 4],
+        ])
+      ).toBe('[[1,2],[3,4]]');
     });
 
     it('should canonicalize objects with sorted keys', () => {

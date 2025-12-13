@@ -3,9 +3,9 @@
  * Uses idb-keyval for simple key-value operations
  */
 
-import { get, set, del } from 'idb-keyval';
-import type { KeyPair, StoredKey } from './types';
+import { del, get, set } from 'idb-keyval';
 import { decodeBase64Url, encodeBase64Url } from './crypto';
+import type { KeyPair, StoredKey } from './types';
 
 const ROOT_KEY_STORAGE_KEY = 'identity:root-key';
 const DEVICE_KEY_STORAGE_KEY = 'identity:device-key';

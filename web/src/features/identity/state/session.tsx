@@ -3,7 +3,7 @@
  * Provides authentication context for the application
  */
 
-import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { clearAllKeys } from '../keys';
 
 // === Types ===

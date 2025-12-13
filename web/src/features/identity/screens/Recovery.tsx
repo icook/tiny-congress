@@ -4,6 +4,8 @@
  */
 
 import { useState } from 'react';
+import { IconAlertTriangle, IconKey, IconPlus, IconShield } from '@tabler/icons-react';
+import { useQuery } from '@tanstack/react-query';
 import {
   Alert,
   Badge,
@@ -16,16 +18,8 @@ import {
   TextInput,
   Title,
 } from '@mantine/core';
-import { IconAlertTriangle, IconKey, IconPlus, IconShield } from '@tabler/icons-react';
-import { useQuery } from '@tanstack/react-query';
-import {
-  canonicalizeToBytes,
-  encodeBase64Url,
-  getRootKey,
-  sign,
-  storedToKeyPair,
-} from '../keys';
 import { recoveryPolicyQuery, useSetRecoveryPolicy } from '../api/queries';
+import { canonicalizeToBytes, encodeBase64Url, getRootKey, sign, storedToKeyPair } from '../keys';
 import { useSession } from '../state/session';
 
 export function Recovery() {

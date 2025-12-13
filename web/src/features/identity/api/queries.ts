@@ -3,7 +3,7 @@
  * Centralized query definitions for consistent caching and refetching
  */
 
-import { useMutation, useQueryClient, queryOptions } from '@tanstack/react-query';
+import { queryOptions, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   addDevice,
   approveRecovery,

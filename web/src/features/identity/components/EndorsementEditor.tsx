@@ -4,6 +4,7 @@
  */
 
 import { useState } from 'react';
+import { IconAlertTriangle, IconSend } from '@tabler/icons-react';
 import {
   Alert,
   Button,
@@ -16,15 +17,8 @@ import {
   Textarea,
   TextInput,
 } from '@mantine/core';
-import { IconAlertTriangle, IconSend } from '@tabler/icons-react';
-import {
-  canonicalizeToBytes,
-  encodeBase64Url,
-  getDeviceKey,
-  sign,
-  storedToKeyPair,
-} from '../keys';
 import { useCreateEndorsement } from '../api/queries';
+import { canonicalizeToBytes, encodeBase64Url, getDeviceKey, sign, storedToKeyPair } from '../keys';
 import { useSession } from '../state/session';
 
 export function EndorsementEditor() {

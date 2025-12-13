@@ -1,16 +1,21 @@
-import { createRootRoute, createRoute, createRouter, RouterProvider } from '@tanstack/react-router';
+import {
+  createRootRoute,
+  createRoute,
+  createRouter,
+  RouterProvider,
+} from '@tanstack/react-router';
 import { ErrorBoundary } from './components/ErrorBoundary';
-import { AboutPage } from './pages/About.page';
-import { DashboardPage } from './pages/Dashboard.page';
-import { HomePage } from './pages/Home.page';
-import { Layout } from './pages/Layout';
-import { ThreadedConversationPage } from './pages/ThreadedConversation.page';
 import { Devices } from './features/identity/screens/Devices';
 import { Endorsements } from './features/identity/screens/Endorsements';
 import { Login } from './features/identity/screens/Login';
 import { Profile } from './features/identity/screens/Profile';
 import { Recovery } from './features/identity/screens/Recovery';
 import { Signup } from './features/identity/screens/Signup';
+import { AboutPage } from './pages/About.page';
+import { DashboardPage } from './pages/Dashboard.page';
+import { HomePage } from './pages/Home.page';
+import { Layout } from './pages/Layout';
+import { ThreadedConversationPage } from './pages/ThreadedConversation.page';
 
 const rootRoute = createRootRoute({
   component: Layout,
@@ -109,7 +114,11 @@ export function Router() {
   );
 }
 
-function createPlaceholderRoute(path: string, title: string, description: string) {
+function createPlaceholderRoute(
+  path: string,
+  title: string,
+  description: string
+) {
   return createRoute({
     getParentRoute: () => rootRoute,
     path,
@@ -117,7 +126,13 @@ function createPlaceholderRoute(path: string, title: string, description: string
   });
 }
 
-function PlaceholderPage({ title, description }: { title: string; description: string }) {
+function PlaceholderPage({
+  title,
+  description,
+}: {
+  title: string;
+  description: string;
+}) {
   return (
     <div>
       <h1>{title}</h1>
