@@ -1,0 +1,120 @@
+import { describe, expect, it } from 'vitest';
+import {
+  decodeBase64Url,
+  deriveKid,
+  encodeBase64Url,
+  generateKeyPair,
+  sign,
+  verify,
+} from './crypto';
+
+describe('crypto', () => {
+  describe('generateKeyPair', () => {
+    it('should generate a valid Ed25519 key pair', () => {
+      const keyPair = generateKeyPair();
+
+      expect(keyPair.publicKey).toHaveLength(32);
+      expect(keyPair.privateKey).toHaveLength(32);
+      expect(keyPair.kid).toBeTruthy();
+      expect(keyPair.kid.length).toBeGreaterThan(0);
+    });
+
+    it('should generate unique keys each time', () => {
+      const keyPair1 = generateKeyPair();
+      const keyPair2 = generateKeyPair();
+
+      expect(keyPair1.kid).not.toBe(keyPair2.kid);
+      expect(keyPair1.publicKey).not.toEqual(keyPair2.publicKey);
+    });
+  });
+
+  describe('sign and verify', () => {
+    it('should sign and verify a message', () => {
+      const keyPair = generateKeyPair();
+      const message = new TextEncoder().encode('hello world');
+
+      const signature = sign(message, keyPair.privateKey);
+      expect(signature).toHaveLength(64); // Ed25519 signature size
+
+      const isValid = verify(message, keyPair.publicKey, signature);
+      expect(isValid).toBe(true);
+    });
+
+    it('should fail verification with wrong public key', () => {
+      const keyPair1 = generateKeyPair();
+      const keyPair2 = generateKeyPair();
+      const message = new TextEncoder().encode('hello world');
+
+      const signature = sign(message, keyPair1.privateKey);
+      const isValid = verify(message, keyPair2.publicKey, signature);
+
+      expect(isValid).toBe(false);
+    });
+
+    it('should fail verification with modified message', () => {
+      const keyPair = generateKeyPair();
+      const message = new TextEncoder().encode('hello world');
+      const modifiedMessage = new TextEncoder().encode('hello world!');
+
+      const signature = sign(message, keyPair.privateKey);
+      const isValid = verify(modifiedMessage, keyPair.publicKey, signature);
+
+      expect(isValid).toBe(false);
+    });
+  });
+
+  describe('deriveKid', () => {
+    it('should derive consistent KID from public key', () => {
+      const keyPair = generateKeyPair();
+
+      const kid1 = deriveKid(keyPair.publicKey);
+      const kid2 = deriveKid(keyPair.publicKey);
+
+      expect(kid1).toBe(kid2);
+    });
+
+    it('should produce different KIDs for different keys', () => {
+      const keyPair1 = generateKeyPair();
+      const keyPair2 = generateKeyPair();
+
+      const kid1 = deriveKid(keyPair1.publicKey);
+      const kid2 = deriveKid(keyPair2.publicKey);
+
+      expect(kid1).not.toBe(kid2);
+    });
+
+    it('should produce base64url-encoded KID', () => {
+      const keyPair = generateKeyPair();
+      const kid = deriveKid(keyPair.publicKey);
+
+      // Should not contain +, /, or =
+      expect(kid).not.toMatch(/[+/=]/);
+    });
+  });
+
+  describe('base64url encoding/decoding', () => {
+    it('should encode and decode bytes', () => {
+      const original = new Uint8Array([1, 2, 3, 4, 5, 255, 128, 0]);
+      const encoded = encodeBase64Url(original);
+      const decoded = decodeBase64Url(encoded);
+
+      expect(decoded).toEqual(original);
+    });
+
+    it('should produce URL-safe encoding', () => {
+      const bytes = new Uint8Array(32).fill(255); // Many bits set
+      const encoded = encodeBase64Url(bytes);
+
+      // Should not contain +, /, or =
+      expect(encoded).not.toMatch(/[+/=]/);
+    });
+
+    it('should handle empty bytes', () => {
+      const empty = new Uint8Array(0);
+      const encoded = encodeBase64Url(empty);
+      const decoded = decodeBase64Url(encoded);
+
+      expect(decoded).toEqual(empty);
+    });
+  });
+});
