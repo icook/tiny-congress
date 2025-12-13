@@ -27,13 +27,24 @@ Required:
 Best for: Integration testing, production-like environment
 
 ```bash
-minikube start           # Start local k8s cluster
+kind create cluster      # Create local k8s cluster (use KinD for CI parity)
 just dev                 # Builds images, deploys, hot-reloads
 ```
+
+We use KinD (Kubernetes in Docker) for local development to match CI. KinD loads
+images directly into the cluster without needing a registry.
 
 Services available at:
 - Frontend: http://localhost:5173
 - GraphQL: http://localhost:8080/graphql
+
+#### Hot Reload Behavior
+
+With file sync enabled, code changes sync directly into running containers:
+- **Frontend:** Vite HMR updates instantly (~100ms)
+- **Backend:** cargo-watch recompiles inside container (~5-10s)
+
+Changes to `Dockerfile*`, `Cargo.toml` dependencies, or `package.json` still trigger full rebuilds.
 
 ### Option B: Backend + Frontend Separately
 

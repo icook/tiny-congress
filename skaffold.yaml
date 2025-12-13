@@ -21,6 +21,16 @@ build:
         cacheFrom:
           - "tc-api-dev:cache-main"
           - "tc-api-dev:cache"
+      sync:
+        manual:
+          - src: "src/**/*.rs"
+            dest: /usr/src/app
+          - src: "migrations/**/*"
+            dest: /usr/src/app
+          - src: "Cargo.toml"
+            dest: /usr/src/app
+          - src: "Cargo.lock"
+            dest: /usr/src/app
     - image: postgres
       context: .
       docker:
@@ -39,6 +49,12 @@ build:
         cacheFrom:
           - "tc-ui-dev:cache-main"
           - "tc-ui-dev:cache"
+      sync:
+        manual:
+          - src: "src/**/*"
+            dest: /app
+          - src: "public/**/*"
+            dest: /app
 deploy:
   helm:
     releases:
@@ -97,9 +113,8 @@ portForward:
     localPort: 5173
 
 profiles:
-  # dev profile: same as default, explicit for clarity
-  # Uses dev Dockerfiles with hot-reload and fast cache mounts
-  # Run with: skaffold dev (or skaffold dev -p dev)
+  # dev profile: uses dev Dockerfiles with hot-reload and file sync
+  # Requires KinD cluster: kind create cluster && skaffold dev
   - name: dev
     build:
       local:

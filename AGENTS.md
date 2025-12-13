@@ -77,6 +77,7 @@ Use the `justfile` as the single source of truth for all commands. Run `just --l
 Additional notes:
 - CI monitoring: after pushing a branch, run `gh run watch --branch $(git rev-parse --abbrev-ref HEAD)` to stream workflow progress.
 - Rust Docker builds use cargo-chef stages by default; keep the planner/cacher/builder structure intact when editing `service/Dockerfile*` assets.
+- **Local Kubernetes:** `just dev` requires KinD (`kind create cluster`). Use KinD for CI parity. See `docs/playbooks/local-dev-setup.md`.
 
 ## Coding Style & Naming Conventions
 - Rust uses edition 2021 with rustfmt; keep modules snake_case and favor descriptive crate names.
