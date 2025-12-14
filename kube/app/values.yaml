@@ -46,6 +46,14 @@ service:
   type: ClusterIP
   port: 8080
 
+startupProbe:
+  httpGet:
+    path: /health
+    port: http
+  failureThreshold: 60
+  periodSeconds: 10
+  timeoutSeconds: 2
+
 ingress:
   enabled: false
   className: ""
