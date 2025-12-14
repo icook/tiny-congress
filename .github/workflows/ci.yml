@@ -351,17 +351,6 @@ jobs:
           set -euo pipefail
           skaffold test -p ${SKAFFOLD_PROFILE} --build-artifacts "${{ steps.artifacts.outputs.file }}"
 
-      - name: Summarize Vitest coverage
-        if: always()
-        working-directory: web
-        run: |
-          if [ -d "coverage/vitest" ]; then
-            echo "### Vitest Unit Test Coverage" >> $GITHUB_STEP_SUMMARY
-            echo '```' >> $GITHUB_STEP_SUMMARY
-            node scripts/print-vitest-coverage.mjs >> $GITHUB_STEP_SUMMARY
-            echo '```' >> $GITHUB_STEP_SUMMARY
-          fi
-
       - name: Upload Vitest coverage
         if: always()
         uses: actions/upload-artifact@v4
@@ -491,19 +480,6 @@ jobs:
           check_name: Playwright E2E
           comment_mode: off
 
-      - name: Summarize Playwright coverage
-        if: always()
-        working-directory: web
-        run: |
-          if [ -d .nyc_output ]; then
-            {
-              echo "### Playwright coverage"
-              echo '```'
-              npx nyc report --reporter=text-summary 2>/dev/null || true
-              echo '```'
-            } >> "$GITHUB_STEP_SUMMARY"
-          fi
-
       - name: Upload Playwright artifacts
         if: always()
         uses: actions/upload-artifact@v4
@@ -526,21 +502,14 @@ jobs:
             service/coverage/backend-unit.lcov
             service/coverage/backend-integration.lcov
 
-      - name: Summarize Rust coverage
+      - name: Summarize all coverage
         if: always()
         run: |
-          sudo apt-get update && sudo apt-get install -y lcov
-          {
-            echo "### Rust coverage"
-            echo ""
-            for file in service/coverage/backend-unit.lcov service/coverage/backend-integration.lcov; do
-              if [ -f "$file" ]; then
-                echo "#### $(basename $file .lcov)"
-                lcov --summary "$file" 2>&1 | grep -E "lines\.|functions\." || true
-                echo ""
-              fi
-            done
-          } >> "$GITHUB_STEP_SUMMARY"
+          node scripts/summarize-coverage.mjs \
+            --vitest web/coverage/vitest/coverage-summary.json \
+            --playwright web/.nyc_output \
+            --rust "service/coverage/backend-unit.lcov:unit,service/coverage/backend-integration.lcov:integration" \
+            >> $GITHUB_STEP_SUMMARY
 
       - name: Dump diagnostics on failure
         if: failure()
