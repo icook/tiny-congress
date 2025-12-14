@@ -207,8 +207,12 @@ typecheck: typecheck-frontend
 test: test-backend test-frontend
     @echo "✓ Unit tests passed"
 
+# Run frontend unit tests with coverage
+test-frontend-cov:
+    cd web && yarn vitest:coverage
+
 # Run all unit tests with coverage
-test-cov: test-backend-cov test-frontend
+test-cov: test-backend-cov test-frontend-cov
     @echo "✓ Coverage reports generated"
 
 # Build everything locally (no images)

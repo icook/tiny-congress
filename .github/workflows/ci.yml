@@ -351,6 +351,25 @@ jobs:
           set -euo pipefail
           skaffold test -p ${SKAFFOLD_PROFILE} --build-artifacts "${{ steps.artifacts.outputs.file }}"
 
+      - name: Summarize Vitest coverage
+        if: always()
+        working-directory: web
+        run: |
+          if [ -d "coverage/vitest" ]; then
+            echo "### Vitest Unit Test Coverage" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            node scripts/print-vitest-coverage.mjs >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Upload Vitest coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vitest-coverage
+          path: web/coverage/vitest/
+          retention-days: 7
+
       - name: Wait for KinD readiness
         run: |
           set -euo pipefail

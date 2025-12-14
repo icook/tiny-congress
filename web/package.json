@@ -19,6 +19,7 @@
     "prettier": "prettier --check \"**/*.{ts,tsx}\"",
     "prettier:write": "prettier --write \"**/*.{ts,tsx}\"",
     "vitest": "vitest run",
+    "vitest:coverage": "vitest run --coverage",
     "vitest:watch": "vitest",
     "playwright:test": "playwright test",
     "playwright:test:coverage": "PLAYWRIGHT_COVERAGE=1 playwright test",
