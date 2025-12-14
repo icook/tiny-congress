@@ -136,6 +136,15 @@ just test-frontend   # Vitest
 just test            # Both
 ```
 
+### Watch Mode (Automatic Re-run on File Changes)
+
+```bash
+just test-backend-watch   # Re-runs cargo test on changes
+just test-frontend-watch  # Re-runs vitest on changes
+```
+
+Watch mode automatically re-runs tests when source files change, useful for TDD workflows.
+
 ### Integration Tests (Requires Database)
 
 ```bash
@@ -161,7 +170,8 @@ export DATABASE_URL=postgres://postgres:postgres@localhost:5432/prioritization
 just dev-backend
 
 # Terminal 2: Run tests as you work
-just test-backend
+just test-backend             # Single run
+just test-backend-watch       # Auto re-run on changes
 just lint-backend
 ```
 
@@ -172,7 +182,8 @@ just lint-backend
 just dev-frontend
 
 # In another terminal, run tests
-just test-frontend
+just test-frontend            # Single run
+just test-frontend-watch      # Auto re-run on changes
 just lint-frontend
 ```
 

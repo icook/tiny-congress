@@ -6,12 +6,14 @@
 #   2. just dev             # Start full-stack dev environment (requires Skaffold + cluster)
 #
 # Local Development (no cluster needed):
-#   - just lint             # Lint all code
-#   - just fmt              # Format all code
-#   - just test-backend     # Run backend unit tests
-#   - just build-backend    # Build backend
-#   - just dev-backend      # Start backend with hot reload
-#   - just dev-frontend     # Start Vite frontend dev server
+#   - just lint                 # Lint all code
+#   - just fmt                  # Format all code
+#   - just test-backend         # Run backend unit tests
+#   - just test-backend-watch   # Run backend tests in watch mode
+#   - just test-frontend-watch  # Run frontend tests in watch mode
+#   - just build-backend        # Build backend
+#   - just dev-backend          # Start backend with hot reload
+#   - just dev-frontend         # Start Vite frontend dev server
 #
 # Full-Stack Testing (requires Docker + Kubernetes):
 #   - just test-full        # Build images, run all tests via Skaffold (mirrors CI)
@@ -30,6 +32,10 @@ default:
 # Run backend unit tests (auto-discovers all tests except integration tests)
 test-backend:
     cd service && cargo test
+
+# Run backend unit tests in watch mode (re-runs on file changes)
+test-backend-watch:
+    cd service && cargo watch -x test
 
 # Run backend unit tests with coverage
 test-backend-cov:
