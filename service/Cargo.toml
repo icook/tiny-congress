@@ -37,6 +37,9 @@ hyper = "1.6"
 sqlx-cli = { version = "0.8.6", features = ["postgres"] }
 tower = { version = "0.5", features = ["util"] }
 
+[features]
+integration-tests = []
+
 [[bin]]
 name = "client"
 path = "src/bin/client.rs"

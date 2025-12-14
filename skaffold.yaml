@@ -75,7 +75,7 @@ deploy:
             create: false
 
 # PRE-DEPLOY TESTS (cluster not required)
-# - Rust: unit tests via cargo llvm-cov
+# - Rust: unit tests via cargo llvm-cov (auto-discovers all tests except integration tests)
 # - Web: vitest unit tests
 test:
   - image: tc-api-release
@@ -87,9 +87,6 @@ test:
           cargo llvm-cov --lcov \
             --output-path coverage/backend-unit.lcov \
             --remap-path-prefix \
-            --test api_tests \
-            --test graphql_tests \
-            --test model_tests \
             -- --test-threads=1 --nocapture
   - image: tc-ui-release
     custom:

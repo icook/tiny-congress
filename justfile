@@ -27,13 +27,17 @@ default:
 # Backend (Rust) Commands
 # =============================================================================
 
-# Run backend unit tests
+# Run backend unit tests (auto-discovers all tests except integration tests)
 test-backend:
-    cd service && cargo test --test api_tests --test graphql_tests --test model_tests
+    cd service && cargo test
 
 # Run backend unit tests with coverage
 test-backend-cov:
-    cd service && cargo llvm-cov --test api_tests --test graphql_tests --test model_tests
+    cd service && cargo llvm-cov
+
+# Run backend integration tests locally (requires DATABASE_URL)
+test-backend-integration-local:
+    cd service && cargo test --features integration-tests --test integration_tests
 
 # Run backend integration tests via Skaffold (RECOMMENDED - requires Docker + Kubernetes)
 test-backend-integration:
