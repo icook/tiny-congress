@@ -27,5 +27,5 @@
       "@test-utils": ["./test-utils"]
     }
   },
-  "include": ["src", "test-utils", "tests", ".storybook/**/*", "playwright.config.ts"]
+  "include": ["src", "test-utils", "tests", ".storybook/**/*", "playwright.config.ts", "codegen.ts"]
 }

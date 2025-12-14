@@ -44,6 +44,10 @@ integration-tests = []
 name = "client"
 path = "src/bin/client.rs"
 
+[[bin]]
+name = "export_schema"
+path = "src/bin/export_schema.rs"
+
 [lints]
 [lints.clippy]
 pedantic = { level = "warn", priority = -1 }

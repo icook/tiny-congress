@@ -92,6 +92,52 @@ jobs:
         run: just lint-frontend
 
   # ============================================================
+  # JOB 0c: Verify GraphQL codegen is up-to-date
+  # ============================================================
+  codegen-check:
+    name: Check GraphQL codegen
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: service -> target
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: web/.nvmrc
+          cache: yarn
+          cache-dependency-path: web/yarn.lock
+
+      - name: Enable corepack
+        run: corepack enable
+
+      - name: Install just
+        uses: extractions/setup-just@v2
+
+      - name: Install frontend dependencies
+        run: just install-frontend
+
+      - name: Run codegen
+        run: just codegen
+
+      - name: Check for uncommitted changes
+        run: |
+          if ! git diff --quiet web/schema.graphql web/src/api/generated/; then
+            echo "::error::GraphQL codegen is out of date. Run 'just codegen' and commit the changes."
+            git diff web/schema.graphql web/src/api/generated/
+            exit 1
+          fi
+          echo "✓ GraphQL codegen is up to date"
+
+  # ============================================================
   # JOB 1: Build all container images in parallel
   # ============================================================
   build-images:
@@ -175,6 +221,7 @@ jobs:
       - build-images
       - lint
       - lint-web
+      - codegen-check
     permissions:
       contents: read
       packages: read
