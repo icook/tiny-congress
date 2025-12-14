@@ -55,6 +55,8 @@ spec:
             - name: BUILD_MESSAGE
               value: {{ .Values.buildInfo.message | quote }}
             {{- end }}
+          startupProbe:
+            {{- toYaml .Values.startupProbe | nindent 12 }}
           livenessProbe:
             httpGet:
               path: /health
