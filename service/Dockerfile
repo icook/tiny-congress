@@ -19,8 +19,6 @@ COPY --from=cacher /usr/local/cargo /usr/local/cargo
 COPY . .
 
 ENV SQLX_OFFLINE=true
-RUN cargo install sqlx-cli --locked --features postgres
-RUN cargo sqlx prepare --check
 RUN cargo build --release
 
 FROM debian:bookworm-slim
