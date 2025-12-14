@@ -118,6 +118,56 @@ jobs:
           echo "✓ GraphQL codegen is up to date"
 
   # ============================================================
+  # JOB 0d: Verify SQLx query snapshots are up-to-date
+  # ============================================================
+  sqlx-check:
+    name: Check SQLx snapshots
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: tinycongress
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/tinycongress
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: service -> target
+
+      - name: Install sqlx-cli
+        run: cargo install sqlx-cli --locked --no-default-features --features postgres
+
+      - name: Run migrations
+        working-directory: service
+        run: cargo sqlx migrate run
+
+      - name: Check SQLx snapshots
+        working-directory: service
+        run: |
+          if ! cargo sqlx prepare --check; then
+            echo "::error::SQLx query snapshots are out of date. Run 'just sqlx-prepare' and commit the changes in service/.sqlx/"
+            exit 1
+          fi
+          echo "✓ SQLx snapshots are up to date"
+
+  # ============================================================
   # JOB 1: Build all container images in parallel
   # ============================================================
   build-images:
@@ -202,6 +252,7 @@ jobs:
       - lint
       - lint-web
       - codegen-check
+      - sqlx-check
     permissions:
       contents: read
       packages: read
