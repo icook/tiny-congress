@@ -28,7 +28,6 @@ RUN apt-get update \
   && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /usr/src/app/target/release/tinycongress-api /usr/local/bin/
-COPY --from=builder /usr/src/app/target/release/client /usr/local/bin/
 COPY --from=builder /usr/src/app/migrations /usr/local/migrations
 
 ENV SQLX_OFFLINE=true \
