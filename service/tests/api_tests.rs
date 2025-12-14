@@ -47,11 +47,11 @@ async fn test_graphql_playground() {
 }
 
 #[tokio::test]
-async fn test_graphql_query() {
+async fn test_graphql_build_info_query() {
     let app = create_test_app();
 
-    // Simple GraphQL query
-    let query = r#"{"query": "{ currentRound { id status } }"}"#;
+    // GraphQL query for build info
+    let query = r#"{"query": "{ buildInfo { version gitSha buildTime } }"}"#;
 
     // Send a POST request with the query
     let response = app
@@ -73,9 +73,9 @@ async fn test_graphql_query() {
     let body = to_bytes(response.into_body(), 1024 * 1024).await.unwrap();
     let body_str = String::from_utf8(body.to_vec()).unwrap();
 
-    // Check that the response contains the expected data
-    assert!(body_str.contains("currentRound"));
-    assert!(body_str.contains("id"));
-    assert!(body_str.contains("status"));
-    assert!(body_str.contains("active"));
+    // Check that the response contains build info data
+    assert!(body_str.contains("buildInfo"));
+    assert!(body_str.contains("version"));
+    assert!(body_str.contains("gitSha"));
+    assert!(body_str.contains("buildTime"));
 }

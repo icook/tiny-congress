@@ -1,87 +1,55 @@
-# Prioritization Room Demo
+# TinyCongress API
 
-This project demonstrates a "Prioritization Room" implementation - a system that allows groups to collectively prioritize topics through pairwise comparisons.
-
-## Features
-
-- Round-based prioritization with configurable tempo
-- Topic pairing and voting mechanism
-- Elo-like ranking system to determine topic priorities
-- GraphQL API for real-time interaction
-- Message queue for event handling
-- React-based web client
+A production-ready Rust web service scaffolding with GraphQL API.
 
 ## Architecture
 
-The demo uses:
+The service uses:
 - **Rust** with **Axum** for the web server
-- **PostgreSQL** with **PGMQ** for message queuing
-- **SQLx** for database interactions
-- **Refinery** for database migrations
+- **PostgreSQL** for the database
+- **SQLx** for database interactions with compile-time query verification
 - **Async-GraphQL** for the API layer
-- **React** for the web client
 
-## Running the Demo
+## Features
+
+- GraphQL API with playground at `/graphql`
+- Health check endpoint at `/health`
+- Build info query for deployment verification
+- Automatic database migrations with retry logic
+- Structured logging with tracing
+- CORS support
+- Pedantic clippy lints for code quality
+
+## Running the Service
 
 ### Prerequisites
 
 - Rust toolchain
-- PostgreSQL with PGMQ extension installed
-- Node.js and npm (for the React client)
-- Docker and Docker Compose (for containerized development/testing)
-- Skaffold (for Kubernetes deployment and integration testing)
+- PostgreSQL
+- Docker and Docker Compose (for containerized development)
+- Skaffold (for Kubernetes deployment)
 
 ### Setup
 
 1. Create a PostgreSQL database:
-```
-createdb prioritization
-```
-
-2. Install PGMQ extension:
-```sql
-CREATE EXTENSION pgmq;
+```bash
+createdb tinycongress
 ```
 
-3. Set environment variables:
-```
-export DATABASE_URL=postgres://username:password@localhost/prioritization
+2. Set environment variables:
+```bash
+export DATABASE_URL=postgres://username:password@localhost/tinycongress
 ```
 
-4. Run the server:
-```
+3. Run the server:
+```bash
 cargo run
 ```
 
-5. In a separate terminal, run the client (optional):
-```
-cargo run --bin client
-```
-
-6. For the web interface, navigate to the `client` directory and run:
-```
-npm install
-npm start
-```
-
-### Running Integration Tests
-
-Use Skaffold so tests execute inside the same container images we ship:
-
-```bash
-skaffold build --file-output artifacts.json
-skaffold test --build-artifacts artifacts.json
-```
-
-This pair of commands builds the dev images, runs the backend unit/API/integration suites plus the frontend lint/type/test/build chain inside containers, and tears everything down when finished.
-
-For full Kubernetes parity (including port-forwards and verify hooks) run:
-
-```bash
-skaffold verify -p ci
-```
-
-This profile mirrors CI by deploying to your local cluster before executing the integration tests.
+The server will:
+- Connect to PostgreSQL with retry logic (handles startup race conditions)
+- Run database migrations automatically
+- Start listening on port 8080 (or `PORT` env var)
 
 ### Development with Skaffold
 
@@ -93,37 +61,47 @@ skaffold dev -p dev
 
 This sets up a development environment with:
 1. Local PostgreSQL database
-2. Hot-reloading of the Rust API via `cargo watch` when files change
-3. Skaffold file sync so local edits land in the container instantly
-4. Kubernetes deployment for realistic testing
+2. Hot-reloading via file sync
+3. Kubernetes deployment for realistic testing
 
-If you need to fall back to the pre-built binary (e.g. for profiling), set `DISABLE_CARGO_WATCH=1` in the deployment.
+### Running Tests
+
+```bash
+cargo test
+```
+
+For integration tests with a real database:
+```bash
+cargo test --features integration-tests
+```
+
+Or use Skaffold to run tests in containers:
+```bash
+skaffold build --file-output artifacts.json
+skaffold test --build-artifacts artifacts.json
+```
 
 ## API Schema
 
 The GraphQL API provides:
 
-- Queries:
-  - `currentRound`: Get the currently active round
-  - `currentPairing`: Get the current topic pairing for a round
-  - `topTopics`: Get the highest ranked topics
+### Queries
+- `buildInfo`: Get build metadata (version, git SHA, build time)
 
-- Mutations:
-  - `submitVote`: Submit a vote for one topic in a pairing
+### Mutations
+- `echo(message: String!)`: Echo back a message (placeholder)
 
-## Round Logic
+Access the GraphQL Playground at `http://localhost:8080/graphql` for interactive exploration.
 
-1. Each round runs for a configurable period (default: 60 seconds)
-2. At the start of each round, random pairings of topics are created
-3. Users vote on which topic in each pair they consider more important
-4. At the end of the round, votes are tallied and topic rankings are updated
-5. Rankings use an Elo-like system where topics gain or lose points based on wins/losses
+## Environment Variables
 
-## Extending the Demo
-
-Potential extensions include:
-- Adding user authentication
-- Supporting multiple simultaneous rooms with different configurations
-- Adding more sophisticated ranking algorithms
-- Implementing federation between rooms
-- Adding visualization of ranking changes over time
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `DATABASE_URL` | PostgreSQL connection string | `postgres://postgres:postgres@localhost:5432/tinycongress` |
+| `PORT` | Server port | `8080` |
+| `RUST_LOG` | Log level | `info` |
+| `MIGRATIONS_DIR` | Custom migrations directory | `./migrations` |
+| `APP_VERSION` | Application version for build info | `dev` |
+| `GIT_SHA` | Git commit SHA for build info | `unknown` |
+| `BUILD_TIME` | Build timestamp (RFC3339) | `unknown` |
+| `BUILD_MESSAGE` | Optional build message | none |

@@ -2,7 +2,7 @@
 apiVersion: skaffold/v4beta13
 kind: Config
 metadata:
-  name: prioritization-room
+  name: tiny-congress
 build:
   local:
     push: false
