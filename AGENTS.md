@@ -51,7 +51,6 @@ Key interfaces:
 - `docs/interfaces/directory-conventions.md` - Where code lives
 - `docs/interfaces/naming-conventions.md` - How to name things
 - `docs/interfaces/branch-naming-conventions.md` - Branch naming standards
-- `docs/interfaces/agent-output-schema.md` - PR compliance format
 
 Key style guides:
 - `docs/style/STYLE_GUIDE.md` - Mantine-first styling policy
@@ -112,22 +111,6 @@ Additional notes:
 - DO NOT modify `skaffold.yaml` profiles without running the testing-local-dev skill
 - DO NOT run bare `git push`; ALWAYS specify the remote and branch explicitly: `git push origin <branch-name>` (see ADR-004)
 - DO NOT use `--force` or `--force-with-lease` without explicit branch: `git push --force-with-lease origin <branch-name>`
-
-## Agent Acknowledgement Contract
-Every agent-generated PR description MUST include this YAML block at the end:
-
-```yaml
-# --- Agent Compliance ---
-agent_compliance:
-  docs_read:
-    - AGENTS.md
-  constraints_followed: true
-  files_modified: []  # List paths actually changed
-  deviations:
-    - none  # Or explain any rule exceptions
-```
-
-CI will reject PRs missing this block or with malformed YAML. The `files_modified` list must match the actual diff.
 
 ## Recovery Protocol
 If an agent violates these rules:
