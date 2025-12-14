@@ -34,6 +34,17 @@ export default defineConfig({
   },
   build: {
     sourcemap: enablePlaywrightCoverage,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'react-vendor': ['react', 'react-dom'],
+          'router': ['@tanstack/react-router'],
+          'query': ['@tanstack/react-query'],
+          'mantine': ['@mantine/core', '@mantine/hooks'],
+          'icons': ['@tabler/icons-react'],
+        },
+      },
+    },
   },
   test: {
     globals: true,
