@@ -51,11 +51,18 @@
    }
    ```
 
-6. **Update frontend** to use new endpoint (see `web/src/`)
+6. **Regenerate TypeScript types**:
+   ```bash
+   just codegen
+   ```
+   This exports the schema and generates TypeScript types + Zod schemas.
+
+7. **Update frontend** to use new endpoint (see `web/src/`)
 
 ## Verification
 - [ ] `just test-backend` passes
 - [ ] `just lint-backend` clean
+- [ ] `just codegen` produces no additional changes
 - [ ] Endpoint accessible via GraphQL playground
 - [ ] Frontend integration works
 
@@ -73,4 +80,5 @@
 
 ## See also
 - `service/src/` - existing resolvers
+- [GraphQL Codegen Workflow](./graphql-codegen.md) - type generation process
 - async-graphql docs for patterns
