@@ -17,7 +17,7 @@ use axum::{
 use std::net::SocketAddr;
 use tinycongress_api::{
     build_info::BuildInfoProvider,
-    db::{create_seed_data, setup_database},
+    db::setup_database,
     graphql::{graphql_handler, graphql_playground, MutationRoot, QueryRoot},
 };
 use tower_http::cors::{Any, CorsLayer};
@@ -47,10 +47,6 @@ async fn main() -> Result<(), anyhow::Error> {
 
     tracing::info!("Connecting to database...");
     let pool = setup_database(&database_url).await?;
-
-    // Create seed data
-    tracing::info!("Setting up seed data...");
-    create_seed_data(&pool).await?;
 
     let build_info = BuildInfoProvider::from_env();
     let build_info_snapshot = build_info.build_info();
