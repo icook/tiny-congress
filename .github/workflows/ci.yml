@@ -212,68 +212,7 @@ jobs:
           echo "${{ matrix.image }}-tag=${{ steps.tags.outputs.sha_tag }}" >> "$GITHUB_OUTPUT"
 
   # ============================================================
-  # JOB 2a: Run Skaffold tests (container structure tests)
-  # ============================================================
-  container-tests:
-    name: Container structure tests
-    runs-on: ubuntu-latest
-    needs:
-      - build-images
-    permissions:
-      contents: read
-      packages: read
-    env:
-      SKAFFOLD_DEFAULT_REPO: ghcr.io/${{ github.repository }}
-      SKAFFOLD_PROFILE: ci
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Cache Skaffold
-        id: cache-skaffold
-        uses: actions/cache@v4
-        with:
-          path: /usr/local/bin/skaffold
-          key: skaffold-v${{ hashFiles('.skaffold-version') }}
-
-      - name: Install Skaffold
-        if: steps.cache-skaffold.outputs.cache-hit != 'true'
-        run: |
-          set -euo pipefail
-          SKAFFOLD_VERSION=v$(cat .skaffold-version)
-          curl -fsSL -o skaffold https://storage.googleapis.com/skaffold/releases/${SKAFFOLD_VERSION}/skaffold-linux-amd64
-          sudo install skaffold /usr/local/bin/skaffold
-
-      - name: Login to GHCR
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Write Skaffold artifacts file
-        id: artifacts
-        run: |
-          set -euo pipefail
-          artifacts_file="${RUNNER_TEMP}/skaffold-artifacts.json"
-          cat > "$artifacts_file" <<'EOF'
-          {
-            "builds": [
-              {"imageName": "tc-api-release", "tag": "${{ env.REGISTRY }}/tc-api-release:${{ github.sha }}"},
-              {"imageName": "tc-ui-release", "tag": "${{ env.REGISTRY }}/tc-ui-release:${{ github.sha }}"},
-              {"imageName": "postgres", "tag": "${{ env.REGISTRY }}/postgres:${{ github.sha }}"}
-            ]
-          }
-          EOF
-          echo "file=${artifacts_file}" >> "$GITHUB_OUTPUT"
-
-      - name: Run Skaffold tests
-        run: |
-          set -euo pipefail
-          skaffold test -p ${SKAFFOLD_PROFILE} --build-artifacts "${{ steps.artifacts.outputs.file }}"
-
-  # ============================================================
-  # JOB 2b: Backend integration tests
+  # JOB 2a: Backend integration tests
   # ============================================================
   backend-integration:
     name: Backend integration tests
@@ -356,6 +295,16 @@ jobs:
           EOF
           echo "file=${artifacts_file}" >> "$GITHUB_OUTPUT"
 
+      - name: Prepare coverage directory
+        run: |
+          mkdir -p service/coverage
+          rm -f service/coverage/backend-unit.lcov service/coverage/backend-integration.lcov
+
+      - name: Run Skaffold tests
+        run: |
+          set -euo pipefail
+          skaffold test -p ${SKAFFOLD_PROFILE} --build-artifacts "${{ steps.artifacts.outputs.file }}"
+
       - name: Wait for KinD readiness
         run: |
           set -euo pipefail
@@ -373,6 +322,9 @@ jobs:
       - name: Configure registry access for KinD
         run: |
           set -euo pipefail
+          # Wait for the default service account to be created
+          timeout 60 bash -c 'until kubectl get serviceaccount default -n default >/dev/null 2>&1; do sleep 2; done'
+
           kubectl create secret docker-registry ghcr-cred \
             --namespace default \
             --docker-server=ghcr.io \
@@ -390,11 +342,6 @@ jobs:
           set -euo pipefail
           skaffold deploy -p ${SKAFFOLD_PROFILE} --status-check=true \
             --build-artifacts "${{ steps.artifacts.outputs.file }}"
-
-      - name: Prepare coverage directory
-        run: |
-          mkdir -p service/coverage
-          rm -f service/coverage/backend-unit.lcov service/coverage/backend-integration.lcov
 
       - name: Run Rust integration tests
         run: |
@@ -570,6 +517,9 @@ jobs:
       - name: Configure registry access for KinD
         run: |
           set -euo pipefail
+          # Wait for the default service account to be created
+          timeout 60 bash -c 'until kubectl get serviceaccount default -n default >/dev/null 2>&1; do sleep 2; done'
+
           kubectl create secret docker-registry ghcr-cred \
             --namespace default \
             --docker-server=ghcr.io \
