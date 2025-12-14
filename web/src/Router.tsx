@@ -1,12 +1,10 @@
-import {
-  createRootRoute,
-  createRoute,
-  createRouter,
-  lazyRouteComponent,
-  RouterProvider,
-} from '@tanstack/react-router';
+import { createRootRoute, createRoute, createRouter, RouterProvider } from '@tanstack/react-router';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { AboutPage } from './pages/About.page';
+import { DashboardPage } from './pages/Dashboard.page';
+import { HomePage } from './pages/Home.page';
 import { Layout } from './pages/Layout';
+import { ThreadedConversationPage } from './pages/ThreadedConversation.page';
 
 const rootRoute = createRootRoute({
   component: Layout,
@@ -15,29 +13,25 @@ const rootRoute = createRootRoute({
 const homeRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/',
-  component: lazyRouteComponent(() => import('./pages/Home.page').then((m) => m.HomePage)),
+  component: HomePage,
 });
 
 const dashboardRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: 'dashboard',
-  component: lazyRouteComponent(() =>
-    import('./pages/Dashboard.page').then((m) => m.DashboardPage)
-  ),
+  component: DashboardPage,
 });
 
 const conversationsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: 'conversations',
-  component: lazyRouteComponent(() =>
-    import('./pages/ThreadedConversation.page').then((m) => m.ThreadedConversationPage)
-  ),
+  component: ThreadedConversationPage,
 });
 
 const aboutRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: 'about',
-  component: lazyRouteComponent(() => import('./pages/About.page').then((m) => m.AboutPage)),
+  component: AboutPage,
 });
 
 const routeTree = rootRoute.addChildren([
