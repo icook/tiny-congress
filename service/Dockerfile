@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1.4
 # Use cargo-chef to cache dependency builds between Docker layers
 FROM lukemathwalker/cargo-chef:latest-rust-1.91 AS chef
 
@@ -9,7 +10,9 @@ RUN cargo chef prepare --recipe-path recipe.json
 
 FROM chef AS cacher
 COPY --from=planner /usr/src/app/recipe.json recipe.json
-RUN cargo chef cook --release --recipe-path recipe.json
+RUN --mount=type=cache,target=/usr/local/cargo/registry,id=cargo-registry \
+    --mount=type=cache,target=/usr/local/cargo/git,id=cargo-git \
+    cargo chef cook --release --recipe-path recipe.json
 
 FROM rust:1.91 AS builder
 
@@ -19,7 +22,9 @@ COPY --from=cacher /usr/local/cargo /usr/local/cargo
 COPY . .
 
 ENV SQLX_OFFLINE=true
-RUN cargo build --release
+RUN --mount=type=cache,target=/usr/local/cargo/registry,id=cargo-registry \
+    --mount=type=cache,target=/usr/local/cargo/git,id=cargo-git \
+    cargo build --release
 
 FROM debian:bookworm-slim
 
