@@ -9,40 +9,20 @@ type BuildInfo {
 }
 
 type MutationRoot {
-	submitVote(pairingId: ID!, userId: ID!, choice: ID!): Boolean!
-}
-
-type Pairing {
-	id: ID!
-	topicA: Topic!
-	topicB: Topic!
+	"""
+	Placeholder mutation - returns the input string
+	
+	This exists because GraphQL requires at least one mutation.
+	Replace with actual mutations as features are implemented.
+	"""
+	echo(message: String!): String!
 }
 
 type QueryRoot {
+	"""
+	Returns build metadata for the running service
+	"""
 	buildInfo: BuildInfo!
-	currentRound: Round
-	currentPairing(roundId: ID!): Pairing
-	topTopics(limit: Int): [TopicRanking!]!
-}
-
-type Round {
-	id: ID!
-	startTime: String!
-	endTime: String!
-	status: String!
-}
-
-type Topic {
-	id: ID!
-	title: String!
-	description: String!
-}
-
-type TopicRanking {
-	topicId: ID!
-	rank: Int!
-	score: Float!
-	topic: Topic!
 }
 
 """

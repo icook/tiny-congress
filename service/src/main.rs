@@ -8,11 +8,7 @@
 )]
 
 use async_graphql::{EmptySubscription, Schema};
-use axum::{
-    http::Method,
-    routing::get,
-    Extension, Router,
-};
+use axum::{http::Method, routing::get, Extension, Router};
 use std::net::SocketAddr;
 use tinycongress_api::{
     build_info::BuildInfoProvider,

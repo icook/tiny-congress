@@ -97,7 +97,7 @@ fn evaluate_condition(condition: &Condition, attrs: &HashMap<String, Value>) -> 
                 .ok_or_else(|| anyhow!("Comparison requires value"))?;
             let actual = attrs
                 .get(field)
-                .ok_or_else(|| anyhow!("Field not found: {}", field))?;
+                .ok_or_else(|| anyhow!("Field not found: {field}"))?;
 
             match (actual, expected) {
                 (Value::Number(a), Value::Number(e)) => Ok(match condition.op {

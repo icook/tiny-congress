@@ -258,8 +258,11 @@ function PolicySetupForm({ onSuccess, onCancel }: PolicySetupFormProps) {
 
   const updateHelper = (index: number, accountId: string) => {
     const updated = [...helpers];
-    updated[index] = { ...updated[index], accountId };
-    setHelpers(updated);
+    const existing = updated[index];
+    if (existing) {
+      updated[index] = { ...existing, accountId };
+      setHelpers(updated);
+    }
   };
 
   const handleSubmit = async () => {
