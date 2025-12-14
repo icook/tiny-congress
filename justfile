@@ -150,9 +150,13 @@ build-frontend:
 dev-frontend:
     cd web && yarn dev
 
-# Run Storybook dev server (experimental - may have dependency issues)
+# Run Storybook dev server
 storybook:
     cd web && yarn storybook
+
+# Build Storybook static site
+storybook-build:
+    cd web && yarn storybook:build
 
 # Install frontend dependencies
 install-frontend:
