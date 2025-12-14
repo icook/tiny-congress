@@ -1,3 +1,5 @@
+#![cfg(feature = "integration-tests")]
+
 use sqlx_core::{executor::Executor, query::query, query_as::query_as, query_scalar::query_scalar};
 use sqlx_postgres::PgPool;
 use tinycongress_api::db;
