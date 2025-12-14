@@ -1,7 +1,7 @@
 import '@mantine/core/styles.css';
 
 import React, { useCallback, useEffect } from 'react';
-import { DARK_MODE_EVENT_NAME } from 'storybook-dark-mode';
+import { DARK_MODE_EVENT_NAME } from '@vueless/storybook-dark-mode';
 import { addons } from 'storybook/preview-api';
 import { MantineProvider, useMantineColorScheme } from '@mantine/core';
 import { mantineTheme } from '../src/theme/mantineTheme';
