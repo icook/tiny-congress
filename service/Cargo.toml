@@ -6,7 +6,7 @@ edition = "2021"
 [dependencies]
 # Web server
 axum = "0.8"
-tokio = { version = "1", features = ["full"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "signal", "time"] }
 tower = "0.5"
 tower-http = { version = "0.6", features = ["cors", "trace"] }
 tracing = "0.1"
@@ -26,7 +26,6 @@ uuid = { version = "1.16", features = ["v4", "serde"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 async-trait = "0.1"
-futures = "0.3"
 thiserror = "2.0"
 anyhow = "1.0"
 rand = "0.9"
@@ -34,7 +33,6 @@ reqwest = { version = "0.12", features = ["json"] }
 
 [dev-dependencies]
 hyper = "1.6"
-sqlx-cli = { version = "0.8.6", features = ["postgres"] }
 tower = { version = "0.5", features = ["util"] }
 
 [features]
