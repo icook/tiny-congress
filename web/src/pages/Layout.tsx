@@ -1,5 +1,6 @@
+import { Suspense } from 'react';
 import { Outlet } from '@tanstack/react-router';
-import { AppShell, Burger, Group, Image, Text } from '@mantine/core';
+import { AppShell, Burger, Group, Image, Loader, Text } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { Navbar } from '../components/Navbar/Navbar';
 
@@ -24,7 +25,9 @@ export function Layout() {
       </AppShell.Navbar>
 
       <AppShell.Main>
-        <Outlet />
+        <Suspense fallback={<Loader />}>
+          <Outlet />
+        </Suspense>
       </AppShell.Main>
     </AppShell>
   );
