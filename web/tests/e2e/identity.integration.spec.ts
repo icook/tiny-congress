@@ -2,7 +2,8 @@
  * Identity E2E integration tests - full flow testing with backend
  *
  * These tests require the full backend stack to be running.
- * Mark with @integration tag to run only in CI with backend.
+ * In CI, backend must be available - tests will fail if not.
+ * Locally, set SKIP_INTEGRATION_TESTS=1 to skip these tests.
  */
 
 /* eslint-disable playwright/no-skipped-test */
@@ -10,21 +11,35 @@
 import { expect, test } from './fixtures';
 
 const API_URL = process.env.PLAYWRIGHT_API_URL ?? 'http://127.0.0.1:8080';
+const IS_CI = process.env.CI === 'true';
+const SKIP_LOCALLY = process.env.SKIP_INTEGRATION_TESTS === '1';
 
-// Helper to check if backend is available
-async function isBackendAvailable(request: ReturnType<typeof test.info>['request']) {
+// Check backend availability - fail in CI, skip locally if requested
+async function checkBackendOrSkip(request: Parameters<Parameters<typeof test>[1]>[0]['request']) {
+  if (SKIP_LOCALLY && !IS_CI) {
+    test.skip(true, 'Skipping integration tests locally (SKIP_INTEGRATION_TESTS=1)');
+    return;
+  }
+
   try {
-    // @ts-expect-error - request is available in test context
     const response = await request.get(`${API_URL}/health`);
-    return response.ok();
-  } catch {
-    return false;
+    if (!response.ok()) {
+      if (IS_CI) {
+        throw new Error(`Backend health check failed in CI: ${response.status()}`);
+      }
+      test.skip(true, 'Backend not available locally');
+    }
+  } catch (error) {
+    if (IS_CI) {
+      throw new Error(`Backend not reachable in CI: ${error}`);
+    }
+    test.skip(true, 'Backend not available locally');
   }
 }
 
 test.describe('Signup flow @integration', () => {
   test('completes signup with valid credentials', async ({ page, request }) => {
-    test.skip(!(await isBackendAvailable(request)), 'Backend not available');
+    await checkBackendOrSkip(request);
 
     await page.goto('/signup');
 
@@ -43,7 +58,7 @@ test.describe('Signup flow @integration', () => {
   });
 
   test('shows error for duplicate username', async ({ page, request }) => {
-    test.skip(!(await isBackendAvailable(request)), 'Backend not available');
+    await checkBackendOrSkip(request);
 
     // First, create a user directly via API if possible, or use a known existing user
     const existingUsername = 'duplicate_test_user';
@@ -66,7 +81,7 @@ test.describe('Login flow @integration', () => {
   // In CI, this would be set up as part of test fixtures
 
   test('shows device key warning when no key exists', async ({ page, request }) => {
-    test.skip(!(await isBackendAvailable(request)), 'Backend not available');
+    await checkBackendOrSkip(request);
 
     await page.goto('/login');
 
@@ -81,7 +96,7 @@ test.describe('Login flow @integration', () => {
 
 test.describe('Navigation between auth pages @integration', () => {
   test('can navigate from home to signup', async ({ page, request }) => {
-    test.skip(!(await isBackendAvailable(request)), 'Backend not available');
+    await checkBackendOrSkip(request);
 
     await page.goto('/');
     await page.goto('/signup');
@@ -90,7 +105,7 @@ test.describe('Navigation between auth pages @integration', () => {
   });
 
   test('can navigate from signup to login', async ({ page, request }) => {
-    test.skip(!(await isBackendAvailable(request)), 'Backend not available');
+    await checkBackendOrSkip(request);
 
     await page.goto('/signup');
     await page.goto('/login');
