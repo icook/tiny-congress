@@ -52,3 +52,7 @@ minikube start
 skaffold dev --port-forward
 ```
 
+# Documentation
+
+See [docs/README.md](docs/README.md) for playbooks, interfaces, ADRs, and documentation placement rules.
+
