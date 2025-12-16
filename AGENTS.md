@@ -44,6 +44,10 @@ Use the `justfile` as the single source of truth for all commands. Run `just --l
 | **Dev server** | `just dev` | Full-stack with Skaffold (requires cluster) |
 | **Frontend dev** | `just dev-frontend` | Vite dev server only |
 | **Build** | `just build` | Backend + frontend builds |
+| **Security audit** | `just audit` | All security checks (blocking in CI) |
+| **Dep vulnerabilities** | `just audit-deps` | cargo-deny + yarn audit |
+| **Secret detection** | `just audit-secrets` | gitleaks scan |
+| **Unused deps** | `just audit-unused` | cargo-machete |
 
 Additional notes:
 - CI monitoring: after pushing a branch, run `gh run watch --branch $(git rev-parse --abbrev-ref HEAD)` to stream workflow progress.
