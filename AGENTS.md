@@ -18,43 +18,15 @@ This file is a concise index of rules and pointers—not detailed documentation.
 - `web/`: React/Mantine client on Vite. Source under `web/src/`, shared mocks in `web/test-utils/`.
 - `dockerfiles/`, `skaffold.yaml`, `kube/`: Container and Kubernetes assets for CI, integration, and demo environments.
 
-## Working Documents
+## Documentation
 
-| Location | Purpose | Lifecycle |
-|----------|---------|-----------|
-| `.scratch/` | Ephemeral notes, analysis, brainstorming | Delete after task |
-| `.plan/` | Feature specs, tickets for large branches | Remove on merge to master |
-| `docs/` | Accepted documentation only | Permanent |
+See [docs/README.md](docs/README.md) for the full index of playbooks, interfaces, ADRs, checklists, and document placement rules.
 
-See README in each directory for details. Never put scratch/analysis files in `docs/`.
-
-## Documentation (Required Reading)
-Consult these before starting work:
-
-| Directory | Purpose | When to read |
-|-----------|---------|--------------|
-| `docs/playbooks/` | Step-by-step how-to guides | Before any unfamiliar task |
-| `docs/interfaces/` | Contracts, schemas, naming rules | Before writing new code |
-| `docs/decisions/` | ADRs explaining why decisions were made | When questioning existing patterns |
-| `docs/checklists/` | Pre-PR, pre-release, incident checklists | Before opening PRs or deploying |
-| `docs/style/` | UI styling guidelines (Mantine-first) | Before modifying frontend UI |
-| `docs/skills/` | LLM skills for specific tasks | When referenced by other docs |
-
-Key playbooks:
-- `docs/playbooks/local-dev-setup.md` - Development environment options
-- `docs/playbooks/adding-migration.md` - Database changes
-- `docs/playbooks/new-graphql-endpoint.md` - API changes
-- `docs/playbooks/debugging-ci-failure.md` - CI troubleshooting
-
-Key interfaces:
-- `docs/interfaces/environment-variables.md` - Required and optional env vars
-- `docs/interfaces/directory-conventions.md` - Where code lives
-- `docs/interfaces/naming-conventions.md` - How to name things
-- `docs/interfaces/branch-naming-conventions.md` - Branch naming standards
-
-Key style guides:
-- `docs/style/STYLE_GUIDE.md` - Mantine-first styling policy
-- `docs/style/LLM_UI_GUIDE.md` - LLM instructions for UI work
+Key references:
+- `docs/playbooks/` - How-to guides (local-dev-setup, adding-migration, new-graphql-endpoint)
+- `docs/interfaces/` - Contracts and naming conventions
+- `docs/decisions/` - ADRs explaining architectural choices
+- `docs/style/` - UI styling (Mantine-first per ADR-005)
 
 ## Build, Test, and Development Commands
 
