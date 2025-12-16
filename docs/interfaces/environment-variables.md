@@ -8,28 +8,28 @@ The backend uses [figment](https://docs.rs/figment/) for layered configuration. 
 
 ## Backend (Rust API)
 
-All environment variables use the `TC_` prefix. Nested config uses underscore separators.
+All environment variables use the `TC_` prefix. Nested config uses double underscore (`__`) separators.
 
 ### Database Configuration
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `TC_DATABASE_URL` | Yes | - | PostgreSQL connection string |
-| `TC_DATABASE_MAX_CONNECTIONS` | No | `10` | Maximum connections in pool |
-| `TC_DATABASE_MIGRATIONS_DIR` | No | auto-detect | Custom migrations directory path |
+| `TC_DATABASE__URL` | Yes | - | PostgreSQL connection string |
+| `TC_DATABASE__MAX_CONNECTIONS` | No | `10` | Maximum connections in pool |
+| `TC_DATABASE__MIGRATIONS_DIR` | No | auto-detect | Custom migrations directory path |
 
 ### Server Configuration
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `TC_SERVER_PORT` | No | `8080` | HTTP server port |
-| `TC_SERVER_HOST` | No | `0.0.0.0` | HTTP server bind address |
+| `TC_SERVER__PORT` | No | `8080` | HTTP server port |
+| `TC_SERVER__HOST` | No | `0.0.0.0` | HTTP server bind address |
 
 ### Logging Configuration
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `TC_LOGGING_LEVEL` | No | `info` | Log level (`debug`, `info`, `warn`, `error`) |
+| `TC_LOGGING__LEVEL` | No | `info` | Log level (`debug`, `info`, `warn`, `error`) |
 
 ### Build Info (unchanged)
 
@@ -88,11 +88,11 @@ Environment variables are set in `kube/app/templates/deployment.yaml`:
 
 ```yaml
 env:
-  - name: TC_LOGGING_LEVEL
+  - name: TC_LOGGING__LEVEL
     value: info
-  - name: TC_DATABASE_URL
+  - name: TC_DATABASE__URL
     value: postgres://postgres:postgres@postgres:5432/tiny-congress
-  - name: TC_SERVER_PORT
+  - name: TC_SERVER__PORT
     value: "8080"
 ```
 
@@ -100,7 +100,7 @@ For production, use Kubernetes secrets:
 
 ```yaml
 env:
-  - name: TC_DATABASE_URL
+  - name: TC_DATABASE__URL
     valueFrom:
       secretKeyRef:
         name: postgres-credentials
@@ -112,8 +112,8 @@ env:
 ### Option 1: Environment variables
 
 ```bash
-export TC_DATABASE_URL=postgres://postgres:postgres@localhost:5432/tiny-congress
-export TC_LOGGING_LEVEL=debug
+export TC_DATABASE__URL=postgres://postgres:postgres@localhost:5432/tiny-congress
+export TC_LOGGING__LEVEL=debug
 just dev-backend
 ```
 
@@ -128,7 +128,7 @@ just dev-backend
 ### Option 3: Inline (one-off)
 
 ```bash
-TC_DATABASE_URL=postgres://... cargo run
+TC_DATABASE__URL=postgres://... cargo run
 ```
 
 ## Connection String Format
@@ -161,7 +161,7 @@ This is handled automatically by `dockerfiles/Dockerfile.postgres`.
 
 | Error | Cause | Fix |
 |-------|-------|-----|
-| "database.url is required" | Missing TC_DATABASE_URL | Set `TC_DATABASE_URL` environment variable |
+| "database.url is required" | Missing TC_DATABASE__URL | Set `TC_DATABASE__URL` environment variable |
 | "connection refused" | Postgres not running | Start postgres or check host/port |
 | "database does not exist" | DB not created | Run `createdb tiny-congress` |
 | "extension pgmq does not exist" | Missing extension | Use provided Dockerfile.postgres |

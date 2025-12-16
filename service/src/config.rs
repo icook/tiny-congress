@@ -117,7 +117,7 @@ impl Config {
         let config: Self = Figment::new()
             .merge(Serialized::defaults(Self::default()))
             .merge(Yaml::file("config.yaml"))
-            .merge(Env::prefixed("TC_").split("_"))
+            .merge(Env::prefixed("TC_").split("__"))
             .extract()?;
 
         config.validate()?;
@@ -132,7 +132,7 @@ impl Config {
         let config: Self = Figment::new()
             .merge(Serialized::defaults(Self::default()))
             .merge(Yaml::file(yaml_path))
-            .merge(Env::prefixed("TC_").split("_"))
+            .merge(Env::prefixed("TC_").split("__"))
             .extract()?;
 
         config.validate()?;
@@ -147,7 +147,7 @@ impl Config {
         // Database URL is required and must be a postgres URL
         if self.database.url.is_empty() {
             return Err(ConfigError::Validation(
-                "database.url is required. Set TC_DATABASE_URL environment variable.".into(),
+                "database.url is required. Set TC_DATABASE__URL environment variable.".into(),
             ));
         }
 

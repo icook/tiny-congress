@@ -46,7 +46,7 @@ pub async fn setup_database(config: &DatabaseConfig) -> Result<PgPool, anyhow::E
 
     // Resolve the migrations directory in a way that works in release images too.
     // Preference order:
-    //  1. config.migrations_dir (from config file or TC_DATABASE_MIGRATIONS_DIR env)
+    //  1. config.migrations_dir (from config file or TC_DATABASE__MIGRATIONS_DIR env)
     //  2. ./migrations relative to the running binary
     //  3. The compile-time manifest directory for local `cargo run`
     let candidate_dirs = [
