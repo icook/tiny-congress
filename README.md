@@ -56,3 +56,28 @@ skaffold dev --port-forward
 
 See [docs/README.md](docs/README.md) for playbooks, interfaces, ADRs, and documentation placement rules.
 
+## Security Checks
+
+Security and dependency hygiene checks are **blocking in CI**. Run them locally before pushing:
+
+```bash
+# Install required tools
+brew install gitleaks
+cargo install cargo-deny cargo-machete
+
+# Run all security checks
+just audit
+
+# Or run individually:
+just audit-deps      # cargo-deny + yarn audit (vulnerabilities & licenses)
+just audit-secrets   # gitleaks (secret detection)
+just audit-unused    # cargo-machete (unused dependencies)
+```
+
+CI enforces:
+- **Rust vulnerabilities**: HIGH/CRITICAL advisories block via `cargo-deny`
+- **Rust licenses**: Only permissive licenses allowed (MIT, Apache-2.0, BSD, etc.)
+- **Rust unused deps**: Any unused dependency fails via `cargo-machete`
+- **Frontend vulnerabilities**: HIGH+ severity blocks via `yarn audit`
+- **Secrets**: Any detected secret blocks via `gitleaks`
+
