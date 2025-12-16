@@ -42,8 +42,9 @@ async fn main() -> Result<(), anyhow::Error> {
     );
 
     // Database connection
-    let database_url = std::env::var("DATABASE_URL")
-        .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:5432/tinycongress".to_string());
+    let database_url = std::env::var("DATABASE_URL").unwrap_or_else(|_| {
+        "postgres://postgres:postgres@localhost:5432/tiny-congress".to_string()
+    });
 
     tracing::info!("Connecting to database...");
     let pool = setup_database(&database_url).await?;

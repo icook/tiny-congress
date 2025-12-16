@@ -6,7 +6,7 @@
 
 | Variable | Description | Example |
 |----------|-------------|---------|
-| `DATABASE_URL` | PostgreSQL connection string | `postgres://postgres:postgres@localhost:5432/prioritization` |
+| `DATABASE_URL` | PostgreSQL connection string | `postgres://postgres:postgres@localhost:5432/tiny-congress` |
 
 ### Optional
 
@@ -48,7 +48,7 @@ env:
   - name: RUST_LOG
     value: info
   - name: DATABASE_URL
-    value: postgres://postgres:postgres@postgres:5432/prioritization
+    value: postgres://postgres:postgres@postgres:5432/tiny-congress
 ```
 
 For production, use Kubernetes secrets:
@@ -67,7 +67,7 @@ env:
 ### Option 1: Export in shell
 
 ```bash
-export DATABASE_URL=postgres://postgres:postgres@localhost:5432/prioritization
+export DATABASE_URL=postgres://postgres:postgres@localhost:5432/tiny-congress
 export RUST_LOG=debug
 just dev-backend
 ```
@@ -76,7 +76,7 @@ just dev-backend
 
 Create `service/.env`:
 ```
-DATABASE_URL=postgres://postgres:postgres@localhost:5432/prioritization
+DATABASE_URL=postgres://postgres:postgres@localhost:5432/tiny-congress
 RUST_LOG=debug
 ```
 
@@ -102,7 +102,7 @@ postgres://USER:PASSWORD@HOST:PORT/DATABASE
 | PASSWORD | `postgres` | `postgres` |
 | HOST | `localhost` | `postgres` (k8s service) |
 | PORT | `5432` | `5432` |
-| DATABASE | `prioritization` | `prioritization` |
+| DATABASE | `tiny-congress` | `tiny-congress` |
 
 ## Required Extensions
 
@@ -119,7 +119,7 @@ This is handled automatically by `dockerfiles/Dockerfile.postgres`.
 | Error | Cause | Fix |
 |-------|-------|-----|
 | "connection refused" | Postgres not running | Start postgres or check host/port |
-| "database does not exist" | DB not created | Run `createdb prioritization` |
+| "database does not exist" | DB not created | Run `createdb tiny-congress` |
 | "extension pgmq does not exist" | Missing extension | Use provided Dockerfile.postgres |
 | "RUST_LOG: invalid filter directive" | Bad log format | Use `debug`, `info`, `warn`, `error` |
 

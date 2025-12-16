@@ -55,7 +55,7 @@ Best for: Fast iteration, debugging one service
 # Using Docker
 docker run -d --name postgres \
   -e POSTGRES_PASSWORD=postgres \
-  -e POSTGRES_DB=prioritization \
+  -e POSTGRES_DB=tiny-congress \
   -p 5432:5432 \
   ghcr.io/icook/tiny-congress/postgres:branch-master
 
@@ -64,7 +64,7 @@ docker run -d --name postgres \
 
 **Terminal 2 - Backend:**
 ```bash
-export DATABASE_URL=postgres://postgres:postgres@localhost:5432/prioritization
+export DATABASE_URL=postgres://postgres:postgres@localhost:5432/tiny-congress
 just dev-backend
 ```
 
@@ -88,7 +88,7 @@ Configure API endpoint in frontend if needed (currently hardcoded).
 Best for: API development, testing resolvers
 
 ```bash
-export DATABASE_URL=postgres://postgres:postgres@localhost:5432/prioritization
+export DATABASE_URL=postgres://postgres:postgres@localhost:5432/tiny-congress
 just dev-backend
 ```
 
@@ -103,7 +103,7 @@ Includes pgmq extension pre-configured:
 ```bash
 docker run -d --name tc-postgres \
   -e POSTGRES_PASSWORD=postgres \
-  -e POSTGRES_DB=prioritization \
+  -e POSTGRES_DB=tiny-congress \
   -p 5432:5432 \
   ghcr.io/icook/tiny-congress/postgres:branch-master
 ```
@@ -113,8 +113,8 @@ docker run -d --name tc-postgres \
 1. Install pgmq extension (see https://github.com/tembo-io/pgmq)
 2. Create database:
    ```bash
-   createdb prioritization
-   psql prioritization -c "CREATE EXTENSION pgmq;"
+   createdb tiny-congress
+   psql tiny-congress -c "CREATE EXTENSION pgmq;"
    ```
 
 ### Connecting to Existing Database
@@ -122,18 +122,26 @@ docker run -d --name tc-postgres \
 For debugging against staging/shared DB:
 
 ```bash
-export DATABASE_URL=postgres://user:pass@staging-host:5432/prioritization
+export DATABASE_URL=postgres://user:pass@staging-host:5432/tiny-congress
 just dev-backend
 ```
 
 ## Running Tests
 
-### Unit Tests (No Database)
+### Unit Tests
 
 ```bash
-just test-backend    # Rust tests
+just test-backend    # Rust tests (uses testcontainers for DB tests)
 just test-frontend   # Vitest
 just test            # Both
+```
+
+Backend tests that need a database use [testcontainers](https://testcontainers.com/) to automatically
+spin up an isolated PostgreSQL container. No manual database setup required.
+
+**First-time setup:** Build the custom postgres image with pgmq extension:
+```bash
+just build-test-postgres
 ```
 
 ### Watch Mode (Automatic Re-run on File Changes)
@@ -144,14 +152,6 @@ just test-frontend-watch  # Re-runs vitest on changes
 ```
 
 Watch mode automatically re-runs tests when source files change, useful for TDD workflows.
-
-### Integration Tests (Requires Database)
-
-```bash
-# With local Postgres running:
-export DATABASE_URL=postgres://postgres:postgres@localhost:5432/prioritization
-cd service && cargo test --test integration_tests
-```
 
 ### E2E Tests (Requires Full Stack)
 
@@ -166,7 +166,7 @@ just test-frontend-e2e
 
 ```bash
 # Terminal 1: Start backend with hot reload
-export DATABASE_URL=postgres://postgres:postgres@localhost:5432/prioritization
+export DATABASE_URL=postgres://postgres:postgres@localhost:5432/tiny-congress
 just dev-backend
 
 # Terminal 2: Run tests as you work

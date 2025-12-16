@@ -97,7 +97,7 @@ Additional notes:
 
 ## Environment & Configuration Tips
 - Keep secrets out of version control; export `DATABASE_URL` and queue settings locally and in CI.
-- Ensure PostgreSQL loads `CREATE EXTENSION pgmq;` before integration jobs.
+- Backend tests use testcontainers for DB isolation. Run `just build-test-postgres` once to build the custom image.
 - Align Docker tags with `skaffold.yaml` profiles so preview, test, and prod images stay consistent.
 
 ## Prohibited Actions (Hard Constraints)
