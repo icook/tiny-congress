@@ -17,7 +17,11 @@ unmaintained = "workspace"
 # How to handle yanked crates: "deny", "warn", "allow"
 yanked = "deny"
 # Ignore specific advisories (add with justification if needed)
-ignore = []
+ignore = [
+    # tokio-tar vulnerability in testcontainers (dev dependency only, used in tests)
+    # Waiting for testcontainers to update: https://rustsec.org/advisories/RUSTSEC-2025-0111
+    "RUSTSEC-2025-0111",
+]
 
 # =============================================================================
 # Licenses - ensure all dependencies use acceptable licenses
