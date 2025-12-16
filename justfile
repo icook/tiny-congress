@@ -335,6 +335,20 @@ db-migrate:
     cd service && cargo run --bin tinycongress-api -- migrate
 
 # =============================================================================
+# SQLx Query Cache (Offline Mode)
+# =============================================================================
+
+# Regenerate SQLx query snapshots (requires DATABASE_URL)
+sqlx-prepare:
+    cd service && cargo sqlx prepare
+    @echo "✓ SQLx snapshots regenerated in service/.sqlx/"
+
+# Verify SQLx query snapshots are up-to-date (requires DATABASE_URL)
+sqlx-check:
+    cd service && cargo sqlx prepare --check
+    @echo "✓ SQLx snapshots are up to date"
+
+# =============================================================================
 # Info / Versions
 # =============================================================================
 

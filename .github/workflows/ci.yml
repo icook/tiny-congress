@@ -118,6 +118,71 @@ jobs:
           echo "✓ GraphQL codegen is up to date"
 
   # ============================================================
+  # JOB 0d: Verify SQLx query snapshots are up-to-date
+  # ============================================================
+  sqlx-check:
+    name: Check SQLx snapshots
+    runs-on: ubuntu-latest
+    needs: [build-images]
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/tinycongress
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Start postgres
+        run: |
+          docker run -d --name postgres \
+            -p 5432:5432 \
+            ${{ env.REGISTRY }}/postgres:${{ github.sha }}
+          # Wait for postgres to be ready
+          for i in {1..30}; do
+            if docker exec postgres pg_isready -U postgres; then
+              echo "Postgres is ready"
+              break
+            fi
+            echo "Waiting for postgres... ($i/30)"
+            sleep 1
+          done
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: service -> target
+
+      - name: Install sqlx-cli
+        run: cargo install sqlx-cli --locked --no-default-features --features postgres
+
+      - name: Run migrations
+        working-directory: service
+        run: cargo sqlx migrate run
+
+      - name: Check SQLx snapshots
+        working-directory: service
+        run: |
+          output=$(cargo sqlx prepare --check 2>&1) || {
+            echo "$output"
+            echo "::error::SQLx query snapshots are out of date. Run 'just sqlx-prepare' and commit the changes in service/.sqlx/"
+            exit 1
+          }
+          echo "$output"
+          if echo "$output" | grep -q "potentially unused queries"; then
+            echo "::error::Unused SQLx query snapshots found in .sqlx/. Run 'just sqlx-prepare' to remove stale entries."
+            exit 1
+          fi
+          echo "✓ SQLx snapshots are up to date"
+
+  # ============================================================
   # JOB 1: Build all container images in parallel
   # ============================================================
   build-images:
@@ -202,6 +267,7 @@ jobs:
       - lint
       - lint-web
       - codegen-check
+      - sqlx-check
     permissions:
       contents: read
       packages: read
