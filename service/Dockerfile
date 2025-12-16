@@ -36,6 +36,6 @@ COPY --from=builder /usr/src/app/target/release/tinycongress-api /usr/local/bin/
 COPY --from=builder /usr/src/app/migrations /usr/local/migrations
 
 ENV SQLX_OFFLINE=true \
-    MIGRATIONS_DIR=/usr/local/migrations
+    TC_DATABASE_MIGRATIONS_DIR=/usr/local/migrations
 
 CMD ["tinycongress-api"]

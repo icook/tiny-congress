@@ -1,0 +1,21 @@
+# TinyCongress API Configuration
+# Copy to config.yaml and modify as needed.
+# Environment variables with TC_ prefix override these values.
+
+database:
+  # PostgreSQL connection URL (required)
+  url: postgres://postgres:postgres@localhost:5432/tiny-congress
+  # Maximum connections in pool
+  max_connections: 10
+  # Optional: custom migrations directory
+  # migrations_dir: /path/to/migrations
+
+server:
+  # HTTP server port
+  port: 8080
+  # HTTP server bind address
+  host: 0.0.0.0
+
+logging:
+  # Log level: debug, info, warn, error
+  level: info
