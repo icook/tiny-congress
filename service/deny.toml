@@ -12,11 +12,10 @@ no-default-features = false
 [advisories]
 db-path = "~/.cargo/advisory-db"
 db-urls = ["https://github.com/rustsec/advisory-db"]
-# Fail on HIGH and CRITICAL vulnerabilities
-vulnerability = "deny"
-unmaintained = "warn"
+# How to handle unmaintained crates: "all", "workspace", "transitive", "none"
+unmaintained = "workspace"
+# How to handle yanked crates: "deny", "warn", "allow"
 yanked = "deny"
-notice = "warn"
 # Ignore specific advisories (add with justification if needed)
 ignore = []
 
