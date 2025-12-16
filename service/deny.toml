@@ -23,9 +23,7 @@ ignore = []
 # Licenses - ensure all dependencies use acceptable licenses
 # =============================================================================
 [licenses]
-# Fail on unlicensed dependencies
-unlicensed = "deny"
-# Allow common permissive licenses
+# Allow common permissive licenses (SPDX identifiers)
 allow = [
     "MIT",
     "Apache-2.0",
