@@ -118,7 +118,59 @@ jobs:
           echo "✓ GraphQL codegen is up to date"
 
   # ============================================================
-  # JOB 0d: Verify SQLx query snapshots are up-to-date
+  # JOB 0d: Security & Dependency Audit
+  # ============================================================
+  security-audit:
+    name: Security & Dependency Audit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for gitleaks
+
+      # Rust: advisories + licenses via cargo-deny
+      - name: Install cargo-deny
+        uses: taiki-e/install-action@cargo-deny
+
+      - name: Run cargo deny
+        working-directory: service
+        run: cargo deny check
+
+      # Rust: unused dependencies via cargo-machete
+      - name: Install cargo-machete
+        uses: taiki-e/install-action@cargo-machete
+
+      - name: Check for unused dependencies
+        working-directory: service
+        run: cargo machete
+
+      # Frontend: vulnerabilities via yarn audit
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: web/.nvmrc
+          cache: yarn
+          cache-dependency-path: web/yarn.lock
+
+      - name: Enable corepack
+        run: corepack enable
+
+      - name: Install frontend dependencies
+        run: cd web && yarn install --immutable
+
+      - name: Run yarn audit
+        working-directory: web
+        run: yarn npm audit --severity high
+
+      # Secrets detection via gitleaks
+      - name: Run gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ============================================================
+  # JOB 0e: Verify SQLx query snapshots are up-to-date
   # ============================================================
   sqlx-check:
     name: Check SQLx snapshots
@@ -268,6 +320,7 @@ jobs:
       - lint-web
       - codegen-check
       - sqlx-check
+      - security-audit
     permissions:
       contents: read
       packages: read

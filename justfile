@@ -207,6 +207,30 @@ undeploy:
     skaffold delete
 
 # =============================================================================
+# Security & Dependency Audit
+# =============================================================================
+
+# Run all security and hygiene checks
+audit: audit-deps audit-secrets audit-unused
+    @echo "✓ All security checks passed"
+
+# Check for vulnerabilities and license issues (cargo-deny + yarn audit)
+audit-deps:
+    cd service && cargo deny check
+    cd web && yarn npm audit --severity high
+    @echo "✓ Dependency audit passed"
+
+# Check for leaked secrets (requires gitleaks: brew install gitleaks)
+audit-secrets:
+    gitleaks detect --source . --verbose
+    @echo "✓ No secrets detected"
+
+# Check for unused Rust dependencies (requires cargo-machete: cargo install cargo-machete)
+audit-unused:
+    cd service && cargo machete
+    @echo "✓ No unused dependencies"
+
+# =============================================================================
 # Quality Checks (Local - No Cluster Required)
 # =============================================================================
 

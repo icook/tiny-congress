@@ -2,6 +2,7 @@
 name = "tinycongress-api"
 version = "0.1.0"
 edition = "2021"
+license = "MIT"
 
 [dependencies]
 # Web server
@@ -39,6 +40,10 @@ once_cell = "1.19"
 [[bin]]
 name = "export_schema"
 path = "src/bin/export_schema.rs"
+
+# cargo-machete false positives (used via derive macros)
+[package.metadata.cargo-machete]
+ignored = ["serde", "thiserror", "async-trait"]
 
 [lints]
 [lints.clippy]
