@@ -16,7 +16,7 @@ RUN set -eux; \
 # Set environment variables
 ENV POSTGRES_USER=postgres
 ENV POSTGRES_PASSWORD=postgres
-ENV POSTGRES_DB=tinycongress
+ENV POSTGRES_DB=tiny-congress
 
 # Create extension setup script
 RUN echo "CREATE EXTENSION IF NOT EXISTS pgmq;" > /docker-entrypoint-initdb.d/init-extensions.sql

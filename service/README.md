@@ -33,12 +33,12 @@ The service uses:
 
 1. Create a PostgreSQL database:
 ```bash
-createdb tinycongress
+createdb tiny-congress
 ```
 
 2. Set environment variables:
 ```bash
-export DATABASE_URL=postgres://username:password@localhost/tinycongress
+export DATABASE_URL=postgres://username:password@localhost/tiny-congress
 ```
 
 3. Run the server:
@@ -70,9 +70,12 @@ This sets up a development environment with:
 cargo test
 ```
 
-For integration tests with a real database:
+Tests that need a database use [testcontainers](https://testcontainers.com/) to automatically
+spin up an isolated PostgreSQL container. First build the custom postgres image:
+
 ```bash
-cargo test --features integration-tests
+# One-time setup (from repo root)
+just build-test-postgres
 ```
 
 Or use Skaffold to run tests in containers:
@@ -97,7 +100,7 @@ Access the GraphQL Playground at `http://localhost:8080/graphql` for interactive
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `DATABASE_URL` | PostgreSQL connection string | `postgres://postgres:postgres@localhost:5432/tinycongress` |
+| `DATABASE_URL` | PostgreSQL connection string | `postgres://postgres:postgres@localhost:5432/tiny-congress` |
 | `PORT` | Server port | `8080` |
 | `RUST_LOG` | Log level | `info` |
 | `MIGRATIONS_DIR` | Custom migrations directory | `./migrations` |

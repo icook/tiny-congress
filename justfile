@@ -8,7 +8,7 @@
 # Local Development (no cluster needed):
 #   - just lint                 # Lint all code
 #   - just fmt                  # Format all code
-#   - just test-backend         # Run backend unit tests
+#   - just test-backend         # Run backend unit tests (uses testcontainers)
 #   - just test-backend-watch   # Run backend tests in watch mode
 #   - just test-frontend-watch  # Run frontend tests in watch mode
 #   - just build-backend        # Build backend
@@ -29,25 +29,33 @@ default:
 # Backend (Rust) Commands
 # =============================================================================
 
-# Run backend unit tests (auto-discovers all tests except integration tests)
-test-backend:
+# Run backend unit tests (auto-builds postgres image if needed for DB tests)
+test-backend: _ensure-test-postgres
     cd service && cargo test
 
 # Run backend unit tests in watch mode (re-runs on file changes)
-test-backend-watch:
+test-backend-watch: _ensure-test-postgres
     cd service && cargo watch -x test
 
 # Run backend unit tests with coverage
-test-backend-cov:
+test-backend-cov: _ensure-test-postgres
     cd service && cargo llvm-cov
 
-# Run backend integration tests locally (requires DATABASE_URL)
-test-backend-integration-local:
-    cd service && cargo test --features integration-tests --test integration_tests
+# Build postgres image for testcontainers
+build-test-postgres:
+    docker build -t tc-postgres:local -f dockerfiles/Dockerfile.postgres dockerfiles/
 
-# Run backend integration tests via Skaffold (RECOMMENDED - requires Docker + Kubernetes)
-test-backend-integration:
-    @echo "Building images and running integration tests via Skaffold..."
+# Internal: ensure postgres image exists for testcontainers
+_ensure-test-postgres:
+    #!/usr/bin/env bash
+    if ! docker image inspect tc-postgres:local >/dev/null 2>&1; then
+        echo "Building tc-postgres:local image for testcontainers..."
+        docker build -t tc-postgres:local -f dockerfiles/Dockerfile.postgres dockerfiles/
+    fi
+
+# Run unit tests via Skaffold (requires Docker + Kubernetes)
+test-skaffold:
+    @echo "Building images and running unit tests via Skaffold..."
     skaffold build --file-output artifacts.json && skaffold test --build-artifacts artifacts.json
 
 # Verify full test suite via Skaffold (CI mode - RECOMMENDED approach per AGENTS.md)

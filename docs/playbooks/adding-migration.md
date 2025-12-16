@@ -20,7 +20,7 @@
 
 3. Run migration locally:
    ```bash
-   DATABASE_URL=postgres://postgres:postgres@localhost:5432/prioritization sqlx migrate run
+   DATABASE_URL=postgres://postgres:postgres@localhost:5432/tiny-congress sqlx migrate run
    ```
 
 4. Regenerate offline query data:
