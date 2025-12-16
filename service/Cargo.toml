@@ -41,6 +41,10 @@ once_cell = "1.19"
 name = "export_schema"
 path = "src/bin/export_schema.rs"
 
+# cargo-machete false positives (used via derive macros)
+[package.metadata.cargo-machete]
+ignored = ["serde", "thiserror", "async-trait"]
+
 [lints]
 [lints.clippy]
 pedantic = { level = "warn", priority = -1 }
