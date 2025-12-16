@@ -17,6 +17,7 @@ use axum::{
 use std::net::SocketAddr;
 use tinycongress_api::{
     build_info::BuildInfoProvider,
+    config::Config,
     db::setup_database,
     graphql::{graphql_handler, graphql_playground, MutationRoot, QueryRoot},
 };
@@ -29,10 +30,11 @@ async fn health_check() -> impl IntoResponse {
 
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
-    // Set up logging
-    if std::env::var("RUST_LOG").is_err() {
-        std::env::set_var("RUST_LOG", "info");
-    }
+    // Load and validate configuration first (fail-fast)
+    let config = Config::load().map_err(|e| anyhow::anyhow!("{e}"))?;
+
+    // Set up logging from config
+    std::env::set_var("RUST_LOG", &config.logging.level);
     tracing_subscriber::fmt::init();
 
     // Init banner so container logs clearly show startup
@@ -42,12 +44,8 @@ async fn main() -> Result<(), anyhow::Error> {
     );
 
     // Database connection
-    let database_url = std::env::var("DATABASE_URL").unwrap_or_else(|_| {
-        "postgres://postgres:postgres@localhost:5432/tiny-congress".to_string()
-    });
-
     tracing::info!("Connecting to database...");
-    let pool = setup_database(&database_url).await?;
+    let pool = setup_database(&config.database).await?;
 
     let build_info = BuildInfoProvider::from_env();
     let build_info_snapshot = build_info.build_info();
@@ -81,15 +79,9 @@ async fn main() -> Result<(), anyhow::Error> {
         );
 
     // Start the server
-    let port = std::env::var("PORT")
-        .unwrap_or_else(|_| "8080".to_string())
-        .parse::<u16>()
-        .unwrap_or(8080);
-
-    let addr = SocketAddr::from(([0, 0, 0, 0], port));
+    let addr = SocketAddr::from(([0, 0, 0, 0], config.server.port));
     tracing::info!("Starting server at http://{}/graphql", addr);
 
-    // Updated server binding code
     let listener = tokio::net::TcpListener::bind(addr).await?;
     axum::serve(listener, app).await?;
 

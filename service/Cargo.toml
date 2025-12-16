@@ -21,6 +21,9 @@ async-graphql-axum = "7.0"
 sqlx-core = { version = "0.8", default-features = false, features = ["_rt-tokio", "_tls-rustls-ring-webpki", "chrono", "uuid", "json", "migrate"] }
 sqlx-postgres = { version = "0.8", default-features = false, features = ["chrono", "uuid", "json", "migrate"] }
 
+# Configuration
+figment = { version = "0.10", features = ["yaml", "env"] }
+
 # Utilities
 chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1.16", features = ["v4", "serde"] }

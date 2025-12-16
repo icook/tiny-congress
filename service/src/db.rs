@@ -1,3 +1,4 @@
+use crate::config::DatabaseConfig;
 use sqlx_core::migrate::Migrator;
 use sqlx_postgres::{PgPool, PgPoolOptions};
 use std::path::{Path, PathBuf};
@@ -13,7 +14,7 @@ use tracing::{info, warn};
 /// # Errors
 /// Returns an error if the database connection cannot be established or
 /// migrations fail to run after exhausting retries.
-pub async fn setup_database(database_url: &str) -> Result<PgPool, anyhow::Error> {
+pub async fn setup_database(config: &DatabaseConfig) -> Result<PgPool, anyhow::Error> {
     let retry_deadline = Duration::from_secs(60); // overall retry budget
     let max_interval = Duration::from_secs(30); // cap single waits
     let mut delay = Duration::from_millis(500);
@@ -23,10 +24,10 @@ pub async fn setup_database(database_url: &str) -> Result<PgPool, anyhow::Error>
         info!("Attempting to connect to Postgres...");
 
         match PgPoolOptions::new()
-            .max_connections(10)
+            .max_connections(config.max_connections)
             // Allow extra time to acquire a connection during startup bursts
             .acquire_timeout(Duration::from_secs(30))
-            .connect(database_url)
+            .connect(&config.url)
             .await
         {
             Ok(pool) => break pool,
@@ -45,11 +46,11 @@ pub async fn setup_database(database_url: &str) -> Result<PgPool, anyhow::Error>
 
     // Resolve the migrations directory in a way that works in release images too.
     // Preference order:
-    //  1. MIGRATIONS_DIR env var (allows containers to mount migrations elsewhere)
+    //  1. config.migrations_dir (from config file or TC_DATABASE__MIGRATIONS_DIR env)
     //  2. ./migrations relative to the running binary
     //  3. The compile-time manifest directory for local `cargo run`
     let candidate_dirs = [
-        std::env::var_os("MIGRATIONS_DIR").map(PathBuf::from),
+        config.migrations_dir.as_ref().map(PathBuf::from),
         Some(PathBuf::from("./migrations")),
         Some(PathBuf::from(concat!(
             env!("CARGO_MANIFEST_DIR"),

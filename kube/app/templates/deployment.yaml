@@ -41,10 +41,12 @@ spec:
               containerPort: 8080
               protocol: TCP
           env:
-            - name: RUST_LOG
+            - name: TC_LOGGING__LEVEL
               value: info
-            - name: DATABASE_URL
+            - name: TC_DATABASE__URL
               value: postgres://postgres:postgres@postgres:5432/tiny-congress
+            - name: TC_SERVER__PORT
+              value: "8080"
             - name: APP_VERSION
               value: {{ default .Values.image.tag .Values.buildInfo.appVersion | quote }}
             - name: GIT_SHA

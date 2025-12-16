@@ -1,20 +1,44 @@
 # Environment Variables
 
+The backend uses [figment](https://docs.rs/figment/) for layered configuration. Configuration is loaded in priority order:
+
+1. **Struct defaults** (lowest priority)
+2. **config.yaml file** (if exists)
+3. **Environment variables** with `TC_` prefix (highest priority, always wins)
+
 ## Backend (Rust API)
 
-### Required
+All environment variables use the `TC_` prefix. Nested config uses double underscore (`__`) separators.
 
-| Variable | Description | Example |
-|----------|-------------|---------|
-| `DATABASE_URL` | PostgreSQL connection string | `postgres://postgres:postgres@localhost:5432/tiny-congress` |
+### Database Configuration
 
-### Optional
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `TC_DATABASE__URL` | Yes | - | PostgreSQL connection string |
+| `TC_DATABASE__MAX_CONNECTIONS` | No | `10` | Maximum connections in pool |
+| `TC_DATABASE__MIGRATIONS_DIR` | No | auto-detect | Custom migrations directory path |
+
+### Server Configuration
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `TC_SERVER__PORT` | No | `8080` | HTTP server port |
+| `TC_SERVER__HOST` | No | `0.0.0.0` | HTTP server bind address |
+
+### Logging Configuration
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `TC_LOGGING__LEVEL` | No | `info` | Log level (`debug`, `info`, `warn`, `error`) |
+
+### Build Info (unchanged)
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `PORT` | `8080` | HTTP server port |
-| `RUST_LOG` | `info` | Log level (`debug`, `info`, `warn`, `error`) |
-| `MIGRATIONS_DIR` | `<cargo_manifest>/migrations` | Custom migrations directory path |
+| `APP_VERSION` | `dev` | Application version |
+| `GIT_SHA` | `unknown` | Git commit SHA |
+| `BUILD_TIME` | `unknown` | Build timestamp (RFC3339) |
+| `BUILD_MESSAGE` | - | Optional build message |
 
 ### Test/CI Only
 
@@ -39,23 +63,44 @@
 | `PLAYWRIGHT_COVERAGE` | - | Enable coverage collection when set |
 | `CI` | - | Enables CI-specific behavior (retries, coverage) |
 
+## YAML Configuration
+
+Create `service/config.yaml` for local development (see `service/config.yaml.example`):
+
+```yaml
+database:
+  url: postgres://postgres:postgres@localhost:5432/tiny-congress
+  max_connections: 10
+
+server:
+  port: 8080
+  host: 0.0.0.0
+
+logging:
+  level: debug
+```
+
+Environment variables always override YAML values.
+
 ## Kubernetes Deployments
 
 Environment variables are set in `kube/app/templates/deployment.yaml`:
 
 ```yaml
 env:
-  - name: RUST_LOG
+  - name: TC_LOGGING__LEVEL
     value: info
-  - name: DATABASE_URL
+  - name: TC_DATABASE__URL
     value: postgres://postgres:postgres@postgres:5432/tiny-congress
+  - name: TC_SERVER__PORT
+    value: "8080"
 ```
 
 For production, use Kubernetes secrets:
 
 ```yaml
 env:
-  - name: DATABASE_URL
+  - name: TC_DATABASE__URL
     valueFrom:
       secretKeyRef:
         name: postgres-credentials
@@ -64,28 +109,26 @@ env:
 
 ## Local Development
 
-### Option 1: Export in shell
+### Option 1: Environment variables
 
 ```bash
-export DATABASE_URL=postgres://postgres:postgres@localhost:5432/tiny-congress
-export RUST_LOG=debug
+export TC_DATABASE__URL=postgres://postgres:postgres@localhost:5432/tiny-congress
+export TC_LOGGING__LEVEL=debug
 just dev-backend
 ```
 
-### Option 2: Use .env file (not committed)
+### Option 2: YAML config file
 
-Create `service/.env`:
+```bash
+cp service/config.yaml.example service/config.yaml
+# Edit config.yaml as needed
+just dev-backend
 ```
-DATABASE_URL=postgres://postgres:postgres@localhost:5432/tiny-congress
-RUST_LOG=debug
-```
-
-The backend uses `dotenvy` to load `.env` files automatically.
 
 ### Option 3: Inline (one-off)
 
 ```bash
-DATABASE_URL=postgres://... cargo run
+TC_DATABASE__URL=postgres://... cargo run
 ```
 
 ## Connection String Format
@@ -118,13 +161,15 @@ This is handled automatically by `dockerfiles/Dockerfile.postgres`.
 
 | Error | Cause | Fix |
 |-------|-------|-----|
+| "database.url is required" | Missing TC_DATABASE__URL | Set `TC_DATABASE__URL` environment variable |
 | "connection refused" | Postgres not running | Start postgres or check host/port |
 | "database does not exist" | DB not created | Run `createdb tiny-congress` |
 | "extension pgmq does not exist" | Missing extension | Use provided Dockerfile.postgres |
-| "RUST_LOG: invalid filter directive" | Bad log format | Use `debug`, `info`, `warn`, `error` |
 
 ## See also
 
+- `service/src/config.rs` - Configuration struct and loading logic
+- `service/config.yaml.example` - Example YAML configuration
 - `service/src/main.rs` - Backend env var usage
 - `kube/app/templates/deployment.yaml` - K8s configuration
 - `dockerfiles/Dockerfile.postgres` - Database setup
