@@ -170,8 +170,14 @@ jobs:
       - name: Check SQLx snapshots
         working-directory: service
         run: |
-          if ! cargo sqlx prepare --check; then
+          output=$(cargo sqlx prepare --check 2>&1) || {
+            echo "$output"
             echo "::error::SQLx query snapshots are out of date. Run 'just sqlx-prepare' and commit the changes in service/.sqlx/"
+            exit 1
+          }
+          echo "$output"
+          if echo "$output" | grep -q "potentially unused queries"; then
+            echo "::error::Unused SQLx query snapshots found in .sqlx/. Run 'just sqlx-prepare' to remove stale entries."
             exit 1
           fi
           echo "✓ SQLx snapshots are up to date"
