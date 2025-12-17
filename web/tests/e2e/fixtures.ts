@@ -7,12 +7,14 @@ const truthy = (value: string | undefined) =>
 const shouldCollectCoverage = truthy(process.env.PLAYWRIGHT_COVERAGE) || truthy(process.env.CI);
 
 if (shouldCollectCoverage) {
+  // eslint-disable-next-line no-console
   console.log('[Coverage] Hook registered, will collect coverage after each test');
   base.afterEach(async ({ context }, testInfo) => {
     const coverageDir = path.join(process.cwd(), '.nyc_output');
     await fs.mkdir(coverageDir, { recursive: true });
 
     const pages = context.pages();
+    // eslint-disable-next-line no-console
     console.log(`[Coverage] Collecting from ${pages.length} page(s) for test: ${testInfo.title}`);
 
     await Promise.all(
@@ -26,6 +28,7 @@ if (shouldCollectCoverage) {
               keyCount: cov ? Object.keys(cov).length : 0,
             };
           });
+          // eslint-disable-next-line no-console
           console.log(
             `[Coverage] Page ${index}: exists=${coverageInfo.exists}, type=${coverageInfo.type}, keys=${coverageInfo.keyCount}`
           );
@@ -37,6 +40,7 @@ if (shouldCollectCoverage) {
           });
 
           if (!coverage) {
+            // eslint-disable-next-line no-console
             console.log(`[Coverage] Page ${index}: No coverage data to collect`);
             return;
           }
@@ -47,8 +51,10 @@ if (shouldCollectCoverage) {
             `${safeId}-worker${testInfo.workerIndex}-retry${testInfo.retry}-page${index}.json`
           );
           await fs.writeFile(filePath, JSON.stringify(coverage));
+          // eslint-disable-next-line no-console
           console.log(`[Coverage] Page ${index}: Wrote coverage to ${filePath}`);
         } catch (error) {
+          // eslint-disable-next-line no-console
           console.log(`[Coverage] Page ${index}: Error - ${error}`);
           // Swallow evaluation errors for closed pages.
         }
