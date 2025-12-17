@@ -23,7 +23,7 @@
     "vitest:watch": "vitest",
     "playwright:test": "playwright test",
     "playwright:test:coverage": "PLAYWRIGHT_COVERAGE=1 playwright test",
-    "playwright:report": "c8 report --reporter=lcov --reporter=html --reporter=text-summary --reporter=json-summary --reports-dir coverage/playwright",
+    "playwright:report": "c8 report --temp-directory .nyc_output --reporter=lcov --reporter=html --reporter=text-summary --reporter=json-summary --reports-dir coverage/playwright",
     "playwright:clean": "node ./scripts/reset-playwright-coverage.mjs",
     "playwright:ci": "node ./scripts/run-playwright-ci.mjs",
     "test": "npm run typecheck && npm run lint && npm run vitest && npm run build",
