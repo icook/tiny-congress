@@ -18,6 +18,7 @@ build:
         dockerfile: Dockerfile.dev
         buildArgs:
           BUILDKIT_INLINE_CACHE: "1"
+          RUST_VERSION: "{{.RUST_VERSION}}"
         cacheFrom:
           - "tc-api-dev:cache-main"
           - "tc-api-dev:cache"
@@ -73,6 +74,8 @@ deploy:
         setValues:
           serviceAccount:
             create: false
+          cargoCache:
+            enabled: true
 
 # PRE-DEPLOY TESTS (cluster not required)
 # - Rust: unit tests via cargo llvm-cov (auto-discovers all tests except integration tests)

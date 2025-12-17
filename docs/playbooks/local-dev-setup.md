@@ -27,12 +27,15 @@ Required:
 Best for: Integration testing, production-like environment
 
 ```bash
-kind create cluster      # Create local k8s cluster (use KinD for CI parity)
-just dev                 # Builds images, deploys, hot-reloads
+just kind-create    # Create KinD cluster with shared cargo cache
+just dev            # Builds images, deploys, hot-reloads
 ```
 
 We use KinD (Kubernetes in Docker) for local development to match CI. KinD loads
 images directly into the cluster without needing a registry.
+
+The `kind-config.yaml` mounts your local `service/target` directory into the cluster,
+so Rust builds share cache between local development and container builds (~40s vs ~3min).
 
 Services available at:
 - Frontend: http://localhost:5173

@@ -1,6 +1,8 @@
 # syntax=docker/dockerfile:1.4
 # Use cargo-chef to cache dependency builds between Docker layers
-FROM lukemathwalker/cargo-chef:latest-rust-1.91 AS chef
+# RUST_VERSION must be passed via --build-arg (sourced from mise.toml via justfile)
+ARG RUST_VERSION
+FROM lukemathwalker/cargo-chef:latest-rust-${RUST_VERSION} AS chef
 
 WORKDIR /usr/src/app
 
