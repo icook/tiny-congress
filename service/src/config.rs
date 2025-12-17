@@ -15,6 +15,8 @@ pub struct Config {
     pub database: DatabaseConfig,
     pub server: ServerConfig,
     pub logging: LoggingConfig,
+    #[serde(default)]
+    pub cors: CorsConfig,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -49,6 +51,15 @@ pub struct LoggingConfig {
     pub level: String,
 }
 
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct CorsConfig {
+    /// Allowed origins for CORS requests.
+    /// Use `"*"` to allow any origin (not recommended for production).
+    /// Example: `["http://localhost:5173", "https://app.example.com"]`
+    #[serde(default = "default_allowed_origins")]
+    pub allowed_origins: Vec<String>,
+}
+
 // These functions cannot be const because serde uses function pointers for defaults
 #[allow(clippy::missing_const_for_fn)]
 fn default_max_connections() -> u32 {
@@ -68,6 +79,21 @@ fn default_log_level() -> String {
     "info".to_string()
 }
 
+#[allow(clippy::missing_const_for_fn)]
+fn default_allowed_origins() -> Vec<String> {
+    // Default to empty (no cross-origin requests allowed) - safe for production
+    // Configure explicitly via TC_CORS__ALLOWED_ORIGINS or config.yaml
+    vec![]
+}
+
+impl Default for CorsConfig {
+    fn default() -> Self {
+        Self {
+            allowed_origins: default_allowed_origins(),
+        }
+    }
+}
+
 impl Default for Config {
     fn default() -> Self {
         Self {
@@ -83,6 +109,7 @@ impl Default for Config {
             logging: LoggingConfig {
                 level: default_log_level(),
             },
+            cors: CorsConfig::default(),
         }
     }
 }
@@ -172,6 +199,15 @@ impl Config {
             ));
         }
 
+        // CORS origins must be valid URLs or "*"
+        for origin in &self.cors.allowed_origins {
+            if origin != "*" && !origin.starts_with("http://") && !origin.starts_with("https://") {
+                return Err(ConfigError::Validation(format!(
+                    "cors.allowed_origins contains invalid origin '{origin}'. Must be '*' or start with http:// or https://"
+                )));
+            }
+        }
+
         Ok(())
     }
 }
@@ -224,5 +260,40 @@ mod tests {
         let mut config = Config::default();
         config.database.url = "postgresql://localhost/test".into();
         assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn test_cors_defaults_to_empty() {
+        let config = CorsConfig::default();
+        assert!(config.allowed_origins.is_empty());
+    }
+
+    #[test]
+    fn test_cors_validation_accepts_valid_origins() {
+        let mut config = Config::default();
+        config.database.url = "postgres://localhost/test".into();
+        config.cors.allowed_origins = vec![
+            "http://localhost:3000".into(),
+            "https://app.example.com".into(),
+        ];
+        assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn test_cors_validation_accepts_wildcard() {
+        let mut config = Config::default();
+        config.database.url = "postgres://localhost/test".into();
+        config.cors.allowed_origins = vec!["*".into()];
+        assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn test_cors_validation_rejects_invalid_origin() {
+        let mut config = Config::default();
+        config.database.url = "postgres://localhost/test".into();
+        config.cors.allowed_origins = vec!["not-a-url".into()];
+        let result = config.validate();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("invalid origin"));
     }
 }

@@ -19,3 +19,12 @@ server:
 logging:
   # Log level: debug, info, warn, error
   level: info
+
+# CORS configuration
+# Default: empty (blocks all cross-origin requests)
+cors:
+  # Allowed origins for development
+  # For production, set specific origins via TC_CORS__ALLOWED_ORIGINS
+  allowed_origins:
+    - http://localhost:5173
+    - http://127.0.0.1:5173
