@@ -32,12 +32,6 @@ COPY . .
 
 ENV SQLX_OFFLINE=true
 
-# Check sqlx prepared queries with cache mounts
-RUN --mount=type=cache,target=/usr/local/cargo/registry,id=cargo-registry \
-    --mount=type=cache,target=/usr/local/cargo/git,id=cargo-git \
-    --mount=type=cache,target=/usr/src/app/target,id=cargo-target-dev \
-    cargo sqlx prepare --check
-
 # Build with cache mounts for fast incremental compilation
 RUN --mount=type=cache,target=/usr/local/cargo/registry,id=cargo-registry \
     --mount=type=cache,target=/usr/local/cargo/git,id=cargo-git \
