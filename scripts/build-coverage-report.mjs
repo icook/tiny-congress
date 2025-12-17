@@ -245,11 +245,12 @@ function main() {
     console.log('Vitest coverage not found, skipping...');
   }
 
-  // Playwright coverage
+  // Playwright coverage - c8 generates HTML in lcov-report/ subdirectory
   const playwrightDir = values.playwright;
-  if (existsSync(playwrightDir) && existsSync(join(playwrightDir, 'index.html'))) {
+  const playwrightHtmlDir = join(playwrightDir, 'lcov-report');
+  if (existsSync(playwrightHtmlDir) && existsSync(join(playwrightHtmlDir, 'index.html'))) {
     console.log('Copying Playwright coverage...');
-    cpSync(playwrightDir, join(outputDir, 'playwright'), { recursive: true });
+    cpSync(playwrightHtmlDir, join(outputDir, 'playwright'), { recursive: true });
     reports.push({
       name: 'Playwright E2E',
       icon: '&#x1F3AD;',
@@ -257,31 +258,38 @@ function main() {
       summary: parsePlaywrightSummary(playwrightDir),
     });
   } else {
-    console.log('Playwright coverage not found, skipping...');
+    console.log(`Playwright coverage not found at ${playwrightHtmlDir}, skipping...`);
   }
 
   // Rust coverage (generate HTML from LCOV)
   const rustLcov = values.rust;
   if (existsSync(rustLcov)) {
-    console.log('Generating Rust coverage HTML...');
+    console.log(`Generating Rust coverage HTML from ${rustLcov}...`);
     const rustOutputDir = join(outputDir, 'rust');
     mkdirSync(rustOutputDir, { recursive: true });
     try {
-      execSync(`genhtml "${rustLcov}" --output-directory "${rustOutputDir}" --quiet`, {
-        stdio: 'inherit',
+      execSync(`genhtml "${rustLcov}" --output-directory "${rustOutputDir}"`, {
+        stdio: ['pipe', 'pipe', 'pipe'],
       });
-      reports.push({
-        name: 'Rust Backend',
-        icon: '&#x1F980;',
-        dir: 'rust',
-        summary: parseLcovSummary(rustLcov),
-      });
+      // Verify genhtml created the index.html
+      if (existsSync(join(rustOutputDir, 'index.html'))) {
+        reports.push({
+          name: 'Rust Backend',
+          icon: '&#x1F980;',
+          dir: 'rust',
+          summary: parseLcovSummary(rustLcov),
+        });
+      } else {
+        console.error('genhtml ran but did not create index.html');
+      }
     } catch (err) {
-      console.error('Failed to generate Rust HTML coverage:', err.message);
+      console.error('Failed to generate Rust HTML coverage.');
+      console.error('Error:', err.message);
+      if (err.stderr) console.error('stderr:', err.stderr.toString());
       console.log('genhtml may not be installed. Install with: apt-get install lcov');
     }
   } else {
-    console.log('Rust LCOV not found, skipping...');
+    console.log(`Rust LCOV not found at ${rustLcov}, skipping...`);
   }
 
   // Generate index.html
