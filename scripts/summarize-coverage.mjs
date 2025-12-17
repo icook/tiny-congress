@@ -22,9 +22,26 @@ const getIcon = (pct) => {
   return '🔴';
 };
 
+// Extract percentage from various coverage metric formats
+// Handles: { pct: 50 }, { percent: 50 }, 50, "50"
+const getPct = (metric) => {
+  if (!metric) return 0;
+  if (typeof metric === 'number') return metric;
+  if (typeof metric === 'string') return Number(metric) || 0;
+  if (typeof metric.pct === 'number') return metric.pct;
+  if (typeof metric.percent === 'number') return metric.percent;
+  // Calculate from covered/total if available
+  if (metric.total > 0 && typeof metric.covered === 'number') {
+    return (metric.covered / metric.total) * 100;
+  }
+  return 0;
+};
+
 const formatPct = (pct, bold = false) => {
-  const icon = getIcon(pct);
-  const value = `${icon} ${pct.toFixed(0)}%`;
+  // Handle various input formats safely
+  const numPct = typeof pct === 'number' ? pct : Number(pct) || 0;
+  const icon = getIcon(numPct);
+  const value = `${icon} ${numPct.toFixed(0)}%`;
   return bold ? `**${value}**` : value;
 };
 
@@ -312,7 +329,7 @@ function renderVitestSection(data) {
 
   // Total row
   lines.push(
-    `| **Total** | ${formatPct(data.total.lines.pct, true)} | ${formatPct(data.total.branches.pct, true)} | ${formatPct(data.total.functions.pct, true)} |`
+    `| **Total** | ${formatPct(getPct(data.total.lines), true)} | ${formatPct(getPct(data.total.branches), true)} | ${formatPct(getPct(data.total.functions), true)} |`
   );
 
   return lines.join('\n');
@@ -323,21 +340,19 @@ function renderPlaywrightSection(data) {
 
   const lines = ['### 🎭 Playwright E2E', '', '| Directory | Lines | Branches | Functions |', '|-----------|-------|----------|-----------|'];
 
-  const calcPct = (stat) => (stat.total > 0 ? (stat.covered / stat.total) * 100 : 0);
-
   // Sort directories alphabetically
   const sortedDirs = [...data.byDirectory.entries()].sort((a, b) => a[0].localeCompare(b[0]));
 
   for (const [dir, stats] of sortedDirs) {
-    const linesPct = calcPct(stats.lines);
-    const branchesPct = calcPct(stats.branches);
-    const funcsPct = calcPct(stats.functions);
+    const linesPct = getPct(stats.lines);
+    const branchesPct = getPct(stats.branches);
+    const funcsPct = getPct(stats.functions);
     lines.push(`| ${dir} | ${formatPct(linesPct)} | ${formatPct(branchesPct)} | ${formatPct(funcsPct)} |`);
   }
 
   // Total row
   lines.push(
-    `| **Total** | ${formatPct(data.total.lines.pct, true)} | ${formatPct(data.total.branches.pct, true)} | ${formatPct(data.total.functions.pct, true)} |`
+    `| **Total** | ${formatPct(getPct(data.total.lines), true)} | ${formatPct(getPct(data.total.branches), true)} | ${formatPct(getPct(data.total.functions), true)} |`
   );
 
   return lines.join('\n');
@@ -365,7 +380,7 @@ function renderRustSection(rustData) {
     }
 
     // Total row
-    sections.push(`| **Total** | ${formatPct(data.total.lines.pct, true)} | ${formatPct(data.total.functions.pct, true)} |`);
+    sections.push(`| **Total** | ${formatPct(getPct(data.total.lines), true)} | ${formatPct(getPct(data.total.functions), true)} |`);
   }
 
   return sections.join('\n');
