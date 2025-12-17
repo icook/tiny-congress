@@ -71,7 +71,7 @@ console.log('### Playwright Test Stability');
 console.log('');
 
 if (flakyCount === 0) {
-  console.log('✅ No flaky tests detected');
+  console.log(`✅ All ${totalTests} test(s) passed without flakiness`);
 } else {
   console.log(`⚠️ **${flakyCount} flaky test(s) detected** (passed on retry)`);
   console.log('');
