@@ -31,6 +31,26 @@ All environment variables use the `TC_` prefix. Nested config uses double unders
 |----------|----------|---------|-------------|
 | `TC_LOGGING__LEVEL` | No | `info` | Log level (`debug`, `info`, `warn`, `error`) |
 
+### CORS Configuration
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `TC_CORS__ALLOWED_ORIGINS` | No | `[]` (empty) | Comma-separated list of allowed origins |
+
+**Security note:** CORS defaults to blocking all cross-origin requests. You must explicitly configure allowed origins.
+
+Examples:
+```bash
+# Development
+TC_CORS__ALLOWED_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
+
+# Production
+TC_CORS__ALLOWED_ORIGINS=https://app.example.com
+
+# Allow any origin (NOT recommended for production)
+TC_CORS__ALLOWED_ORIGINS=*
+```
+
 ### Build Info (unchanged)
 
 | Variable | Default | Description |
@@ -78,6 +98,12 @@ server:
 
 logging:
   level: debug
+
+# CORS: explicitly configure for development
+cors:
+  allowed_origins:
+    - http://localhost:5173
+    - http://127.0.0.1:5173
 ```
 
 Environment variables always override YAML values.
@@ -94,6 +120,8 @@ env:
     value: postgres://postgres:postgres@postgres:5432/tiny-congress
   - name: TC_SERVER__PORT
     value: "8080"
+  - name: TC_CORS__ALLOWED_ORIGINS
+    value: "https://app.example.com"
 ```
 
 For production, use Kubernetes secrets:

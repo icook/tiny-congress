@@ -20,6 +20,13 @@ buildInfo:
   buildTime: unknown
   message: ""
 
+# CORS configuration
+# For production, override with actual frontend domain(s)
+cors:
+  # Comma-separated list of allowed origins
+  # Empty by default (blocks all cross-origin requests) - must be explicitly configured
+  allowedOrigins: ""
+
 serviceAccount:
   # Specifies whether a service account should be created
   create: true

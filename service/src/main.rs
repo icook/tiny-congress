@@ -9,7 +9,7 @@
 
 use async_graphql::{EmptySubscription, Schema};
 use axum::{
-    http::{Method, StatusCode},
+    http::{header::HeaderValue, Method, StatusCode},
     response::IntoResponse,
     routing::get,
     Extension, Router,
@@ -21,7 +21,7 @@ use tinycongress_api::{
     db::setup_database,
     graphql::{graphql_handler, graphql_playground, MutationRoot, QueryRoot},
 };
-use tower_http::cors::{Any, CorsLayer};
+use tower_http::cors::{AllowOrigin, Any, CorsLayer};
 
 // Health check handler
 async fn health_check() -> impl IntoResponse {
@@ -62,6 +62,25 @@ async fn main() -> Result<(), anyhow::Error> {
         .data(build_info)
         .finish();
 
+    // Build CORS layer from config
+    let cors_origins = &config.cors.allowed_origins;
+    let allow_origin: AllowOrigin = if cors_origins.iter().any(|o| o == "*") {
+        tracing::warn!("CORS configured to allow any origin - not recommended for production");
+        AllowOrigin::any()
+    } else if cors_origins.is_empty() {
+        tracing::info!(
+            "CORS allowed origins not configured - cross-origin requests will be blocked"
+        );
+        AllowOrigin::list(Vec::<HeaderValue>::new())
+    } else {
+        let origins: Vec<HeaderValue> = cors_origins
+            .iter()
+            .filter_map(|origin| origin.parse().ok())
+            .collect();
+        tracing::info!(origins = ?cors_origins, "CORS allowed origins configured");
+        AllowOrigin::list(origins)
+    };
+
     // Build the API
     let app = Router::new()
         // GraphQL routes
@@ -75,7 +94,7 @@ async fn main() -> Result<(), anyhow::Error> {
             CorsLayer::new()
                 .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
                 .allow_headers(Any)
-                .allow_origin(Any),
+                .allow_origin(allow_origin),
         );
 
     // Start the server
