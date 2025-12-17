@@ -93,12 +93,18 @@ function parseVitestCoverage(filePath) {
 }
 
 // ============================================================================
-// NYC/Istanbul JSON Parser
+// Playwright Coverage Parser (supports both JSON summary and legacy NYC format)
 // ============================================================================
-function parsePlaywrightCoverage(nycOutputDir) {
-  if (!existsSync(nycOutputDir)) return null;
+function parsePlaywrightCoverage(inputPath) {
+  if (!existsSync(inputPath)) return null;
 
-  const files = readdirSync(nycOutputDir).filter((f) => f.endsWith('.json'));
+  // If it's a JSON file, parse it like vitest (coverage-summary.json format)
+  if (inputPath.endsWith('.json')) {
+    return parseVitestCoverage(inputPath);
+  }
+
+  // Legacy: directory with NYC/Istanbul JSON files
+  const files = readdirSync(inputPath).filter((f) => f.endsWith('.json'));
   if (files.length === 0) return null;
 
   const dirStats = new Map();
@@ -111,7 +117,7 @@ function parsePlaywrightCoverage(nycOutputDir) {
 
   for (const file of files) {
     try {
-      const data = JSON.parse(readFileSync(join(nycOutputDir, file), 'utf8'));
+      const data = JSON.parse(readFileSync(join(inputPath, file), 'utf8'));
 
       for (const [filePath, coverage] of Object.entries(data)) {
         // Find web root from first file
