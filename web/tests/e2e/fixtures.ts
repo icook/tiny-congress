@@ -1,6 +1,6 @@
+import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import crypto from 'node:crypto';
 import { test as base, expect } from '@playwright/test';
 
 const truthy = (value: string | undefined) =>
@@ -30,10 +30,7 @@ export const test = base.extend<{ coveragePage: void }>({
           // Generate unique filename
           const hash = crypto.randomBytes(8).toString('hex');
           const safeId = testInfo.testId.replace(/[^a-z0-9_-]/gi, '_');
-          const filePath = path.join(
-            coverageDir,
-            `v8-${safeId}-${hash}.json`
-          );
+          const filePath = path.join(coverageDir, `v8-${safeId}-${hash}.json`);
 
           // Write V8 coverage format that c8 can read
           await fs.writeFile(filePath, JSON.stringify({ result: coverage }));
