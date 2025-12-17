@@ -8,6 +8,7 @@ import {
   IconMessages,
   IconSettings,
   IconUser,
+  IconUserPlus,
 } from '@tabler/icons-react';
 import { Link, useRouterState } from '@tanstack/react-router';
 import {
@@ -28,6 +29,11 @@ const navLinks = [
   { icon: IconInfoCircle, label: 'About', path: '/about' },
   { icon: IconDeviceDesktopAnalytics, label: 'Analytics', path: '/analytics' },
   { icon: IconCalendarStats, label: 'Releases', path: '/releases' },
+];
+
+const authLinks = [{ icon: IconUserPlus, label: 'Sign Up', path: '/signup' }];
+
+const userLinks = [
   { icon: IconUser, label: 'Account', path: '/account' },
   { icon: IconFingerprint, label: 'Security', path: '/security' },
   { icon: IconSettings, label: 'Settings', path: '/settings' },
@@ -76,6 +82,22 @@ export function Navbar() {
           />
         ))}
       </Stack>
+
+      <Box pt="sm" style={{ borderTop: `1px solid ${borderColor}` }}>
+        <Stack gap={4}>
+          {authLinks.map((link) => (
+            <NavLink
+              key={link.label}
+              component={Link}
+              to={link.path}
+              label={link.label}
+              leftSection={<link.icon size={18} stroke={1.5} />}
+              active={isActive(link.path)}
+              fw={500}
+            />
+          ))}
+        </Stack>
+      </Box>
     </Stack>
   );
 }

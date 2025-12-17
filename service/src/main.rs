@@ -20,6 +20,7 @@ use tinycongress_api::{
     config::Config,
     db::setup_database,
     graphql::{graphql_handler, graphql_playground, MutationRoot, QueryRoot},
+    identity,
 };
 use tower_http::cors::{AllowOrigin, Any, CorsLayer};
 
@@ -85,11 +86,13 @@ async fn main() -> Result<(), anyhow::Error> {
     let app = Router::new()
         // GraphQL routes
         .route("/graphql", get(graphql_playground).post(graphql_handler))
+        // Identity routes
+        .merge(identity::http::router())
         // Health check route
         .route("/health", get(health_check))
         // Add the schema to the extension
         .layer(Extension(schema))
-        .layer(Extension(pool))
+        .layer(Extension(pool.clone()))
         .layer(
             CorsLayer::new()
                 .allow_methods([Method::GET, Method::POST, Method::OPTIONS])

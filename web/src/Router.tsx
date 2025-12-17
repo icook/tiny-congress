@@ -1,5 +1,6 @@
 import { createRootRoute, createRoute, createRouter, RouterProvider } from '@tanstack/react-router';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { Signup } from './features/identity';
 import { AboutPage } from './pages/About.page';
 import { DashboardPage } from './pages/Dashboard.page';
 import { HomePage } from './pages/Home.page';
@@ -34,11 +35,18 @@ const aboutRoute = createRoute({
   component: AboutPage,
 });
 
+const signupRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: 'signup',
+  component: Signup,
+});
+
 const routeTree = rootRoute.addChildren([
   homeRoute,
   dashboardRoute,
   conversationsRoute,
   aboutRoute,
+  signupRoute,
   createPlaceholderRoute('analytics', 'Analytics', 'Analytics page content'),
   createPlaceholderRoute('releases', 'Releases', 'Releases page content'),
   createPlaceholderRoute('account', 'Account', 'Account page content'),
