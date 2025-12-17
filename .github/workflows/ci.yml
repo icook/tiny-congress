@@ -576,7 +576,7 @@ jobs:
       - name: Build unified coverage report
         if: always()
         working-directory: web
-        run: node ../scripts/build-coverage-report.mjs
+        run: node scripts/build-coverage-report.mjs
 
       - name: Upload coverage report
         if: always()
