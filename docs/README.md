@@ -46,6 +46,7 @@ Contracts and standards for consistency:
 | [react-coding-standards.md](interfaces/react-coding-standards.md) | React/TypeScript patterns |
 | [signed-envelope-spec.md](interfaces/signed-envelope-spec.md) | Cryptographic envelope format |
 | [ticket-management.md](interfaces/ticket-management.md) | Issue labeling and lifecycle |
+| [secure-defaults.md](interfaces/secure-defaults.md) | Security configuration policy |
 
 ## Decisions (ADRs)
 
