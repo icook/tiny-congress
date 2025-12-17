@@ -363,7 +363,7 @@ jobs:
 
       - name: Cache Skaffold
         id: cache-skaffold
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: /usr/local/bin/skaffold
           key: skaffold-v${{ hashFiles('.skaffold-version') }}
@@ -443,7 +443,7 @@ jobs:
 
       - name: Cache Playwright browsers
         id: cache-playwright
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ${{ env.PLAYWRIGHT_BROWSERS_PATH }}
           key: playwright-${{ runner.os }}-${{ hashFiles('web/yarn.lock') }}
