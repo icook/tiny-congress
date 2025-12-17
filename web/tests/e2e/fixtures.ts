@@ -80,7 +80,9 @@ export async function generateCoverageReport(): Promise<void> {
     // Filter source files after source map resolution
     sourceFilter: (sourcePath: string) => {
       // Exclude node_modules and only include project source files
-      if (sourcePath.includes('node_modules')) return false;
+      if (sourcePath.includes('node_modules')) {
+        return false;
+      }
       // Include src files (after source map resolution) or built assets
       return sourcePath.includes('/src/') || sourcePath.includes('/assets/');
     },
