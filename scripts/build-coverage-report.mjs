@@ -11,10 +11,10 @@
  *     --output coverage-report
  */
 
-import { execSync } from 'child_process';
 import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'fs';
-import { join, basename } from 'path';
+import { join } from 'path';
 import { parseArgs } from 'util';
+import MCR from 'monocart-coverage-reports';
 
 // Icon thresholds (matches summarize-coverage.mjs)
 const getIcon = (pct) => {
@@ -229,7 +229,7 @@ function generateIndexHtml(reports) {
 // Main
 // ============================================================================
 
-function main() {
+async function main() {
   const outputDir = values.output;
 
   // Clean and create output directory
@@ -292,24 +292,24 @@ function main() {
     }
   }
 
-  // Rust coverage (generate HTML from LCOV)
-  // LCOV paths are relative (e.g., src/db.rs), so we must run genhtml from service/ directory
+  // Rust coverage (generate HTML from LCOV using Monocart for consistent styling)
   const rustLcov = values.rust;
   if (existsSync(rustLcov)) {
     console.log(`Generating Rust coverage HTML from ${rustLcov}...`);
     const rustOutputDir = join(process.cwd(), outputDir, 'rust');
-    mkdirSync(rustOutputDir, { recursive: true });
-
-    // Convert LCOV path to absolute for use from service/ directory
-    const absoluteLcov = join(process.cwd(), rustLcov);
 
     try {
-      // Run genhtml from service/ directory so relative source paths resolve correctly
-      execSync(`genhtml "${absoluteLcov}" --output-directory "${rustOutputDir}"`, {
-        cwd: 'service',
-        stdio: ['pipe', 'pipe', 'pipe'],
+      const rustReport = MCR({
+        name: 'Rust Backend Coverage',
+        outputDir: rustOutputDir,
+        reports: ['html', 'json-summary'],
       });
-      // Verify genhtml created the index.html
+
+      // Add LCOV data - Monocart can consume LCOV files directly
+      await rustReport.add(readFileSync(rustLcov, 'utf8'), { type: 'lcov' });
+      await rustReport.generate();
+
+      // Verify Monocart created the index.html
       if (existsSync(join(rustOutputDir, 'index.html'))) {
         reports.push({
           name: 'Rust Backend',
@@ -318,13 +318,11 @@ function main() {
           summary: parseLcovSummary(rustLcov),
         });
       } else {
-        console.error('genhtml ran but did not create index.html');
+        console.error('Monocart ran but did not create index.html');
       }
     } catch (err) {
       console.error('Failed to generate Rust HTML coverage.');
       console.error('Error:', err.message);
-      if (err.stderr) console.error('stderr:', err.stderr.toString());
-      console.log('genhtml may not be installed. Install with: apt-get install lcov');
     }
   } else {
     console.log(`Rust LCOV not found at ${rustLcov}, skipping...`);
@@ -342,4 +340,7 @@ function main() {
   }
 }
 
-main();
+main().catch((err) => {
+  console.error('Error:', err.message);
+  process.exit(1);
+});

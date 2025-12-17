@@ -440,9 +440,6 @@ jobs:
         working-directory: web
         run: yarn playwright install --with-deps chromium
 
-      - name: Install lcov
-        run: sudo apt-get update && sudo apt-get install -y lcov
-
       - name: Prepare test output directories
         run: |
           mkdir -p web/reports web/test-results web/coverage/playwright service/coverage
