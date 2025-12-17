@@ -33,8 +33,6 @@ jobs:
 
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: service -> target
 
       - name: Install just
         uses: extractions/setup-just@v3
@@ -86,8 +84,6 @@ jobs:
 
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: service -> target
 
       - name: Set up Node
         uses: actions/setup-node@v6
@@ -213,8 +209,6 @@ jobs:
 
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: service -> target
 
       - name: Install sqlx-cli
         run: cargo install sqlx-cli --locked --no-default-features --features postgres
@@ -252,14 +246,17 @@ jobs:
       matrix:
         include:
           - image: tc-api-release
-            context: ./service
+            context: .
             dockerfile: service/Dockerfile
+            needs_rust: true
           - image: tc-ui-release
-            context: ./web
+            context: .
             dockerfile: web/Dockerfile
+            needs_rust: true
           - image: postgres
             context: .
             dockerfile: dockerfiles/Dockerfile.postgres
+            needs_rust: false
     outputs:
       tc-api-release-tag: ${{ steps.meta.outputs.tc-api-release-tag }}
       tc-ui-release-tag: ${{ steps.meta.outputs.tc-ui-release-tag }}
@@ -290,7 +287,7 @@ jobs:
 
       - name: Extract Rust version from mise.toml
         id: rust-version
-        if: matrix.image == 'tc-api-release'
+        if: matrix.needs_rust
         run: |
           RUST_VERSION=$(grep '^rust' mise.toml | sed 's/.*= *"\([^"]*\)".*/\1/')
           echo "version=${RUST_VERSION}" >> "$GITHUB_OUTPUT"
@@ -463,8 +460,6 @@ jobs:
 
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: service -> target
 
       - name: Set up Node
         uses: actions/setup-node@v6
@@ -495,6 +490,14 @@ jobs:
         run: |
           mkdir -p web/reports web/test-results web/coverage/playwright service/coverage
           rm -f service/coverage/backend-unit.lcov
+
+      - name: Install wasm-pack
+        run: cargo install wasm-pack --locked
+
+      - name: Build WASM
+        run: |
+          cd crates/tc-crypto
+          wasm-pack build --target web --release --out-dir ../../web/src/wasm/tc-crypto
 
       - name: Run Skaffold tests
         env:

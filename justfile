@@ -91,6 +91,31 @@ dev-backend:
     cd service && cargo watch --watch src --watch migrations -x "run --bin tinycongress-api"
 
 # =============================================================================
+# WASM (Crypto Library)
+# =============================================================================
+
+# Build crypto-wasm for production (outputs to web/src/wasm/tc-crypto/)
+build-wasm:
+    @echo "Building tc-crypto WASM for production..."
+    cd crates/tc-crypto && wasm-pack build --target web --release --out-dir ../../web/src/wasm/tc-crypto
+    @echo "✓ WASM built to web/src/wasm/tc-crypto/"
+
+# Build crypto-wasm for development (faster, debug symbols)
+build-wasm-dev:
+    @echo "Building tc-crypto WASM for development..."
+    cd crates/tc-crypto && wasm-pack build --target web --dev --out-dir ../../web/src/wasm/tc-crypto
+    @echo "✓ WASM built to web/src/wasm/tc-crypto/"
+
+# Test crypto-wasm (native Rust tests)
+test-wasm:
+    cargo test -p tc-crypto
+
+# Clean WASM build artifacts
+clean-wasm:
+    rm -rf crates/tc-crypto/pkg web/src/wasm/tc-crypto
+    @echo "✓ WASM artifacts cleaned"
+
+# =============================================================================
 # Code Generation (GraphQL & OpenAPI Types)
 # =============================================================================
 
@@ -301,8 +326,8 @@ fmt: fmt-backend fmt-frontend
 # Type check frontend
 typecheck: typecheck-frontend
 
-# Run all local unit tests (backend + frontend, if they exist)
-test: test-backend test-frontend
+# Run all local unit tests (backend + frontend + wasm)
+test: test-backend test-wasm test-frontend
     @echo "✓ Unit tests passed"
 
 # Run frontend unit tests with coverage
@@ -314,7 +339,7 @@ test-cov: test-backend-cov test-frontend-cov
     @echo "✓ Coverage reports generated"
 
 # Build everything locally (no images)
-build: build-backend build-frontend
+build: build-backend build-wasm build-frontend
     @echo "✓ All builds successful"
 
 # Build everything in release mode
@@ -338,7 +363,7 @@ test-ci: test-full
 # =============================================================================
 
 # Clean build artifacts
-clean:
+clean: clean-wasm
     cd service && cargo clean
     cd web && rm -rf node_modules/.cache dist .vite
     @echo "✓ Build artifacts cleaned"

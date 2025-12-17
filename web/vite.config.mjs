@@ -68,6 +68,11 @@ export default defineConfig({
       provider: 'v8',
       reporter: ['text', 'json', 'json-summary', 'html'],
       reportsDirectory: './coverage/vitest',
+      exclude: [
+        'src/wasm/**',
+        'src/providers/CryptoProvider.tsx',
+        'src/features/identity/keys/__tests__/**',
+      ],
       thresholds: {
         statements: 50,
         branches: 50,

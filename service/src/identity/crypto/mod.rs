@@ -1,25 +1,13 @@
 //! Cryptographic utilities for identity system
+//!
+//! Re-exports from the shared `tc-crypto` crate for consistency across
+//! backend and frontend (via WASM).
 
-use base64::engine::general_purpose::URL_SAFE_NO_PAD;
-use base64::Engine;
-use sha2::{Digest, Sha256};
+// Re-export core functions from tc-crypto
+pub use tc_crypto::{decode_base64url_native as decode_base64url, derive_kid, encode_base64url};
 
-/// Derive a key identifier (kid) from a public key.
-/// KID = base64url(SHA-256(pubkey)[0:16])
-#[must_use]
-pub fn derive_kid(public_key: &[u8]) -> String {
-    let hash = Sha256::digest(public_key);
-    // Truncate to first 16 bytes for shorter KIDs
-    URL_SAFE_NO_PAD.encode(&hash[..16])
-}
-
-/// Decode a base64url-encoded string to bytes
-///
-/// # Errors
-/// Returns `DecodeError` if the input is not valid base64url
-pub fn decode_base64url(encoded: &str) -> Result<Vec<u8>, base64::DecodeError> {
-    URL_SAFE_NO_PAD.decode(encoded)
-}
+// Re-export the error type
+pub use tc_crypto::DecodeError;
 
 #[cfg(test)]
 mod tests {
@@ -44,7 +32,15 @@ mod tests {
     #[test]
     fn test_decode_base64url() {
         let encoded = "SGVsbG8";
-        let decoded = decode_base64url(encoded).unwrap();
+        let decoded = decode_base64url(encoded).expect("decode should succeed");
         assert_eq!(decoded, b"Hello");
+    }
+
+    #[test]
+    fn test_derive_kid_matches_tc_crypto() {
+        // Verify the service produces the same output as tc-crypto directly
+        let pubkey = [1u8; 32];
+        let kid = derive_kid(&pubkey);
+        assert_eq!(kid, "cs1uhCLEB_ttCYaQ8RMLfQ");
     }
 }
