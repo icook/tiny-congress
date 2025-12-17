@@ -1,11 +1,7 @@
 //! HTTP handlers for identity system
 
 use axum::{
-    extract::Extension,
-    http::StatusCode,
-    response::IntoResponse,
-    routing::post,
-    Json, Router,
+    extract::Extension, http::StatusCode, response::IntoResponse, routing::post, Json, Router,
 };
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
@@ -108,7 +104,14 @@ async fn signup(
     .await;
 
     match result {
-        Ok(_) => (StatusCode::CREATED, Json(SignupResponse { account_id, root_kid })).into_response(),
+        Ok(_) => (
+            StatusCode::CREATED,
+            Json(SignupResponse {
+                account_id,
+                root_kid,
+            }),
+        )
+            .into_response(),
         Err(e) => {
             // Check for unique constraint violation
             let error_msg = e.to_string();
