@@ -307,3 +307,28 @@ async fn test_duplicate_username_rejected(pool: PgPool) {
 | `panic!` in handlers | Return error variant |
 | Inline SQL strings repeated | Use constants or query builder |
 | `clone()` without need | Borrow or use references |
+| String parsing for error detection | Use structured error types |
+
+### Avoid String Parsing for Error Detection
+
+Never match errors by parsing their `Display` output or searching for substrings. Error messages are not stable APIs—they can change between versions, vary by locale, or differ across database drivers.
+
+```rust
+// Bad: Fragile string matching
+if e.to_string().contains("accounts_username_key") {
+    return Err(ApiError::DuplicateUsername);
+}
+
+// Good: Structured error inspection
+if let sqlx::Error::Database(db_err) = &e {
+    if let Some(constraint) = db_err.constraint() {
+        match constraint {
+            "accounts_username_key" => return Err(ApiError::DuplicateUsername),
+            "accounts_root_kid_key" => return Err(ApiError::DuplicateKey),
+            _ => {}
+        }
+    }
+}
+```
+
+This applies to all error handling—use typed error variants, error codes, or structured accessors rather than string matching.

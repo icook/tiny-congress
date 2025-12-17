@@ -110,25 +110,24 @@ async fn signup(
         )
             .into_response(),
         Err(e) => {
-            // Check for unique constraint violation
-            let error_msg = e.to_string();
-            if error_msg.contains("accounts_username_key") {
-                return (
-                    StatusCode::CONFLICT,
-                    Json(ErrorResponse {
-                        error: "Username already taken".to_string(),
-                    }),
-                )
-                    .into_response();
-            }
-            if error_msg.contains("accounts_root_kid_key") {
-                return (
-                    StatusCode::CONFLICT,
-                    Json(ErrorResponse {
-                        error: "Public key already registered".to_string(),
-                    }),
-                )
-                    .into_response();
+            // Check for unique constraint violation using structured error info
+            if let sqlx::Error::Database(db_err) = &e {
+                if let Some(constraint) = db_err.constraint() {
+                    let error_msg = match constraint {
+                        "accounts_username_key" => Some("Username already taken"),
+                        "accounts_root_kid_key" => Some("Public key already registered"),
+                        _ => None,
+                    };
+                    if let Some(msg) = error_msg {
+                        return (
+                            StatusCode::CONFLICT,
+                            Json(ErrorResponse {
+                                error: msg.to_string(),
+                            }),
+                        )
+                            .into_response();
+                    }
+                }
             }
 
             tracing::error!("Signup failed: {}", e);
