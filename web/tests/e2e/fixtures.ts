@@ -12,7 +12,8 @@ export const test = base.extend<{ coveragePage: void }>({
   coveragePage: [
     async ({ page }, use, testInfo) => {
       if (shouldCollectCoverage) {
-        // Start V8 JavaScript coverage before test
+        // eslint-disable-next-line no-console
+        console.log(`[V8 Coverage] Starting coverage for: ${testInfo.title}`);
         await page.coverage.startJSCoverage({ resetOnNavigation: false });
       }
 
@@ -20,24 +21,26 @@ export const test = base.extend<{ coveragePage: void }>({
       await use();
 
       if (shouldCollectCoverage) {
-        // Stop coverage and get results
         const coverage = await page.coverage.stopJSCoverage();
+        // eslint-disable-next-line no-console
+        console.log(`[V8 Coverage] Collected ${coverage.length} scripts for: ${testInfo.title}`);
 
         if (coverage.length > 0) {
           const coverageDir = path.join(process.cwd(), '.nyc_output');
           await fs.mkdir(coverageDir, { recursive: true });
 
-          // Generate unique filename
           const hash = crypto.randomBytes(8).toString('hex');
           const safeId = testInfo.testId.replace(/[^a-z0-9_-]/gi, '_');
           const filePath = path.join(coverageDir, `v8-${safeId}-${hash}.json`);
 
-          // Write V8 coverage format that c8 can read
+          // Write V8 coverage in the format c8 expects
           await fs.writeFile(filePath, JSON.stringify({ result: coverage }));
+          // eslint-disable-next-line no-console
+          console.log(`[V8 Coverage] Wrote: ${filePath}`);
         }
       }
     },
-    { auto: true }, // Automatically use this fixture for all tests
+    { auto: true },
   ],
 });
 
