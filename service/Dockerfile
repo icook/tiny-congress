@@ -16,7 +16,7 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry,id=cargo-registry \
     --mount=type=cache,target=/usr/local/cargo/git,id=cargo-git \
     cargo chef cook --release --recipe-path recipe.json
 
-FROM rust:1.91 AS builder
+FROM rust:${RUST_VERSION} AS builder
 
 WORKDIR /usr/src/app
 COPY --from=cacher /usr/src/app/target target
