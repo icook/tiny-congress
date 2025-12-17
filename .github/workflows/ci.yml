@@ -37,7 +37,7 @@ jobs:
           workspaces: service -> target
 
       - name: Install just
-        uses: extractions/setup-just@v2
+        uses: extractions/setup-just@v3
 
       - name: Lint backend
         run: just lint-backend
@@ -63,7 +63,7 @@ jobs:
         run: corepack enable
 
       - name: Install just
-        uses: extractions/setup-just@v2
+        uses: extractions/setup-just@v3
 
       - name: Install dependencies
         run: just install-frontend
@@ -100,7 +100,7 @@ jobs:
         run: corepack enable
 
       - name: Install just
-        uses: extractions/setup-just@v2
+        uses: extractions/setup-just@v3
 
       - name: Install frontend dependencies
         run: just install-frontend
