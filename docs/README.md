@@ -45,6 +45,7 @@ Contracts and standards for consistency:
 | [rust-coding-standards.md](interfaces/rust-coding-standards.md) | Rust style guide |
 | [react-coding-standards.md](interfaces/react-coding-standards.md) | React/TypeScript patterns |
 | [signed-envelope-spec.md](interfaces/signed-envelope-spec.md) | Cryptographic envelope format |
+| [ticket-management.md](interfaces/ticket-management.md) | Issue labeling and lifecycle |
 
 ## Decisions (ADRs)
 
