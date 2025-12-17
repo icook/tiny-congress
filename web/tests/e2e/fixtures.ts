@@ -1,43 +1,47 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import { test as base, expect } from '@playwright/test';
 
 const truthy = (value: string | undefined) =>
   (value ?? '').toLowerCase() === 'true' || value === '1';
 const shouldCollectCoverage = truthy(process.env.PLAYWRIGHT_COVERAGE) || truthy(process.env.CI);
 
-if (shouldCollectCoverage) {
-  base.afterEach(async ({ context }, testInfo) => {
-    const coverageDir = path.join(process.cwd(), '.nyc_output');
-    await fs.mkdir(coverageDir, { recursive: true });
+// Extended test fixture with V8 coverage collection
+export const test = base.extend<{ coveragePage: void }>({
+  coveragePage: [
+    async ({ page }, use, testInfo) => {
+      if (shouldCollectCoverage) {
+        // Start V8 JavaScript coverage before test
+        await page.coverage.startJSCoverage({ resetOnNavigation: false });
+      }
 
-    const pages = context.pages();
-    await Promise.all(
-      pages.map(async (page, index) => {
-        try {
-          const coverage = await page.evaluate(() => {
-            const snapshot = (globalThis as any).__coverage__;
-            (globalThis as any).__coverage__ = undefined;
-            return snapshot;
-          });
+      // Run the test
+      await use();
 
-          if (!coverage) {
-            return;
-          }
+      if (shouldCollectCoverage) {
+        // Stop coverage and get results
+        const coverage = await page.coverage.stopJSCoverage();
 
+        if (coverage.length > 0) {
+          const coverageDir = path.join(process.cwd(), '.nyc_output');
+          await fs.mkdir(coverageDir, { recursive: true });
+
+          // Generate unique filename
+          const hash = crypto.randomBytes(8).toString('hex');
           const safeId = testInfo.testId.replace(/[^a-z0-9_-]/gi, '_');
           const filePath = path.join(
             coverageDir,
-            `${safeId}-worker${testInfo.workerIndex}-retry${testInfo.retry}-page${index}.json`
+            `v8-${safeId}-${hash}.json`
           );
-          await fs.writeFile(filePath, JSON.stringify(coverage));
-        } catch (error) {
-          // Swallow evaluation errors for closed pages.
-        }
-      })
-    );
-  });
-}
 
-export const test = base;
+          // Write V8 coverage format that c8 can read
+          await fs.writeFile(filePath, JSON.stringify({ result: coverage }));
+        }
+      }
+    },
+    { auto: true }, // Automatically use this fixture for all tests
+  ],
+});
+
 export { expect };

@@ -490,9 +490,9 @@ jobs:
           skaffold deploy -p ${SKAFFOLD_PROFILE} --status-check=true \
             --build-artifacts "${{ steps.artifacts.outputs.file }}"
 
-      - name: Build instrumented frontend for E2E tests
+      - name: Build frontend for E2E tests
         working-directory: web
-        run: PLAYWRIGHT_COVERAGE=1 yarn build
+        run: yarn build  # PLAYWRIGHT_COVERAGE enables sourcemaps via CI env var
 
       - name: Analyze bundle size
         if: always()

@@ -1,6 +1,5 @@
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
-import istanbul from 'vite-plugin-istanbul';
 import tsconfigPaths from 'vite-tsconfig-paths';
 import { visualizer } from 'rollup-plugin-visualizer';
 
@@ -12,14 +11,6 @@ export default defineConfig({
   plugins: [
     react(),
     tsconfigPaths(),
-    enablePlaywrightCoverage &&
-      istanbul({
-        include: ['src/**/*.ts', 'src/**/*.tsx'],
-        extension: ['.ts', '.tsx'],
-        cypress: false,
-        requireEnv: false,
-        forceBuildInstrument: true,
-      }),
     enableBundleAnalyzer &&
       visualizer({
         filename: './dist/stats.html',
