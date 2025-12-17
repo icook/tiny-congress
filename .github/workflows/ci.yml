@@ -573,6 +573,10 @@ jobs:
             --rust "service/coverage/backend-unit.lcov:unit" \
             >> $GITHUB_STEP_SUMMARY
 
+      - name: Install lcov for HTML generation
+        if: always()
+        run: sudo apt-get update && sudo apt-get install -y lcov
+
       - name: Build unified coverage report
         if: always()
         working-directory: web

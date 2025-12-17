@@ -12,9 +12,9 @@
  */
 
 import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'fs';
+import { execSync } from 'child_process';
 import { join } from 'path';
 import { parseArgs } from 'util';
-import MCR from 'monocart-coverage-reports';
 
 // Icon thresholds (matches summarize-coverage.mjs)
 const getIcon = (pct) => {
@@ -293,24 +293,19 @@ async function main() {
     }
   }
 
-  // Rust coverage (generate HTML from LCOV using Monocart for consistent styling)
+  // Rust coverage (generate HTML from LCOV using genhtml)
   const rustLcov = values.rust;
   if (existsSync(rustLcov)) {
     console.log(`Generating Rust coverage HTML from ${rustLcov}...`);
-    const rustOutputDir = join(process.cwd(), outputDir, 'rust');
+    const rustOutputDir = join(outputDir, 'rust');
 
     try {
-      const rustReport = MCR({
-        name: 'Rust Backend Coverage',
-        outputDir: rustOutputDir,
-        reports: ['html', 'json-summary'],
+      // Use genhtml from lcov package to convert LCOV to HTML
+      execSync(`genhtml "${rustLcov}" --output-directory "${rustOutputDir}" --dark-mode --title "Rust Backend Coverage"`, {
+        stdio: 'inherit',
       });
 
-      // Add LCOV data - Monocart can consume LCOV files directly
-      await rustReport.add(readFileSync(rustLcov, 'utf8'), { type: 'lcov' });
-      await rustReport.generate();
-
-      // Verify Monocart created the index.html
+      // Verify genhtml created the index.html
       if (existsSync(join(rustOutputDir, 'index.html'))) {
         reports.push({
           name: 'Rust Backend',
@@ -319,11 +314,12 @@ async function main() {
           summary: parseLcovSummary(rustLcov),
         });
       } else {
-        console.error('Monocart ran but did not create index.html');
+        console.error('genhtml ran but did not create index.html');
       }
     } catch (err) {
       console.error('Failed to generate Rust HTML coverage.');
       console.error('Error:', err.message);
+      console.error('Make sure lcov is installed (apt-get install lcov)');
     }
   } else {
     console.log(`Rust LCOV not found at ${rustLcov}, skipping...`);
