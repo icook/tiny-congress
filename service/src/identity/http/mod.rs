@@ -5,17 +5,26 @@ use std::sync::Arc;
 use axum::{
     extract::Extension, http::StatusCode, response::IntoResponse, routing::post, Json, Router,
 };
+use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
+use validator::Validate;
 
-use super::crypto::{decode_base64url, derive_kid};
+use super::crypto::derive_kid;
 use super::repo::{AccountRepo, AccountRepoError};
+use crate::validation::validate_base64url_ed25519_pubkey;
 
 /// Signup request payload
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Validate)]
 pub struct SignupRequest {
+    #[validate(length(min = 1, max = 64, message = "Username must be 1-64 characters"))]
     pub username: String,
-    pub root_pubkey: String, // base64url encoded
+
+    #[validate(custom(
+        function = "validate_base64url_ed25519_pubkey",
+        message = "Invalid public key: must be base64url-encoded 32-byte Ed25519 key"
+    ))]
+    pub root_pubkey: String,
 }
 
 /// Signup response
@@ -41,7 +50,25 @@ async fn signup(
     Extension(repo): Extension<Arc<dyn AccountRepo>>,
     Json(req): Json<SignupRequest>,
 ) -> impl IntoResponse {
-    // Validate username
+    // Validate request using validator crate
+    if let Err(errors) = req.validate() {
+        // Extract first validation error message
+        let message = errors
+            .field_errors()
+            .values()
+            .flat_map(|v| v.iter())
+            .find_map(|e| e.message.as_ref())
+            .map_or_else(|| "Validation failed".to_string(), ToString::to_string);
+
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse { error: message }),
+        )
+            .into_response();
+    }
+
+    // Trim username (validation ensures it's not empty after trim would be nice,
+    // but we can handle that by checking the trimmed value)
     let username = req.username.trim();
     if username.is_empty() {
         return (
@@ -53,38 +80,17 @@ async fn signup(
             .into_response();
     }
 
-    if username.len() > 64 {
+    // Derive KID from public key (already validated by validator)
+    let Ok(pubkey_bytes) = URL_SAFE_NO_PAD.decode(&req.root_pubkey) else {
+        // This should never happen since validation already passed
         return (
             StatusCode::BAD_REQUEST,
             Json(ErrorResponse {
-                error: "Username too long".to_string(),
-            }),
-        )
-            .into_response();
-    }
-
-    // Decode and validate public key
-    let Ok(pubkey_bytes) = decode_base64url(&req.root_pubkey) else {
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(ErrorResponse {
-                error: "Invalid base64url encoding for root_pubkey".to_string(),
+                error: "Invalid public key encoding".to_string(),
             }),
         )
             .into_response();
     };
-
-    if pubkey_bytes.len() != 32 {
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(ErrorResponse {
-                error: "root_pubkey must be 32 bytes (Ed25519)".to_string(),
-            }),
-        )
-            .into_response();
-    }
-
-    // Derive KID from public key
     let root_kid = derive_kid(&pubkey_bytes);
 
     // Create account via repository
