@@ -91,25 +91,32 @@ function parseLcovSummary(lcovPath) {
 // ============================================================================
 
 function generateIndexHtml(reports) {
+  const getPct = (metric) => {
+    if (!metric) return 0;
+    if (typeof metric.pct === 'number') return metric.pct;
+    if (typeof metric === 'number') return metric;
+    return 0;
+  };
+
   const rows = reports
     .filter((r) => r.summary)
     .map((r) => {
-      const lines = r.summary.lines || { pct: 0 };
-      const branches = r.summary.branches || { pct: 0 };
-      const functions = r.summary.functions || { pct: 0 };
+      const linesPct = getPct(r.summary.lines);
+      const branchesPct = getPct(r.summary.branches);
+      const funcsPct = getPct(r.summary.functions);
 
-      const linesInfo = getIcon(lines.pct);
-      const branchesInfo = branches.pct !== undefined ? getIcon(branches.pct) : null;
-      const funcsInfo = getIcon(functions.pct);
+      const linesInfo = getIcon(linesPct);
+      const branchesInfo = branchesPct !== undefined ? getIcon(branchesPct) : null;
+      const funcsInfo = getIcon(funcsPct);
 
       return `
         <tr>
           <td>
             <a href="${r.dir}/index.html">${r.icon} ${r.name}</a>
           </td>
-          <td style="color: ${linesInfo.color}">${lines.pct.toFixed(1)}%</td>
-          <td style="color: ${branchesInfo?.color || '#888'}">${branchesInfo ? branches.pct.toFixed(1) + '%' : 'N/A'}</td>
-          <td style="color: ${funcsInfo.color}">${functions.pct.toFixed(1)}%</td>
+          <td style="color: ${linesInfo.color}">${linesPct.toFixed(1)}%</td>
+          <td style="color: ${branchesInfo?.color || '#888'}">${branchesInfo ? branchesPct.toFixed(1) + '%' : 'N/A'}</td>
+          <td style="color: ${funcsInfo.color}">${funcsPct.toFixed(1)}%</td>
           <td><a href="${r.dir}/index.html">View Report</a></td>
         </tr>`;
     })
