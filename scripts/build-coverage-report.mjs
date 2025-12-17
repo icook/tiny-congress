@@ -245,11 +245,25 @@ function main() {
     console.log('Vitest coverage not found, skipping...');
   }
 
-  // Playwright coverage - c8 generates HTML in lcov-report/ subdirectory
+  // Playwright coverage - c8 generates HTML in various locations depending on version
   const playwrightDir = values.playwright;
-  const playwrightHtmlDir = join(playwrightDir, 'lcov-report');
-  if (existsSync(playwrightHtmlDir) && existsSync(join(playwrightHtmlDir, 'index.html'))) {
-    console.log('Copying Playwright coverage...');
+  // Check multiple possible HTML locations (c8 versions vary)
+  const possibleHtmlDirs = [
+    join(playwrightDir, 'lcov-report'),  // c8 v8+
+    join(playwrightDir, 'html'),          // some c8 versions
+    playwrightDir,                         // direct output
+  ];
+
+  let playwrightHtmlDir = null;
+  for (const dir of possibleHtmlDirs) {
+    if (existsSync(join(dir, 'index.html'))) {
+      playwrightHtmlDir = dir;
+      break;
+    }
+  }
+
+  if (playwrightHtmlDir) {
+    console.log(`Copying Playwright coverage from ${playwrightHtmlDir}...`);
     cpSync(playwrightHtmlDir, join(outputDir, 'playwright'), { recursive: true });
     reports.push({
       name: 'Playwright E2E',
@@ -258,7 +272,16 @@ function main() {
       summary: parsePlaywrightSummary(playwrightDir),
     });
   } else {
-    console.log(`Playwright coverage not found at ${playwrightHtmlDir}, skipping...`);
+    console.log(`Playwright HTML coverage not found. Checked: ${possibleHtmlDirs.join(', ')}`);
+    // List what's actually in the coverage directory for debugging
+    if (existsSync(playwrightDir)) {
+      try {
+        const contents = readdirSync(playwrightDir);
+        console.log(`Contents of ${playwrightDir}: ${contents.join(', ') || '(empty)'}`);
+      } catch (e) {
+        console.log(`Could not list ${playwrightDir}: ${e.message}`);
+      }
+    }
   }
 
   // Rust coverage (generate HTML from LCOV)
@@ -268,9 +291,11 @@ function main() {
     const rustOutputDir = join(outputDir, 'rust');
     mkdirSync(rustOutputDir, { recursive: true });
     try {
-      execSync(`genhtml "${rustLcov}" --output-directory "${rustOutputDir}"`, {
-        stdio: ['pipe', 'pipe', 'pipe'],
-      });
+      // Use --ignore-errors source because LCOV paths are from container, not host
+      execSync(
+        `genhtml "${rustLcov}" --output-directory "${rustOutputDir}" --ignore-errors source`,
+        { stdio: ['pipe', 'pipe', 'pipe'] }
+      );
       // Verify genhtml created the index.html
       if (existsSync(join(rustOutputDir, 'index.html'))) {
         reports.push({
