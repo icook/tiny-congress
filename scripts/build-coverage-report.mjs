@@ -273,11 +273,12 @@ function main() {
     });
   } else {
     console.log(`Playwright HTML coverage not found. Checked: ${possibleHtmlDirs.join(', ')}`);
-    // List what's actually in the coverage directory for debugging
+    // Debug: list what's actually in the coverage directory
+    console.log(`Checking if ${playwrightDir} exists: ${existsSync(playwrightDir)}`);
     if (existsSync(playwrightDir)) {
       try {
         const contents = readdirSync(playwrightDir);
-        console.log(`Contents of ${playwrightDir}: ${contents.join(', ') || '(empty)'}`);
+        console.log(`Contents of ${playwrightDir}: ${contents.length > 0 ? contents.join(', ') : '(empty)'}`);
       } catch (e) {
         console.log(`Could not list ${playwrightDir}: ${e.message}`);
       }
@@ -291,9 +292,9 @@ function main() {
     const rustOutputDir = join(outputDir, 'rust');
     mkdirSync(rustOutputDir, { recursive: true });
     try {
-      // Use --ignore-errors source because LCOV paths are from container, not host
+      // Use --ignore-errors and --synthesize-missing because LCOV paths are from container, not host
       execSync(
-        `genhtml "${rustLcov}" --output-directory "${rustOutputDir}" --ignore-errors source`,
+        `genhtml "${rustLcov}" --output-directory "${rustOutputDir}" --ignore-errors source,unmapped --synthesize-missing`,
         { stdio: ['pipe', 'pipe', 'pipe'] }
       );
       // Verify genhtml created the index.html
