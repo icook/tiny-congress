@@ -34,6 +34,7 @@ async-trait = "0.1"
 thiserror = "2.0"
 anyhow = "1.0"
 serde-aux = "4.7.0"
+validator = { version = "0.20", features = ["derive"] }
 
 # Cryptography
 sha2 = "0.10"
@@ -52,7 +53,7 @@ path = "src/bin/export_schema.rs"
 
 # cargo-machete false positives (used via derive macros)
 [package.metadata.cargo-machete]
-ignored = ["serde", "thiserror", "async-trait"]
+ignored = ["serde", "thiserror", "async-trait", "validator"]
 
 [lints]
 [lints.clippy]
