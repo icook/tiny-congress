@@ -286,17 +286,22 @@ function main() {
   }
 
   // Rust coverage (generate HTML from LCOV)
+  // LCOV paths are relative (e.g., src/db.rs), so we must run genhtml from service/ directory
   const rustLcov = values.rust;
   if (existsSync(rustLcov)) {
     console.log(`Generating Rust coverage HTML from ${rustLcov}...`);
-    const rustOutputDir = join(outputDir, 'rust');
+    const rustOutputDir = join(process.cwd(), outputDir, 'rust');
     mkdirSync(rustOutputDir, { recursive: true });
+
+    // Convert LCOV path to absolute for use from service/ directory
+    const absoluteLcov = join(process.cwd(), rustLcov);
+
     try {
-      // Use --ignore-errors and --synthesize-missing because LCOV paths are from container, not host
-      execSync(
-        `genhtml "${rustLcov}" --output-directory "${rustOutputDir}" --ignore-errors source,unmapped --synthesize-missing`,
-        { stdio: ['pipe', 'pipe', 'pipe'] }
-      );
+      // Run genhtml from service/ directory so relative source paths resolve correctly
+      execSync(`genhtml "${absoluteLcov}" --output-directory "${rustOutputDir}"`, {
+        cwd: 'service',
+        stdio: ['pipe', 'pipe', 'pipe'],
+      });
       // Verify genhtml created the index.html
       if (existsSync(join(rustOutputDir, 'index.html'))) {
         reports.push({
