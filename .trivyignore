@@ -1,0 +1,20 @@
+# Trivy vulnerability ignore list
+# https://aquasecurity.github.io/trivy/latest/docs/configuration/filtering/#trivyignore
+
+# ============================================================
+# postgres image: gosu binary vulnerabilities
+# ============================================================
+# gosu is only used during container startup to drop privileges.
+# The postgres process itself doesn't use gosu during runtime.
+# These vulnerabilities in gosu's Go stdlib are not exploitable
+# in our use case (no tar parsing or x509 error string handling).
+
+# golang: archive/tar: Unbounded allocation when parsing GNU sparse map
+# Affects: gosu in postgres:17 base image (Go 1.24.6)
+# Fixed in: Go 1.24.8, 1.25.2
+CVE-2025-58183
+
+# crypto/x509: Excessive resource consumption when printing error string
+# Affects: gosu in postgres:17 base image (Go 1.24.6)
+# Fixed in: Go 1.24.11, 1.25.5
+CVE-2025-61729

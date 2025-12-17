@@ -335,6 +335,12 @@ jobs:
           - tc-ui-release
           - postgres
     steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          sparse-checkout: .trivyignore
+          sparse-checkout-cone-mode: false
+
       - name: Login to GHCR
         uses: docker/login-action@v3
         with:
@@ -350,6 +356,7 @@ jobs:
           exit-code: '1'
           ignore-unfixed: true
           severity: 'CRITICAL,HIGH'
+          trivyignores: '.trivyignore'
 
   # ============================================================
   # JOB 2: Run Skaffold test/deploy and host-based integration/E2E tests
