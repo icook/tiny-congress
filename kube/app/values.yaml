@@ -24,8 +24,8 @@ buildInfo:
 # For production, override with actual frontend domain(s)
 cors:
   # Comma-separated list of allowed origins
-  # Default allows local development origins
-  allowedOrigins: "http://localhost:5173,http://127.0.0.1:5173"
+  # Empty by default (blocks all cross-origin requests) - must be explicitly configured
+  allowedOrigins: ""
 
 serviceAccount:
   # Specifies whether a service account should be created
