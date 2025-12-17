@@ -263,24 +263,6 @@ cargo run --release
 
 Or use `mold` linker (Linux) / `zld` (macOS).
 
-## IDE Setup
-
-### VS Code
-
-Recommended extensions:
-- rust-analyzer (Rust)
-- ESLint, Prettier (TypeScript)
-- GraphQL (schema highlighting)
-
-### Settings
-
-```json
-{
-  "rust-analyzer.cargo.features": "all",
-  "editor.formatOnSave": true
-}
-```
-
 ## See also
 
 - `docs/interfaces/environment-variables.md` - All env vars
