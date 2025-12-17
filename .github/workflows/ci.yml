@@ -440,6 +440,9 @@ jobs:
         working-directory: web
         run: yarn playwright install --with-deps chromium
 
+      - name: Install lcov
+        run: sudo apt-get update && sudo apt-get install -y lcov
+
       - name: Prepare test output directories
         run: |
           mkdir -p web/reports web/test-results web/coverage/playwright service/coverage
@@ -451,14 +454,6 @@ jobs:
         run: |
           set -euo pipefail
           skaffold test -p ${SKAFFOLD_PROFILE} --build-artifacts "${{ steps.artifacts.outputs.file }}"
-
-      - name: Upload Vitest coverage
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: vitest-coverage
-          path: web/coverage/vitest/
-          retention-days: 7
 
       - name: Wait for KinD readiness
         run: |
@@ -562,28 +557,18 @@ jobs:
           check_name: Playwright E2E
           comment_mode: off
 
-      - name: Upload Playwright artifacts
+      - name: Upload Playwright test artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-artifacts
+          name: playwright-test-results
           if-no-files-found: warn
           path: |
             web/test-results
             web/reports/playwright.xml
             web/playwright-report
-            web/coverage/playwright
 
-      - name: Upload Rust coverage artifacts
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: rust-coverage
-          if-no-files-found: warn
-          path: |
-            service/coverage/backend-unit.lcov
-
-      - name: Summarize all coverage
+      - name: Summarize coverage to job summary
         if: always()
         run: |
           node scripts/summarize-coverage.mjs \
@@ -591,6 +576,18 @@ jobs:
             --playwright web/.nyc_output \
             --rust "service/coverage/backend-unit.lcov:unit" \
             >> $GITHUB_STEP_SUMMARY
+
+      - name: Build unified coverage report
+        if: always()
+        run: node scripts/build-coverage-report.mjs
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage-report/
+          retention-days: 7
 
       - name: Dump diagnostics on failure
         if: failure()
