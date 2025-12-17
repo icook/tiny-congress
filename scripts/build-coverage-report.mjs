@@ -24,12 +24,13 @@ const getIcon = (pct) => {
 };
 
 // Parse command line args
+// Note: Script runs from web/ directory to access monocart-coverage-reports
 const { values } = parseArgs({
   options: {
-    vitest: { type: 'string', default: 'web/coverage/vitest' },
-    playwright: { type: 'string', default: 'web/coverage/playwright' },
-    rust: { type: 'string', default: 'service/coverage/backend-unit.lcov' },
-    output: { type: 'string', default: 'coverage-report' },
+    vitest: { type: 'string', default: 'coverage/vitest' },
+    playwright: { type: 'string', default: 'coverage/playwright' },
+    rust: { type: 'string', default: '../service/coverage/backend-unit.lcov' },
+    output: { type: 'string', default: '../coverage-report' },
   },
 });
 
