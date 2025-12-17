@@ -13,7 +13,7 @@
 
 import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'fs';
 import { execSync } from 'child_process';
-import { join } from 'path';
+import { join, resolve } from 'path';
 import { parseArgs } from 'util';
 
 // Icon thresholds (matches summarize-coverage.mjs)
@@ -299,10 +299,16 @@ async function main() {
     console.log(`Generating Rust coverage HTML from ${rustLcov}...`);
     const rustOutputDir = join(outputDir, 'rust');
 
+    // Resolve absolute paths since we'll run genhtml from service directory
+    const absoluteLcov = resolve(rustLcov);
+    const absoluteOutputDir = resolve(rustOutputDir);
+    const serviceDir = resolve('../service');
+
     try {
-      // Use genhtml from lcov package to convert LCOV to HTML
-      execSync(`genhtml "${rustLcov}" --output-directory "${rustOutputDir}" --dark-mode --title "Rust Backend Coverage"`, {
+      // Run genhtml from service directory so it can find src/*.rs files
+      execSync(`genhtml "${absoluteLcov}" --output-directory "${absoluteOutputDir}" --dark-mode --title "Rust Backend Coverage"`, {
         stdio: 'inherit',
+        cwd: serviceDir,
       });
 
       // Verify genhtml created the index.html
