@@ -1,13 +1,15 @@
 //! HTTP handlers for identity system
 
+use std::sync::Arc;
+
 use axum::{
     extract::Extension, http::StatusCode, response::IntoResponse, routing::post, Json, Router,
 };
 use serde::{Deserialize, Serialize};
-use sqlx::PgPool;
 use uuid::Uuid;
 
 use super::crypto::{decode_base64url, derive_kid};
+use super::repo::{AccountRepo, AccountRepoError};
 
 /// Signup request payload
 #[derive(Debug, Deserialize)]
@@ -36,7 +38,7 @@ pub fn router() -> Router {
 
 /// Handle signup request
 async fn signup(
-    Extension(pool): Extension<PgPool>,
+    Extension(repo): Extension<Arc<dyn AccountRepo>>,
     Json(req): Json<SignupRequest>,
 ) -> impl IntoResponse {
     // Validate username
@@ -85,59 +87,125 @@ async fn signup(
     // Derive KID from public key
     let root_kid = derive_kid(&pubkey_bytes);
 
-    // Insert account
-    let account_id = Uuid::new_v4();
-    let result = sqlx::query(
-        r"
-        INSERT INTO accounts (id, username, root_pubkey, root_kid)
-        VALUES ($1, $2, $3, $4)
-        ",
-    )
-    .bind(account_id)
-    .bind(username)
-    .bind(&req.root_pubkey)
-    .bind(&root_kid)
-    .execute(&pool)
-    .await;
-
-    match result {
-        Ok(_) => (
+    // Create account via repository
+    match repo.create(username, &req.root_pubkey, &root_kid).await {
+        Ok(account) => (
             StatusCode::CREATED,
             Json(SignupResponse {
-                account_id,
-                root_kid,
+                account_id: account.id,
+                root_kid: account.root_kid,
             }),
         )
             .into_response(),
-        Err(e) => {
-            // Check for unique constraint violation using structured error info
-            if let sqlx::Error::Database(db_err) = &e {
-                if let Some(constraint) = db_err.constraint() {
-                    let error_msg = match constraint {
-                        "accounts_username_key" => Some("Username already taken"),
-                        "accounts_root_kid_key" => Some("Public key already registered"),
-                        _ => None,
-                    };
-                    if let Some(msg) = error_msg {
-                        return (
-                            StatusCode::CONFLICT,
-                            Json(ErrorResponse {
-                                error: msg.to_string(),
-                            }),
-                        )
-                            .into_response();
-                    }
-                }
-            }
-
-            tracing::error!("Signup failed: {}", e);
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
+        Err(e) => match e {
+            AccountRepoError::DuplicateUsername => (
+                StatusCode::CONFLICT,
                 Json(ErrorResponse {
-                    error: "Internal server error".to_string(),
+                    error: "Username already taken".to_string(),
                 }),
             )
-                .into_response()
-        }
+                .into_response(),
+            AccountRepoError::DuplicateKey => (
+                StatusCode::CONFLICT,
+                Json(ErrorResponse {
+                    error: "Public key already registered".to_string(),
+                }),
+            )
+                .into_response(),
+            AccountRepoError::Database(db_err) => {
+                tracing::error!("Signup failed: {}", db_err);
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(ErrorResponse {
+                        error: "Internal server error".to_string(),
+                    }),
+                )
+                    .into_response()
+            }
+        },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::identity::repo::mock::MockAccountRepo;
+    use axum::{
+        body::Body,
+        http::{Request, StatusCode},
+    };
+    use tower::ServiceExt;
+
+    fn test_router(repo: Arc<dyn AccountRepo>) -> Router {
+        Router::new()
+            .route("/auth/signup", post(signup))
+            .layer(Extension(repo))
+    }
+
+    #[tokio::test]
+    async fn test_signup_success() {
+        let mock_repo = Arc::new(MockAccountRepo::new());
+        let app = test_router(mock_repo);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/auth/signup")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        r#"{"username": "alice", "root_pubkey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"}"#,
+                    ))
+                    .expect("request builder"),
+            )
+            .await
+            .expect("response");
+
+        assert_eq!(response.status(), StatusCode::CREATED);
+    }
+
+    #[tokio::test]
+    async fn test_signup_empty_username() {
+        let mock_repo = Arc::new(MockAccountRepo::new());
+        let app = test_router(mock_repo);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/auth/signup")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        r#"{"username": "", "root_pubkey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"}"#,
+                    ))
+                    .expect("request builder"),
+            )
+            .await
+            .expect("response");
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn test_signup_duplicate_username() {
+        let mock_repo = Arc::new(MockAccountRepo::new());
+        mock_repo.set_create_result(Err(AccountRepoError::DuplicateUsername));
+        let app = test_router(mock_repo);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/auth/signup")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        r#"{"username": "alice", "root_pubkey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"}"#,
+                    ))
+                    .expect("request builder"),
+            )
+            .await
+            .expect("response");
+
+        assert_eq!(response.status(), StatusCode::CONFLICT);
     }
 }

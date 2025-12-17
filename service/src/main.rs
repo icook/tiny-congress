@@ -7,6 +7,8 @@
     clippy::unwrap_used
 )]
 
+use std::sync::Arc;
+
 use async_graphql::{EmptySubscription, Schema};
 use axum::{
     http::{header::HeaderValue, Method, StatusCode},
@@ -20,7 +22,7 @@ use tinycongress_api::{
     config::Config,
     db::setup_database,
     graphql::{graphql_handler, graphql_playground, MutationRoot, QueryRoot},
-    identity,
+    identity::{self, repo::PgAccountRepo},
 };
 use tower_http::cors::{AllowOrigin, Any, CorsLayer};
 
@@ -63,6 +65,10 @@ async fn main() -> Result<(), anyhow::Error> {
         .data(build_info)
         .finish();
 
+    // Create repositories
+    let account_repo: Arc<dyn identity::repo::AccountRepo> =
+        Arc::new(PgAccountRepo::new(pool.clone()));
+
     // Build CORS layer from config
     let cors_origins = &config.cors.allowed_origins;
     let allow_origin: AllowOrigin = if cors_origins.iter().any(|o| o == "*") {
@@ -93,6 +99,7 @@ async fn main() -> Result<(), anyhow::Error> {
         // Add the schema to the extension
         .layer(Extension(schema))
         .layer(Extension(pool.clone()))
+        .layer(Extension(account_repo))
         .layer(
             CorsLayer::new()
                 .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
