@@ -1,43 +1,99 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { test as base, expect } from '@playwright/test';
+import MCR from 'monocart-coverage-reports';
 
 const truthy = (value: string | undefined) =>
   (value ?? '').toLowerCase() === 'true' || value === '1';
 const shouldCollectCoverage = truthy(process.env.PLAYWRIGHT_COVERAGE) || truthy(process.env.CI);
 
-if (shouldCollectCoverage) {
-  base.afterEach(async ({ context }, testInfo) => {
-    const coverageDir = path.join(process.cwd(), '.nyc_output');
-    await fs.mkdir(coverageDir, { recursive: true });
+// Coverage output directory
+const coverageDir = path.join(process.cwd(), 'coverage/playwright');
 
-    const pages = context.pages();
-    await Promise.all(
-      pages.map(async (page, index) => {
-        try {
-          const coverage = await page.evaluate(() => {
-            const snapshot = (globalThis as any).__coverage__;
-            (globalThis as any).__coverage__ = undefined;
-            return snapshot;
-          });
+// Create or get the shared coverage report instance
+// We write raw coverage data per test, then generate report in global teardown
+const rawCoverageDir = path.join(process.cwd(), '.playwright-coverage');
 
-          if (!coverage) {
-            return;
-          }
+// Extended test fixture with V8 coverage collection via Monocart
+export const test = base.extend<{ coveragePage: void }>({
+  coveragePage: [
+    async ({ page }, use, testInfo) => {
+      if (shouldCollectCoverage) {
+        await page.coverage.startJSCoverage({ resetOnNavigation: false });
+      }
 
+      // Run the test
+      await use();
+
+      if (shouldCollectCoverage) {
+        const coverage = await page.coverage.stopJSCoverage();
+
+        if (coverage.length > 0) {
+          // Write raw V8 coverage data for this test
+          // The global teardown will merge and generate the report
+          await fs.mkdir(rawCoverageDir, { recursive: true });
           const safeId = testInfo.testId.replace(/[^a-z0-9_-]/gi, '_');
-          const filePath = path.join(
-            coverageDir,
-            `${safeId}-worker${testInfo.workerIndex}-retry${testInfo.retry}-page${index}.json`
-          );
+          const filePath = path.join(rawCoverageDir, `${safeId}.json`);
           await fs.writeFile(filePath, JSON.stringify(coverage));
-        } catch (error) {
-          // Swallow evaluation errors for closed pages.
         }
-      })
-    );
+      }
+    },
+    { auto: true },
+  ],
+});
+
+// Generate coverage report from collected raw data
+export async function generateCoverageReport(): Promise<void> {
+  if (!shouldCollectCoverage) {
+    return;
+  }
+
+  // Check if there's any raw coverage data
+  try {
+    await fs.access(rawCoverageDir);
+  } catch {
+    // eslint-disable-next-line no-console
+    console.log('[Coverage] No raw coverage data found, skipping report generation');
+    return;
+  }
+
+  const coverageReport = MCR({
+    name: 'Playwright E2E Coverage',
+    outputDir: coverageDir,
+    reports: ['lcov', 'html', 'json-summary', 'text-summary'],
+
+    // Filter coverage entries by URL before source map resolution
+    entryFilter: (entry) => {
+      // Only include scripts from our app (localhost), not external CDNs
+      return entry.url.includes('localhost') || entry.url.includes('127.0.0.1');
+    },
+
+    // Filter source files after source map resolution
+    sourceFilter: (sourcePath: string) => {
+      // Only include our app source files, exclude node_modules
+      if (sourcePath.includes('node_modules')) {
+        return false;
+      }
+      return sourcePath.startsWith('src/');
+    },
   });
+
+  // Read and add all raw coverage files
+  const files = await fs.readdir(rawCoverageDir);
+  for (const file of files) {
+    if (file.endsWith('.json')) {
+      const filePath = path.join(rawCoverageDir, file);
+      const content = await fs.readFile(filePath, 'utf-8');
+      const coverage = JSON.parse(content);
+      await coverageReport.add(coverage);
+    }
+  }
+
+  // Generate the merged report
+  await coverageReport.generate();
+
+  // Clean up raw coverage files
+  await fs.rm(rawCoverageDir, { recursive: true, force: true });
 }
 
-export const test = base;
 export { expect };

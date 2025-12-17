@@ -1,18 +1,18 @@
 #!/usr/bin/env node
 /**
  * Unified coverage summary script for CI
- * Parses Vitest JSON, NYC/Istanbul JSON, and LCOV formats
+ * Parses Vitest JSON, Playwright JSON, and LCOV formats
  * Outputs unified markdown with directory-level breakdowns and icons
  *
  * Usage:
  *   node scripts/summarize-coverage.mjs \
  *     --vitest web/coverage/vitest/coverage-summary.json \
- *     --playwright web/.nyc_output \
+ *     --playwright web/coverage/playwright/coverage-summary.json \
  *     --rust service/coverage/backend-unit.lcov:unit,service/coverage/backend-integration.lcov:integration
  */
 
-import { readFileSync, readdirSync, existsSync } from 'fs';
-import { join, dirname, basename, relative } from 'path';
+import { readFileSync, existsSync } from 'fs';
+import { basename } from 'path';
 import { parseArgs } from 'util';
 
 // Icon thresholds
@@ -93,109 +93,11 @@ function parseVitestCoverage(filePath) {
 }
 
 // ============================================================================
-// NYC/Istanbul JSON Parser
+// Playwright Coverage Parser (JSON summary format from monocart)
 // ============================================================================
-function parsePlaywrightCoverage(nycOutputDir) {
-  if (!existsSync(nycOutputDir)) return null;
-
-  const files = readdirSync(nycOutputDir).filter((f) => f.endsWith('.json'));
-  if (files.length === 0) return null;
-
-  const dirStats = new Map();
-  let totalLines = { covered: 0, total: 0 };
-  let totalBranches = { covered: 0, total: 0 };
-  let totalFunctions = { covered: 0, total: 0 };
-
-  // Find web root
-  let webRoot = '';
-
-  for (const file of files) {
-    try {
-      const data = JSON.parse(readFileSync(join(nycOutputDir, file), 'utf8'));
-
-      for (const [filePath, coverage] of Object.entries(data)) {
-        // Find web root from first file
-        if (!webRoot && filePath.includes('/web/src/')) {
-          const idx = filePath.indexOf('/web/src/');
-          webRoot = filePath.substring(0, idx + 5);
-        }
-
-        // Get relative path
-        let relPath = filePath;
-        if (webRoot && filePath.startsWith(webRoot)) {
-          relPath = filePath.substring(webRoot.length);
-        }
-
-        // Extract directory
-        const parts = relPath.split('/').filter(Boolean);
-        let dir = parts.length >= 2 ? `${parts[0]}/${parts[1]}` : parts[0] || 'root';
-
-        if (!dirStats.has(dir)) {
-          dirStats.set(dir, {
-            lines: { covered: 0, total: 0 },
-            branches: { covered: 0, total: 0 },
-            functions: { covered: 0, total: 0 },
-          });
-        }
-
-        const dirData = dirStats.get(dir);
-
-        // Count statements (lines)
-        if (coverage.s) {
-          const stmtValues = Object.values(coverage.s);
-          const covered = stmtValues.filter((v) => v > 0).length;
-          dirData.lines.covered += covered;
-          dirData.lines.total += stmtValues.length;
-          totalLines.covered += covered;
-          totalLines.total += stmtValues.length;
-        }
-
-        // Count branches
-        if (coverage.b) {
-          for (const branchHits of Object.values(coverage.b)) {
-            const covered = branchHits.filter((v) => v > 0).length;
-            dirData.branches.covered += covered;
-            dirData.branches.total += branchHits.length;
-            totalBranches.covered += covered;
-            totalBranches.total += branchHits.length;
-          }
-        }
-
-        // Count functions
-        if (coverage.f) {
-          const funcValues = Object.values(coverage.f);
-          const covered = funcValues.filter((v) => v > 0).length;
-          dirData.functions.covered += covered;
-          dirData.functions.total += funcValues.length;
-          totalFunctions.covered += covered;
-          totalFunctions.total += funcValues.length;
-        }
-      }
-    } catch {
-      // Skip malformed files
-    }
-  }
-
-  if (dirStats.size === 0) return null;
-
-  const calcPct = (stat) => (stat.total > 0 ? (stat.covered / stat.total) * 100 : 0);
-
-  return {
-    total: {
-      lines: { pct: calcPct(totalLines), covered: totalLines.covered, total: totalLines.total },
-      branches: {
-        pct: calcPct(totalBranches),
-        covered: totalBranches.covered,
-        total: totalBranches.total,
-      },
-      functions: {
-        pct: calcPct(totalFunctions),
-        covered: totalFunctions.covered,
-        total: totalFunctions.total,
-      },
-    },
-    byDirectory: dirStats,
-  };
+function parsePlaywrightCoverage(inputPath) {
+  // Playwright uses the same coverage-summary.json format as Vitest
+  return parseVitestCoverage(inputPath);
 }
 
 // ============================================================================
