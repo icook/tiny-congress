@@ -62,17 +62,14 @@ async fn signup(
     }
 
     // Decode and validate public key
-    let pubkey_bytes = match decode_base64url(&req.root_pubkey) {
-        Ok(bytes) => bytes,
-        Err(_) => {
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(ErrorResponse {
-                    error: "Invalid base64url encoding for root_pubkey".to_string(),
-                }),
-            )
-                .into_response();
-        }
+    let Ok(pubkey_bytes) = decode_base64url(&req.root_pubkey) else {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: "Invalid base64url encoding for root_pubkey".to_string(),
+            }),
+        )
+            .into_response();
     };
 
     if pubkey_bytes.len() != 32 {
@@ -91,10 +88,10 @@ async fn signup(
     // Insert account
     let account_id = Uuid::new_v4();
     let result = sqlx::query(
-        r#"
+        r"
         INSERT INTO accounts (id, username, root_pubkey, root_kid)
         VALUES ($1, $2, $3, $4)
-        "#,
+        ",
     )
     .bind(account_id)
     .bind(username)

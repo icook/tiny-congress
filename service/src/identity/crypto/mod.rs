@@ -14,6 +14,9 @@ pub fn derive_kid(public_key: &[u8]) -> String {
 }
 
 /// Decode a base64url-encoded string to bytes
+///
+/// # Errors
+/// Returns `DecodeError` if the input is not valid base64url
 pub fn decode_base64url(encoded: &str) -> Result<Vec<u8>, base64::DecodeError> {
     URL_SAFE_NO_PAD.decode(encoded)
 }
