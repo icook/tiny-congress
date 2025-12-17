@@ -1,3 +1,29 @@
 #!/usr/bin/env sh
 
+# Lint staged frontend files
 cd web && npx lint-staged
+frontend_status=$?
+
+# Lint Rust files if any .rs files are staged
+cd ..
+if git diff --cached --name-only | grep -q '\.rs$'; then
+  echo "Running cargo fmt check..."
+  cd service && cargo fmt --all -- --check
+  fmt_status=$?
+
+  if [ $fmt_status -ne 0 ]; then
+    echo "Rust formatting check failed. Run 'cargo fmt' in service/ to fix."
+    exit 1
+  fi
+
+  echo "Running cargo clippy..."
+  cargo clippy --all-features -- -D warnings
+  clippy_status=$?
+
+  if [ $clippy_status -ne 0 ]; then
+    echo "Clippy check failed. Fix the warnings above."
+    exit 1
+  fi
+fi
+
+exit $frontend_status
