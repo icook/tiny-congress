@@ -21,7 +21,7 @@
           "System"
         ],
         "summary": "Get build information",
-        "description": "Returns metadata about the running service including version, git SHA, and build time.",
+        "description": "Returns metadata about the running service including version, git SHA, and build time.\n\n# Errors\n\nReturns `ProblemDetails` on internal server errors.",
         "operationId": "get_build_info",
         "responses": {
           "200": {

@@ -20,7 +20,7 @@ export type Scalars = {
   Float: { input: number; output: number };
 };
 
-/** Build metadata exposed via GraphQL and logs. */
+/** Build metadata exposed via GraphQL, REST, and logs. */
 export type BuildInfo = {
   buildTime: Scalars['String']['output'];
   gitSha: Scalars['String']['output'];

@@ -1,5 +1,5 @@
 """
-Build metadata exposed via GraphQL and logs.
+Build metadata exposed via GraphQL, REST, and logs.
 """
 type BuildInfo {
 	version: String!

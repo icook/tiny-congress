@@ -14,6 +14,10 @@ export interface paths {
     /**
      * Get build information
      * @description Returns metadata about the running service including version, git SHA, and build time.
+     *
+     *     # Errors
+     *
+     *     Returns `ProblemDetails` on internal server errors.
      */
     get: operations['get_build_info'];
     put?: never;
