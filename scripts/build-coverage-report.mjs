@@ -252,13 +252,13 @@ function main() {
     console.log('Vitest coverage not found, skipping...');
   }
 
-  // Playwright coverage - c8 generates HTML in various locations depending on version
+  // Playwright coverage (Monocart outputs directly to coverage/playwright)
   const playwrightDir = values.playwright;
-  // Check multiple possible HTML locations (c8 versions vary)
+  // Check multiple possible HTML locations for compatibility
   const possibleHtmlDirs = [
-    join(playwrightDir, 'lcov-report'),  // c8 v8+
-    join(playwrightDir, 'html'),          // some c8 versions
-    playwrightDir,                         // direct output
+    playwrightDir, // Monocart outputs here
+    join(playwrightDir, 'lcov-report'),
+    join(playwrightDir, 'html'),
   ];
 
   let playwrightHtmlDir = null;

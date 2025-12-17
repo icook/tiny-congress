@@ -7,6 +7,7 @@ const shouldStartWebServer = !truthy(process.env.PLAYWRIGHT_SKIP_WEB_SERVER) && 
 
 export default defineConfig({
   testDir: './tests/e2e',
+  globalTeardown: './tests/e2e/global-teardown.ts',
   timeout: 30_000,
   fullyParallel: true,
   retries: process.env.CI ? 1 : 0,
