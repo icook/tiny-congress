@@ -1,14 +1,18 @@
 use async_graphql::SimpleObject;
 use chrono::{DateTime, Utc};
+use serde::Serialize;
 use std::env;
+use utoipa::ToSchema;
 
-/// Build metadata exposed via GraphQL and logs.
-#[derive(Clone, Debug, PartialEq, Eq, SimpleObject)]
+/// Build metadata exposed via GraphQL, REST, and logs.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, SimpleObject, ToSchema)]
 #[graphql(rename_fields = "camelCase")]
+#[serde(rename_all = "camelCase")]
 pub struct BuildInfo {
     pub version: String,
     pub git_sha: String,
     pub build_time: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub message: Option<String>,
 }
 

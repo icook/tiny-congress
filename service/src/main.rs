@@ -31,8 +31,11 @@ use tinycongress_api::{
     db::setup_database,
     graphql::{graphql_handler, graphql_playground, MutationRoot, QueryRoot},
     identity::{self, repo::PgAccountRepo},
+    rest::{self, ApiDoc},
 };
 use tower_http::cors::{AllowOrigin, Any, CorsLayer};
+use utoipa::OpenApi;
+use utoipa_swagger_ui::SwaggerUi;
 
 // Health check handler
 async fn health_check() -> impl IntoResponse {
@@ -124,7 +127,7 @@ async fn main() -> Result<(), anyhow::Error> {
     // Create the GraphQL schema
     let schema = Schema::build(QueryRoot, MutationRoot, EmptySubscription)
         .data(pool.clone()) // Pass the database pool to the schema
-        .data(build_info)
+        .data(build_info.clone())
         .finish();
 
     // Create repositories
@@ -159,10 +162,17 @@ async fn main() -> Result<(), anyhow::Error> {
         None
     };
 
+    // REST API v1 routes
+    let rest_v1 = Router::new().route("/build-info", get(rest::get_build_info));
+
     // Build the API
     let mut app = Router::new()
         // GraphQL routes
         .route("/graphql", get(graphql_playground).post(graphql_handler))
+        // REST API v1
+        .nest("/api/v1", rest_v1)
+        // Swagger UI for REST API documentation
+        .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", ApiDoc::openapi()))
         // Identity routes
         .merge(identity::http::router())
         // Health check route
@@ -171,6 +181,7 @@ async fn main() -> Result<(), anyhow::Error> {
         .layer(Extension(schema))
         .layer(Extension(pool.clone()))
         .layer(Extension(account_repo))
+        .layer(Extension(build_info))
         .layer(
             CorsLayer::new()
                 .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
@@ -187,7 +198,12 @@ async fn main() -> Result<(), anyhow::Error> {
 
     // Start the server
     let addr = SocketAddr::from(([0, 0, 0, 0], config.server.port));
-    tracing::info!("Starting server at http://{}/graphql", addr);
+    tracing::info!(
+        graphql = %format!("http://{}/graphql", addr),
+        rest = %format!("http://{}/api/v1", addr),
+        swagger = %format!("http://{}/swagger-ui", addr),
+        "Starting server"
+    );
 
     let listener = tokio::net::TcpListener::bind(addr).await?;
     axum::serve(listener, app).await?;
