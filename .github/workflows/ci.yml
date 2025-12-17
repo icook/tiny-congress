@@ -321,6 +321,37 @@ jobs:
           echo "${{ matrix.image }}-tag=${{ steps.tags.outputs.sha_tag }}" >> "$GITHUB_OUTPUT"
 
   # ============================================================
+  # JOB 1b: Scan container images for vulnerabilities
+  # ============================================================
+  scan-images:
+    name: Scan ${{ matrix.image }}
+    runs-on: ubuntu-latest
+    needs: [build-images]
+    strategy:
+      fail-fast: false
+      matrix:
+        image:
+          - tc-api-release
+          - tc-ui-release
+          - postgres
+    steps:
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ matrix.image }}:${{ github.sha }}
+          format: 'table'
+          exit-code: '1'
+          ignore-unfixed: true
+          severity: 'CRITICAL,HIGH'
+
+  # ============================================================
   # JOB 2: Run Skaffold test/deploy and host-based integration/E2E tests
   # ============================================================
   integration-tests:
@@ -328,6 +359,7 @@ jobs:
     runs-on: ubuntu-latest
     needs:
       - build-images
+      - scan-images
       - lint
       - lint-web
       - codegen-check
