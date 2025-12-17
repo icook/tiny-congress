@@ -51,6 +51,40 @@ TC_CORS__ALLOWED_ORIGINS=https://app.example.com
 TC_CORS__ALLOWED_ORIGINS=*
 ```
 
+### Security Headers Configuration
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `TC_SECURITY_HEADERS__ENABLED` | No | `true` | Enable security headers |
+| `TC_SECURITY_HEADERS__HSTS_ENABLED` | No | `false` | Enable HSTS (use with HTTPS only) |
+| `TC_SECURITY_HEADERS__HSTS_MAX_AGE` | No | `31536000` | HSTS max-age in seconds (1 year) |
+| `TC_SECURITY_HEADERS__HSTS_INCLUDE_SUBDOMAINS` | No | `true` | Include subdomains in HSTS |
+| `TC_SECURITY_HEADERS__FRAME_OPTIONS` | No | `DENY` | X-Frame-Options (`DENY` or `SAMEORIGIN`) |
+| `TC_SECURITY_HEADERS__CONTENT_SECURITY_POLICY` | No | `default-src 'self'` | Content-Security-Policy header value |
+| `TC_SECURITY_HEADERS__REFERRER_POLICY` | No | `strict-origin-when-cross-origin` | Referrer-Policy header value |
+
+**Security note:** Security headers are enabled by default with safe values. HSTS is disabled by default since it requires HTTPS.
+
+Headers applied (when enabled):
+- `X-Content-Type-Options: nosniff`
+- `X-Frame-Options: DENY` (configurable)
+- `X-XSS-Protection: 1; mode=block`
+- `Content-Security-Policy: default-src 'self'` (configurable)
+- `Referrer-Policy: strict-origin-when-cross-origin` (configurable)
+- `Strict-Transport-Security` (only if `hsts_enabled: true`)
+
+Examples:
+```bash
+# Production with HSTS
+TC_SECURITY_HEADERS__HSTS_ENABLED=true
+
+# Allow iframes from same origin
+TC_SECURITY_HEADERS__FRAME_OPTIONS=SAMEORIGIN
+
+# Custom CSP for frontend compatibility
+TC_SECURITY_HEADERS__CONTENT_SECURITY_POLICY="default-src 'self'; script-src 'self' 'unsafe-inline'"
+```
+
 ### Build Info (unchanged)
 
 | Variable | Default | Description |

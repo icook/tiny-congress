@@ -28,3 +28,22 @@ cors:
   allowed_origins:
     - http://localhost:5173
     - http://127.0.0.1:5173
+
+# Security headers configuration
+# These headers provide defense-in-depth against common web vulnerabilities
+security_headers:
+  # Enable security headers (default: true)
+  enabled: true
+  # HSTS - only enable in production with HTTPS (default: false)
+  hsts_enabled: false
+  # HSTS max-age in seconds (default: 31536000 = 1 year)
+  hsts_max_age: 31536000
+  # Include subdomains in HSTS (default: true)
+  hsts_include_subdomains: true
+  # X-Frame-Options: DENY or SAMEORIGIN (default: DENY)
+  frame_options: DENY
+  # Content-Security-Policy (default: "default-src 'self'")
+  # For frontend compatibility, you may need to adjust this
+  content_security_policy: "default-src 'self'"
+  # Referrer-Policy (default: strict-origin-when-cross-origin)
+  referrer_policy: strict-origin-when-cross-origin
