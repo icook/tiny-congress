@@ -458,7 +458,7 @@ jobs:
 
       - name: Upload Vitest coverage
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: vitest-coverage
           path: web/coverage/vitest/
@@ -568,7 +568,7 @@ jobs:
 
       - name: Upload Playwright artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: playwright-artifacts
           if-no-files-found: warn
@@ -580,7 +580,7 @@ jobs:
 
       - name: Upload Rust coverage artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: rust-coverage
           if-no-files-found: warn
