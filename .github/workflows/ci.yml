@@ -143,7 +143,11 @@ jobs:
 
       - name: Check for unused dependencies
         working-directory: service
-        run: cargo machete
+        run: |
+          if ! cargo machete; then
+            echo "::error::Unused dependencies detected. Remove them or add to Cargo.toml [package.metadata.cargo-machete] ignored list."
+            exit 1
+          fi
 
       # Frontend: vulnerabilities via yarn audit
       - name: Set up Node
