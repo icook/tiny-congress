@@ -26,7 +26,9 @@ if (shouldCollectCoverage) {
               keyCount: cov ? Object.keys(cov).length : 0,
             };
           });
-          console.log(`[Coverage] Page ${index}: exists=${coverageInfo.exists}, type=${coverageInfo.type}, keys=${coverageInfo.keyCount}`);
+          console.log(
+            `[Coverage] Page ${index}: exists=${coverageInfo.exists}, type=${coverageInfo.type}, keys=${coverageInfo.keyCount}`
+          );
 
           const coverage = await page.evaluate(() => {
             const snapshot = (globalThis as any).__coverage__;
