@@ -18,8 +18,8 @@ import MCR from 'monocart-coverage-reports';
 
 // Icon thresholds (matches summarize-coverage.mjs)
 const getIcon = (pct) => {
-  if (pct >= 80) return { icon: '&#x1F7E2;', color: '#22c55e', label: 'good' };
-  if (pct >= 50) return { icon: '&#x1F7E1;', color: '#eab308', label: 'ok' };
+  if (pct >= 80) {return { icon: '&#x1F7E2;', color: '#22c55e', label: 'good' };}
+  if (pct >= 50) {return { icon: '&#x1F7E1;', color: '#eab308', label: 'ok' };}
   return { icon: '&#x1F534;', color: '#ef4444', label: 'low' };
 };
 
@@ -39,7 +39,7 @@ const { values } = parseArgs({
 // ============================================================================
 
 function parseVitestSummary(summaryPath) {
-  if (!existsSync(summaryPath)) return null;
+  if (!existsSync(summaryPath)) {return null;}
   try {
     const data = JSON.parse(readFileSync(summaryPath, 'utf8'));
     return data.total || null;
@@ -50,7 +50,7 @@ function parseVitestSummary(summaryPath) {
 
 function parsePlaywrightSummary(coverageDir) {
   const summaryPath = join(coverageDir, 'coverage-summary.json');
-  if (!existsSync(summaryPath)) return null;
+  if (!existsSync(summaryPath)) {return null;}
   try {
     const data = JSON.parse(readFileSync(summaryPath, 'utf8'));
     return data.total || null;
@@ -60,7 +60,7 @@ function parsePlaywrightSummary(coverageDir) {
 }
 
 function parseLcovSummary(lcovPath) {
-  if (!existsSync(lcovPath)) return null;
+  if (!existsSync(lcovPath)) {return null;}
   try {
     const content = readFileSync(lcovPath, 'utf8');
     let linesTotal = 0,
@@ -69,10 +69,10 @@ function parseLcovSummary(lcovPath) {
       funcsCovered = 0;
 
     for (const line of content.split('\n')) {
-      if (line.startsWith('LF:')) linesTotal += parseInt(line.substring(3), 10);
-      else if (line.startsWith('LH:')) linesCovered += parseInt(line.substring(3), 10);
-      else if (line.startsWith('FNF:')) funcsTotal += parseInt(line.substring(4), 10);
-      else if (line.startsWith('FNH:')) funcsCovered += parseInt(line.substring(4), 10);
+      if (line.startsWith('LF:')) {linesTotal += parseInt(line.substring(3), 10);}
+      else if (line.startsWith('LH:')) {linesCovered += parseInt(line.substring(3), 10);}
+      else if (line.startsWith('FNF:')) {funcsTotal += parseInt(line.substring(4), 10);}
+      else if (line.startsWith('FNH:')) {funcsCovered += parseInt(line.substring(4), 10);}
     }
 
     const linesPct = linesTotal > 0 ? (linesCovered / linesTotal) * 100 : 0;
@@ -93,9 +93,9 @@ function parseLcovSummary(lcovPath) {
 
 function generateIndexHtml(reports) {
   const getPct = (metric) => {
-    if (!metric) return 0;
-    if (typeof metric.pct === 'number') return metric.pct;
-    if (typeof metric === 'number') return metric;
+    if (!metric) {return 0;}
+    if (typeof metric.pct === 'number') {return metric.pct;}
+    if (typeof metric === 'number') {return metric;}
     return 0;
   };
 
@@ -116,7 +116,7 @@ function generateIndexHtml(reports) {
             <a href="${r.dir}/index.html">${r.icon} ${r.name}</a>
           </td>
           <td style="color: ${linesInfo.color}">${linesPct.toFixed(1)}%</td>
-          <td style="color: ${branchesInfo?.color || '#888'}">${branchesInfo ? branchesPct.toFixed(1) + '%' : 'N/A'}</td>
+          <td style="color: ${branchesInfo?.color || '#888'}">${branchesInfo ? `${branchesPct.toFixed(1)  }%` : 'N/A'}</td>
           <td style="color: ${funcsInfo.color}">${funcsPct.toFixed(1)}%</td>
           <td><a href="${r.dir}/index.html">View Report</a></td>
         </tr>`;
