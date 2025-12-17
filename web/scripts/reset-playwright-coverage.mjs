@@ -2,7 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 
 const targets = [
-  '.nyc_output',
+  '.playwright-coverage', // Raw V8 coverage data from monocart
   'coverage/playwright',
   'reports/playwright.xml',
   'playwright-report',
