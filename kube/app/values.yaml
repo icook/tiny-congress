@@ -120,3 +120,11 @@ postgres:
     repository: postgres
     tag: "17"
     pullPolicy: IfNotPresent
+
+# Cargo build cache for dev mode (hostPath volume)
+# Shares build cache with local dev via KinD extraMounts
+# Requires: kind create cluster --config kind-config.yaml
+cargoCache:
+  enabled: false
+  # Path inside KinD node (mapped from ./service/target via kind-config.yaml)
+  hostPath: /cargo-cache

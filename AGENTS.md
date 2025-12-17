@@ -61,6 +61,10 @@ Additional notes:
 - Frontend TypeScript relies on Prettier, ESLint, Stylelint; use PascalCase components, camelCase hooks, and co-locate styles.
 - Frontend styling follows Mantine-first approach per ADR-005 (`docs/decisions/005-mantine-first-styling.md`).
 
+## Design Principles
+- **Fail loud over silent incorrectness:** Never use default values that mask misconfiguration. Required values should fail fast with clear error messages, not silently fall back to potentially stale defaults. Example: `${VAR:?error message}` over `${VAR:-default}`.
+- **Single source of truth:** Configuration values (versions, ports, feature flags) should be defined in exactly one place. Other files should read from or reference that source, not duplicate the value.
+
 ## Testing Guidelines
 - Keep specs near code (`*_tests.rs`, `*.test.tsx`). Reuse fixtures before adding mocks.
 - Cover ranking, pairing, and voting flows when rules shift; add regression tests for reported bugs.

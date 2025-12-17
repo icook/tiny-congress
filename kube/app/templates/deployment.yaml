@@ -71,6 +71,18 @@ spec:
               port: http
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
+          {{- if .Values.cargoCache.enabled }}
+          volumeMounts:
+            - name: cargo-cache
+              mountPath: /usr/src/app/target
+          {{- end }}
+      {{- if .Values.cargoCache.enabled }}
+      volumes:
+        - name: cargo-cache
+          hostPath:
+            path: {{ .Values.cargoCache.hostPath | default "/tmp/tc-cargo-cache" }}
+            type: DirectoryOrCreate
+      {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

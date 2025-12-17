@@ -288,6 +288,13 @@ jobs:
           echo "sha_tag=${{ env.REGISTRY }}/${{ matrix.image }}:${{ github.sha }}" >> "$GITHUB_OUTPUT"
           echo "branch_tag=${{ env.REGISTRY }}/${{ matrix.image }}:branch-${branch}" >> "$GITHUB_OUTPUT"
 
+      - name: Extract Rust version from mise.toml
+        id: rust-version
+        if: matrix.image == 'tc-api-release'
+        run: |
+          RUST_VERSION=$(grep '^rust' mise.toml | sed 's/.*= *"\([^"]*\)".*/\1/')
+          echo "version=${RUST_VERSION}" >> "$GITHUB_OUTPUT"
+
       - name: Build and push ${{ matrix.image }}
         uses: docker/build-push-action@v6
         with:
@@ -297,6 +304,7 @@ jobs:
           platforms: linux/amd64
           build-args: |
             BUILDKIT_INLINE_CACHE=1
+            RUST_VERSION=${{ steps.rust-version.outputs.version }}
           tags: |
             ${{ steps.tags.outputs.sha_tag }}
             ${{ steps.tags.outputs.branch_tag }}

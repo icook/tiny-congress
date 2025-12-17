@@ -174,17 +174,62 @@ install-frontend:
 # Full-Stack Development (Requires Skaffold + Kubernetes Cluster)
 # =============================================================================
 
+# Check that local rustc version matches mise.toml (for shared cargo cache)
+check-rust-version:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    EXPECTED=$(grep 'rust' mise.toml | sed 's/.*"\(.*\)"/\1/')
+    # Use mise exec if available, otherwise fall back to direct rustc
+    if command -v mise &>/dev/null; then
+        ACTUAL=$(mise exec -- rustc --version | awk '{print $2}')
+    else
+        ACTUAL=$(rustc --version | awk '{print $2}')
+    fi
+    if [[ "$ACTUAL" != "$EXPECTED" ]]; then
+        echo "ERROR: rustc version mismatch!"
+        echo "  Expected: $EXPECTED (from mise.toml)"
+        echo "  Actual:   $ACTUAL"
+        echo ""
+        echo "Run: mise install"
+        echo "Or:  rustup install $EXPECTED && rustup default $EXPECTED"
+        exit 1
+    fi
+    echo "rustc version OK: $ACTUAL"
+
+# Create KinD cluster with shared cargo cache mount
+# Run this once before `just dev` for faster Rust rebuilds
+kind-create:
+    @echo "Creating KinD cluster with cargo cache mount..."
+    kind create cluster --config kind-config.yaml
+    @echo "Cluster ready. Run 'just dev' to start development."
+
+# Delete KinD cluster
+kind-delete:
+    kind delete cluster
+
+# Extract rust version from mise.toml (single source of truth)
+# Fail loud if mise.toml is missing or malformed
+rust-version := ```
+    VERSION=$(grep 'rust' mise.toml 2>/dev/null | sed 's/.*"\(.*\)"/\1/')
+    if [ -z "$VERSION" ]; then
+        echo "ERROR: Could not extract rust version from mise.toml" >&2
+        echo "Ensure mise.toml exists with: rust = \"X.Y.Z\"" >&2
+        exit 1
+    fi
+    echo "$VERSION"
+```
+
 # Start full development environment with Skaffold (hot reload, port forwarding)
-# Prerequisites: Docker, Skaffold, Kubernetes cluster (minikube/Docker Desktop)
-dev:
+# Prerequisites: Docker, Skaffold, KinD cluster (just kind-create)
+dev: check-rust-version
     @echo "Starting full-stack dev with Skaffold..."
-    @echo "Prerequisites: ensure your Kubernetes cluster is running (e.g., minikube start)"
-    skaffold dev -p dev --port-forward
+    @echo "Prerequisites: run 'just kind-create' first for KinD with shared cargo cache"
+    RUST_VERSION={{rust-version}} skaffold dev --port-forward --cleanup=false --skip-tests
 
 # Build all container images (for current profile)
 build-images:
     @echo "Building container images..."
-    skaffold build
+    RUST_VERSION={{rust-version}} skaffold build
 
 # Build images and output artifacts JSON (for reuse with test)
 build-images-artifacts:
