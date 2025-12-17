@@ -595,10 +595,9 @@ jobs:
           PREVIEW_PID=$!
           timeout 60 bash -c 'until curl -sf http://localhost:5173 >/dev/null; do sleep 1; done'
 
-          # Run tests
-          node ./scripts/reset-playwright-coverage.mjs
+          # Run tests - coverage report generated in Playwright global teardown
+          yarn playwright:clean
           yarn playwright:test || TEST_EXIT=$?
-          [ -d .nyc_output ] && yarn playwright:report || true
 
           # Cleanup
           kill $PREVIEW_PID $PF_API_PID 2>/dev/null || true
@@ -613,18 +612,17 @@ jobs:
           check_name: Playwright E2E
           comment_mode: off
 
-      - name: Upload Playwright artifacts
+      - name: Upload Playwright test artifacts
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: playwright-artifacts
+          name: playwright-test-results
           if-no-files-found: warn
           path: |
             web/test-results
             web/reports/playwright.xml
             web/reports/playwright-results.json
             web/playwright-report
-            web/coverage/playwright
 
       - name: Analyze Playwright flakiness
         if: always()
@@ -640,14 +638,31 @@ jobs:
           path: |
             service/coverage/backend-unit.lcov
 
-      - name: Summarize all coverage
+      - name: Summarize coverage to job summary
         if: always()
         run: |
           node scripts/summarize-coverage.mjs \
             --vitest web/coverage/vitest/coverage-summary.json \
-            --playwright web/.nyc_output \
+            --playwright web/coverage/playwright/coverage-summary.json \
             --rust "service/coverage/backend-unit.lcov:unit" \
             >> $GITHUB_STEP_SUMMARY
+
+      - name: Install lcov for HTML generation
+        if: always()
+        run: sudo apt-get update && sudo apt-get install -y lcov
+
+      - name: Build unified coverage report
+        if: always()
+        working-directory: web
+        run: node scripts/build-coverage-report.mjs
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: coverage-report
+          path: coverage-report/
+          retention-days: 7
 
       - name: Dump diagnostics on failure
         if: failure()
