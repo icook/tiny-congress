@@ -1,13 +1,10 @@
 import {
   IconCalendarStats,
   IconDeviceDesktopAnalytics,
-  IconFingerprint,
   IconGauge,
   IconHome2,
   IconInfoCircle,
   IconMessages,
-  IconSettings,
-  IconUser,
   IconUserPlus,
 } from '@tabler/icons-react';
 import { Link, useRouterState } from '@tanstack/react-router';
@@ -32,12 +29,6 @@ const navLinks = [
 ];
 
 const authLinks = [{ icon: IconUserPlus, label: 'Sign Up', path: '/signup' }];
-
-const userLinks = [
-  { icon: IconUser, label: 'Account', path: '/account' },
-  { icon: IconFingerprint, label: 'Security', path: '/security' },
-  { icon: IconSettings, label: 'Settings', path: '/settings' },
-];
 
 export function Navbar() {
   const currentPath = useRouterState({
