@@ -28,6 +28,13 @@ export const test = base.extend<{ coveragePage: void }>({
       if (shouldCollectCoverage) {
         const coverage = await page.coverage.stopJSCoverage();
 
+        // eslint-disable-next-line no-console
+        console.log(`[Coverage] Test "${testInfo.title}" collected ${coverage.length} scripts`);
+        if (coverage.length > 0) {
+          // eslint-disable-next-line no-console
+          console.log(`[Coverage] Scripts: ${coverage.map((c) => c.url).join(', ')}`);
+        }
+
         if (coverage.length > 0) {
           // Write raw V8 coverage data for this test
           // The global teardown will merge and generate the report
@@ -35,6 +42,8 @@ export const test = base.extend<{ coveragePage: void }>({
           const safeId = testInfo.testId.replace(/[^a-z0-9_-]/gi, '_');
           const filePath = path.join(rawCoverageDir, `${safeId}.json`);
           await fs.writeFile(filePath, JSON.stringify(coverage));
+          // eslint-disable-next-line no-console
+          console.log(`[Coverage] Wrote raw data to: ${filePath}`);
         }
       }
     },
@@ -61,19 +70,34 @@ export async function generateCoverageReport(): Promise<void> {
     name: 'Playwright E2E Coverage',
     outputDir: coverageDir,
     reports: ['lcov', 'html', 'json-summary', 'text-summary'],
+
+    // Filter coverage entries by URL before source map resolution
+    entryFilter: (entry) => {
+      // Only include scripts from our app (localhost), not external CDNs
+      return entry.url.includes('localhost') || entry.url.includes('127.0.0.1');
+    },
+
+    // Filter source files after source map resolution
     sourceFilter: (sourcePath: string) => {
-      // Only include app source files, not node_modules or external scripts
-      return sourcePath.includes('/src/') && !sourcePath.includes('node_modules');
+      // Exclude node_modules and only include project source files
+      if (sourcePath.includes('node_modules')) return false;
+      // Include src files (after source map resolution) or built assets
+      return sourcePath.includes('/src/') || sourcePath.includes('/assets/');
     },
   });
 
   // Read and add all raw coverage files
   const files = await fs.readdir(rawCoverageDir);
+  // eslint-disable-next-line no-console
+  console.log(`[Coverage] Found ${files.length} raw coverage files`);
+
   for (const file of files) {
     if (file.endsWith('.json')) {
       const filePath = path.join(rawCoverageDir, file);
       const content = await fs.readFile(filePath, 'utf-8');
       const coverage = JSON.parse(content);
+      // eslint-disable-next-line no-console
+      console.log(`[Coverage] Adding coverage from ${file} (${coverage.length} entries)`);
       await coverageReport.add(coverage);
     }
   }
