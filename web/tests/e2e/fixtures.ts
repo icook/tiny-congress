@@ -70,21 +70,22 @@ export async function generateCoverageReport(): Promise<void> {
     name: 'Playwright E2E Coverage',
     outputDir: coverageDir,
     reports: ['lcov', 'html', 'json-summary', 'text-summary'],
+    logging: 'debug',
 
     // Filter coverage entries by URL before source map resolution
     entryFilter: (entry) => {
-      // Only include scripts from our app (localhost), not external CDNs
-      return entry.url.includes('localhost') || entry.url.includes('127.0.0.1');
+      const isLocal = entry.url.includes('localhost') || entry.url.includes('127.0.0.1');
+      // eslint-disable-next-line no-console
+      console.log(`[Coverage] Entry filter: ${entry.url} -> ${isLocal}`);
+      return isLocal;
     },
 
     // Filter source files after source map resolution
     sourceFilter: (sourcePath: string) => {
-      // Exclude node_modules and only include project source files
-      if (sourcePath.includes('node_modules')) {
-        return false;
-      }
-      // Include src files (after source map resolution) or built assets
-      return sourcePath.includes('/src/') || sourcePath.includes('/assets/');
+      // eslint-disable-next-line no-console
+      console.log(`[Coverage] Source filter: ${sourcePath}`);
+      // Accept all sources for debugging
+      return true;
     },
   });
 
