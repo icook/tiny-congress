@@ -9,7 +9,9 @@ export default defineConfig({
   testDir: './tests/e2e',
   timeout: 30_000,
   fullyParallel: true,
-  retries: process.env.CI ? 1 : 0,
+  // Retry failed tests in CI to handle transient failures
+  // Tests that pass on retry are flagged as "flaky" in reports
+  retries: process.env.CI ? 2 : 0,
   reporter: [
     ['list'],
     [
@@ -20,6 +22,8 @@ export default defineConfig({
       },
     ],
     ['html', { outputFolder: 'playwright-report', open: 'never' }],
+    // JSON reporter for programmatic analysis and flakiness tracking
+    ['json', { outputFile: 'reports/playwright-results.json' }],
   ],
   use: {
     baseURL: process.env.PLAYWRIGHT_BASE_URL ?? 'http://127.0.0.1:4173',
