@@ -16,6 +16,8 @@ fi
 
 export RUST_LOG="${RUST_LOG:-info}"
 
+echo "=== Watching for file changes in: $APP_ROOT ==="
+
 # Watch core Rust sources and migrations, re-running the API binary on change
 exec cargo watch \
   --watch src \

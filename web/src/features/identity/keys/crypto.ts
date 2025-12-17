@@ -13,11 +13,10 @@ import type { KeyPair } from './types';
  * @returns KeyPair with public/private keys and derived KID
  */
 export function generateKeyPair(): KeyPair {
-  const privateKey = ed25519.utils.randomPrivateKey();
-  const publicKey = ed25519.getPublicKey(privateKey);
+  const { secretKey, publicKey } = ed25519.keygen();
   const kid = deriveKid(publicKey);
 
-  return { publicKey, privateKey, kid };
+  return { publicKey, privateKey: secretKey, kid };
 }
 
 /**

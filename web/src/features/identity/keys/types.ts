@@ -34,6 +34,10 @@ export interface KeyPair {
  * Signed envelope for cryptographic operations
  */
 export interface SignedEnvelope {
+  /** Envelope version */
+  v: number;
+  /** Type of payload (e.g., "DeviceDelegation") */
+  payload_type: string;
   /** Arbitrary JSON payload */
   payload: Record<string, unknown>;
   /** Signer metadata */
@@ -46,5 +50,5 @@ export interface SignedEnvelope {
     device_id?: string;
   };
   /** Ed25519 signature over canonical JSON, base64url encoded */
-  signature: string;
+  sig: string;
 }

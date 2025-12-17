@@ -41,24 +41,36 @@ export function Signup() {
       const deviceKeyPair = generateKeyPair();
 
       // Create delegation envelope (root delegates to device)
+      const accountId = crypto.randomUUID();
+      const deviceId = crypto.randomUUID();
+
       const delegationPayload = {
-        type: 'DeviceDelegation',
-        device_id: crypto.randomUUID(),
+        device_id: deviceId,
         device_pubkey: encodeBase64Url(deviceKeyPair.publicKey),
         permissions: ['*'], // Full permissions for first device
         created_at: new Date().toISOString(),
       };
 
-      const canonicalPayload = canonicalizeToBytes(delegationPayload);
-      const delegationSignature = sign(canonicalPayload, rootKeyPair.privateKey);
+      const signer = {
+        kid: rootKeyPair.kid,
+        account_id: accountId,
+      };
+
+      // Canonical signing bytes: payload_type + payload + signer
+      const signingTarget = {
+        payload_type: 'DeviceDelegation',
+        payload: delegationPayload,
+        signer,
+      };
+      const canonicalBytes = canonicalizeToBytes(signingTarget);
+      const delegationSignature = sign(canonicalBytes, rootKeyPair.privateKey);
 
       const delegationEnvelope = {
+        v: 1,
+        payload_type: 'DeviceDelegation',
         payload: delegationPayload,
-        signer: {
-          kid: rootKeyPair.kid,
-          account_id: crypto.randomUUID(),
-        },
-        signature: encodeBase64Url(delegationSignature),
+        signer,
+        sig: encodeBase64Url(delegationSignature),
       };
 
       // Call signup API
