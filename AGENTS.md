@@ -25,6 +25,7 @@ See [docs/README.md](docs/README.md) for the full index of playbooks, interfaces
 Key references:
 - `docs/playbooks/` - How-to guides (local-dev-setup, adding-migration, new-graphql-endpoint)
 - `docs/interfaces/` - Contracts and naming conventions
+- `docs/interfaces/ticket-management.md` - Labeling taxonomy for GitHub issues (follow when creating tickets)
 - `docs/decisions/` - ADRs explaining architectural choices
 - `docs/style/` - UI styling (Mantine-first per ADR-005)
 
