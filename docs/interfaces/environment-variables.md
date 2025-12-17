@@ -120,6 +120,8 @@ env:
     value: postgres://postgres:postgres@postgres:5432/tiny-congress
   - name: TC_SERVER__PORT
     value: "8080"
+  - name: TC_CORS__ALLOWED_ORIGINS
+    value: "https://app.example.com"
 ```
 
 For production, use Kubernetes secrets:
