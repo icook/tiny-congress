@@ -622,8 +622,14 @@ jobs:
           path: |
             web/test-results
             web/reports/playwright.xml
+            web/reports/playwright-results.json
             web/playwright-report
             web/coverage/playwright
+
+      - name: Analyze Playwright flakiness
+        if: always()
+        working-directory: web
+        run: node scripts/analyze-playwright-flakiness.mjs >> $GITHUB_STEP_SUMMARY
 
       - name: Upload Rust coverage artifacts
         if: always()

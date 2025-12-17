@@ -27,6 +27,7 @@ How-to guides for common development tasks:
 | [docker-layer-caching.md](playbooks/docker-layer-caching.md) | Optimizing Docker builds |
 | [dependency-update.md](playbooks/dependency-update.md) | Updating project dependencies |
 | [frontend-test-patterns.md](playbooks/frontend-test-patterns.md) | Writing frontend tests |
+| [fixing-flaky-tests.md](playbooks/fixing-flaky-tests.md) | Debugging intermittent test failures |
 | [graphql-codegen.md](playbooks/graphql-codegen.md) | Generating GraphQL types |
 | [pr-review-checklist.md](playbooks/pr-review-checklist.md) | Reviewing pull requests |
 | [skaffold-profiles.md](playbooks/skaffold-profiles.md) | Using Skaffold profiles |
