@@ -22,7 +22,13 @@
 //! # Database Test Usage
 //!
 //! Use `#[test]` (not `#[tokio::test]`) and wrap async code with `run_test`.
-//! For isolated DB mutations, prefer a rollback-only transaction helper:
+//!
+//! ## When to use each pattern:
+//!
+//! ### `test_transaction()` - 95% of DB tests (fast, simple)
+//! - Query logic, CRUD operations, business logic
+//! - Any test that doesn't need explicit transaction control
+//! - Fast (~1-5ms setup) because it reuses the shared database
 //!
 //! ```ignore
 //! use crate::common::test_db::{run_test, test_transaction};
@@ -32,6 +38,28 @@
 //!     run_test(async {
 //!         let mut tx = test_transaction().await;
 //!         sqlx::query("INSERT ...").execute(&mut *tx).await.unwrap();
+//!         // Transaction auto-rolls back on drop
+//!     });
+//! }
+//! ```
+//!
+//! ### `isolated_db()` - Specialized tests requiring full DB isolation
+//! - Migration testing (rollback, idempotency)
+//! - Concurrent transaction behavior (SELECT FOR UPDATE, isolation levels)
+//! - Transaction isolation levels (SERIALIZABLE)
+//! - Database-level features (LISTEN/NOTIFY, advisory locks)
+//! - Testing explicit BEGIN/COMMIT/ROLLBACK logic
+//! - Slower (~15-30ms setup) but provides complete isolation
+//!
+//! ```ignore
+//! use crate::common::test_db::{run_test, isolated_db};
+//!
+//! #[test]
+//! fn test_migration_idempotency() {
+//!     run_test(async {
+//!         let db = isolated_db().await;
+//!         // This database is fully isolated - run migrations, test transactions, etc.
+//!         // Database is automatically dropped when `db` goes out of scope
 //!     });
 //! }
 //! ```
@@ -131,6 +159,8 @@ pub mod test_db {
         pool: PgPool,
         _container: Arc<ContainerAsync<GenericImage>>,
         database_url: String,
+        /// Port for connecting to the container
+        port: u16,
     }
 
     impl TestDb {
@@ -141,6 +171,11 @@ pub mod test_db {
 
         pub fn database_url(&self) -> &str {
             &self.database_url
+        }
+
+        /// Get the port for the test container
+        pub fn port(&self) -> u16 {
+            self.port
         }
     }
 
@@ -193,15 +228,12 @@ pub mod test_db {
                 let database_url =
                     format!("postgres://postgres:postgres@127.0.0.1:{port}/tiny-congress");
 
-                // Connect to the database
-                let pool = PgPoolOptions::new()
-                    .max_connections(5)
-                    .acquire_timeout(Duration::from_secs(30))
-                    .connect(&database_url)
+                // Run migrations using a single connection (not a pool)
+                // so we can close it and create the template before opening the pool
+                let mut migration_conn = PgConnection::connect(&database_url)
                     .await
-                    .expect("Failed to connect to test database");
+                    .expect("Failed to connect to test database for migrations");
 
-                // Run migrations
                 let migrator = Migrator::new(Path::new(concat!(
                     env!("CARGO_MANIFEST_DIR"),
                     "/migrations"
@@ -209,7 +241,43 @@ pub mod test_db {
                 .await
                 .expect("Failed to load migrations");
 
-                migrator.run(&pool).await.expect("Failed to run migrations");
+                migrator
+                    .run(&mut migration_conn)
+                    .await
+                    .expect("Failed to run migrations");
+
+                // Close the migration connection so tiny-congress has no active sessions
+                drop(migration_conn);
+
+                // Create a template database for isolated_db() to use
+                // We do this while no connections exist to tiny-congress
+                let maintenance_url =
+                    format!("postgres://postgres:postgres@127.0.0.1:{port}/postgres");
+                let mut maint_conn = PgConnection::connect(&maintenance_url)
+                    .await
+                    .expect("Failed to connect to postgres database for template creation");
+
+                // Drop template if it exists (from previous test run)
+                sqlx::query("DROP DATABASE IF EXISTS \"tiny_congress_template\"")
+                    .execute(&mut maint_conn)
+                    .await
+                    .expect("Failed to drop old template");
+
+                // Create template database from tiny-congress
+                sqlx::query(
+                    "CREATE DATABASE \"tiny_congress_template\" TEMPLATE \"tiny-congress\"",
+                )
+                .execute(&mut maint_conn)
+                .await
+                .expect("Failed to create template database");
+
+                // Now create the pool for regular test usage
+                let pool = PgPoolOptions::new()
+                    .max_connections(5)
+                    .acquire_timeout(Duration::from_secs(30))
+                    .connect(&database_url)
+                    .await
+                    .expect("Failed to connect to test database");
 
                 // Verify pool is working
                 sqlx_core::query_scalar::query_scalar::<_, i32>("SELECT 1")
@@ -221,8 +289,139 @@ pub mod test_db {
                     pool,
                     _container: container,
                     database_url,
+                    port,
                 }
             })
             .await
+    }
+
+    /// RAII guard for an isolated test database created via PostgreSQL template copy.
+    ///
+    /// This creates a unique database by copying from the shared test DB (which has
+    /// migrations already applied). The database is automatically dropped when this
+    /// struct is dropped.
+    ///
+    /// Use this for tests that need:
+    /// - Full database isolation (not just transaction rollback)
+    /// - Testing explicit transaction control (BEGIN/COMMIT/ROLLBACK)
+    /// - Migration testing (rollback, idempotency)
+    /// - Concurrent transaction behavior (SELECT FOR UPDATE, isolation levels)
+    /// - Database-level features (LISTEN/NOTIFY, advisory locks)
+    pub struct IsolatedDb {
+        pool: PgPool,
+        database_name: String,
+        database_url: String,
+        /// Port of the shared test container (used for cleanup connection)
+        port: u16,
+    }
+
+    impl IsolatedDb {
+        /// Get the connection pool for this isolated database.
+        pub fn pool(&self) -> &PgPool {
+            &self.pool
+        }
+
+        /// Get the database URL for this isolated database.
+        pub fn database_url(&self) -> &str {
+            &self.database_url
+        }
+
+        /// Get the database name.
+        pub fn database_name(&self) -> &str {
+            &self.database_name
+        }
+    }
+
+    impl Drop for IsolatedDb {
+        fn drop(&mut self) {
+            let db_name = self.database_name.clone();
+            let port = self.port;
+
+            // Spawn cleanup on the shared runtime to ensure it completes
+            TEST_RUNTIME.spawn(async move {
+                // Connect to postgres (maintenance) database to perform cleanup
+                let maintenance_url =
+                    format!("postgres://postgres:postgres@127.0.0.1:{port}/postgres");
+
+                if let Ok(mut conn) = PgConnection::connect(&maintenance_url).await {
+                    // Terminate any remaining connections to the isolated database
+                    let _ = sqlx::query(&format!(
+                        "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '{db_name}'"
+                    ))
+                    .execute(&mut conn)
+                    .await;
+
+                    // Drop the database
+                    let _ = sqlx::query(&format!("DROP DATABASE IF EXISTS \"{db_name}\""))
+                        .execute(&mut conn)
+                        .await;
+                }
+            });
+        }
+    }
+
+    /// Create an isolated test database via PostgreSQL template copy.
+    ///
+    /// This is ~10x faster than re-running migrations for each test because
+    /// PostgreSQL performs a filesystem-level copy of the template database.
+    ///
+    /// # Performance
+    /// - Template copy: ~15-30ms (current schema)
+    /// - Migration re-run: ~100-300ms (current schema)
+    ///
+    /// # Example
+    /// ```ignore
+    /// use crate::common::test_db::{run_test, isolated_db};
+    ///
+    /// #[test]
+    /// fn test_migration_idempotency() {
+    ///     run_test(async {
+    ///         let db = isolated_db().await;
+    ///         // This database is fully isolated - run migrations, test transactions, etc.
+    ///     });
+    /// }
+    /// ```
+    #[allow(clippy::expect_used)]
+    pub async fn isolated_db() -> IsolatedDb {
+        // Ensure shared test DB is initialized (this runs migrations and creates template)
+        let test_db = get_test_db().await;
+        let port = test_db.port();
+
+        // Generate unique database name
+        let db_name = format!("test_isolated_{}", uuid::Uuid::new_v4().simple());
+
+        // Connect to postgres (maintenance) database to create the isolated DB
+        let maintenance_url = format!("postgres://postgres:postgres@127.0.0.1:{port}/postgres");
+        let mut maint_conn = PgConnection::connect(&maintenance_url)
+            .await
+            .expect("Failed to connect to postgres database");
+
+        // Create the isolated database using the template database
+        // We use tiny_congress_template which was created during get_test_db()
+        // and has no active connections (unlike the main tiny-congress database)
+        sqlx::query(&format!(
+            "CREATE DATABASE \"{db_name}\" TEMPLATE \"tiny_congress_template\""
+        ))
+        .execute(&mut maint_conn)
+        .await
+        .expect("Failed to create isolated database from template");
+
+        // Build connection string for the new database
+        let database_url = format!("postgres://postgres:postgres@127.0.0.1:{port}/{db_name}");
+
+        // Connect to the new isolated database
+        let pool = PgPoolOptions::new()
+            .max_connections(5)
+            .acquire_timeout(Duration::from_secs(30))
+            .connect(&database_url)
+            .await
+            .expect("Failed to connect to isolated database");
+
+        IsolatedDb {
+            pool,
+            database_name: db_name,
+            database_url,
+            port,
+        }
     }
 }
