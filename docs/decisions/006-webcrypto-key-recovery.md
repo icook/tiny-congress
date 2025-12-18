@@ -89,13 +89,20 @@ Concern: minimize subtle crypto implementation bugs and reduce key handling risk
 
 * **Server-side rate limiting:** Recovery endpoint (`GET /auth/backup/:kid`) rate-limited to 5 attempts per minute per IP. Failed decryption attempts (inferred from lack of subsequent authenticated request) may trigger progressive delays.
 
-* **Database schema extension:**
+* **Database schema:** Backups stored in separate `account_backups` table (not columns on `accounts`) for cleaner separation, no NULLs, and future extensibility (multiple backup methods, history).
   ```sql
-  ALTER TABLE accounts ADD COLUMN encrypted_backup BYTEA;
-  ALTER TABLE accounts ADD COLUMN backup_kdf_algorithm TEXT;  -- 'argon2id' or 'pbkdf2'
-  ALTER TABLE accounts ADD COLUMN backup_salt BYTEA;
-  ALTER TABLE accounts ADD COLUMN backup_version INTEGER DEFAULT 1;
-  ALTER TABLE accounts ADD COLUMN backup_created_at TIMESTAMPTZ;
+  CREATE TABLE account_backups (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    account_id UUID NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    kid TEXT NOT NULL,  -- denormalized for recovery lookup
+    encrypted_backup BYTEA NOT NULL,
+    salt BYTEA NOT NULL,
+    kdf_algorithm TEXT NOT NULL CHECK (kdf_algorithm IN ('argon2id', 'pbkdf2')),
+    version INTEGER NOT NULL DEFAULT 1,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (account_id),
+    UNIQUE (kid)
+  );
   ```
 
 ## Related decisions

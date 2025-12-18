@@ -68,26 +68,42 @@ wasm-bindgen = "0.2"
 
 ## Database Schema
 
-### Migration: `XX_account_backup.sql`
+### Migration: `XX_account_backups.sql`
+
+Backups use a separate table rather than columns on `accounts` for:
+- No NULLs on accounts table (backup is optional)
+- Clean domain separation
+- Future extensibility (multiple backup methods, history)
 
 ```sql
 -- Encrypted backup storage for root keys
--- Column names aligned with ADR-006
-ALTER TABLE accounts
-  ADD COLUMN encrypted_backup BYTEA,
-  ADD COLUMN backup_salt BYTEA,
-  ADD COLUMN backup_kdf_algorithm TEXT CHECK (backup_kdf_algorithm IN ('argon2id', 'pbkdf2')),
-  ADD COLUMN backup_version INTEGER DEFAULT 1,
-  ADD COLUMN backup_created_at TIMESTAMPTZ;
+CREATE TABLE account_backups (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  account_id UUID NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+  kid TEXT NOT NULL,  -- denormalized for recovery lookup without join
+  encrypted_backup BYTEA NOT NULL,
+  salt BYTEA NOT NULL,
+  kdf_algorithm TEXT NOT NULL CHECK (kdf_algorithm IN ('argon2id', 'pbkdf2')),
+  version INTEGER NOT NULL DEFAULT 1,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
 
--- Index for recovery lookups by KID
-CREATE INDEX idx_accounts_backup_kid ON accounts(root_kid) WHERE encrypted_backup IS NOT NULL;
+  CONSTRAINT uq_account_backups_account UNIQUE (account_id),
+  CONSTRAINT uq_account_backups_kid UNIQUE (kid)
+);
 
-COMMENT ON COLUMN accounts.encrypted_backup IS 'AES-256-GCM ciphertext (includes nonce + tag) of root private key';
-COMMENT ON COLUMN accounts.backup_kdf_algorithm IS 'KDF used: argon2id (preferred) or pbkdf2 (fallback)';
+-- Primary lookup path for recovery (by KID)
+CREATE INDEX idx_account_backups_kid ON account_backups(kid);
+
+COMMENT ON TABLE account_backups IS 'Password-encrypted root key backups for account recovery';
+COMMENT ON COLUMN account_backups.kid IS 'Key ID (denormalized from accounts.root_kid for join-free lookup)';
+COMMENT ON COLUMN account_backups.encrypted_backup IS 'Binary envelope: version + KDF params + nonce + AES-256-GCM ciphertext';
 ```
 
-**Note:** Nonce is stored within `encrypted_backup` blob per the binary envelope format (see Encrypted Backup Format section). KDF params are implicit per algorithm (Argon2id: m=19456, t=2, p=1; PBKDF2: 600k iterations).
+**Notes:**
+- `kid` is denormalized to avoid joining `accounts` on every recovery lookup
+- `ON DELETE CASCADE` ensures backup is removed when account is deleted
+- `UNIQUE (account_id)` enforces 1:1 for MVP; can be relaxed for multiple backup methods later
+- Nonce and KDF params are embedded in `encrypted_backup` blob (see Encrypted Backup Format)
 
 ---
 
@@ -101,14 +117,11 @@ Create or update encrypted backup.
 ```json
 {
   "kid": "base64url-kid",
-  "encrypted_backup": "base64url-envelope",
-  "salt": "base64url-salt",
-  "kdf_algorithm": "argon2id",
-  "version": 1
+  "encrypted_backup": "base64url-envelope"
 }
 ```
 
-**Note:** `encrypted_backup` contains the full binary envelope (version + KDF ID + params + nonce + ciphertext). KDF params are implicit per algorithm.
+**Note:** `encrypted_backup` contains the full binary envelope. The server parses this envelope to extract and index the `salt`, `kdf_algorithm`, and `version` fields.
 
 **Response:** `201 Created` or `200 OK` (update)
 ```json
@@ -136,7 +149,7 @@ Retrieve encrypted backup for recovery.
 
 **Response:** `404 Not Found` if no backup exists.
 
-**Rate Limiting:** 5 requests/minute/IP. Returns `429 Too Many Requests` with `Retry-After` header.
+**Rate Limiting:** 5 requests/minute/IP. Returns `429 Too Many Requests` with `Retry-After` header. Failed decryption attempts (inferred from lack of subsequent authenticated signatures) trigger progressive delays to prevent brute-forcing.
 
 ### DELETE `/api/auth/backup/:kid`
 
@@ -379,9 +392,15 @@ export class WasmFallbackSigner implements Signer {
   ) {}
 
   async sign(message: Uint8Array): Promise<Uint8Array> {
-    // Uses Rust/WASM module for ZIP215 compliance (ADR-007)
-    const { sign_ed25519 } = await import('@tinycongress/crypto-wasm');
-    return sign_ed25519(message, this.privateKey);
+    try {
+      // Uses Rust/WASM module for ZIP215 compliance (ADR-007)
+      const { sign_ed25519 } = await import('@tinycongress/crypto-wasm');
+      return sign_ed25519(message, this.privateKey);
+    } finally {
+      // Best-effort: strictly explicit zeroization is hard in JS, 
+      // but we should ensure the reference is cleared if this signer is short-lived.
+      // Note: The privateKey buffer in this class persists as long as the signer instance.
+    }
   }
 
   async getPublicKey(): Promise<Uint8Array> {
@@ -498,8 +517,9 @@ export default {
 4. Create cross-environment test vectors (generate from Rust, validate in WASM)
 
 **Deliverables:**
-- Migration `XX_account_backup.sql`
+- Migration `XX_account_backups.sql` (new table)
 - `POST/GET/DELETE /api/auth/backup/:kid` endpoints
+- Repository layer for `account_backups` table
 - Test vectors in `service/tests/crypto_vectors.rs`
 
 ### Phase 2: WASM Canonicalization
