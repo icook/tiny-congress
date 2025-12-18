@@ -1,1 +1,0 @@
-genhtml /home/runner/work/tiny-congress/tiny-congress/service/coverage/backend-unit.lcov --output-directory /home/runner/work/tiny-congress/tiny-congress/coverage-report/rust --dark-mode --title 'Rust Backend Coverage'
