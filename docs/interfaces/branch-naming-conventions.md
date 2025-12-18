@@ -339,7 +339,8 @@ Before pushing a branch, verify:
 
 ## Related Documentation
 
-- `AGENTS.md` - Repository guidelines and workflows
-- `docs/decisions/004-explicit-git-push-branches.md` - Explicit push requirements
-- `docs/interfaces/naming-conventions.md` - General naming conventions
-- `docs/playbooks/` - Development workflows
+- `CLAUDE.md` - Repository guidelines and workflows
+- `pr-naming-conventions.md` - PR titles and commit messages
+- `naming-conventions.md` - General naming conventions
+- `../decisions/004-explicit-git-push-branches.md` - Explicit push requirements
+- `../playbooks/` - Development workflows

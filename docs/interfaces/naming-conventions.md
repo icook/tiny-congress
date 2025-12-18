@@ -59,9 +59,12 @@
 | Type | Convention | Example |
 |------|------------|---------|
 | Branch | `type/issue-slug` | `feature/123-add-voting` |
-| Commit | Imperative, concise | `Add vote counting endpoint` |
+| Commit | Conventional Commits | `feat(voting): add counting endpoint (#123)` |
+| PR title | Conventional Commits | `feat(voting): add counting endpoint (#123)` |
 
-For comprehensive branch naming rules, see `branch-naming-conventions.md`.
+For comprehensive rules, see:
+- `branch-naming-conventions.md` - Branch naming
+- `pr-naming-conventions.md` - PR titles and commit messages
 
 ## Anti-patterns
 

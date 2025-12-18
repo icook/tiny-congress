@@ -42,6 +42,7 @@ Contracts and standards for consistency:
 | [directory-conventions.md](interfaces/directory-conventions.md) | Where code lives |
 | [naming-conventions.md](interfaces/naming-conventions.md) | How to name things |
 | [branch-naming-conventions.md](interfaces/branch-naming-conventions.md) | Git branch naming standards |
+| [pr-naming-conventions.md](interfaces/pr-naming-conventions.md) | PR titles and commit messages |
 | [api-contracts.md](interfaces/api-contracts.md) | API design patterns |
 | [error-handling.md](interfaces/error-handling.md) | Error handling overview and standard codes |
 | [error-handling-backend.md](interfaces/error-handling-backend.md) | Rust error types, HTTP/GraphQL responses |
