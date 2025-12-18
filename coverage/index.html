@@ -69,6 +69,15 @@
     .good { color: #22c55e; }
     .ok { color: #eab308; }
     .low { color: #ef4444; }
+    h2 {
+      font-size: 1.25rem;
+      margin-top: 2rem;
+      margin-bottom: 1rem;
+      color: var(--text);
+    }
+    .schemas-table {
+      margin-bottom: 1.5rem;
+    }
   </style>
 </head>
 <body>
@@ -109,6 +118,33 @@
         </tr>
       </tbody>
     </table>
+
+    
+    <h2>API Schemas</h2>
+    <table class="schemas-table">
+      <thead>
+        <tr>
+          <th>Schema</th>
+          <th>Description</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        
+        <tr>
+          <td>&#x1F4DC; GraphQL Schema</td>
+          <td>GraphQL SDL schema definition</td>
+          <td><a href="schemas/graphql-viewer.html">Browse</a> | <a href="schemas/schema.graphql" target="_blank">Raw</a> | <a href="schemas/schema.graphql" download>Download</a></td>
+        </tr>
+
+        <tr>
+          <td>&#x1F4CB; OpenAPI Spec</td>
+          <td>REST API specification (OpenAPI 3.0)</td>
+          <td><a href="schemas/swagger-ui.html">Browse</a> | <a href="schemas/openapi.json" target="_blank">Raw</a> | <a href="schemas/openapi.json" download>Download</a></td>
+        </tr>
+      </tbody>
+    </table>
+  
 
     <div class="legend">
       <span class="good">&#x2022; &ge;80% Good</span>
