@@ -20,6 +20,10 @@ pub struct Config {
     pub cors: CorsConfig,
     #[serde(default)]
     pub security_headers: SecurityHeadersConfig,
+    #[serde(default)]
+    pub graphql: GraphQLConfig,
+    #[serde(default)]
+    pub swagger: SwaggerConfig,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -177,6 +181,24 @@ impl Default for SecurityHeadersConfig {
     }
 }
 
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+pub struct GraphQLConfig {
+    /// Enable GraphQL Playground UI at /graphql (GET).
+    /// Default: false (disabled for security - exposes schema to potential attackers).
+    /// Enable in development via `TC_GRAPHQL__PLAYGROUND_ENABLED=true`
+    #[serde(default)]
+    pub playground_enabled: bool,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+pub struct SwaggerConfig {
+    /// Enable Swagger UI at /swagger-ui.
+    /// Default: false (disabled for security - exposes API documentation).
+    /// Enable in development via `TC_SWAGGER__ENABLED=true`
+    #[serde(default)]
+    pub enabled: bool,
+}
+
 impl Default for Config {
     fn default() -> Self {
         Self {
@@ -194,6 +216,8 @@ impl Default for Config {
             },
             cors: CorsConfig::default(),
             security_headers: SecurityHeadersConfig::default(),
+            graphql: GraphQLConfig::default(),
+            swagger: SwaggerConfig::default(),
         }
     }
 }
@@ -414,5 +438,31 @@ mod tests {
         let json = r#"{"allowed_origins": ""}"#;
         let config: CorsConfig = serde_json::from_str(json).expect("should parse");
         assert!(config.allowed_origins.is_empty());
+    }
+
+    #[test]
+    fn test_graphql_playground_disabled_by_default() {
+        let config = GraphQLConfig::default();
+        assert!(!config.playground_enabled);
+    }
+
+    #[test]
+    fn test_graphql_playground_can_be_enabled() {
+        let json = r#"{"playground_enabled": true}"#;
+        let config: GraphQLConfig = serde_json::from_str(json).expect("should parse");
+        assert!(config.playground_enabled);
+    }
+
+    #[test]
+    fn test_swagger_disabled_by_default() {
+        let config = SwaggerConfig::default();
+        assert!(!config.enabled);
+    }
+
+    #[test]
+    fn test_swagger_can_be_enabled() {
+        let json = r#"{"enabled": true}"#;
+        let config: SwaggerConfig = serde_json::from_str(json).expect("should parse");
+        assert!(config.enabled);
     }
 }

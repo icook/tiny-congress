@@ -85,6 +85,34 @@ TC_SECURITY_HEADERS__FRAME_OPTIONS=SAMEORIGIN
 TC_SECURITY_HEADERS__CONTENT_SECURITY_POLICY="default-src 'self'; script-src 'self' 'unsafe-inline'"
 ```
 
+### GraphQL Configuration
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `TC_GRAPHQL__PLAYGROUND_ENABLED` | No | `false` | Enable GraphQL Playground UI at `/graphql` (GET) |
+
+**Security note:** GraphQL Playground is disabled by default for security. It exposes the full API schema and provides an interactive interface that could help attackers. Enable only in development environments.
+
+Examples:
+```bash
+# Enable for local development
+TC_GRAPHQL__PLAYGROUND_ENABLED=true
+```
+
+### Swagger UI Configuration
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `TC_SWAGGER__ENABLED` | No | `false` | Enable Swagger UI at `/swagger-ui` |
+
+**Security note:** Swagger UI is disabled by default for security. It exposes REST API documentation. Enable only in development environments.
+
+Examples:
+```bash
+# Enable for local development
+TC_SWAGGER__ENABLED=true
+```
+
 ### Build Info (unchanged)
 
 | Variable | Default | Description |

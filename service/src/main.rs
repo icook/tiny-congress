@@ -107,12 +107,21 @@ async fn main() -> Result<(), anyhow::Error> {
 
     // Build the API
     let mut app = Router::new()
-        // GraphQL routes
-        .route("/graphql", get(graphql_playground).post(graphql_handler))
+        // GraphQL endpoint - POST always enabled, GET (playground) is conditional
+        .route("/graphql", {
+            let route = axum::routing::post(graphql_handler);
+            if config.graphql.playground_enabled {
+                tracing::info!("GraphQL Playground enabled at /graphql");
+                route.get(graphql_playground)
+            } else {
+                tracing::info!(
+                    "GraphQL Playground disabled (enable via TC_GRAPHQL__PLAYGROUND_ENABLED=true)"
+                );
+                route
+            }
+        })
         // REST API v1
         .nest("/api/v1", rest_v1)
-        // Swagger UI for REST API documentation
-        .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", ApiDoc::openapi()))
         // Identity routes
         .merge(identity::http::router())
         // Health check route
@@ -136,12 +145,20 @@ async fn main() -> Result<(), anyhow::Error> {
             .layer(Extension(headers));
     }
 
+    // Add Swagger UI if enabled (disabled by default for security)
+    if config.swagger.enabled {
+        tracing::info!("Swagger UI enabled at /swagger-ui");
+        app = app
+            .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", ApiDoc::openapi()));
+    } else {
+        tracing::info!("Swagger UI disabled (enable via TC_SWAGGER__ENABLED=true)");
+    }
+
     // Start the server
     let addr = SocketAddr::from(([0, 0, 0, 0], config.server.port));
     tracing::info!(
         graphql = %format!("http://{}/graphql", addr),
         rest = %format!("http://{}/api/v1", addr),
-        swagger = %format!("http://{}/swagger-ui", addr),
         "Starting server"
     );
 

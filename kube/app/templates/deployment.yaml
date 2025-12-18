@@ -49,6 +49,10 @@ spec:
               value: "8080"
             - name: TC_CORS__ALLOWED_ORIGINS
               value: {{ .Values.cors.allowedOrigins | default "http://localhost:5173,http://127.0.0.1:5173" | quote }}
+            - name: TC_GRAPHQL__PLAYGROUND_ENABLED
+              value: {{ .Values.graphql.playgroundEnabled | default false | quote }}
+            - name: TC_SWAGGER__ENABLED
+              value: {{ .Values.swagger.enabled | default false | quote }}
             - name: APP_VERSION
               value: {{ default .Values.image.tag .Values.buildInfo.appVersion | quote }}
             - name: GIT_SHA
