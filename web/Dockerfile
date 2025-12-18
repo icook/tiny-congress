@@ -1,19 +1,23 @@
-# WASM build stage
+# Version args - sourced from mise.toml via CI
 ARG RUST_VERSION=1.91.0
+ARG NODE_VERSION=22
+
+# WASM build stage
 FROM rust:${RUST_VERSION}-slim AS wasm-builder
 WORKDIR /build
 
 # Install wasm-pack
 RUN cargo install wasm-pack
 
-# Copy only what's needed for WASM build
+# Copy workspace root and tc-crypto crate
+COPY Cargo.toml ./
 COPY crates/tc-crypto ./crates/tc-crypto
 
 # Build WASM
 RUN cd crates/tc-crypto && wasm-pack build --target web --release --out-dir /wasm-out
 
-# Node build stage - use fixed version matching web/.nvmrc
-FROM node:22-slim AS builder
+# Node build stage
+FROM node:${NODE_VERSION}-slim AS builder
 WORKDIR /app
 
 # Install dependencies

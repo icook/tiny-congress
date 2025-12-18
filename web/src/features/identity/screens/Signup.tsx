@@ -8,7 +8,7 @@ import { IconAlertTriangle, IconCheck } from '@tabler/icons-react';
 import { Alert, Button, Card, Code, Group, Stack, Text, TextInput, Title } from '@mantine/core';
 import { useCryptoRequired } from '@/providers/CryptoProvider';
 import { useSignup } from '../api/queries';
-import { encodeBase64Url, generateKeyPair } from '../keys';
+import { generateKeyPair } from '../keys';
 
 export function Signup() {
   const crypto = useCryptoRequired();
@@ -37,7 +37,7 @@ export function Signup() {
       // Call signup API
       const response = await signup.mutateAsync({
         username: username.trim(),
-        root_pubkey: encodeBase64Url(crypto, keyPair.publicKey),
+        root_pubkey: crypto.encode_base64url(keyPair.publicKey),
       });
 
       setCreatedAccount(response);
