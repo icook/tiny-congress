@@ -14,7 +14,7 @@ Shared testing utilities for the TinyCongress frontend.
 Import the custom `render` function instead of `@testing-library/react`:
 
 ```tsx
-import { render } from '../../test-utils';
+import { render } from '@test-utils';
 import { MyComponent } from './MyComponent';
 
 test('renders correctly', () => {
@@ -30,6 +30,8 @@ The custom render wraps components with:
 - `MantineProvider` - Theme context matching the app's Mantine theme
 
 This ensures components render in the same context as the real app.
+
+`render` also accepts standard Testing Library render options (including `wrapper`) when needed.
 
 ## Adding Utilities
 
