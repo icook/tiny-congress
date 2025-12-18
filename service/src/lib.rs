@@ -11,5 +11,6 @@ pub mod build_info;
 pub mod config;
 pub mod db;
 pub mod graphql;
+pub mod http;
 pub mod identity;
 pub mod rest;

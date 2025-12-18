@@ -11,25 +11,19 @@ use std::sync::Arc;
 
 use async_graphql::{EmptySubscription, Schema};
 use axum::{
-    extract::Request,
-    http::{
-        header::{
-            HeaderName, HeaderValue, CONTENT_SECURITY_POLICY, REFERRER_POLICY,
-            STRICT_TRANSPORT_SECURITY, X_CONTENT_TYPE_OPTIONS, X_FRAME_OPTIONS, X_XSS_PROTECTION,
-        },
-        Method, StatusCode,
-    },
-    middleware::{self, Next},
-    response::{IntoResponse, Response},
+    http::{header::HeaderValue, Method, StatusCode},
+    middleware,
+    response::IntoResponse,
     routing::get,
     Extension, Router,
 };
 use std::net::SocketAddr;
 use tinycongress_api::{
     build_info::BuildInfoProvider,
-    config::{Config, SecurityHeadersConfig},
+    config::Config,
     db::setup_database,
     graphql::{graphql_handler, graphql_playground, MutationRoot, QueryRoot},
+    http::{build_security_headers, security_headers_middleware},
     identity::{self, repo::PgAccountRepo},
     rest::{self, ApiDoc},
 };
@@ -40,60 +34,6 @@ use utoipa_swagger_ui::SwaggerUi;
 // Health check handler
 async fn health_check() -> impl IntoResponse {
     StatusCode::OK
-}
-
-/// Build security headers from configuration.
-fn build_security_headers(config: &SecurityHeadersConfig) -> Arc<Vec<(HeaderName, HeaderValue)>> {
-    let mut headers = Vec::new();
-
-    // X-Content-Type-Options: nosniff (always)
-    headers.push((X_CONTENT_TYPE_OPTIONS, HeaderValue::from_static("nosniff")));
-
-    // X-Frame-Options
-    if let Ok(value) = HeaderValue::from_str(&config.frame_options) {
-        headers.push((X_FRAME_OPTIONS, value));
-    }
-
-    // X-XSS-Protection (legacy but still useful for older browsers)
-    headers.push((X_XSS_PROTECTION, HeaderValue::from_static("1; mode=block")));
-
-    // Content-Security-Policy
-    if let Ok(value) = HeaderValue::from_str(&config.content_security_policy) {
-        headers.push((CONTENT_SECURITY_POLICY, value));
-    }
-
-    // Referrer-Policy
-    if let Ok(value) = HeaderValue::from_str(&config.referrer_policy) {
-        headers.push((REFERRER_POLICY, value));
-    }
-
-    // HSTS (only if enabled - should only be used with HTTPS)
-    if config.hsts_enabled {
-        let hsts_value = if config.hsts_include_subdomains {
-            format!("max-age={}; includeSubDomains", config.hsts_max_age)
-        } else {
-            format!("max-age={}", config.hsts_max_age)
-        };
-        if let Ok(value) = HeaderValue::from_str(&hsts_value) {
-            headers.push((STRICT_TRANSPORT_SECURITY, value));
-        }
-    }
-
-    Arc::new(headers)
-}
-
-/// Middleware to add security headers to all responses.
-async fn security_headers_middleware(
-    Extension(headers): Extension<Arc<Vec<(HeaderName, HeaderValue)>>>,
-    request: Request,
-    next: Next,
-) -> Response {
-    let mut response = next.run(request).await;
-    let response_headers = response.headers_mut();
-    for (name, value) in headers.iter() {
-        response_headers.insert(name.clone(), value.clone());
-    }
-    response
 }
 
 #[tokio::main]

@@ -725,3 +725,136 @@ async fn test_full_app_has_cors() {
         Some(&HeaderValue::from_static("http://localhost:3000"))
     );
 }
+
+/// Comprehensive production-like integration test.
+///
+/// This test verifies the full application stack works correctly with all
+/// features enabled, similar to how the production server runs. It checks:
+/// - All routes are accessible (health, GraphQL, REST, identity, swagger)
+/// - Security headers are applied correctly
+/// - CORS is properly configured
+/// - GraphQL queries execute successfully
+/// - REST endpoints return valid responses
+#[tokio::test]
+async fn test_production_like_full_stack() {
+    let app = TestAppBuilder::with_mocks().build();
+
+    // 1. Health check endpoint works
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/health")
+                .body(Body::empty())
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+    assert_eq!(response.status(), StatusCode::OK);
+    // Verify security headers on health response
+    assert_eq!(
+        response.headers().get(X_CONTENT_TYPE_OPTIONS),
+        Some(&HeaderValue::from_static("nosniff"))
+    );
+    assert_eq!(
+        response.headers().get(X_FRAME_OPTIONS),
+        Some(&HeaderValue::from_static("DENY"))
+    );
+    assert_eq!(
+        response.headers().get(X_XSS_PROTECTION),
+        Some(&HeaderValue::from_static("1; mode=block"))
+    );
+    assert_eq!(
+        response.headers().get(CONTENT_SECURITY_POLICY),
+        Some(&HeaderValue::from_static("default-src 'self'"))
+    );
+
+    // 2. GraphQL query executes correctly
+    let query = r#"{"query": "{ buildInfo { version gitSha buildTime } }"}"#;
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/graphql")
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(query))
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = to_bytes(response.into_body(), 1024 * 1024)
+        .await
+        .expect("body");
+    let body_str = String::from_utf8(body.to_vec()).expect("utf8");
+    assert!(body_str.contains("buildInfo"));
+    assert!(!body_str.contains("errors"));
+
+    // 3. REST API returns valid JSON
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/build-info")
+                .body(Body::empty())
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = to_bytes(response.into_body(), 1024 * 1024)
+        .await
+        .expect("body");
+    let body_str = String::from_utf8(body.to_vec()).expect("utf8");
+    assert!(body_str.contains("version"));
+    assert!(body_str.contains("gitSha"));
+
+    // 4. Identity signup works with mocks
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/auth/signup")
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    r#"{"username": "prodtest", "root_pubkey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"}"#,
+                ))
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+    assert_eq!(response.status(), StatusCode::CREATED);
+
+    // 5. Swagger UI is accessible
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/swagger-ui/")
+                .body(Body::empty())
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+    assert_eq!(response.status(), StatusCode::OK);
+
+    // 6. CORS preflight works for configured origin
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method(Method::OPTIONS)
+                .uri("/graphql")
+                .header(ORIGIN, "http://localhost:3000")
+                .header("Access-Control-Request-Method", "POST")
+                .body(Body::empty())
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+    assert_eq!(
+        response.headers().get(ACCESS_CONTROL_ALLOW_ORIGIN),
+        Some(&HeaderValue::from_static("http://localhost:3000"))
+    );
+}
