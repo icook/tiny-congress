@@ -146,16 +146,16 @@ codegen-frontend: codegen-graphql
 # Frontend (React/TypeScript) Commands
 # =============================================================================
 
-# Run frontend unit tests (if they exist)
-test-frontend:
+# Run frontend unit tests (requires WASM artifacts)
+test-frontend: build-wasm-dev
     cd web && yarn vitest
 
-# Run frontend unit tests in watch mode (if they exist)
-test-frontend-watch:
+# Run frontend unit tests in watch mode (requires WASM artifacts)
+test-frontend-watch: build-wasm-dev
     cd web && yarn vitest:watch
 
 # Run full frontend test suite (typecheck + lint + vitest + build) - includes E2E via CI
-test-frontend-full:
+test-frontend-full: build-wasm-dev
     cd web && yarn test
 
 # Run frontend E2E tests with Playwright (requires running backend/frontend)
@@ -331,7 +331,7 @@ test: test-backend test-wasm test-frontend
     @echo "✓ Unit tests passed"
 
 # Run frontend unit tests with coverage
-test-frontend-cov:
+test-frontend-cov: build-wasm-dev
     cd web && yarn vitest:coverage
 
 # Run all unit tests with coverage
