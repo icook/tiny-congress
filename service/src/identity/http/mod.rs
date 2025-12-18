@@ -19,14 +19,14 @@ pub struct SignupRequest {
 }
 
 /// Signup response
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct SignupResponse {
     pub account_id: Uuid,
     pub root_kid: String,
 }
 
 /// Error response
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct ErrorResponse {
     pub error: String,
 }
@@ -131,9 +131,11 @@ mod tests {
     use super::*;
     use crate::identity::repo::mock::MockAccountRepo;
     use axum::{
-        body::Body,
+        body::{to_bytes, Body},
         http::{Request, StatusCode},
     };
+    use sqlx::Error as SqlxError;
+    use tc_crypto::{derive_kid, encode_base64url};
     use tower::ServiceExt;
 
     fn test_router(repo: Arc<dyn AccountRepo>) -> Router {
@@ -142,10 +144,19 @@ mod tests {
             .layer(Extension(repo))
     }
 
+    fn encoded_pubkey(byte: u8) -> (String, String) {
+        let pubkey_bytes = [byte; 32];
+        let encoded = encode_base64url(&pubkey_bytes);
+        let kid = derive_kid(&pubkey_bytes);
+        (encoded, kid)
+    }
+
     #[tokio::test]
     async fn test_signup_success() {
         let mock_repo = Arc::new(MockAccountRepo::new());
-        let app = test_router(mock_repo);
+        let app = test_router(mock_repo.clone());
+
+        let (root_pubkey, expected_kid) = encoded_pubkey(1);
 
         let response = app
             .oneshot(
@@ -153,15 +164,28 @@ mod tests {
                     .method("POST")
                     .uri("/auth/signup")
                     .header("content-type", "application/json")
-                    .body(Body::from(
-                        r#"{"username": "alice", "root_pubkey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"}"#,
-                    ))
+                    .body(Body::from(format!(
+                        r#"{{"username": "alice", "root_pubkey": "{root_pubkey}"}}"#
+                    )))
                     .expect("request builder"),
             )
             .await
             .expect("response");
 
-        assert_eq!(response.status(), StatusCode::CREATED);
+        let (parts, body) = response.into_parts();
+        assert_eq!(parts.status, StatusCode::CREATED);
+
+        let body_bytes = to_bytes(body, 1024 * 1024).await.expect("body bytes");
+        let payload: SignupResponse = serde_json::from_slice(&body_bytes).expect("json payload");
+
+        assert_eq!(payload.root_kid, expected_kid);
+
+        let calls = mock_repo.calls();
+        assert_eq!(calls.len(), 1);
+        let (username, captured_pubkey, captured_kid) = &calls[0];
+        assert_eq!(username, "alice");
+        assert_eq!(captured_pubkey, &root_pubkey);
+        assert_eq!(captured_kid, &expected_kid);
     }
 
     #[tokio::test]
@@ -169,15 +193,17 @@ mod tests {
         let mock_repo = Arc::new(MockAccountRepo::new());
         let app = test_router(mock_repo);
 
+        let (root_pubkey, _) = encoded_pubkey(2);
+
         let response = app
             .oneshot(
                 Request::builder()
                     .method("POST")
                     .uri("/auth/signup")
                     .header("content-type", "application/json")
-                    .body(Body::from(
-                        r#"{"username": "", "root_pubkey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"}"#,
-                    ))
+                    .body(Body::from(format!(
+                        r#"{{"username": "", "root_pubkey": "{root_pubkey}"}}"#
+                    )))
                     .expect("request builder"),
             )
             .await
@@ -187,9 +213,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_signup_duplicate_username() {
+    async fn test_signup_invalid_base64_pubkey() {
         let mock_repo = Arc::new(MockAccountRepo::new());
-        mock_repo.set_create_result(Err(AccountRepoError::DuplicateUsername));
         let app = test_router(mock_repo);
 
         let response = app
@@ -199,13 +224,132 @@ mod tests {
                     .uri("/auth/signup")
                     .header("content-type", "application/json")
                     .body(Body::from(
-                        r#"{"username": "alice", "root_pubkey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"}"#,
+                        r#"{"username": "alice", "root_pubkey": "!!!not-base64!!!"}"#,
                     ))
                     .expect("request builder"),
             )
             .await
             .expect("response");
 
+        let (parts, body) = response.into_parts();
+        assert_eq!(parts.status, StatusCode::BAD_REQUEST);
+        let body_bytes = to_bytes(body, 1024 * 1024).await.expect("body bytes");
+        let payload: ErrorResponse = serde_json::from_slice(&body_bytes).expect("json payload");
+        assert!(payload
+            .error
+            .contains("Invalid base64url encoding for root_pubkey"));
+    }
+
+    #[tokio::test]
+    async fn test_signup_pubkey_wrong_length() {
+        let mock_repo = Arc::new(MockAccountRepo::new());
+        let app = test_router(mock_repo);
+
+        // Valid base64 but only encodes 4 bytes.
+        let short_pubkey = encode_base64url(&[9u8; 4]);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/auth/signup")
+                    .header("content-type", "application/json")
+                    .body(Body::from(format!(
+                        r#"{{"username": "alice", "root_pubkey": "{short_pubkey}"}}"#
+                    )))
+                    .expect("request builder"),
+            )
+            .await
+            .expect("response");
+
+        let (parts, body) = response.into_parts();
+        assert_eq!(parts.status, StatusCode::BAD_REQUEST);
+        let body_bytes = to_bytes(body, 1024 * 1024).await.expect("body bytes");
+        let payload: ErrorResponse = serde_json::from_slice(&body_bytes).expect("json payload");
+        assert!(payload
+            .error
+            .contains("root_pubkey must be 32 bytes (Ed25519)"));
+    }
+
+    #[tokio::test]
+    async fn test_signup_duplicate_username() {
+        let mock_repo = Arc::new(MockAccountRepo::new());
+        mock_repo.set_create_result(Err(AccountRepoError::DuplicateUsername));
+        let app = test_router(mock_repo);
+
+        let (root_pubkey, _) = encoded_pubkey(3);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/auth/signup")
+                    .header("content-type", "application/json")
+                    .body(Body::from(format!(
+                        r#"{{"username": "alice", "root_pubkey": "{root_pubkey}"}}"#
+                    )))
+                    .expect("request builder"),
+            )
+            .await
+            .expect("response");
+
         assert_eq!(response.status(), StatusCode::CONFLICT);
+    }
+
+    #[tokio::test]
+    async fn test_signup_duplicate_key() {
+        let mock_repo = Arc::new(MockAccountRepo::new());
+        mock_repo.set_create_result(Err(AccountRepoError::DuplicateKey));
+        let app = test_router(mock_repo);
+
+        let (root_pubkey, _) = encoded_pubkey(4);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/auth/signup")
+                    .header("content-type", "application/json")
+                    .body(Body::from(format!(
+                        r#"{{"username": "alice", "root_pubkey": "{root_pubkey}"}}"#
+                    )))
+                    .expect("request builder"),
+            )
+            .await
+            .expect("response");
+
+        assert_eq!(response.status(), StatusCode::CONFLICT);
+    }
+
+    #[tokio::test]
+    async fn test_signup_database_error_returns_500() {
+        let mock_repo = Arc::new(MockAccountRepo::new());
+        mock_repo.set_create_result(Err(AccountRepoError::Database(SqlxError::Io(
+            std::io::Error::new(std::io::ErrorKind::Other, "boom"),
+        ))));
+        let app = test_router(mock_repo);
+
+        let (root_pubkey, _) = encoded_pubkey(5);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/auth/signup")
+                    .header("content-type", "application/json")
+                    .body(Body::from(format!(
+                        r#"{{"username": "alice", "root_pubkey": "{root_pubkey}"}}"#
+                    )))
+                    .expect("request builder"),
+            )
+            .await
+            .expect("response");
+
+        let (parts, body) = response.into_parts();
+        assert_eq!(parts.status, StatusCode::INTERNAL_SERVER_ERROR);
+
+        let body_bytes = to_bytes(body, 1024 * 1024).await.expect("body bytes");
+        let payload: ErrorResponse = serde_json::from_slice(&body_bytes).expect("json payload");
+        assert!(payload.error.contains("Internal server error"));
     }
 }

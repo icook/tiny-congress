@@ -24,17 +24,25 @@ describe('ErrorFallback', () => {
 
   it('reloads page when reload button is clicked', () => {
     const reloadSpy = vi.fn();
+    const originalLocation = window.location;
     Object.defineProperty(window, 'location', {
-      value: { reload: reloadSpy },
+      value: { ...originalLocation, reload: reloadSpy },
       writable: true,
     });
 
-    render(<ErrorFallback />);
+    try {
+      render(<ErrorFallback />);
 
-    const reloadButton = screen.getByRole('button', { name: /reload page/i });
-    reloadButton.click();
+      const reloadButton = screen.getByRole('button', { name: /reload page/i });
+      reloadButton.click();
 
-    expect(reloadSpy).toHaveBeenCalled();
+      expect(reloadSpy).toHaveBeenCalled();
+    } finally {
+      Object.defineProperty(window, 'location', {
+        value: originalLocation,
+        writable: true,
+      });
+    }
   });
 
   it('does not display error details in production', () => {
