@@ -544,6 +544,14 @@ jobs:
           set -euo pipefail
           skaffold test -p ${SKAFFOLD_PROFILE} --build-artifacts "${{ steps.artifacts.outputs.file }}"
 
+      - name: Generate Rust coverage
+        env:
+          TEST_POSTGRES_IMAGE: ${{ env.REGISTRY }}/postgres:${{ github.sha }}
+        working-directory: service
+        run: |
+          set -euo pipefail
+          cargo llvm-cov --lcov --output-path coverage/backend-unit.lcov
+
       - name: Upload Vitest coverage
         if: always()
         uses: actions/upload-artifact@v6
