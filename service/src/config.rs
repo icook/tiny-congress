@@ -18,6 +18,8 @@ pub struct Config {
     pub logging: LoggingConfig,
     #[serde(default)]
     pub cors: CorsConfig,
+    #[serde(default)]
+    pub security_headers: SecurityHeadersConfig,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -108,6 +110,73 @@ impl Default for CorsConfig {
     }
 }
 
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct SecurityHeadersConfig {
+    /// Enable security headers (default: true).
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+
+    /// Enable HSTS header (default: false, enable in production with HTTPS).
+    #[serde(default)]
+    pub hsts_enabled: bool,
+
+    /// HSTS max-age in seconds (default: 31536000 = 1 year).
+    #[serde(default = "default_hsts_max_age")]
+    pub hsts_max_age: u64,
+
+    /// Include subdomains in HSTS (default: true).
+    #[serde(default = "default_true")]
+    pub hsts_include_subdomains: bool,
+
+    /// X-Frame-Options value: "DENY" or "SAMEORIGIN" (default: "DENY").
+    #[serde(default = "default_frame_options")]
+    pub frame_options: String,
+
+    /// Content-Security-Policy header value (default: "default-src 'self'").
+    #[serde(default = "default_csp")]
+    pub content_security_policy: String,
+
+    /// Referrer-Policy header value (default: "strict-origin-when-cross-origin").
+    #[serde(default = "default_referrer_policy")]
+    pub referrer_policy: String,
+}
+
+#[allow(clippy::missing_const_for_fn)]
+fn default_true() -> bool {
+    true
+}
+
+#[allow(clippy::missing_const_for_fn)]
+fn default_hsts_max_age() -> u64 {
+    31_536_000 // 1 year
+}
+
+fn default_frame_options() -> String {
+    "DENY".to_string()
+}
+
+fn default_csp() -> String {
+    "default-src 'self'".to_string()
+}
+
+fn default_referrer_policy() -> String {
+    "strict-origin-when-cross-origin".to_string()
+}
+
+impl Default for SecurityHeadersConfig {
+    fn default() -> Self {
+        Self {
+            enabled: default_true(),
+            hsts_enabled: false,
+            hsts_max_age: default_hsts_max_age(),
+            hsts_include_subdomains: default_true(),
+            frame_options: default_frame_options(),
+            content_security_policy: default_csp(),
+            referrer_policy: default_referrer_policy(),
+        }
+    }
+}
+
 impl Default for Config {
     fn default() -> Self {
         Self {
@@ -124,6 +193,7 @@ impl Default for Config {
                 level: default_log_level(),
             },
             cors: CorsConfig::default(),
+            security_headers: SecurityHeadersConfig::default(),
         }
     }
 }
@@ -220,6 +290,15 @@ impl Config {
                     "cors.allowed_origins contains invalid origin '{origin}'. Must be '*' or start with http:// or https://"
                 )));
             }
+        }
+
+        // X-Frame-Options must be DENY or SAMEORIGIN
+        let frame_opts = self.security_headers.frame_options.to_uppercase();
+        if frame_opts != "DENY" && frame_opts != "SAMEORIGIN" {
+            return Err(ConfigError::Validation(format!(
+                "security_headers.frame_options must be 'DENY' or 'SAMEORIGIN', got: '{}'",
+                self.security_headers.frame_options
+            )));
         }
 
         Ok(())
