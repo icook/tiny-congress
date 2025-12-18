@@ -6,10 +6,12 @@
 import { useState } from 'react';
 import { IconAlertTriangle, IconCheck } from '@tabler/icons-react';
 import { Alert, Button, Card, Code, Group, Stack, Text, TextInput, Title } from '@mantine/core';
+import { useCryptoRequired } from '@/providers/CryptoProvider';
 import { useSignup } from '../api/queries';
-import { encodeBase64Url, generateKeyPair } from '../keys';
+import { generateKeyPair } from '../keys';
 
 export function Signup() {
+  const crypto = useCryptoRequired();
   const signup = useSignup();
 
   const [username, setUsername] = useState('');
@@ -29,13 +31,13 @@ export function Signup() {
     setIsGeneratingKeys(true);
 
     try {
-      // Generate key pair
-      const keyPair = generateKeyPair();
+      // Generate key pair (uses WASM for KID derivation)
+      const keyPair = generateKeyPair(crypto);
 
       // Call signup API
       const response = await signup.mutateAsync({
         username: username.trim(),
-        root_pubkey: encodeBase64Url(keyPair.publicKey),
+        root_pubkey: crypto.encode_base64url(keyPair.publicKey),
       });
 
       setCreatedAccount(response);

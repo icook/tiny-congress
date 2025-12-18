@@ -8,8 +8,8 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use super::crypto::{decode_base64url, derive_kid};
 use super::repo::{AccountRepo, AccountRepoError};
+use tc_crypto::{decode_base64url_native as decode_base64url, derive_kid};
 
 /// Signup request payload
 #[derive(Debug, Deserialize)]

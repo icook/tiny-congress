@@ -123,13 +123,13 @@ profiles:
     build:
       artifacts:
         - image: tc-api-release
-          context: ./service/
+          context: .
           docker:
-            dockerfile: Dockerfile
+            dockerfile: service/Dockerfile
         - image: tc-ui-release
-          context: ./web/
+          context: .
           docker:
-            dockerfile: Dockerfile
+            dockerfile: web/Dockerfile
   - name: ci
     build:
       local:
@@ -138,11 +138,12 @@ profiles:
         - "linux/amd64"
       artifacts:
         - image: tc-api-release
-          context: ./service/
+          context: .
           docker:
-            dockerfile: Dockerfile
+            dockerfile: service/Dockerfile
             buildArgs:
               BUILDKIT_INLINE_CACHE: "1"
+              RUST_VERSION: "{{.RUST_VERSION}}"
             cacheFrom:
               - "tc-api-release:cache-main"
               - "tc-api-release:cache"
@@ -156,11 +157,12 @@ profiles:
               - "postgres:cache-main"
               - "postgres:cache"
         - image: tc-ui-release
-          context: ./web/
+          context: .
           docker:
-            dockerfile: Dockerfile
+            dockerfile: web/Dockerfile
             buildArgs:
               BUILDKIT_INLINE_CACHE: "1"
+              RUST_VERSION: "{{.RUST_VERSION}}"
             cacheFrom:
               - "tc-ui-release:cache-main"
               - "tc-ui-release:cache"

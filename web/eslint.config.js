@@ -30,6 +30,7 @@ export default tseslint.config(
       '.yarn/**',
       'node_modules/**',
       'src/api/generated/**', // Generated code from graphql-codegen
+      'src/wasm/**', // Generated code from wasm-pack
       'codegen.ts', // GraphQL codegen config
     ],
   },

@@ -1,8 +1,8 @@
 [package]
 name = "tinycongress-api"
 version = "0.1.0"
-edition = "2021"
-license = "MIT"
+edition.workspace = true
+license.workspace = true
 
 [features]
 default = []
@@ -45,8 +45,7 @@ anyhow = "1.0"
 serde-aux = "4.7.0"
 
 # Cryptography
-sha2 = "0.10"
-base64 = "0.22"
+tc-crypto = { path = "../crates/tc-crypto", version = "0.1.0" }
 
 [dev-dependencies]
 hyper = "1.6"
@@ -70,19 +69,4 @@ path = "src/bin/export_openapi.rs"
 ignored = ["serde", "thiserror", "async-trait", "utoipa"]
 
 [lints]
-[lints.clippy]
-pedantic = { level = "warn", priority = -1 }
-nursery = { level = "warn", priority = -1 }
-missing_errors_doc = "warn"
-missing_panics_doc = "warn"
-# Stricter error handling
-unwrap_used = "warn"
-expect_used = "warn"
-# No debug/panic in production code
-dbg_macro = "warn"
-todo = "warn"
-unimplemented = "warn"
-# Allowed
-module_name_repetitions = "allow"
-missing_docs_in_private_items = "allow"
-similar_names = "allow"
+workspace = true

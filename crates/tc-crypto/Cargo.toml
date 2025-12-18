@@ -1,0 +1,29 @@
+[package]
+name = "tc-crypto"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Shared cryptographic utilities for TinyCongress"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+# WASM bindings
+wasm-bindgen = "0.2"
+
+# Cryptography
+sha2 = "0.10"
+base64 = "0.22"
+
+# Error handling
+thiserror = "2"
+
+[dev-dependencies]
+wasm-bindgen-test = "0.3"
+
+[lints]
+workspace = true
+
+[package.metadata.cargo-machete]
+ignored = ["thiserror"]

@@ -2024,7 +2024,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@noble/hashes@npm:2.0.1, @noble/hashes@npm:^2.0.1":
+"@noble/hashes@npm:2.0.1":
   version: 2.0.1
   resolution: "@noble/hashes@npm:2.0.1"
   checksum: 10c0/e81769ce21c3b1c80141a3b99bd001f17edea09879aa936692ae39525477386d696101cd573928a304806efb2b9fa751e1dd83241c67d0c84d30091e85c79bdb
@@ -7115,7 +7115,6 @@ __metadata:
     "@mantine/hooks": "npm:^8.3.10"
     "@mantine/notifications": "npm:^8.3.10"
     "@noble/curves": "npm:^2.0.1"
-    "@noble/hashes": "npm:^2.0.1"
     "@playwright/test": "npm:^1.57.0"
     "@storybook/react": "npm:^10.1.7"
     "@storybook/react-vite": "npm:^10.1.7"
