@@ -43,7 +43,9 @@ Contracts and standards for consistency:
 | [naming-conventions.md](interfaces/naming-conventions.md) | How to name things |
 | [branch-naming-conventions.md](interfaces/branch-naming-conventions.md) | Git branch naming standards |
 | [api-contracts.md](interfaces/api-contracts.md) | API design patterns |
-| [error-handling.md](interfaces/error-handling.md) | Error handling patterns (frontend + backend) |
+| [error-handling.md](interfaces/error-handling.md) | Error handling overview and standard codes |
+| [error-handling-backend.md](interfaces/error-handling-backend.md) | Rust error types, HTTP/GraphQL responses |
+| [error-handling-frontend.md](interfaces/error-handling-frontend.md) | React error boundaries, network errors |
 | [rust-coding-standards.md](interfaces/rust-coding-standards.md) | Rust style guide |
 | [react-coding-standards.md](interfaces/react-coding-standards.md) | React/TypeScript patterns |
 | [signed-envelope-spec.md](interfaces/signed-envelope-spec.md) | Cryptographic envelope format |

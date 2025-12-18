@@ -25,11 +25,17 @@ just build-test-postgres
 
 ## Service Dockerfiles
 
-The main application Dockerfiles live in `service/`:
+The main API Dockerfiles live in `service/`:
 - `service/Dockerfile` - Production API image
 - `service/Dockerfile.dev` - Development API image with hot reload
 
 These use cargo-chef for optimized layer caching. See [ADR-001](../docs/decisions/001-cargo-chef-docker-builds.md).
+
+## UI Dockerfiles
+
+The web client Dockerfiles live in `web/`:
+- `web/Dockerfile` - Production UI image (Nginx-served static build)
+- `web/Dockerfile.dev` - Development UI image with Vite hot reload
 
 ## Related
 
