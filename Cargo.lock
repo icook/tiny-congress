@@ -2968,6 +2968,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "tc-test-macros"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "tempfile"
 version = "3.23.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3110,6 +3119,7 @@ dependencies = [
  "sqlx-core",
  "sqlx-postgres",
  "tc-crypto",
+ "tc-test-macros",
  "testcontainers",
  "thiserror 2.0.17",
  "tinycongress-api",
