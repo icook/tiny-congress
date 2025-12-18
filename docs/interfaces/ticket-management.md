@@ -41,6 +41,11 @@ How urgent is this?
 | `priority/medium` | `#fbca04` | Important but not blocking | Address within 2-3 sprints |
 | `priority/low` | `#0e8a16` | Nice to have, minor impact | Backlog, address opportunistically |
 
+### Milestones (Required)
+
+Every issue must be assigned to a milestone. Pick the best-fitting open milestone;
+if none apply, create a new milestone before triage is complete.
+
 ### Area Labels (Scope)
 
 What part of the system does this affect?
@@ -194,6 +199,7 @@ Use checkboxes for testable criteria:
    - Add `area/` label
    - Add `priority/` label if determinable
    - Add `effort/` label if estimable
+   - Assign a milestone
    - Request clarification with `needs-info` if unclear
    - Close with `duplicate` or `wontfix` if applicable
 3. Assign or queue the issue for follow-up if it is ready for work.
@@ -205,6 +211,7 @@ Use checkboxes for testable criteria:
 - [ ] `type/` label applied
 - [ ] `area/` label applied
 - [ ] `priority/` assessed (or marked for backlog review)
+- [ ] Milestone assigned
 - [ ] Not a duplicate of existing issue
 - [ ] If bug: reproduction steps present
 - [ ] If feature: acceptance criteria defined
@@ -315,7 +322,9 @@ echo "Labels created successfully"
 ```markdown
 **Title:** [Area] Clear imperative description
 
-**Labels:** type/*, priority/* (if known)
+**Labels:** type/*, area/*, priority/* (if known)
+
+**Milestone:** assigned in GitHub
 
 **Body:**
 ## Context
