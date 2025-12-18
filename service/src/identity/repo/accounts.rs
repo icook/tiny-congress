@@ -62,42 +62,73 @@ impl AccountRepo for PgAccountRepo {
         root_pubkey: &str,
         root_kid: &str,
     ) -> Result<CreatedAccount, AccountRepoError> {
-        let id = Uuid::new_v4();
+        create_account(&self.pool, username, root_pubkey, root_kid).await
+    }
+}
 
-        let result = sqlx::query(
-            r"
-            INSERT INTO accounts (id, username, root_pubkey, root_kid)
-            VALUES ($1, $2, $3, $4)
-            ",
-        )
-        .bind(id)
-        .bind(username)
-        .bind(root_pubkey)
-        .bind(root_kid)
-        .execute(&self.pool)
-        .await;
+/// Shared implementation for account creation that works with any executor.
+/// This allows tests to use transactions for isolation.
+async fn create_account<'e, E>(
+    executor: E,
+    username: &str,
+    root_pubkey: &str,
+    root_kid: &str,
+) -> Result<CreatedAccount, AccountRepoError>
+where
+    E: sqlx::Executor<'e, Database = sqlx::Postgres>,
+{
+    let id = Uuid::new_v4();
 
-        match result {
-            Ok(_) => Ok(CreatedAccount {
-                id,
-                root_kid: root_kid.to_string(),
-            }),
-            Err(e) => {
-                if let sqlx::Error::Database(db_err) = &e {
-                    if let Some(constraint) = db_err.constraint() {
-                        match constraint {
-                            "accounts_username_key" => {
-                                return Err(AccountRepoError::DuplicateUsername)
-                            }
-                            "accounts_root_kid_key" => return Err(AccountRepoError::DuplicateKey),
-                            _ => {}
-                        }
+    let result = sqlx::query(
+        r"
+        INSERT INTO accounts (id, username, root_pubkey, root_kid)
+        VALUES ($1, $2, $3, $4)
+        ",
+    )
+    .bind(id)
+    .bind(username)
+    .bind(root_pubkey)
+    .bind(root_kid)
+    .execute(executor)
+    .await;
+
+    match result {
+        Ok(_) => Ok(CreatedAccount {
+            id,
+            root_kid: root_kid.to_string(),
+        }),
+        Err(e) => {
+            if let sqlx::Error::Database(db_err) = &e {
+                if let Some(constraint) = db_err.constraint() {
+                    match constraint {
+                        "accounts_username_key" => return Err(AccountRepoError::DuplicateUsername),
+                        "accounts_root_kid_key" => return Err(AccountRepoError::DuplicateKey),
+                        _ => {}
                     }
                 }
-                Err(AccountRepoError::Database(e))
             }
+            Err(AccountRepoError::Database(e))
         }
     }
+}
+
+/// Create an account using any executor (pool, connection, or transaction).
+/// Useful for tests that need transaction isolation.
+///
+/// # Errors
+///
+/// Returns `AccountRepoError::DuplicateUsername` if username is taken.
+/// Returns `AccountRepoError::DuplicateKey` if public key is already registered.
+pub async fn create_account_with_executor<'e, E>(
+    executor: E,
+    username: &str,
+    root_pubkey: &str,
+    root_kid: &str,
+) -> Result<CreatedAccount, AccountRepoError>
+where
+    E: sqlx::Executor<'e, Database = sqlx::Postgres>,
+{
+    create_account(executor, username, root_pubkey, root_kid).await
 }
 
 #[cfg(any(test, feature = "test-utils"))]
@@ -112,6 +143,8 @@ pub mod mock {
     pub struct MockAccountRepo {
         /// Preset result to return from `create()`.
         pub create_result: Mutex<Option<Result<CreatedAccount, AccountRepoError>>>,
+        /// Captured calls for verification
+        pub calls: Mutex<Vec<(String, String, String)>>,
     }
 
     impl MockAccountRepo {
@@ -120,6 +153,7 @@ pub mod mock {
         pub const fn new() -> Self {
             Self {
                 create_result: Mutex::new(None),
+                calls: Mutex::new(Vec::new()),
             }
         }
 
@@ -130,6 +164,15 @@ pub mod mock {
         /// Panics if the internal mutex is poisoned.
         pub fn set_create_result(&self, result: Result<CreatedAccount, AccountRepoError>) {
             *self.create_result.lock().expect("lock poisoned") = Some(result);
+        }
+
+        /// Retrieve all recorded calls
+        ///
+        /// # Panics
+        ///
+        /// Panics if the internal mutex is poisoned.
+        pub fn calls(&self) -> Vec<(String, String, String)> {
+            self.calls.lock().expect("lock poisoned").clone()
         }
     }
 
@@ -143,10 +186,15 @@ pub mod mock {
     impl AccountRepo for MockAccountRepo {
         async fn create(
             &self,
-            _username: &str,
-            _root_pubkey: &str,
+            username: &str,
+            root_pubkey: &str,
             root_kid: &str,
         ) -> Result<CreatedAccount, AccountRepoError> {
+            self.calls.lock().expect("lock poisoned").push((
+                username.to_string(),
+                root_pubkey.to_string(),
+                root_kid.to_string(),
+            ));
             self.create_result
                 .lock()
                 .expect("lock poisoned")

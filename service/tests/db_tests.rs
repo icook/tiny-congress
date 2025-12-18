@@ -9,8 +9,17 @@ use common::test_db::{get_test_db, isolated_db, test_transaction};
 use sqlx::{query, query_scalar};
 use sqlx_core::migrate::Migrator;
 use std::path::Path;
+use tc_crypto::{derive_kid, encode_base64url};
 use tc_test_macros::shared_runtime_test;
+use tinycongress_api::identity::repo::{create_account_with_executor, AccountRepoError};
 use uuid::Uuid;
+
+fn test_keys(seed: u8) -> (String, String) {
+    let pubkey = [seed; 32];
+    let root_pubkey = encode_base64url(&pubkey);
+    let root_kid = derive_kid(&pubkey);
+    (root_pubkey, root_kid)
+}
 
 /// Test that we can connect to the database and run queries.
 #[shared_runtime_test]
@@ -71,6 +80,61 @@ async fn test_crud_operations() {
         .expect("Failed to count items");
 
     assert_eq!(count, 1, "Should find the inserted item");
+}
+
+/// Test that accounts table exists and create_account_with_executor works.
+#[shared_runtime_test]
+async fn test_accounts_repo_inserts_account() {
+    let mut tx = test_transaction().await;
+    let (root_pubkey, root_kid) = test_keys(42);
+
+    let account = create_account_with_executor(&mut *tx, "alice", &root_pubkey, &root_kid)
+        .await
+        .expect("expected account to insert");
+
+    let username: String = query_scalar("SELECT username FROM accounts WHERE id = $1")
+        .bind(account.id)
+        .fetch_one(&mut *tx)
+        .await
+        .expect("should fetch inserted row");
+
+    assert_eq!(username, "alice");
+    assert_eq!(account.root_kid, root_kid);
+}
+
+/// Test unique constraints: duplicate username should be rejected.
+#[shared_runtime_test]
+async fn test_accounts_repo_rejects_duplicate_username() {
+    let mut tx = test_transaction().await;
+
+    let (root_pubkey, root_kid) = test_keys(1);
+    create_account_with_executor(&mut *tx, "alice", &root_pubkey, &root_kid)
+        .await
+        .expect("first insert should succeed");
+
+    let (second_pubkey, second_kid) = test_keys(2);
+    let err = create_account_with_executor(&mut *tx, "alice", &second_pubkey, &second_kid)
+        .await
+        .expect_err("duplicate username should error");
+
+    assert!(matches!(err, AccountRepoError::DuplicateUsername));
+}
+
+/// Test unique constraints: duplicate public key should be rejected.
+#[shared_runtime_test]
+async fn test_accounts_repo_rejects_duplicate_root_key() {
+    let mut tx = test_transaction().await;
+    let (root_pubkey, root_kid) = test_keys(3);
+
+    create_account_with_executor(&mut *tx, "alice", &root_pubkey, &root_kid)
+        .await
+        .expect("first insert should succeed");
+
+    let err = create_account_with_executor(&mut *tx, "bob", &root_pubkey, &root_kid)
+        .await
+        .expect_err("duplicate key should error");
+
+    assert!(matches!(err, AccountRepoError::DuplicateKey));
 }
 
 /// Test that pgmq extension is available (from custom postgres image).
