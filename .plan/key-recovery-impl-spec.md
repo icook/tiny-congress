@@ -1,6 +1,6 @@
 # Key Recovery Implementation Specification
 
-**Related:** [ADR-006](../docs/decisions/006-webcrypto-key-recovery.md) | [Signed Envelope Spec](../docs/interfaces/signed-envelope-spec.md)
+**Related:** [ADR-006](../docs/decisions/006-webcrypto-key-recovery.md) | [ADR-007](../docs/decisions/007-zip215-verification.md) | [Signed Envelope Spec](../docs/interfaces/signed-envelope-spec.md)
 **Status:** Draft
 **Last updated:** 2025-12-17
 
@@ -29,8 +29,8 @@ This spec details the implementation of password-encrypted server backup for roo
 ### Backend (Cargo.toml)
 
 ```toml
-# Signing
-ed25519-dalek = { version = "2", features = ["rand_core"] }
+# Signing and verification (ZIP215-compliant per ADR-007)
+ed25519-consensus = "2"
 
 # Encryption (for validation/re-encryption if needed)
 aes-gcm = "0.10"
@@ -45,8 +45,7 @@ wasm-bindgen = "0.2"
 ```json
 {
   "dependencies": {
-    "@noble/curves": "^2.0.1",      // existing - fallback signing
-    "@noble/hashes": "^2.0.1",      // existing - Argon2 not available, use for PBKDF2
+    "@noble/hashes": "^2.0.1",      // existing - for PBKDF2 fallback
     "idb-keyval": "^6.2.1"          // IndexedDB wrapper for CryptoKey storage
   },
   "devDependencies": {
@@ -54,6 +53,8 @@ wasm-bindgen = "0.2"
   }
 }
 ```
+
+**Note:** Signing/verification fallback uses the Rust/WASM module (same as verification), not `@noble/curves`. This ensures ZIP215 compliance per ADR-007.
 
 ### Browser Requirements
 
@@ -71,22 +72,22 @@ wasm-bindgen = "0.2"
 
 ```sql
 -- Encrypted backup storage for root keys
+-- Column names aligned with ADR-006
 ALTER TABLE accounts
   ADD COLUMN encrypted_backup BYTEA,
   ADD COLUMN backup_salt BYTEA,
-  ADD COLUMN backup_nonce BYTEA,
-  ADD COLUMN backup_kdf TEXT CHECK (backup_kdf IN ('argon2id', 'pbkdf2')),
-  ADD COLUMN backup_kdf_params JSONB,
+  ADD COLUMN backup_kdf_algorithm TEXT CHECK (backup_kdf_algorithm IN ('argon2id', 'pbkdf2')),
   ADD COLUMN backup_version INTEGER DEFAULT 1,
-  ADD COLUMN backup_created_at TIMESTAMPTZ,
-  ADD COLUMN backup_updated_at TIMESTAMPTZ;
+  ADD COLUMN backup_created_at TIMESTAMPTZ;
 
 -- Index for recovery lookups by KID
 CREATE INDEX idx_accounts_backup_kid ON accounts(root_kid) WHERE encrypted_backup IS NOT NULL;
 
-COMMENT ON COLUMN accounts.encrypted_backup IS 'AES-256-GCM ciphertext of root private key';
-COMMENT ON COLUMN accounts.backup_kdf_params IS '{"m": 19456, "t": 2, "p": 1} for argon2id or {"iterations": 600000} for pbkdf2';
+COMMENT ON COLUMN accounts.encrypted_backup IS 'AES-256-GCM ciphertext (includes nonce + tag) of root private key';
+COMMENT ON COLUMN accounts.backup_kdf_algorithm IS 'KDF used: argon2id (preferred) or pbkdf2 (fallback)';
 ```
+
+**Note:** Nonce is stored within `encrypted_backup` blob per the binary envelope format (see Encrypted Backup Format section). KDF params are implicit per algorithm (Argon2id: m=19456, t=2, p=1; PBKDF2: 600k iterations).
 
 ---
 
@@ -100,14 +101,14 @@ Create or update encrypted backup.
 ```json
 {
   "kid": "base64url-kid",
-  "encrypted_backup": "base64url-ciphertext",
+  "encrypted_backup": "base64url-envelope",
   "salt": "base64url-salt",
-  "nonce": "base64url-nonce",
-  "kdf": "argon2id",
-  "kdf_params": { "m": 19456, "t": 2, "p": 1 },
+  "kdf_algorithm": "argon2id",
   "version": 1
 }
 ```
+
+**Note:** `encrypted_backup` contains the full binary envelope (version + KDF ID + params + nonce + ciphertext). KDF params are implicit per algorithm.
 
 **Response:** `201 Created` or `200 OK` (update)
 ```json
@@ -126,11 +127,9 @@ Retrieve encrypted backup for recovery.
 **Response:** `200 OK`
 ```json
 {
-  "encrypted_backup": "base64url-ciphertext",
+  "encrypted_backup": "base64url-envelope",
   "salt": "base64url-salt",
-  "nonce": "base64url-nonce",
-  "kdf": "argon2id",
-  "kdf_params": { "m": 19456, "t": 2, "p": 1 },
+  "kdf_algorithm": "argon2id",
   "version": 1
 }
 ```
@@ -190,6 +189,16 @@ private_key (32 bytes) → AES-256-GCM(key, nonce) → ciphertext (48 bytes)
 
 ## Frontend Architecture
 
+### Critical: Verification Must Use WASM
+
+Per ADR-007, **all signature verification in the browser MUST use the Rust/WASM module** (`verify_ed25519`). WebCrypto's `crypto.subtle.verify()` does NOT implement ZIP215 semantics and MUST NOT be used for verification.
+
+| Operation | Allowed | Not Allowed |
+|-----------|---------|-------------|
+| Signing | WebCrypto `sign()` ✅ | — |
+| Signing fallback | WASM `sign_ed25519()` ✅ | — |
+| Verification | WASM `verify_ed25519()` ✅ | WebCrypto `verify()` ❌ |
+
 ### File Structure
 
 ```
@@ -197,8 +206,9 @@ web/src/features/identity/
 ├── keys/
 │   ├── crypto.ts           # Existing - key generation
 │   ├── types.ts            # Existing - KeyPair interface
-│   ├── webcrypto.ts        # NEW - WebCrypto Ed25519 operations
+│   ├── webcrypto.ts        # NEW - WebCrypto Ed25519 signing only
 │   ├── fallback-signer.ts  # NEW - WASM fallback for signing
+│   ├── verifier.ts         # NEW - WASM-only verification (ZIP215)
 │   └── feature-detect.ts   # NEW - Browser capability detection
 ├── recovery/
 │   ├── crypto.worker.ts    # NEW - Isolated decryption worker
@@ -369,9 +379,9 @@ export class WasmFallbackSigner implements Signer {
   ) {}
 
   async sign(message: Uint8Array): Promise<Uint8Array> {
-    // Uses @noble/curves ed25519
-    const { ed25519 } = await import('@noble/curves/ed25519');
-    return ed25519.sign(message, this.privateKey);
+    // Uses Rust/WASM module for ZIP215 compliance (ADR-007)
+    const { sign_ed25519 } = await import('@tinycongress/crypto-wasm');
+    return sign_ed25519(message, this.privateKey);
   }
 
   async getPublicKey(): Promise<Uint8Array> {
@@ -382,14 +392,18 @@ export class WasmFallbackSigner implements Signer {
 
 ---
 
-## WASM Module (Canonicalization)
+## WASM Module (Crypto)
 
-### Rust Source (`service/src/wasm/canonical.rs`)
+The WASM module provides canonicalization, signing, and verification. All three use Rust to ensure ZIP215 compliance (ADR-007).
+
+### Rust Source (`service/src/wasm/crypto.rs`)
 
 ```rust
 use wasm_bindgen::prelude::*;
+use ed25519_consensus::{SigningKey, VerificationKey, Signature};
 use serde_json::Value;
 
+/// Canonicalize envelope fields for signing (RFC 8785)
 #[wasm_bindgen]
 pub fn canonical_signing_bytes(
     payload_type: &str,
@@ -405,9 +419,37 @@ pub fn canonical_signing_bytes(
         "signer": signer,
     });
 
-    // RFC 8785 canonicalization
     let canonical = json_canonicalization::serialize(&signing_obj)?;
     Ok(canonical.into_bytes())
+}
+
+/// Sign a message with Ed25519 (fallback when WebCrypto unavailable)
+#[wasm_bindgen]
+pub fn sign_ed25519(message: &[u8], private_key: &[u8]) -> Result<Vec<u8>, JsError> {
+    let key_bytes: [u8; 32] = private_key
+        .try_into()
+        .map_err(|_| JsError::new("Invalid private key length"))?;
+    let signing_key = SigningKey::from(key_bytes);
+    let signature = signing_key.sign(message);
+    Ok(signature.to_bytes().to_vec())
+}
+
+/// Verify an Ed25519 signature (ZIP215 semantics)
+#[wasm_bindgen]
+pub fn verify_ed25519(message: &[u8], signature: &[u8], public_key: &[u8]) -> Result<bool, JsError> {
+    let sig_bytes: [u8; 64] = signature
+        .try_into()
+        .map_err(|_| JsError::new("Invalid signature length"))?;
+    let key_bytes: [u8; 32] = public_key
+        .try_into()
+        .map_err(|_| JsError::new("Invalid public key length"))?;
+
+    let sig = Signature::from(sig_bytes);
+    let vk = VerificationKey::try_from(key_bytes)
+        .map_err(|_| JsError::new("Invalid public key"))?;
+
+    // ZIP215 verification
+    Ok(vk.verify(&sig, message).is_ok())
 }
 ```
 
@@ -420,6 +462,7 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 wasm-bindgen = "0.2"
+ed25519-consensus = "2"
 serde_json = "1"
 json-canonicalization = "0.5"
 
@@ -451,8 +494,8 @@ export default {
 
 1. Add database migration for backup columns
 2. Implement backup API endpoints (no auth initially, add later)
-3. Add `ed25519-dalek` to backend, verify signing matches `@noble/curves`
-4. Create cross-environment test vectors
+3. Add `ed25519-consensus` to backend for ZIP215-compliant signing/verification
+4. Create cross-environment test vectors (generate from Rust, validate in WASM)
 
 **Deliverables:**
 - Migration `XX_account_backup.sql`

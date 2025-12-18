@@ -30,7 +30,7 @@ Concern: minimize subtle crypto implementation bugs and reduce key handling risk
 
    * On recovery, after decrypting the root key, the client **imports it into WebCrypto as a `CryptoKey` with `extractable: false` and `keyUsages: ["sign"]`** (not `["sign", "verify"]`) and uses `subtle.sign()` for signing.
    * **Browser requirements:** Ed25519 in WebCrypto requires Chrome 113+, Edge 113+, Safari 17+, Firefox 128+. At time of writing this covers ~92% of global browser usage.
-   * **Fallback strategy:** On unsupported browsers, signing falls back to a Rust/WASM `ed25519-dalek` implementation (to be built). This path loses the `extractable: false` benefit but maintains functional parity. The UI should display a warning indicating reduced key isolation.
+   * **Fallback strategy:** On unsupported browsers, signing falls back to the Rust/WASM module (same module used for verification). This path loses the `extractable: false` benefit but maintains functional parity. The UI should display a warning indicating reduced key isolation.
 3. **We treat `extractable: false` as footgun reduction, not a hard security boundary.**
 
    * It prevents accidental export via WebCrypto APIs and discourages app-level serialization of key bytes.
@@ -76,8 +76,8 @@ Concern: minimize subtle crypto implementation bugs and reduce key handling risk
 * Strict separation between:
 
   * **Canonicalization** (Rust/WASM)
-  * **Signing** (WebCrypto)
-  * **Verification semantics** (Rust canonical, optionally mirrored in UI via WASM)
+  * **Signing** (WebCrypto when available, WASM fallback)
+  * **Verification** (Rust/WASM only — per [ADR-007](007-zip215-verification.md), ZIP215 semantics require WASM; WebCrypto `verify()` cannot be used)
 
 * **CryptoKey session persistence:** After import, the `CryptoKey` handle is stored in IndexedDB (which supports structured clone of non-extractable keys). On page reload, retrieve from IndexedDB rather than re-decrypting.
 
@@ -98,13 +98,18 @@ Concern: minimize subtle crypto implementation bugs and reduce key handling risk
   ALTER TABLE accounts ADD COLUMN backup_created_at TIMESTAMPTZ;
   ```
 
+## Related decisions
+
+* [ADR-007: ZIP215 verification](007-zip215-verification.md) — All verification uses ZIP215 semantics via WASM.
+* [Signed Envelope Spec](../interfaces/signed-envelope-spec.md) — Defines envelope structure and canonicalization.
+
 ## Follow-ups
 
 * Add cross-environment test vectors: canonical payload bytes and known signatures.
 * Define XSS hardening baseline (CSP, dependency controls) since client-side recovery inherently raises stakes.
 * Evaluate WebAuthn-based recovery/signing post-MVP.
 * Define canonical message format (bytes-to-sign structure) for Ed25519 signatures.
-* Add backend dependencies: `ed25519-dalek`, `aes-gcm`, `argon2` crates.
+* Add backend dependencies: `ed25519-consensus` (for ZIP215 verification), `aes-gcm`, `argon2` crates.
 * Build WASM crypto module with `wasm-pack` for canonicalization.
 * Implement browser feature detection for Ed25519 WebCrypto support.
 * Add Vite worker build configuration for dedicated crypto Worker.
