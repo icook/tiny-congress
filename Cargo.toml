@@ -1,4 +1,5 @@
 [workspace]
+# Keep members on single line - web/Dockerfile sed pattern depends on this format
 members = ["service", "crates/tc-crypto", "crates/test-macros"]
 resolver = "2"
 
