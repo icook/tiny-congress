@@ -886,5 +886,6 @@ jobs:
             | 📊 Coverage | [${{ env.PAGES_BASE_URL }}/pr/${{ steps.paths.outputs.pr_number }}/coverage/](${{ env.PAGES_BASE_URL }}/pr/${{ steps.paths.outputs.pr_number }}/coverage/) |
             | 📚 Storybook | [${{ env.PAGES_BASE_URL }}/pr/${{ steps.paths.outputs.pr_number }}/storybook/](${{ env.PAGES_BASE_URL }}/pr/${{ steps.paths.outputs.pr_number }}/storybook/) |
             | 🎭 Playwright | [${{ env.PAGES_BASE_URL }}/pr/${{ steps.paths.outputs.pr_number }}/playwright/](${{ env.PAGES_BASE_URL }}/pr/${{ steps.paths.outputs.pr_number }}/playwright/) |
+            | 📋 API Schemas | [GraphQL](${{ env.PAGES_BASE_URL }}/pr/${{ steps.paths.outputs.pr_number }}/coverage/schemas/graphql-viewer.html) · [OpenAPI](${{ env.PAGES_BASE_URL }}/pr/${{ steps.paths.outputs.pr_number }}/coverage/schemas/swagger-ui.html) |
 
             <sub>🤖 Reports auto-generated from commit ${{ github.sha }}</sub>
