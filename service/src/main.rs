@@ -7,8 +7,6 @@
     clippy::unwrap_used
 )]
 
-use std::sync::Arc;
-
 use async_graphql::{EmptySubscription, Schema};
 use axum::{
     extract::Request,
