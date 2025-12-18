@@ -4,6 +4,7 @@
 //!
 //! - [`app_builder::TestAppBuilder`] - Build test Axum apps that mirror main.rs wiring
 //! - [`test_db`] - Shared PostgreSQL container for database integration tests
+//! - [`graphql`] - GraphQL response helpers for testing schema behavior
 //!
 //! # App Builder Usage
 //!
@@ -76,6 +77,7 @@
 //!   In CI, set to the GHCR image: `ghcr.io/icook/tiny-congress/postgres:$SHA`
 
 pub mod app_builder;
+pub mod graphql;
 
 pub mod test_db {
     use once_cell::sync::Lazy;

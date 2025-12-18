@@ -4,56 +4,9 @@
 //! against the schema, without going through HTTP. This allows testing
 //! schema-level behavior in isolation.
 
-use async_graphql::{EmptySubscription, Schema};
-use serde_json::Value;
-use tinycongress_api::build_info::BuildInfoProvider;
-use tinycongress_api::graphql::{MutationRoot, QueryRoot};
+mod common;
 
-// ============================================================================
-// Test Helpers
-// ============================================================================
-
-/// Execute a GraphQL query against the test schema and return parsed JSON.
-async fn execute_query(query: &str) -> Value {
-    let schema = Schema::build(QueryRoot, MutationRoot, EmptySubscription)
-        .data(BuildInfoProvider::from_env())
-        .finish();
-    let response = schema.execute(query).await;
-    serde_json::to_value(response).expect("Failed to serialize GraphQL response")
-}
-
-/// Helper to extract the "data" field from a GraphQL response.
-fn extract_data(response: &Value) -> Option<&Value> {
-    response.get("data").filter(|v| !v.is_null())
-}
-
-/// Helper to extract errors from a GraphQL response.
-fn extract_errors(response: &Value) -> &[Value] {
-    response
-        .get("errors")
-        .and_then(|e| e.as_array())
-        .map(|a| a.as_slice())
-        .unwrap_or(&[])
-}
-
-/// Assert that a GraphQL response has no errors.
-fn assert_no_errors(response: &Value) {
-    let errors = extract_errors(response);
-    assert!(
-        errors.is_empty(),
-        "Expected no GraphQL errors, but got: {:?}",
-        errors
-    );
-}
-
-/// Assert that a GraphQL response contains at least one error.
-fn assert_has_errors(response: &Value) {
-    let errors = extract_errors(response);
-    assert!(
-        !errors.is_empty(),
-        "Expected GraphQL errors, but response had none"
-    );
-}
+use common::graphql::{assert_has_errors, assert_no_errors, execute_query, extract_data};
 
 // ============================================================================
 // Basic Query/Mutation Tests
