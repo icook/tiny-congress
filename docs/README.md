@@ -60,6 +60,7 @@ Architecture Decision Records explaining why we chose specific approaches:
 | [003-pgmq-job-queue.md](decisions/003-pgmq-job-queue.md) | PostgreSQL-based job queue |
 | [004-explicit-git-push-branches.md](decisions/004-explicit-git-push-branches.md) | Always specify branch on push |
 | [005-mantine-first-styling.md](decisions/005-mantine-first-styling.md) | Mantine-first styling approach |
+| [006-rest-endpoint-generation.md](decisions/006-rest-endpoint-generation.md) | REST endpoint generation strategy (Proposed) |
 
 ## Checklists
 

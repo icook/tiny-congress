@@ -91,20 +91,31 @@ dev-backend:
     cd service && cargo watch --watch src --watch migrations -x "run --bin tinycongress-api"
 
 # =============================================================================
-# Code Generation (GraphQL Types)
+# Code Generation (GraphQL & OpenAPI Types)
 # =============================================================================
 
 # Export GraphQL schema from Rust backend
 export-schema:
     cd service && cargo run --bin export_schema > ../web/schema.graphql
 
+# Export OpenAPI schema from Rust backend
+export-openapi:
+    cd service && cargo run --bin export_openapi > ../web/openapi.json
+
 # Generate TypeScript types and Zod schemas from GraphQL schema
-codegen-frontend:
+codegen-graphql:
     cd web && yarn graphql-codegen
 
-# Full codegen: export schema from Rust + generate TypeScript/Zod
-codegen: export-schema codegen-frontend
-    @echo "✓ GraphQL types generated"
+# Generate TypeScript types from OpenAPI schema
+codegen-openapi:
+    cd web && yarn openapi-typescript openapi.json -o src/api/generated/rest.ts && yarn prettier --write src/api/generated/rest.ts
+
+# Full codegen: export schemas from Rust + generate TypeScript types
+codegen: export-schema export-openapi codegen-graphql codegen-openapi
+    @echo "✓ GraphQL and REST types generated"
+
+# Legacy alias for codegen-graphql
+codegen-frontend: codegen-graphql
 
 # =============================================================================
 # Frontend (React/TypeScript) Commands
