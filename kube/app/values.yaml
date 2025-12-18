@@ -27,6 +27,20 @@ cors:
   # Empty by default (blocks all cross-origin requests) - must be explicitly configured
   allowedOrigins: ""
 
+# GraphQL configuration
+graphql:
+  # Enable GraphQL Playground UI at /graphql (GET)
+  # Default: false (disabled for security - exposes schema)
+  # Enable for local development via skaffold.yaml setValues
+  playgroundEnabled: false
+
+# Swagger UI configuration
+swagger:
+  # Enable Swagger UI at /swagger-ui
+  # Default: false (disabled for security - exposes API documentation)
+  # Enable for local development via skaffold.yaml setValues
+  enabled: false
+
 serviceAccount:
   # Specifies whether a service account should be created
   create: true

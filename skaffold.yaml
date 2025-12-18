@@ -76,6 +76,11 @@ deploy:
             create: false
           cargoCache:
             enabled: true
+          # Enable dev tools in local development (disabled by default for security)
+          graphql:
+            playgroundEnabled: true
+          swagger:
+            enabled: true
 
 # PRE-DEPLOY TESTS (cluster not required)
 # - Rust: unit tests via cargo llvm-cov (auto-discovers all tests except integration tests)
