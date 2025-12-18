@@ -1,5 +1,5 @@
+import { render, screen } from '@test-utils';
 import { beforeEach, expect, test, vi } from 'vitest';
-import { render, screen } from '../../test-utils';
 import { fetchBuildInfo } from '../api/buildInfo';
 import { AboutPage } from './About.page';
 

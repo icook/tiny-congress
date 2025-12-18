@@ -142,6 +142,24 @@ export default tseslint.config(
     },
     rules: {
       ...(playwrightRecommended.rules ?? {}),
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: '@playwright/test',
+              message: 'Import { test, expect } from ./fixtures to enable coverage and shared helpers.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    // Allow fixtures to source Playwright primitives.
+    files: ['tests/e2e/fixtures.ts'],
+    rules: {
+      'no-restricted-imports': 'off',
     },
   },
 

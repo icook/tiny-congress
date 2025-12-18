@@ -13,10 +13,11 @@
 | E2E | Playwright | `web/tests/` | `just test-frontend-e2e` |
 
 ## Vitest patterns
+Use `@test-utils` for `render`, `screen`, and `userEvent` so Mantine and Query providers are included.
 
 ### Basic component test
 ```typescript
-import { render, screen } from '@testing-library/react';
+import { render, screen } from '@test-utils';
 import { MyComponent } from './MyComponent';
 
 describe('MyComponent', () => {
@@ -29,8 +30,7 @@ describe('MyComponent', () => {
 
 ### With user interaction
 ```typescript
-import { render, screen } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import { render, screen, userEvent } from '@test-utils';
 
 it('handles click', async () => {
   const user = userEvent.setup();
@@ -50,17 +50,12 @@ vi.mock('@/hooks/useApi', () => ({
 }));
 ```
 
-### Using shared mocks
-```typescript
-// Import from test-utils
-import { mockUser, mockSession } from '@/test-utils/mocks';
-```
-
 ## Playwright patterns
+Use `./fixtures` so coverage collection and shared helpers stay active (lint enforced).
 
 ### Basic E2E test
 ```typescript
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
 
 test('user can navigate to dashboard', async ({ page }) => {
   await page.goto('/');
@@ -89,7 +84,7 @@ await expect(page.getByText('Success')).toBeVisible();
 ## Coverage requirements
 
 CI collects coverage for both test types:
-- Vitest: Standard Istanbul coverage
+- Vitest: V8 coverage via Vitest provider
 - Playwright: V8 coverage via instrumentation
 
 Coverage reports uploaded as artifacts.

@@ -326,6 +326,8 @@ test('displays fallback on error', () => {
 
 ### Query Key Testing
 
+`@test-utils` `render` supports Testing Library render options, including `wrapper`, for extra providers.
+
 Mock or use testing utilities for TanStack Query:
 
 ```tsx
