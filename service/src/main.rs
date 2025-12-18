@@ -24,7 +24,7 @@ use axum::{
     routing::get,
     Extension, Router,
 };
-use std::{net::SocketAddr, sync::Arc};
+use std::net::SocketAddr;
 use tinycongress_api::{
     build_info::BuildInfoProvider,
     config::{Config, SecurityHeadersConfig},
