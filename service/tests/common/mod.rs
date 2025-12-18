@@ -1,10 +1,25 @@
-//! Common test utilities for database integration tests.
+//! Common test utilities for integration tests.
 //!
-//! This module provides a shared PostgreSQL container and proper async lifecycle
-//! management to avoid "zombie connection" issues that occur when async cleanup
-//! happens after the Tokio runtime is gone.
+//! This module provides:
 //!
-//! # Usage
+//! - [`app_builder::TestAppBuilder`] - Build test Axum apps that mirror main.rs wiring
+//! - [`test_db`] - Shared PostgreSQL container for database integration tests
+//!
+//! # App Builder Usage
+//!
+//! ```ignore
+//! use crate::common::app_builder::TestAppBuilder;
+//!
+//! #[tokio::test]
+//! async fn test_with_app() {
+//!     let app = TestAppBuilder::with_mocks().build();
+//!     // Use app.oneshot(...) to send requests
+//! }
+//! ```
+//!
+//! See [`app_builder`] module for preset builders and configuration options.
+//!
+//! # Database Test Usage
 //!
 //! Use `#[test]` (not `#[tokio::test]`) and wrap async code with `run_test`.
 //! For isolated DB mutations, prefer a rollback-only transaction helper:
@@ -21,7 +36,7 @@
 //! }
 //! ```
 //!
-//! # Why this pattern?
+//! # Why the shared runtime pattern?
 //!
 //! `#[tokio::test]` creates a runtime per test. When tests finish, async cleanup
 //! may not complete before the runtime is destroyed, leaving "zombie" connections
@@ -32,6 +47,8 @@
 //!
 //! - `TEST_POSTGRES_IMAGE`: Override the postgres image (default: `tc-postgres:local`)
 //!   In CI, set to the GHCR image: `ghcr.io/icook/tiny-congress/postgres:$SHA`
+
+pub mod app_builder;
 
 pub mod test_db {
     use once_cell::sync::Lazy;

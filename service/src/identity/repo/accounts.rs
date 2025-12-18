@@ -100,28 +100,34 @@ impl AccountRepo for PgAccountRepo {
     }
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-utils"))]
+#[allow(clippy::expect_used)]
 pub mod mock {
     //! Mock implementation for testing
 
-    use super::*;
+    use super::{async_trait, AccountRepo, AccountRepoError, CreatedAccount, Uuid};
     use std::sync::Mutex;
 
-    /// Mock account repository for unit tests
+    /// Mock account repository for unit tests.
     pub struct MockAccountRepo {
-        /// Preset result to return from create()
+        /// Preset result to return from `create()`.
         pub create_result: Mutex<Option<Result<CreatedAccount, AccountRepoError>>>,
     }
 
     impl MockAccountRepo {
+        /// Create a new mock repository.
         #[must_use]
-        pub fn new() -> Self {
+        pub const fn new() -> Self {
             Self {
                 create_result: Mutex::new(None),
             }
         }
 
-        /// Set the result that create() will return
+        /// Set the result that `create()` will return.
+        ///
+        /// # Panics
+        ///
+        /// Panics if the internal mutex is poisoned.
         pub fn set_create_result(&self, result: Result<CreatedAccount, AccountRepoError>) {
             *self.create_result.lock().expect("lock poisoned") = Some(result);
         }

@@ -3080,6 +3080,7 @@ dependencies = [
  "sqlx-postgres",
  "testcontainers",
  "thiserror 2.0.17",
+ "tinycongress-api",
  "tokio",
  "tower",
  "tower-http",
