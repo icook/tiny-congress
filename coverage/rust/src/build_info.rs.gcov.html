@@ -1,0 +1,147 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+
+<html lang="en">
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <title>LCOV - Rust Backend Coverage - src/build_info.rs</title>
+  <link rel="stylesheet" type="text/css" href="../gcov.css">
+</head>
+
+<body>
+
+          <table width="100%" border=0 cellspacing=0 cellpadding=0>
+            <tr><td class="title">LCOV - code coverage report</td></tr>
+            <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+
+            <tr>
+              <td width="100%">
+                <table cellpadding=1 border=0 width="100%">
+          <tr>
+            <td width="10%" class="headerItem">Current view:</td>
+            <td width="10%" class="headerValue"><a href="../index.html">top level</a> - <a href="index.html">src</a> - build_info.rs<span style="font-size: 80%;"> (source / <a href="build_info.rs.func-c.html">functions</a>)</span></td>
+            <td width="5%"></td>
+            <td width="5%"></td>
+            <td width="5%" class="headerCovTableHead">Coverage</td>
+            <td width="5%" class="headerCovTableHead" title="Covered + Uncovered code">Total</td>
+            <td width="5%" class="headerCovTableHead" title="Exercised code only">Hit</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test:</td>
+            <td class="headerValue">Rust Backend Coverage</td>
+            <td></td>
+            <td class="headerItem">Lines:</td>
+            <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
+            <td class="headerCovTableEntry">31</td>
+            <td class="headerCovTableEntry">31</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test Date:</td>
+            <td class="headerValue">2025-12-18 21:05:47</td>
+            <td></td>
+            <td class="headerItem">Functions:</td>
+            <td class="headerCovTableEntryLo">45.8&nbsp;%</td>
+            <td class="headerCovTableEntry">48</td>
+            <td class="headerCovTableEntry">22</td>
+          </tr>
+                  <tr><td><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+                </table>
+              </td>
+            </tr>
+
+            <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+          </table>
+
+          <table cellpadding=0 cellspacing=0 border=0>
+            <tr>
+              <td><br></td>
+            </tr>
+            <tr>
+              <td>
+<pre class="sourceHeading">            Line data    Source code</pre>
+<pre class="source">
+<span id="L1"><span class="lineNum">       1</span>              : use async_graphql::SimpleObject;</span>
+<span id="L2"><span class="lineNum">       2</span>              : use chrono::{DateTime, Utc};</span>
+<span id="L3"><span class="lineNum">       3</span>              : use serde::Serialize;</span>
+<span id="L4"><span class="lineNum">       4</span>              : use std::env;</span>
+<span id="L5"><span class="lineNum">       5</span>              : use utoipa::ToSchema;</span>
+<span id="L6"><span class="lineNum">       6</span>              : </span>
+<span id="L7"><span class="lineNum">       7</span>              : /// Build metadata exposed via GraphQL, REST, and logs.</span>
+<span id="L8"><span class="lineNum">       8</span>              : #[derive(Clone, Debug, PartialEq, Eq, Serialize, SimpleObject, ToSchema)]</span>
+<span id="L9"><span class="lineNum">       9</span>              : #[graphql(rename_fields = &quot;camelCase&quot;)]</span>
+<span id="L10"><span class="lineNum">      10</span>              : #[serde(rename_all = &quot;camelCase&quot;)]</span>
+<span id="L11"><span class="lineNum">      11</span>              : pub struct BuildInfo {</span>
+<span id="L12"><span class="lineNum">      12</span>              :     pub version: String,</span>
+<span id="L13"><span class="lineNum">      13</span>              :     pub git_sha: String,</span>
+<span id="L14"><span class="lineNum">      14</span>              :     pub build_time: String,</span>
+<span id="L15"><span class="lineNum">      15</span>              :     #[serde(skip_serializing_if = &quot;Option::is_none&quot;)]</span>
+<span id="L16"><span class="lineNum">      16</span>              :     pub message: Option&lt;String&gt;,</span>
+<span id="L17"><span class="lineNum">      17</span>              : }</span>
+<span id="L18"><span class="lineNum">      18</span>              : </span>
+<span id="L19"><span class="lineNum">      19</span>              : #[derive(Clone, Debug)]</span>
+<span id="L20"><span class="lineNum">      20</span>              : pub struct BuildInfoProvider {</span>
+<span id="L21"><span class="lineNum">      21</span>              :     info: BuildInfo,</span>
+<span id="L22"><span class="lineNum">      22</span>              : }</span>
+<span id="L23"><span class="lineNum">      23</span>              : </span>
+<span id="L24"><span class="lineNum">      24</span>              : impl BuildInfoProvider {</span>
+<span id="L25"><span class="lineNum">      25</span>              :     /// Construct a provider using environment variables, falling back to sensible defaults.</span>
+<span id="L26"><span class="lineNum">      26</span>              :     #[must_use]</span>
+<span id="L27"><span class="lineNum">      27</span> <span class="tlaGNC tlaBgGNC">          58 :     pub fn from_env() -&gt; Self {</span></span>
+<span id="L28"><span class="lineNum">      28</span> <span class="tlaGNC">         232 :         Self::from_lookup(|key| env::var(key).ok())</span></span>
+<span id="L29"><span class="lineNum">      29</span> <span class="tlaGNC">          58 :     }</span></span>
+<span id="L30"><span class="lineNum">      30</span>              : </span>
+<span id="L31"><span class="lineNum">      31</span>              :     /// Construct a provider using a custom lookup function (useful for tests).</span>
+<span id="L32"><span class="lineNum">      32</span>              :     #[must_use]</span>
+<span id="L33"><span class="lineNum">      33</span> <span class="tlaGNC">          62 :     pub fn from_lookup&lt;F&gt;(mut lookup: F) -&gt; Self</span></span>
+<span id="L34"><span class="lineNum">      34</span> <span class="tlaGNC">          62 :     where</span></span>
+<span id="L35"><span class="lineNum">      35</span> <span class="tlaGNC">          62 :         F: FnMut(&amp;str) -&gt; Option&lt;String&gt;,</span></span>
+<span id="L36"><span class="lineNum">      36</span>              :     {</span>
+<span id="L37"><span class="lineNum">      37</span> <span class="tlaGNC">          62 :         let version = lookup(&quot;APP_VERSION&quot;)</span></span>
+<span id="L38"><span class="lineNum">      38</span> <span class="tlaGNC">          62 :             .or_else(|| lookup(&quot;VERSION&quot;))</span></span>
+<span id="L39"><span class="lineNum">      39</span> <span class="tlaGNC">          62 :             .unwrap_or_else(|| &quot;dev&quot;.to_string());</span></span>
+<span id="L40"><span class="lineNum">      40</span>              : </span>
+<span id="L41"><span class="lineNum">      41</span> <span class="tlaGNC">          62 :         let git_sha = lookup(&quot;GIT_SHA&quot;).unwrap_or_else(|| &quot;unknown&quot;.to_string());</span></span>
+<span id="L42"><span class="lineNum">      42</span>              : </span>
+<span id="L43"><span class="lineNum">      43</span> <span class="tlaGNC">          62 :         let build_time = lookup(&quot;BUILD_TIME&quot;)</span></span>
+<span id="L44"><span class="lineNum">      44</span> <span class="tlaGNC">          62 :             .and_then(|value| normalize_build_time(&amp;value))</span></span>
+<span id="L45"><span class="lineNum">      45</span> <span class="tlaGNC">          62 :             .unwrap_or_else(|| &quot;unknown&quot;.to_string());</span></span>
+<span id="L46"><span class="lineNum">      46</span>              : </span>
+<span id="L47"><span class="lineNum">      47</span> <span class="tlaGNC">          62 :         let message = lookup(&quot;BUILD_MESSAGE&quot;);</span></span>
+<span id="L48"><span class="lineNum">      48</span>              : </span>
+<span id="L49"><span class="lineNum">      49</span> <span class="tlaGNC">          62 :         let info = BuildInfo {</span></span>
+<span id="L50"><span class="lineNum">      50</span> <span class="tlaGNC">          62 :             version,</span></span>
+<span id="L51"><span class="lineNum">      51</span> <span class="tlaGNC">          62 :             git_sha,</span></span>
+<span id="L52"><span class="lineNum">      52</span> <span class="tlaGNC">          62 :             build_time,</span></span>
+<span id="L53"><span class="lineNum">      53</span> <span class="tlaGNC">          62 :             message,</span></span>
+<span id="L54"><span class="lineNum">      54</span> <span class="tlaGNC">          62 :         };</span></span>
+<span id="L55"><span class="lineNum">      55</span>              : </span>
+<span id="L56"><span class="lineNum">      56</span> <span class="tlaGNC">          62 :         Self { info }</span></span>
+<span id="L57"><span class="lineNum">      57</span> <span class="tlaGNC">          62 :     }</span></span>
+<span id="L58"><span class="lineNum">      58</span>              : </span>
+<span id="L59"><span class="lineNum">      59</span>              :     /// Fetch the resolved build info values.</span>
+<span id="L60"><span class="lineNum">      60</span>              :     #[must_use]</span>
+<span id="L61"><span class="lineNum">      61</span> <span class="tlaGNC">          13 :     pub fn build_info(&amp;self) -&gt; BuildInfo {</span></span>
+<span id="L62"><span class="lineNum">      62</span> <span class="tlaGNC">          13 :         self.info.clone()</span></span>
+<span id="L63"><span class="lineNum">      63</span> <span class="tlaGNC">          13 :     }</span></span>
+<span id="L64"><span class="lineNum">      64</span>              : }</span>
+<span id="L65"><span class="lineNum">      65</span>              : </span>
+<span id="L66"><span class="lineNum">      66</span> <span class="tlaGNC">          60 : fn normalize_build_time(value: &amp;str) -&gt; Option&lt;String&gt; {</span></span>
+<span id="L67"><span class="lineNum">      67</span> <span class="tlaGNC">          60 :     DateTime::parse_from_rfc3339(value)</span></span>
+<span id="L68"><span class="lineNum">      68</span> <span class="tlaGNC">          60 :         .or_else(|_| DateTime::parse_from_rfc3339(&amp;format!(&quot;{value}Z&quot;)))</span></span>
+<span id="L69"><span class="lineNum">      69</span> <span class="tlaGNC">          60 :         .map(|dt| dt.with_timezone(&amp;Utc).to_rfc3339())</span></span>
+<span id="L70"><span class="lineNum">      70</span> <span class="tlaGNC">          60 :         .ok()</span></span>
+<span id="L71"><span class="lineNum">      71</span> <span class="tlaGNC">          60 : }</span></span>
+        </pre>
+              </td>
+            </tr>
+          </table>
+          <br>
+
+          <table width="100%" border=0 cellspacing=0 cellpadding=0>
+            <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+            <tr><td class="versionInfo">Generated by: <a href="https://github.com//linux-test-project/lcov" target="_parent">LCOV version 2.0-1</a></td></tr>
+          </table>
+          <br>
+
+</body>
+</html>
