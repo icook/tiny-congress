@@ -1,0 +1,39 @@
+"""
+Build metadata exposed via GraphQL, REST, and logs.
+"""
+type BuildInfo {
+	version: String!
+	gitSha: String!
+	buildTime: String!
+	message: String
+}
+
+type MutationRoot {
+	"""
+	Placeholder mutation - returns the input string
+	
+	This exists because GraphQL requires at least one mutation.
+	Replace with actual mutations as features are implemented.
+	"""
+	echo(message: String!): String!
+}
+
+type QueryRoot {
+	"""
+	Returns build metadata for the running service
+	"""
+	buildInfo: BuildInfo!
+}
+
+"""
+Directs the executor to include this field or fragment only when the `if` argument is true.
+"""
+directive @include(if: Boolean!) on FIELD | FRAGMENT_SPREAD | INLINE_FRAGMENT
+"""
+Directs the executor to skip this field or fragment when the `if` argument is true.
+"""
+directive @skip(if: Boolean!) on FIELD | FRAGMENT_SPREAD | INLINE_FRAGMENT
+schema {
+	query: QueryRoot
+	mutation: MutationRoot
+}
