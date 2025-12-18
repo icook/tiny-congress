@@ -7,7 +7,7 @@
     "node": ">=22"
   },
   "scripts": {
-    "prepare": "husky || true",
+    "prepare": "cd .. && web/node_modules/.bin/husky .husky || true",
     "dev": "vite",
     "build": "tsc && vite build",
     "build:analyze": "ANALYZE=1 npm run build",
