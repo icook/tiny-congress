@@ -41,18 +41,10 @@ How urgent is this?
 | `priority/medium` | `#fbca04` | Important but not blocking | Address within 2-3 sprints |
 | `priority/low` | `#0e8a16` | Nice to have, minor impact | Backlog, address opportunistically |
 
-### Status Labels (Workflow)
+### Milestones (Required)
 
-Where is this in the pipeline?
-
-| Label | Color | Description |
-|-------|-------|-------------|
-| `status/triage` | `#ededed` | Needs review and prioritization |
-| `status/ready` | `#c2e0c6` | Ready to be picked up |
-| `status/in-progress` | `#fff89e` | Actively being worked on |
-| `status/blocked` | `#f9d0c4` | Waiting on external dependency |
-| `status/review` | `#bfdadc` | PR submitted, awaiting review |
-| `status/stale` | `#e6e6e6` | No activity for 30+ days |
+Every issue must be assigned to a milestone. Pick the best-fitting open milestone;
+if none apply, create a new milestone before triage is complete.
 
 ### Area Labels (Scope)
 
@@ -149,38 +141,6 @@ How much work is this?
 <!-- Implementation considerations, risks, dependencies -->
 ```
 
-## Issue Lifecycle
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                                                                 │
-│   Created ──► Triage ──► Ready ──► In Progress ──► Review ──► Done
-│                 │                       │              │
-│                 ▼                       ▼              │
-│            [Closed:               [Blocked] ◄─────────┘
-│             wontfix/                   │
-│             duplicate]                 ▼
-│                                   [Unblocked]
-│                                        │
-│                                        ▼
-│                                  [In Progress]
-└─────────────────────────────────────────────────────────────────┘
-```
-
-### State Transitions
-
-| From | To | Trigger |
-|------|-----|---------|
-| Created | `status/triage` | Automatic on creation |
-| `status/triage` | `status/ready` | Prioritized in triage, has labels |
-| `status/triage` | Closed | Marked `duplicate` or `wontfix` |
-| `status/ready` | `status/in-progress` | Assigned, branch created |
-| `status/in-progress` | `status/blocked` | Waiting on dependency |
-| `status/in-progress` | `status/review` | PR opened |
-| `status/blocked` | `status/in-progress` | Blocker resolved |
-| `status/review` | Closed | PR merged |
-| Any | `status/stale` | 30 days without activity |
-
 ## Writing Good Tickets
 
 ### Title Format
@@ -233,15 +193,16 @@ Use checkboxes for testable criteria:
 
 ### Weekly Triage
 
-1. Filter issues with `status/triage` label
+1. Review newly created issues or issues missing required labels.
 2. For each issue:
    - Add `type/` label
    - Add `area/` label
    - Add `priority/` label if determinable
    - Add `effort/` label if estimable
+   - Assign a milestone
    - Request clarification with `needs-info` if unclear
    - Close with `duplicate` or `wontfix` if applicable
-3. Move triaged issues to `status/ready`
+3. Assign or queue the issue for follow-up if it is ready for work.
 
 ### Triage Checklist
 
@@ -250,6 +211,7 @@ Use checkboxes for testable criteria:
 - [ ] `type/` label applied
 - [ ] `area/` label applied
 - [ ] `priority/` assessed (or marked for backlog review)
+- [ ] Milestone assigned
 - [ ] Not a duplicate of existing issue
 - [ ] If bug: reproduction steps present
 - [ ] If feature: acceptance criteria defined
@@ -295,22 +257,18 @@ Closes #123
 ### Stale Issue Management
 
 Issues without activity for 30 days should be:
-1. Labeled `status/stale`
-2. Commented with a warning
-3. Closed after 14 more days without response
+1. Commented with a warning
+2. Closed after 14 more days without response
 
 ### Auto-labeling
 
 Consider GitHub Actions to:
 - Add `area/backend` for changes in `service/`
 - Add `area/frontend` for changes in `web/`
-- Add `status/review` when PR is opened
-- Remove `status/review` when PR is merged
 
 ### Issue-PR Linking
 
 When PR references an issue:
-- Automatically add `status/review` to issue
 - When PR merges, automatically close issue
 
 ## Label Setup Script
@@ -338,14 +296,6 @@ gh label create "priority/high" --color "d93f0b" --description "Significant impa
 gh label create "priority/medium" --color "fbca04" --description "Important but not blocking" --force
 gh label create "priority/low" --color "0e8a16" --description "Nice to have, minor impact" --force
 
-# Status labels
-gh label create "status/triage" --color "ededed" --description "Needs review and prioritization" --force
-gh label create "status/ready" --color "c2e0c6" --description "Ready to be picked up" --force
-gh label create "status/in-progress" --color "fff89e" --description "Actively being worked on" --force
-gh label create "status/blocked" --color "f9d0c4" --description "Waiting on external dependency" --force
-gh label create "status/review" --color "bfdadc" --description "PR submitted, awaiting review" --force
-gh label create "status/stale" --color "e6e6e6" --description "No activity for 30+ days" --force
-
 # Area labels
 gh label create "area/backend" --color "5319e7" --description "Rust API, GraphQL, database" --force
 gh label create "area/frontend" --color "1d76db" --description "React, UI components, styling" --force
@@ -372,7 +322,9 @@ echo "Labels created successfully"
 ```markdown
 **Title:** [Area] Clear imperative description
 
-**Labels:** type/*, priority/* (if known)
+**Labels:** type/*, area/*, priority/* (if known)
+
+**Milestone:** assigned in GitHub
 
 **Body:**
 ## Context
