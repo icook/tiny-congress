@@ -14,7 +14,7 @@ COPY Cargo.toml ./
 COPY crates/tc-crypto ./crates/tc-crypto
 
 # Modify workspace to only include tc-crypto (service isn't needed for WASM build)
-RUN sed -i 's/members = \["service", "crates\/tc-crypto"\]/members = ["crates\/tc-crypto"]/' Cargo.toml
+RUN sed -i 's/members = \["service", "crates\/tc-crypto", "crates\/test-macros"\]/members = ["crates\/tc-crypto"]/' Cargo.toml
 
 # Build WASM
 RUN cd crates/tc-crypto && wasm-pack build --target web --release --out-dir /wasm-out
