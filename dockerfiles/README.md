@@ -37,6 +37,17 @@ The web client Dockerfiles live in `web/`:
 - `web/Dockerfile` - Production UI image (Nginx-served static build)
 - `web/Dockerfile.dev` - Development UI image with Vite hot reload
 
+## Why Dockerfiles live in different directories
+
+We intentionally keep dev and prod Dockerfiles close to their code, while shared
+infrastructure lives in `dockerfiles/`:
+- Dev Dockerfiles (`*.dev`) use subdirectory build contexts with `COPY . .` so
+  Skaffold file sync and hot reload work naturally.
+- Prod Dockerfiles use the repo root context to pull shared crates and other
+  cross-project dependencies explicitly.
+- The Postgres image is shared infra, so it stays centralized under
+  `dockerfiles/`.
+
 ## Related
 
 - [docker-layer-caching playbook](../docs/playbooks/docker-layer-caching.md)
