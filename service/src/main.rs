@@ -24,7 +24,10 @@ use tinycongress_api::{
     db::setup_database,
     graphql::{graphql_handler, graphql_playground, MutationRoot, QueryRoot},
     http::{build_security_headers, security_headers_middleware},
-    identity::{self, repo::PgAccountRepo},
+    identity::{
+        self,
+        repo::{PgAccountRepo, PgBackupRepo},
+    },
     rest::{self, ApiDoc},
 };
 use tower_http::cors::{AllowOrigin, Any, CorsLayer};
@@ -73,6 +76,8 @@ async fn main() -> Result<(), anyhow::Error> {
     // Create repositories
     let account_repo: Arc<dyn identity::repo::AccountRepo> =
         Arc::new(PgAccountRepo::new(pool.clone()));
+    let backup_repo: Arc<dyn identity::repo::BackupRepo> =
+        Arc::new(PgBackupRepo::new(pool.clone()));
 
     // Build CORS layer from config
     let cors_origins = &config.cors.allowed_origins;
@@ -130,6 +135,7 @@ async fn main() -> Result<(), anyhow::Error> {
         .layer(Extension(schema))
         .layer(Extension(pool.clone()))
         .layer(Extension(account_repo))
+        .layer(Extension(backup_repo))
         .layer(Extension(build_info))
         .layer(
             CorsLayer::new()

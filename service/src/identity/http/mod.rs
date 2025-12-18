@@ -1,9 +1,15 @@
 //! HTTP handlers for identity system
 
+mod backup;
+
 use std::sync::Arc;
 
 use axum::{
-    extract::Extension, http::StatusCode, response::IntoResponse, routing::post, Json, Router,
+    extract::Extension,
+    http::StatusCode,
+    response::IntoResponse,
+    routing::{delete, get, post},
+    Json, Router,
 };
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -33,7 +39,11 @@ pub struct ErrorResponse {
 
 /// Create identity router
 pub fn router() -> Router {
-    Router::new().route("/auth/signup", post(signup))
+    Router::new()
+        .route("/auth/signup", post(signup))
+        .route("/auth/backup", post(backup::create_backup))
+        .route("/auth/backup/{kid}", get(backup::get_backup))
+        .route("/auth/backup/{kid}", delete(backup::delete_backup))
 }
 
 /// Handle signup request

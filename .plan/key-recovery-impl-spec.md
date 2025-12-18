@@ -1,8 +1,19 @@
 # Key Recovery Implementation Specification
 
 **Related:** [ADR-006](../docs/decisions/006-webcrypto-key-recovery.md) | [ADR-007](../docs/decisions/007-zip215-verification.md) | [Signed Envelope Spec](../docs/interfaces/signed-envelope-spec.md)
-**Status:** Draft
+**Status:** In Progress
 **Last updated:** 2025-12-17
+
+## Implementation Status
+
+| Phase | Status | Notes |
+|-------|--------|-------|
+| Phase 1: Foundation | ✅ Complete | Migration, API endpoints, repository layer, integration tests |
+| Phase 2: WASM Canonicalization | ⬜ Not Started | |
+| Phase 3: Crypto Worker | ⬜ Not Started | |
+| Phase 4: Key Persistence | ⬜ Not Started | |
+| Phase 5: UI Integration | ⬜ Not Started | |
+| Phase 6: Hardening | ⬜ Not Started | Rate limiting still needed |
 
 ## Overview
 
@@ -509,18 +520,20 @@ export default {
 
 ## Implementation Phases
 
-### Phase 1: Foundation
+### Phase 1: Foundation ✅
 
-1. Add database migration for backup columns
-2. Implement backup API endpoints (no auth initially, add later)
-3. Add `ed25519-consensus` to backend for ZIP215-compliant signing/verification
-4. Create cross-environment test vectors (generate from Rust, validate in WASM)
+1. ✅ Add database migration for backup table
+2. ✅ Implement backup API endpoints (no auth initially, add later)
+3. ⬜ Add `ed25519-consensus` to backend for ZIP215-compliant signing/verification (deferred to Phase 2)
+4. ⬜ Create cross-environment test vectors (deferred to Phase 2)
 
 **Deliverables:**
-- Migration `XX_account_backups.sql` (new table)
-- `POST/GET/DELETE /api/auth/backup/:kid` endpoints
-- Repository layer for `account_backups` table
-- Test vectors in `service/tests/crypto_vectors.rs`
+- ✅ Migration `04_account_backups.sql` (new table)
+- ✅ `POST/GET/DELETE /auth/backup/:kid` endpoints
+- ✅ Repository layer (`BackupRepo` trait + `PgBackupRepo` implementation)
+- ✅ Unit tests for HTTP handlers (4 tests)
+- ✅ Integration tests for repository (9 tests)
+- ⬜ Test vectors in `service/tests/crypto_vectors.rs` (Phase 2)
 
 ### Phase 2: WASM Canonicalization
 
