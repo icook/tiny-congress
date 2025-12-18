@@ -4,6 +4,8 @@ Guidelines for consistent, maintainable Rust code in the service crate.
 
 ## Error Handling
 
+> **See also:** [Error Handling Patterns](./error-handling.md) for comprehensive guidance including standard error codes, REST/GraphQL response formats, and frontend integration.
+
 ### Use `thiserror` for Domain Errors
 
 Define typed errors for each module rather than returning raw tuples or strings:

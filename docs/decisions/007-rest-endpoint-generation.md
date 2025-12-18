@@ -1,4 +1,4 @@
-# ADR-006: REST Endpoint Generation Strategy
+# ADR-007: REST Endpoint Generation Strategy
 
 ## Status
 Proposed

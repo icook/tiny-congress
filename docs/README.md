@@ -43,6 +43,7 @@ Contracts and standards for consistency:
 | [naming-conventions.md](interfaces/naming-conventions.md) | How to name things |
 | [branch-naming-conventions.md](interfaces/branch-naming-conventions.md) | Git branch naming standards |
 | [api-contracts.md](interfaces/api-contracts.md) | API design patterns |
+| [error-handling.md](interfaces/error-handling.md) | Error handling patterns (frontend + backend) |
 | [rust-coding-standards.md](interfaces/rust-coding-standards.md) | Rust style guide |
 | [react-coding-standards.md](interfaces/react-coding-standards.md) | React/TypeScript patterns |
 | [signed-envelope-spec.md](interfaces/signed-envelope-spec.md) | Cryptographic envelope format |
@@ -60,7 +61,8 @@ Architecture Decision Records explaining why we chose specific approaches:
 | [003-pgmq-job-queue.md](decisions/003-pgmq-job-queue.md) | PostgreSQL-based job queue |
 | [004-explicit-git-push-branches.md](decisions/004-explicit-git-push-branches.md) | Always specify branch on push |
 | [005-mantine-first-styling.md](decisions/005-mantine-first-styling.md) | Mantine-first styling approach |
-| [006-rest-endpoint-generation.md](decisions/006-rest-endpoint-generation.md) | REST endpoint generation strategy (Proposed) |
+| [006-wasm-crypto-sharing.md](decisions/006-wasm-crypto-sharing.md) | Shared crypto code via WASM |
+| [007-rest-endpoint-generation.md](decisions/007-rest-endpoint-generation.md) | REST endpoint generation strategy (Proposed) |
 
 ## Checklists
 
@@ -74,6 +76,12 @@ Pre-flight checks for critical operations:
 
 - [STYLE_GUIDE.md](style/STYLE_GUIDE.md) - Mantine-first styling policy
 - [LLM_UI_GUIDE.md](style/LLM_UI_GUIDE.md) - LLM instructions for UI work
+
+## Skills
+
+LLM-specific task guides for AI assistants:
+
+- [testing-local-dev.md](skills/testing-local-dev.md) - Validate Skaffold dev environment (required before Skaffold changes)
 
 ## Related Documentation
 
