@@ -21,7 +21,8 @@
 //!
 //! # Database Test Usage
 //!
-//! Use `#[test]` (not `#[tokio::test]`) and wrap async code with `run_test`.
+//! Use `#[shared_runtime_test]` from `tc-test-macros` for async database tests.
+//! This runs tests on a shared Tokio runtime to ensure proper async cleanup.
 //!
 //! ## When to use each pattern:
 //!
@@ -31,15 +32,14 @@
 //! - Fast (~1-5ms setup) because it reuses the shared database
 //!
 //! ```ignore
-//! use crate::common::test_db::{run_test, test_transaction};
+//! use crate::common::test_db::test_transaction;
+//! use tc_test_macros::shared_runtime_test;
 //!
-//! #[test]
-//! fn test_something_with_db() {
-//!     run_test(async {
-//!         let mut tx = test_transaction().await;
-//!         sqlx::query("INSERT ...").execute(&mut *tx).await.unwrap();
-//!         // Transaction auto-rolls back on drop
-//!     });
+//! #[shared_runtime_test]
+//! async fn test_something_with_db() {
+//!     let mut tx = test_transaction().await;
+//!     sqlx::query("INSERT ...").execute(&mut *tx).await.unwrap();
+//!     // Transaction auto-rolls back on drop
 //! }
 //! ```
 //!
@@ -52,15 +52,14 @@
 //! - Slower (~15-30ms setup) but provides complete isolation
 //!
 //! ```ignore
-//! use crate::common::test_db::{run_test, isolated_db};
+//! use crate::common::test_db::isolated_db;
+//! use tc_test_macros::shared_runtime_test;
 //!
-//! #[test]
-//! fn test_migration_idempotency() {
-//!     run_test(async {
-//!         let db = isolated_db().await;
-//!         // This database is fully isolated - run migrations, test transactions, etc.
-//!         // Database is automatically dropped when `db` goes out of scope
-//!     });
+//! #[shared_runtime_test]
+//! async fn test_migration_idempotency() {
+//!     let db = isolated_db().await;
+//!     // This database is fully isolated - run migrations, test transactions, etc.
+//!     // Database is automatically dropped when `db` goes out of scope
 //! }
 //! ```
 //!
