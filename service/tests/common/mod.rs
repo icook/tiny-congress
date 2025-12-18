@@ -6,16 +6,17 @@
 //!
 //! # Usage
 //!
-//! Use `#[test]` (not `#[tokio::test]`) and wrap async code with `run_test`:
+//! Use `#[test]` (not `#[tokio::test]`) and wrap async code with `run_test`.
+//! For isolated DB mutations, prefer a rollback-only transaction helper:
 //!
 //! ```ignore
-//! use crate::common::test_db::{run_test, get_test_db};
+//! use crate::common::test_db::{run_test, test_transaction};
 //!
 //! #[test]
 //! fn test_something_with_db() {
 //!     run_test(async {
-//!         let db = get_test_db().await;
-//!         // Use db.pool() for your test...
+//!         let mut tx = test_transaction().await;
+//!         sqlx::query("INSERT ...").execute(&mut *tx).await.unwrap();
 //!     });
 //! }
 //! ```
@@ -34,8 +35,9 @@
 
 pub mod test_db {
     use once_cell::sync::Lazy;
+    use sqlx::postgres::{PgConnection, PgPool, PgPoolOptions};
+    use sqlx::Connection;
     use sqlx_core::migrate::Migrator;
-    use sqlx_postgres::{PgPool, PgPoolOptions};
     use std::future::Future;
     use std::path::Path;
     use std::sync::Arc;
@@ -56,17 +58,72 @@ pub mod test_db {
     /// Shared test database state - container + pool
     static TEST_DB: OnceCell<TestDb> = OnceCell::const_new();
 
+    /// RAII guard that begins a transaction and rolls it back on drop.
+    pub struct TestTransaction {
+        conn: Option<PgConnection>,
+    }
+
+    impl TestTransaction {
+        pub async fn new() -> Self {
+            let db = get_test_db().await;
+            let mut conn = PgConnection::connect(db.database_url())
+                .await
+                .expect("Failed to connect to test database");
+
+            sqlx::query("BEGIN")
+                .execute(&mut conn)
+                .await
+                .expect("Failed to start test transaction");
+
+            Self { conn: Some(conn) }
+        }
+    }
+
+    impl std::ops::Deref for TestTransaction {
+        type Target = PgConnection;
+
+        fn deref(&self) -> &Self::Target {
+            self.conn.as_ref().expect("transaction missing connection")
+        }
+    }
+
+    impl std::ops::DerefMut for TestTransaction {
+        fn deref_mut(&mut self) -> &mut Self::Target {
+            self.conn.as_mut().expect("transaction missing connection")
+        }
+    }
+
+    impl Drop for TestTransaction {
+        fn drop(&mut self) {
+            if let Some(mut conn) = self.conn.take() {
+                let _ = TEST_RUNTIME.spawn(async move {
+                    let _ = sqlx::query("ROLLBACK").execute(&mut conn).await;
+                });
+            }
+        }
+    }
+
+    /// Convenience helper to create a rollback-only transaction for a test.
+    pub async fn test_transaction() -> TestTransaction {
+        TestTransaction::new().await
+    }
+
     /// RAII guard holding both the pool and container.
     /// Container is kept alive as long as the pool exists.
     pub struct TestDb {
         pool: PgPool,
         _container: Arc<ContainerAsync<GenericImage>>,
+        database_url: String,
     }
 
     impl TestDb {
         /// Get the connection pool
         pub fn pool(&self) -> &PgPool {
             &self.pool
+        }
+
+        pub fn database_url(&self) -> &str {
+            &self.database_url
         }
     }
 
@@ -146,6 +203,7 @@ pub mod test_db {
                 TestDb {
                     pool,
                     _container: container,
+                    database_url,
                 }
             })
             .await

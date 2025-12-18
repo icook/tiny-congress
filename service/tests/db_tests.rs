@@ -5,9 +5,8 @@
 
 mod common;
 
-use common::test_db::{get_test_db, run_test};
-use sqlx_core::query::query;
-use sqlx_core::query_scalar::query_scalar;
+use common::test_db::{get_test_db, run_test, test_transaction};
+use sqlx::{query, query_scalar};
 use uuid::Uuid;
 
 /// Test that we can connect to the database and run queries.
@@ -53,8 +52,7 @@ fn test_migrations_applied() {
 #[test]
 fn test_crud_operations() {
     run_test(async {
-        let db = get_test_db().await;
-        let pool = db.pool();
+        let mut tx = test_transaction().await;
 
         // Insert a test item
         let item_id = Uuid::new_v4();
@@ -63,25 +61,18 @@ fn test_crud_operations() {
         query("INSERT INTO test_items (id, name) VALUES ($1, $2)")
             .bind(item_id)
             .bind(&item_name)
-            .execute(pool)
+            .execute(&mut *tx)
             .await
             .expect("Failed to insert test item");
 
         // Verify the item exists
         let count: i64 = query_scalar("SELECT COUNT(*) FROM test_items WHERE id = $1")
             .bind(item_id)
-            .fetch_one(pool)
+            .fetch_one(&mut *tx)
             .await
             .expect("Failed to count items");
 
         assert_eq!(count, 1, "Should find the inserted item");
-
-        // Clean up
-        query("DELETE FROM test_items WHERE id = $1")
-            .bind(item_id)
-            .execute(pool)
-            .await
-            .expect("Failed to delete test item");
     });
 }
 
