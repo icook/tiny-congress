@@ -4,6 +4,8 @@ Guidelines for consistent, maintainable React code in the web crate.
 
 ## Error Handling
 
+> **See also:** [Error Handling Patterns](./error-handling.md) for comprehensive guidance including standard error codes, network error handling, and backend integration.
+
 ### Use Error Boundaries for Component Failures
 
 Wrap strategic parts of the component tree with error boundaries to prevent crashes from propagating:
