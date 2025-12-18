@@ -37,9 +37,10 @@ test-backend: _ensure-test-postgres
 test-backend-watch: _ensure-test-postgres
     cd service && cargo watch -x test
 
-# Run backend unit tests with coverage
+# Run backend unit tests with coverage (generates LCOV for unified report)
 test-backend-cov: _ensure-test-postgres
-    cd service && cargo llvm-cov
+    mkdir -p service/coverage
+    cd service && cargo llvm-cov --lcov --output-path coverage/backend-unit.lcov
 
 # Build postgres image for testcontainers
 build-test-postgres:
