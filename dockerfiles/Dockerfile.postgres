@@ -13,9 +13,11 @@ RUN set -eux; \
     apt-get purge -y --auto-remove $buildDeps; \
     rm -rf /var/lib/apt/lists/*
 
-# Set environment variables
-ENV POSTGRES_USER=postgres
-ENV POSTGRES_PASSWORD=postgres
+# Database name default (non-sensitive)
+# POSTGRES_USER and POSTGRES_PASSWORD must be provided at runtime via:
+#   - docker run -e POSTGRES_PASSWORD=... -e POSTGRES_USER=...
+#   - Kubernetes deployment env vars (kube/app/templates/postgres.yaml)
+#   - testcontainers .with_env_var() calls
 ENV POSTGRES_DB=tiny-congress
 
 # Create extension setup script

@@ -229,6 +229,8 @@ jobs:
         run: |
           docker run -d --name postgres \
             -p 5432:5432 \
+            -e POSTGRES_USER=postgres \
+            -e POSTGRES_PASSWORD=postgres \
             ${{ env.REGISTRY }}/postgres:${{ github.sha }}
           # Wait for postgres to be ready
           for i in {1..30}; do
