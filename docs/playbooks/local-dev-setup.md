@@ -263,6 +263,31 @@ cargo run --release
 
 Or use `mold` linker (Linux) / `zld` (macOS).
 
+## Git Hooks
+
+The repository uses [Husky](https://typicode.github.io/husky/) to run pre-commit checks. Hooks are installed automatically when you run `yarn install` in the `web/` directory (via the `prepare` script).
+
+### Pre-commit Hook
+
+Located at `.husky/pre-commit`, this hook runs automatically before each commit:
+
+**Frontend files (`*.ts`, `*.tsx`, `*.css`):**
+- Runs `lint-staged` which applies ESLint fixes, Prettier formatting, and Stylelint fixes to staged files
+
+**Backend files (`*.rs`):**
+- Runs `cargo fmt --check` to verify formatting
+- Runs `cargo clippy` to check for common mistakes
+
+### Bypassing Hooks
+
+If you need to commit without running hooks (e.g., WIP commits, emergency fixes):
+
+```bash
+git commit --no-verify -m "WIP: work in progress"
+```
+
+Use sparingly—CI will still enforce these checks.
+
 ## See also
 
 - `docs/interfaces/environment-variables.md` - All env vars
