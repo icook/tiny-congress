@@ -31,6 +31,7 @@ How-to guides for common development tasks:
 | [graphql-codegen.md](playbooks/graphql-codegen.md) | Generating GraphQL types |
 | [pr-review-checklist.md](playbooks/pr-review-checklist.md) | Reviewing pull requests |
 | [skaffold-profiles.md](playbooks/skaffold-profiles.md) | Using Skaffold profiles |
+| [test-data-factories.md](playbooks/test-data-factories.md) | Creating backend test data with factories |
 
 ## Interfaces
 
