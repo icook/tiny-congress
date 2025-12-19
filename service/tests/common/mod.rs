@@ -77,6 +77,7 @@
 //!   In CI, set to the GHCR image: `ghcr.io/icook/tiny-congress/postgres:$SHA`
 
 pub mod app_builder;
+pub mod factories;
 pub mod graphql;
 
 pub mod test_db {

@@ -5,6 +5,7 @@
 
 mod common;
 
+use common::factories::{AccountFactory, TestItemFactory};
 use common::test_db::{get_test_db, isolated_db, test_transaction};
 use sqlx::{query, query_scalar};
 use sqlx_core::migrate::Migrator;
@@ -12,7 +13,6 @@ use std::path::Path;
 use tc_crypto::{derive_kid, encode_base64url};
 use tc_test_macros::shared_runtime_test;
 use tinycongress_api::identity::repo::{create_account_with_executor, AccountRepoError};
-use uuid::Uuid;
 
 fn test_keys(seed: u8) -> (String, String) {
     let pubkey = [seed; 32];
@@ -61,20 +61,14 @@ async fn test_migrations_applied() {
 async fn test_crud_operations() {
     let mut tx = test_transaction().await;
 
-    // Insert a test item
-    let item_id = Uuid::new_v4();
-    let item_name = format!("Test Item {}", item_id);
-
-    query("INSERT INTO test_items (id, name) VALUES ($1, $2)")
-        .bind(item_id)
-        .bind(&item_name)
-        .execute(&mut *tx)
+    let item = TestItemFactory::new()
+        .create(&mut *tx)
         .await
-        .expect("Failed to insert test item");
+        .expect("create item");
 
     // Verify the item exists
     let count: i64 = query_scalar("SELECT COUNT(*) FROM test_items WHERE id = $1")
-        .bind(item_id)
+        .bind(item.id)
         .fetch_one(&mut *tx)
         .await
         .expect("Failed to count items");
@@ -86,11 +80,13 @@ async fn test_crud_operations() {
 #[shared_runtime_test]
 async fn test_accounts_repo_inserts_account() {
     let mut tx = test_transaction().await;
-    let (root_pubkey, root_kid) = test_keys(42);
 
-    let account = create_account_with_executor(&mut *tx, "alice", &root_pubkey, &root_kid)
+    let account = AccountFactory::new()
+        .with_username("alice")
+        .with_seed(42)
+        .create(&mut *tx)
         .await
-        .expect("expected account to insert");
+        .expect("create account");
 
     let username: String = query_scalar("SELECT username FROM accounts WHERE id = $1")
         .bind(account.id)
@@ -99,7 +95,10 @@ async fn test_accounts_repo_inserts_account() {
         .expect("should fetch inserted row");
 
     assert_eq!(username, "alice");
-    assert_eq!(account.root_kid, root_kid);
+
+    // Verify the key matches the expected value for seed 42
+    let (_, expected_kid) = test_keys(42);
+    assert_eq!(account.root_kid, expected_kid);
 }
 
 /// Test unique constraints: duplicate username should be rejected.
@@ -107,11 +106,15 @@ async fn test_accounts_repo_inserts_account() {
 async fn test_accounts_repo_rejects_duplicate_username() {
     let mut tx = test_transaction().await;
 
-    let (root_pubkey, root_kid) = test_keys(1);
-    create_account_with_executor(&mut *tx, "alice", &root_pubkey, &root_kid)
+    // Create first account
+    AccountFactory::new()
+        .with_username("alice")
+        .with_seed(1)
+        .create(&mut *tx)
         .await
-        .expect("first insert should succeed");
+        .expect("create first account");
 
+    // Try to create second account with same username but different key
     let (second_pubkey, second_kid) = test_keys(2);
     let err = create_account_with_executor(&mut *tx, "alice", &second_pubkey, &second_kid)
         .await
@@ -124,12 +127,17 @@ async fn test_accounts_repo_rejects_duplicate_username() {
 #[shared_runtime_test]
 async fn test_accounts_repo_rejects_duplicate_root_key() {
     let mut tx = test_transaction().await;
-    let (root_pubkey, root_kid) = test_keys(3);
 
-    create_account_with_executor(&mut *tx, "alice", &root_pubkey, &root_kid)
+    // Create first account with specific seed
+    AccountFactory::new()
+        .with_username("alice")
+        .with_seed(3)
+        .create(&mut *tx)
         .await
-        .expect("first insert should succeed");
+        .expect("create first account");
 
+    // Try to create second account with same key (same seed) but different username
+    let (root_pubkey, root_kid) = test_keys(3);
     let err = create_account_with_executor(&mut *tx, "bob", &root_pubkey, &root_kid)
         .await
         .expect_err("duplicate key should error");
@@ -183,18 +191,16 @@ async fn test_isolated_db_basic() {
 
     assert!(exists, "test_items table should exist in isolated database");
 
-    // Insert data that would persist (no transaction rollback)
-    let item_id = Uuid::new_v4();
-    query("INSERT INTO test_items (id, name) VALUES ($1, $2)")
-        .bind(item_id)
-        .bind("isolated test item")
-        .execute(db.pool())
+    // Insert using factory (data persists - no transaction rollback)
+    let item = TestItemFactory::new()
+        .with_name("isolated test item")
+        .create(db.pool())
         .await
-        .expect("Failed to insert item");
+        .expect("create item");
 
     // Verify the insert persisted
     let count: i64 = query_scalar("SELECT COUNT(*) FROM test_items WHERE id = $1")
-        .bind(item_id)
+        .bind(item.id)
         .fetch_one(db.pool())
         .await
         .expect("Failed to count items");
@@ -318,6 +324,118 @@ async fn test_migration_rollback_simulation() {
     assert!(exists_final, "test_items should exist after recreation");
 }
 
+mod factory_tests {
+    use super::*;
+    use common::factories::{AccountFactory, TestItemFactory};
+
+    #[shared_runtime_test]
+    async fn test_account_factory_creates_with_defaults() {
+        let mut tx = test_transaction().await;
+
+        let account = AccountFactory::new()
+            .create(&mut *tx)
+            .await
+            .expect("create account");
+
+        // Verify account was created
+        let username: String = query_scalar("SELECT username FROM accounts WHERE id = $1")
+            .bind(account.id)
+            .fetch_one(&mut *tx)
+            .await
+            .expect("should fetch inserted row");
+
+        assert!(!username.is_empty(), "username should not be empty");
+        assert!(!account.root_kid.is_empty(), "root_kid should not be empty");
+    }
+
+    #[shared_runtime_test]
+    async fn test_account_factory_with_custom_username() {
+        let mut tx = test_transaction().await;
+
+        let account = AccountFactory::new()
+            .with_username("custom_alice")
+            .create(&mut *tx)
+            .await
+            .expect("create account");
+
+        let username: String = query_scalar("SELECT username FROM accounts WHERE id = $1")
+            .bind(account.id)
+            .fetch_one(&mut *tx)
+            .await
+            .expect("should fetch inserted row");
+
+        assert_eq!(username, "custom_alice");
+    }
+
+    #[shared_runtime_test]
+    async fn test_account_factory_with_custom_seed() {
+        let mut tx = test_transaction().await;
+
+        let account1 = AccountFactory::new()
+            .with_seed(42)
+            .create(&mut *tx)
+            .await
+            .expect("create account 1");
+        let account2 = AccountFactory::new()
+            .with_seed(43)
+            .create(&mut *tx)
+            .await
+            .expect("create account 2");
+
+        // Different seeds should produce different keys
+        assert_ne!(account1.root_kid, account2.root_kid);
+    }
+
+    #[shared_runtime_test]
+    async fn test_item_factory_creates_with_defaults() {
+        let mut tx = test_transaction().await;
+
+        let item = TestItemFactory::new()
+            .create(&mut *tx)
+            .await
+            .expect("create item");
+
+        let name: String = query_scalar("SELECT name FROM test_items WHERE id = $1")
+            .bind(item.id)
+            .fetch_one(&mut *tx)
+            .await
+            .expect("should fetch inserted row");
+
+        assert!(!name.is_empty(), "name should not be empty");
+    }
+
+    #[shared_runtime_test]
+    async fn test_item_factory_with_custom_name() {
+        let mut tx = test_transaction().await;
+        let item = TestItemFactory::new()
+            .with_name("custom_item")
+            .create(&mut *tx)
+            .await
+            .expect("create item");
+        let name: String = query_scalar("SELECT name FROM test_items WHERE id = $1")
+            .bind(item.id)
+            .fetch_one(&mut *tx)
+            .await
+            .expect("should fetch inserted row");
+        assert_eq!(name, "custom_item");
+    }
+
+    #[shared_runtime_test]
+    async fn test_item_factory_creates_unique_items() {
+        let mut tx = test_transaction().await;
+        let item1 = TestItemFactory::new()
+            .create(&mut *tx)
+            .await
+            .expect("create item 1");
+        let item2 = TestItemFactory::new()
+            .create(&mut *tx)
+            .await
+            .expect("create item 2");
+        assert_ne!(item1.id, item2.id);
+        assert_ne!(item1.name, item2.name);
+    }
+}
+
 /// Test concurrent transaction behavior with SELECT FOR UPDATE.
 /// Demonstrates isolation between two connections to the same isolated database.
 #[shared_runtime_test]
@@ -325,13 +443,11 @@ async fn test_concurrent_select_for_update() {
     let db = isolated_db().await;
 
     // Insert a test row that we'll lock
-    let item_id = Uuid::new_v4();
-    query("INSERT INTO test_items (id, name) VALUES ($1, $2)")
-        .bind(item_id)
-        .bind("lockable item")
-        .execute(db.pool())
+    let item = TestItemFactory::new()
+        .with_name("lockable item")
+        .create(db.pool())
         .await
-        .expect("Failed to insert item");
+        .expect("create item");
 
     // Open two separate connections from the pool
     let mut conn1 = db.pool().acquire().await.expect("Failed to get conn1");
@@ -340,7 +456,7 @@ async fn test_concurrent_select_for_update() {
     // Start transaction on conn1 and lock the row
     query("BEGIN").execute(&mut *conn1).await.unwrap();
     query("SELECT * FROM test_items WHERE id = $1 FOR UPDATE")
-        .bind(item_id)
+        .bind(item.id)
         .fetch_one(&mut *conn1)
         .await
         .expect("Failed to lock row on conn1");
@@ -348,7 +464,7 @@ async fn test_concurrent_select_for_update() {
     // Start transaction on conn2 and try to lock with NOWAIT
     query("BEGIN").execute(&mut *conn2).await.unwrap();
     let result = query("SELECT * FROM test_items WHERE id = $1 FOR UPDATE NOWAIT")
-        .bind(item_id)
+        .bind(item.id)
         .fetch_one(&mut *conn2)
         .await;
 
@@ -375,18 +491,16 @@ async fn test_isolated_dbs_are_independent() {
     let db1 = isolated_db().await;
     let db2 = isolated_db().await;
 
-    // Insert into db1
-    let item_id = Uuid::new_v4();
-    query("INSERT INTO test_items (id, name) VALUES ($1, $2)")
-        .bind(item_id)
-        .bind("db1 item")
-        .execute(db1.pool())
+    // Insert into db1 using factory
+    let item = TestItemFactory::new()
+        .with_name("db1 item")
+        .create(db1.pool())
         .await
-        .expect("Failed to insert into db1");
+        .expect("create item");
 
     // Verify item exists in db1
     let count_db1: i64 = query_scalar("SELECT COUNT(*) FROM test_items WHERE id = $1")
-        .bind(item_id)
+        .bind(item.id)
         .fetch_one(db1.pool())
         .await
         .expect("Failed to count in db1");
@@ -394,7 +508,7 @@ async fn test_isolated_dbs_are_independent() {
 
     // Verify item does NOT exist in db2
     let count_db2: i64 = query_scalar("SELECT COUNT(*) FROM test_items WHERE id = $1")
-        .bind(item_id)
+        .bind(item.id)
         .fetch_one(db2.pool())
         .await
         .expect("Failed to count in db2");
