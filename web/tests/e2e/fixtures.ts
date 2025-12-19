@@ -76,6 +76,39 @@ export async function generateCoverageReport(): Promise<void> {
       }
       return sourcePath.startsWith('src/');
     },
+
+    // Check coverage thresholds and fail if not met
+    onEnd: async (coverageResults) => {
+      if (!coverageResults) {
+        return;
+      }
+
+      const thresholds = {
+        lines: 50,
+        branches: 40,
+        functions: 50,
+        statements: 50,
+      };
+
+      const errors: string[] = [];
+      const { summary } = coverageResults;
+
+      for (const [metric, threshold] of Object.entries(thresholds)) {
+        const metricData = summary[metric as keyof typeof summary];
+        const pct = typeof metricData?.pct === 'number' ? metricData.pct : 0;
+        if (pct < threshold) {
+          errors.push(
+            `E2E coverage threshold for ${metric} (${pct.toFixed(1)}%) not met: ${threshold}%`
+          );
+        }
+      }
+
+      if (errors.length > 0) {
+        // eslint-disable-next-line no-console
+        console.error(`\n❌ Coverage thresholds not met:\n${errors.join('\n')}`);
+        process.exitCode = 1;
+      }
+    },
   });
 
   // Read and add all raw coverage files
