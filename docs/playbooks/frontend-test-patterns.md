@@ -81,6 +81,43 @@ await page.waitForResponse(resp => resp.url().includes('/api/users'));
 await expect(page.getByText('Success')).toBeVisible();
 ```
 
+### Testing time-dependent code
+
+Use fake timers for deterministic tests involving `setTimeout`, `setInterval`, or time-based UI.
+
+**Vitest:**
+```typescript
+import { vi } from 'vitest';
+
+describe('TimerComponent', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  it('updates after delay', () => {
+    render(<TimerComponent />);
+
+    vi.advanceTimersByTime(5000); // instant "5 seconds later"
+
+    expect(screen.getByText('Done')).toBeInTheDocument();
+  });
+});
+```
+
+**Playwright:**
+```typescript
+test('countdown completes', async ({ page }) => {
+  await page.clock.install({ time: new Date('2024-01-01T10:00:00') });
+  await page.goto('/countdown');
+
+  await page.clock.runFor(5000); // advance 5 seconds
+
+  await expect(page.getByText('Done')).toBeVisible();
+});
+```
+
+**When to use:** Any test with timers, intervals, countdowns, or animations.
+**When NOT to use:** Tests that just wait for async data - use `waitFor` instead.
+
 ## Coverage requirements
 
 CI collects coverage for both test types:
