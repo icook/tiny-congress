@@ -9,6 +9,7 @@
 
 pub mod build_info;
 pub mod config;
+pub mod congress;
 pub mod db;
 pub mod graphql;
 pub mod http;
