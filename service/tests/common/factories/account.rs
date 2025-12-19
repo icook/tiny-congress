@@ -2,7 +2,9 @@
 
 use super::next_id;
 use tc_crypto::{derive_kid, encode_base64url};
-use tinycongress_api::identity::repo::{create_account_with_executor, AccountRepoError, CreatedAccount};
+use tinycongress_api::identity::repo::{
+    create_account_with_executor, AccountRepoError, CreatedAccount,
+};
 
 /// Builder for creating test accounts with sensible defaults.
 ///
