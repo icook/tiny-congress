@@ -93,7 +93,7 @@ async fn test_db_query() {
 
 #### Internal: `get_test_db()` (read-only verification only)
 
-`get_test_db()` provides direct access to the shared pool. **Avoid using this for tests that write data** since changes persist between tests. Use `test_transaction()` or `isolated_db()` instead.
+`get_test_db()` provides direct access to the shared pool. **DO NOT use this for tests that write data** - changes persist between tests and cause flaky failures. Use `test_transaction()` or `isolated_db()` instead.
 
 Valid uses:
 - Read-only verification (e.g., checking migrations ran, extension exists)
