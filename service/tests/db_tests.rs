@@ -81,6 +81,7 @@ async fn test_accounts_repo_inserts_account() {
 
     let account = AccountFactory::new()
         .with_username("alice")
+        .with_seed(42)
         .create(&mut *tx)
         .await;
 
@@ -91,7 +92,10 @@ async fn test_accounts_repo_inserts_account() {
         .expect("should fetch inserted row");
 
     assert_eq!(username, "alice");
-    assert!(!account.root_kid.is_empty());
+
+    // Verify the key matches the expected value for seed 42
+    let (_, expected_kid) = test_keys(42);
+    assert_eq!(account.root_kid, expected_kid);
 }
 
 /// Test unique constraints: duplicate username should be rejected.
