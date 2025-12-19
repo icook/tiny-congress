@@ -382,6 +382,30 @@ mod factory_tests {
 
         assert!(!name.is_empty(), "name should not be empty");
     }
+
+    #[shared_runtime_test]
+    async fn test_item_factory_with_custom_name() {
+        let mut tx = test_transaction().await;
+        let item = TestItemFactory::new()
+            .with_name("custom_item")
+            .create(&mut *tx)
+            .await;
+        let name: String = query_scalar("SELECT name FROM test_items WHERE id = $1")
+            .bind(item.id)
+            .fetch_one(&mut *tx)
+            .await
+            .expect("should fetch inserted row");
+        assert_eq!(name, "custom_item");
+    }
+
+    #[shared_runtime_test]
+    async fn test_item_factory_creates_unique_items() {
+        let mut tx = test_transaction().await;
+        let item1 = TestItemFactory::new().create(&mut *tx).await;
+        let item2 = TestItemFactory::new().create(&mut *tx).await;
+        assert_ne!(item1.id, item2.id);
+        assert_ne!(item1.name, item2.name);
+    }
 }
 
 /// Test concurrent transaction behavior with SELECT FOR UPDATE.

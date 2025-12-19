@@ -1,4 +1,4 @@
-//! TestItem factory for test data creation.
+//! `TestItem` factory for test data creation.
 
 use super::next_id;
 use sqlx::query;
