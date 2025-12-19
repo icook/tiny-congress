@@ -5,6 +5,7 @@
 //! - [`app_builder::TestAppBuilder`] - Build test Axum apps that mirror main.rs wiring
 //! - [`test_db`] - Shared PostgreSQL container for database integration tests
 //! - [`graphql`] - GraphQL response helpers for testing schema behavior
+//! - [`http_mock::MockHttpServer`] - HTTP mock server for testing outbound HTTP calls
 //!
 //! # App Builder Usage
 //!
