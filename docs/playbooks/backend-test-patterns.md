@@ -91,18 +91,27 @@ async fn test_db_query() {
 }
 ```
 
-#### When to use `get_test_db()` directly
+#### Internal: `get_test_db()` (read-only verification only)
 
-Use when you need the pool (e.g., for repository functions that require `&PgPool`):
+`get_test_db()` provides direct access to the shared pool. **Avoid using this for tests that write data** since changes persist between tests. Use `test_transaction()` or `isolated_db()` instead.
+
+Valid uses:
+- Read-only verification (e.g., checking migrations ran, extension exists)
+- Internal use by `test_transaction()` and `isolated_db()`
 
 ```rust
 use common::test_db::get_test_db;
 use tc_test_macros::shared_runtime_test;
 
 #[shared_runtime_test]
-async fn test_with_pool() {
+async fn test_migrations_applied() {
     let db = get_test_db().await;
-    // Use db.pool() for repository calls
+    // Read-only check - no data written
+    let exists: bool = sqlx::query_scalar("SELECT EXISTS (...)")
+        .fetch_one(db.pool())
+        .await
+        .unwrap();
+    assert!(exists);
 }
 ```
 
@@ -176,7 +185,7 @@ Build the custom Postgres image with pgmq extension:
 just build-test-postgres
 ```
 
-This creates `tc-postgres:local` which tests use by default.
+This creates `tc-postgres:local` which tests use by default. The image is built automatically when running `just test-backend` if it doesn't exist.
 
 ### How It Works
 
@@ -194,7 +203,7 @@ pub struct TestDb { pool, database_url, port }
 pub struct IsolatedDb { pool, database_name, database_url }
 
 pub async fn test_transaction() -> TestTransaction;  // 95% of tests
-pub async fn get_test_db() -> &'static TestDb;       // When you need the pool
+pub async fn get_test_db() -> &'static TestDb;       // Internal/read-only only
 pub async fn isolated_db() -> IsolatedDb;            // Full isolation
 ```
 
@@ -273,6 +282,8 @@ fn test_with_custom_values() {
 
 ### Checking Extension Availability
 
+Read-only verification tests can use `get_test_db()` directly:
+
 ```rust
 use common::test_db::get_test_db;
 use sqlx::query_scalar;
@@ -282,6 +293,7 @@ use tc_test_macros::shared_runtime_test;
 async fn test_pgmq_extension_available() {
     let db = get_test_db().await;
 
+    // Read-only check - safe to use get_test_db() directly
     let exists: bool = query_scalar(
         "SELECT EXISTS (SELECT FROM pg_extension WHERE extname = 'pgmq')"
     )
