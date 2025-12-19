@@ -17,12 +17,12 @@ pub struct CreatedTestItem {
 ///
 /// ```rust
 /// // Create with all defaults
-/// let item = TestItemFactory::new().create(&mut tx).await;
+/// let item = TestItemFactory::new().create(&mut tx).await.expect("create item");
 ///
 /// // Customize the name
 /// let item = TestItemFactory::new()
 ///     .with_name("special item")
-///     .create(&mut tx).await;
+///     .create(&mut tx).await?;
 /// ```
 pub struct TestItemFactory {
     name: Option<String>,
@@ -44,10 +44,10 @@ impl TestItemFactory {
 
     /// Create the test item in the database.
     ///
-    /// # Panics
+    /// # Errors
     ///
-    /// Panics if the database insert fails.
-    pub async fn create<'e, E>(self, executor: E) -> CreatedTestItem
+    /// Returns an error if the database insert fails.
+    pub async fn create<'e, E>(self, executor: E) -> Result<CreatedTestItem, sqlx::Error>
     where
         E: sqlx::Executor<'e, Database = sqlx::Postgres>,
     {
@@ -59,10 +59,9 @@ impl TestItemFactory {
             .bind(uuid)
             .bind(&name)
             .execute(executor)
-            .await
-            .expect("TestItemFactory: failed to create test item");
+            .await?;
 
-        CreatedTestItem { id: uuid, name }
+        Ok(CreatedTestItem { id: uuid, name })
     }
 }
 

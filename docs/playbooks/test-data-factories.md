@@ -16,23 +16,30 @@ Creates user accounts with auto-generated usernames and key pairs.
 use common::factories::AccountFactory;
 
 // Create with all defaults
-let account = AccountFactory::new().create(&mut tx).await;
+let account = AccountFactory::new()
+    .create(&mut tx)
+    .await
+    .expect("create account");
 
 // Customize username
 let account = AccountFactory::new()
     .with_username("alice")
-    .create(&mut tx).await;
+    .create(&mut tx)
+    .await?;
 
 // Customize key generation seed (for reproducible keys)
 let account = AccountFactory::new()
     .with_seed(42)
-    .create(&mut tx).await;
+    .create(&mut tx)
+    .await
+    .expect("create account");
 
 // Combine customizations
 let account = AccountFactory::new()
     .with_username("bob")
     .with_seed(123)
-    .create(&mut tx).await;
+    .create(&mut tx)
+    .await?;
 ```
 
 ### TestItemFactory
@@ -43,12 +50,16 @@ Creates test items for basic CRUD testing.
 use common::factories::TestItemFactory;
 
 // Create with all defaults
-let item = TestItemFactory::new().create(&mut tx).await;
+let item = TestItemFactory::new()
+    .create(&mut tx)
+    .await
+    .expect("create item");
 
 // Customize name
 let item = TestItemFactory::new()
     .with_name("special item")
-    .create(&mut tx).await;
+    .create(&mut tx)
+    .await?;
 ```
 
 ## Usage with Different Executors
@@ -58,11 +69,17 @@ Factories work with any sqlx executor type:
 ```rust
 // With test transaction (rolled back after test)
 let mut tx = test_transaction().await;
-let account = AccountFactory::new().create(&mut *tx).await;
+let account = AccountFactory::new()
+    .create(&mut *tx)
+    .await
+    .expect("create account");
 
 // With isolated database pool (persists within isolated db)
 let db = isolated_db().await;
-let account = AccountFactory::new().create(db.pool()).await;
+let account = AccountFactory::new()
+    .create(db.pool())
+    .await
+    .expect("create account");
 ```
 
 ## Adding New Factories
@@ -99,13 +116,14 @@ impl EntityFactory {
         self
     }
 
-    pub async fn create<'e, E>(self, executor: E) -> CreatedEntity
+    pub async fn create<'e, E>(self, executor: E) -> Result<CreatedEntity, sqlx::Error>
     where
         E: sqlx::Executor<'e, Database = sqlx::Postgres>,
     {
         let id = next_id();
         let field = self.field.unwrap_or_else(|| format!("entity_{id}"));
         // ... insert into database
+        Ok(CreatedEntity { id, field })
     }
 }
 
@@ -122,4 +140,4 @@ impl Default for EntityFactory {
 2. **Unique values**: Use `next_id()` to generate unique identifiers
 3. **Builder pattern**: Methods return `Self` for fluent chaining
 4. **Executor agnostic**: Works with transactions, connections, and pools
-5. **Panic on failure**: Factories panic on database errors (test failures are expected to be loud)
+5. **Return Result**: Factories return `Result` types, letting callers decide how to handle errors (use `.expect()` for simple cases, `?` for propagation)

@@ -2,7 +2,7 @@
 
 use super::next_id;
 use tc_crypto::{derive_kid, encode_base64url};
-use tinycongress_api::identity::repo::{create_account_with_executor, CreatedAccount};
+use tinycongress_api::identity::repo::{create_account_with_executor, AccountRepoError, CreatedAccount};
 
 /// Builder for creating test accounts with sensible defaults.
 ///
@@ -10,13 +10,13 @@ use tinycongress_api::identity::repo::{create_account_with_executor, CreatedAcco
 ///
 /// ```rust
 /// // Create with all defaults
-/// let account = AccountFactory::new().create(&mut tx).await;
+/// let account = AccountFactory::new().create(&mut tx).await.expect("create account");
 ///
 /// // Customize specific fields
 /// let account = AccountFactory::new()
 ///     .with_username("alice")
 ///     .with_seed(42)
-///     .create(&mut tx).await;
+///     .create(&mut tx).await?;
 /// ```
 pub struct AccountFactory {
     username: Option<String>,
@@ -50,10 +50,10 @@ impl AccountFactory {
 
     /// Create the account in the database.
     ///
-    /// # Panics
+    /// # Errors
     ///
-    /// Panics if the database insert fails.
-    pub async fn create<'e, E>(self, executor: E) -> CreatedAccount
+    /// Returns an error if the database insert fails (e.g., duplicate username or key).
+    pub async fn create<'e, E>(self, executor: E) -> Result<CreatedAccount, AccountRepoError>
     where
         E: sqlx::Executor<'e, Database = sqlx::Postgres>,
     {
@@ -65,9 +65,7 @@ impl AccountFactory {
 
         let (root_pubkey, root_kid) = generate_test_keys(seed);
 
-        create_account_with_executor(executor, &username, &root_pubkey, &root_kid)
-            .await
-            .expect("AccountFactory: failed to create account")
+        create_account_with_executor(executor, &username, &root_pubkey, &root_kid).await
     }
 }
 
