@@ -288,6 +288,53 @@ export { ErrorFallback } from './ErrorFallback';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 ```
 
+## Import Boundaries
+
+ESLint enforces a strict import hierarchy to maintain clean dependencies.
+
+### Layer Hierarchy
+
+```
+pages → features → shared layers (components, api, providers, theme)
+```
+
+| Layer | Can Import From |
+|-------|-----------------|
+| `@/pages/*` | features, components, api, providers, theme |
+| `@/features/*` | components, api, providers, theme |
+| `@/components/*` | api, providers, theme |
+| `@/api/*` | providers, theme |
+| `@/providers/*` | theme |
+
+### Rules
+
+1. **Use `@/` alias for cross-layer imports**
+2. **Features cannot import other features** — lift shared code to shared layers
+3. **No deep imports** — use barrels (`@/features/identity`, not `@/features/identity/api/client`)
+4. **Relative imports within features** — use sibling barrels (`../api`, not `../api/client`)
+
+### Examples
+
+```tsx
+// Good: Page imports feature barrel
+import { Signup } from '@/features/identity';
+
+// Good: Feature imports shared layer
+import { Button } from '@/components';
+
+// Good: Within feature, import sibling barrel
+import { useSignup } from '../api';
+
+// Bad: Feature imports another feature
+import { something } from '@/features/other';
+
+// Bad: Deep import into feature internals
+import { client } from '@/features/identity/api/client';
+
+// Bad: Deep relative import into sibling internals
+import { useSignup } from '../api/queries';
+```
+
 ## Testing
 
 ### Use Testing Library

@@ -1,3 +1,4 @@
+import boundaries from 'eslint-plugin-boundaries';
 import mantine from 'eslint-config-mantine';
 import jestDom from 'eslint-plugin-jest-dom';
 import playwright from 'eslint-plugin-playwright';
@@ -95,6 +96,85 @@ export default tseslint.config(
             {
               group: ['@emotion/*', '@mui/*'],
               message: 'Do not introduce new styling systems; use Mantine primitives and the shared theme.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+
+  {
+    // Enforce import boundaries between architectural layers (see docs/interfaces/react-coding-standards.md).
+    // Hierarchy: pages → features → shared layers (components, api, providers, theme)
+    files: ['src/**/*.{ts,tsx}'],
+    plugins: {
+      boundaries,
+    },
+    settings: {
+      'boundaries/elements': [
+        { type: 'pages', pattern: 'src/pages/*' },
+        { type: 'features', pattern: 'src/features/*' },
+        { type: 'components', pattern: 'src/components/*' },
+        { type: 'api', pattern: 'src/api/*' },
+        { type: 'providers', pattern: 'src/providers/*' },
+        { type: 'theme', pattern: 'src/theme/*' },
+      ],
+    },
+    rules: {
+      'boundaries/element-types': [
+        'error',
+        {
+          default: 'disallow',
+          rules: [
+            { from: 'pages', allow: ['features', 'components', 'api', 'providers', 'theme'] },
+            { from: 'features', allow: ['components', 'api', 'providers', 'theme'] },
+            { from: 'components', allow: ['api', 'providers', 'theme'] },
+            { from: 'api', allow: ['providers', 'theme'] },
+            { from: 'providers', allow: ['theme'] },
+          ],
+        },
+      ],
+    },
+  },
+
+  {
+    // Enforce barrel imports: no deep imports into features or pages from outside.
+    files: ['src/**/*.{ts,tsx}'],
+    ignores: ['src/features/**/*.{ts,tsx}', 'src/pages/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['@/features/*/*', '@/features/*/*/*'],
+              message: 'Import from feature barrel (@/features/X), not internals.',
+            },
+            {
+              group: ['@/pages/*'],
+              message: 'Pages are entry points; do not import from them.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+
+  {
+    // Within features: enforce sibling barrel imports (../api not ../api/client).
+    files: ['src/features/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['../*/**'],
+              message: 'Import from sibling barrel (../api), not internals (../api/client).',
+            },
+            {
+              group: ['@/features/*'],
+              message: 'Features cannot import other features. Lift shared code to @/components, @/api, or @/providers.',
             },
           ],
         },

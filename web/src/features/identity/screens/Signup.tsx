@@ -7,7 +7,7 @@ import { useState } from 'react';
 import { IconAlertTriangle, IconCheck } from '@tabler/icons-react';
 import { Alert, Button, Card, Code, Group, Stack, Text, TextInput, Title } from '@mantine/core';
 import { useCryptoRequired } from '@/providers/CryptoProvider';
-import { useSignup } from '../api/queries';
+import { useSignup } from '../api';
 import { generateKeyPair } from '../keys';
 
 export function Signup() {
