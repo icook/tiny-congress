@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2025-12-19 21:25:13</td>
+            <td class="headerValue">2025-12-19 22:12:16</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryLo">60.0&nbsp;%</td>
@@ -89,11 +89,11 @@
 <span id="L27"><span class="lineNum">      27</span>              : /// A base64url-encoded string (without padding) of the first 16 bytes of the SHA-256 hash</span>
 <span id="L28"><span class="lineNum">      28</span>              : #[wasm_bindgen]</span>
 <span id="L29"><span class="lineNum">      29</span>              : #[must_use]</span>
-<span id="L30"><span class="lineNum">      30</span> <span class="tlaGNC tlaBgGNC">          17 : pub fn derive_kid(public_key: &amp;[u8]) -&gt; String {</span></span>
-<span id="L31"><span class="lineNum">      31</span> <span class="tlaGNC">          17 :     let hash = Sha256::digest(public_key);</span></span>
+<span id="L30"><span class="lineNum">      30</span> <span class="tlaGNC tlaBgGNC">          23 : pub fn derive_kid(public_key: &amp;[u8]) -&gt; String {</span></span>
+<span id="L31"><span class="lineNum">      31</span> <span class="tlaGNC">          23 :     let hash = Sha256::digest(public_key);</span></span>
 <span id="L32"><span class="lineNum">      32</span>              :     // Truncate to first 16 bytes for shorter KIDs</span>
-<span id="L33"><span class="lineNum">      33</span> <span class="tlaGNC">          17 :     URL_SAFE_NO_PAD.encode(&amp;hash[..16])</span></span>
-<span id="L34"><span class="lineNum">      34</span> <span class="tlaGNC">          17 : }</span></span>
+<span id="L33"><span class="lineNum">      33</span> <span class="tlaGNC">          23 :     URL_SAFE_NO_PAD.encode(&amp;hash[..16])</span></span>
+<span id="L34"><span class="lineNum">      34</span> <span class="tlaGNC">          23 : }</span></span>
 <span id="L35"><span class="lineNum">      35</span>              : </span>
 <span id="L36"><span class="lineNum">      36</span>              : /// Encode bytes as base64url (RFC 4648) without padding.</span>
 <span id="L37"><span class="lineNum">      37</span>              : ///</span>
@@ -104,9 +104,9 @@
 <span id="L42"><span class="lineNum">      42</span>              : /// A base64url-encoded string without padding characters</span>
 <span id="L43"><span class="lineNum">      43</span>              : #[wasm_bindgen]</span>
 <span id="L44"><span class="lineNum">      44</span>              : #[must_use]</span>
-<span id="L45"><span class="lineNum">      45</span> <span class="tlaGNC">          10 : pub fn encode_base64url(bytes: &amp;[u8]) -&gt; String {</span></span>
-<span id="L46"><span class="lineNum">      46</span> <span class="tlaGNC">          10 :     URL_SAFE_NO_PAD.encode(bytes)</span></span>
-<span id="L47"><span class="lineNum">      47</span> <span class="tlaGNC">          10 : }</span></span>
+<span id="L45"><span class="lineNum">      45</span> <span class="tlaGNC">          16 : pub fn encode_base64url(bytes: &amp;[u8]) -&gt; String {</span></span>
+<span id="L46"><span class="lineNum">      46</span> <span class="tlaGNC">          16 :     URL_SAFE_NO_PAD.encode(bytes)</span></span>
+<span id="L47"><span class="lineNum">      47</span> <span class="tlaGNC">          16 : }</span></span>
 <span id="L48"><span class="lineNum">      48</span>              : </span>
 <span id="L49"><span class="lineNum">      49</span>              : /// Decode a base64url-encoded string (RFC 4648) to bytes.</span>
 <span id="L50"><span class="lineNum">      50</span>              : ///</span>
