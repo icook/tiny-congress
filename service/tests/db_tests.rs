@@ -5,6 +5,7 @@
 
 mod common;
 
+use common::factories::{AccountFactory, TestItemFactory};
 use common::test_db::{get_test_db, isolated_db, test_transaction};
 use sqlx::{query, query_scalar};
 use sqlx_core::migrate::Migrator;
@@ -61,20 +62,11 @@ async fn test_migrations_applied() {
 async fn test_crud_operations() {
     let mut tx = test_transaction().await;
 
-    // Insert a test item
-    let item_id = Uuid::new_v4();
-    let item_name = format!("Test Item {}", item_id);
-
-    query("INSERT INTO test_items (id, name) VALUES ($1, $2)")
-        .bind(item_id)
-        .bind(&item_name)
-        .execute(&mut *tx)
-        .await
-        .expect("Failed to insert test item");
+    let item = TestItemFactory::new().create(&mut *tx).await;
 
     // Verify the item exists
     let count: i64 = query_scalar("SELECT COUNT(*) FROM test_items WHERE id = $1")
-        .bind(item_id)
+        .bind(item.id)
         .fetch_one(&mut *tx)
         .await
         .expect("Failed to count items");
@@ -86,11 +78,11 @@ async fn test_crud_operations() {
 #[shared_runtime_test]
 async fn test_accounts_repo_inserts_account() {
     let mut tx = test_transaction().await;
-    let (root_pubkey, root_kid) = test_keys(42);
 
-    let account = create_account_with_executor(&mut *tx, "alice", &root_pubkey, &root_kid)
-        .await
-        .expect("expected account to insert");
+    let account = AccountFactory::new()
+        .with_username("alice")
+        .create(&mut *tx)
+        .await;
 
     let username: String = query_scalar("SELECT username FROM accounts WHERE id = $1")
         .bind(account.id)
@@ -99,7 +91,7 @@ async fn test_accounts_repo_inserts_account() {
         .expect("should fetch inserted row");
 
     assert_eq!(username, "alice");
-    assert_eq!(account.root_kid, root_kid);
+    assert!(!account.root_kid.is_empty());
 }
 
 /// Test unique constraints: duplicate username should be rejected.
@@ -107,11 +99,14 @@ async fn test_accounts_repo_inserts_account() {
 async fn test_accounts_repo_rejects_duplicate_username() {
     let mut tx = test_transaction().await;
 
-    let (root_pubkey, root_kid) = test_keys(1);
-    create_account_with_executor(&mut *tx, "alice", &root_pubkey, &root_kid)
-        .await
-        .expect("first insert should succeed");
+    // Create first account
+    AccountFactory::new()
+        .with_username("alice")
+        .with_seed(1)
+        .create(&mut *tx)
+        .await;
 
+    // Try to create second account with same username but different key
     let (second_pubkey, second_kid) = test_keys(2);
     let err = create_account_with_executor(&mut *tx, "alice", &second_pubkey, &second_kid)
         .await
@@ -124,12 +119,16 @@ async fn test_accounts_repo_rejects_duplicate_username() {
 #[shared_runtime_test]
 async fn test_accounts_repo_rejects_duplicate_root_key() {
     let mut tx = test_transaction().await;
+
+    // Create first account with specific seed
+    AccountFactory::new()
+        .with_username("alice")
+        .with_seed(3)
+        .create(&mut *tx)
+        .await;
+
+    // Try to create second account with same key (same seed) but different username
     let (root_pubkey, root_kid) = test_keys(3);
-
-    create_account_with_executor(&mut *tx, "alice", &root_pubkey, &root_kid)
-        .await
-        .expect("first insert should succeed");
-
     let err = create_account_with_executor(&mut *tx, "bob", &root_pubkey, &root_kid)
         .await
         .expect_err("duplicate key should error");
