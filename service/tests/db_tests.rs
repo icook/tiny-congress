@@ -356,6 +356,17 @@ mod factory_tests {
 
         assert_eq!(username, "custom_alice");
     }
+
+    #[shared_runtime_test]
+    async fn test_account_factory_with_custom_seed() {
+        let mut tx = test_transaction().await;
+
+        let account1 = AccountFactory::new().with_seed(42).create(&mut *tx).await;
+        let account2 = AccountFactory::new().with_seed(43).create(&mut *tx).await;
+
+        // Different seeds should produce different keys
+        assert_ne!(account1.root_kid, account2.root_kid);
+    }
 }
 
 /// Test concurrent transaction behavior with SELECT FOR UPDATE.

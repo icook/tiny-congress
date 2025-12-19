@@ -59,6 +59,8 @@ impl AccountFactory {
     {
         let id = next_id();
         let username = self.username.unwrap_or_else(|| format!("user_{id}"));
+        // Safe: id % 256 is guaranteed to be in range 0..=255, which fits in u8
+        #[allow(clippy::cast_possible_truncation)]
         let seed = self.seed.unwrap_or((id % 256) as u8);
 
         let (root_pubkey, root_kid) = generate_test_keys(seed);
