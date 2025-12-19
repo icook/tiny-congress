@@ -13,7 +13,6 @@ use std::path::Path;
 use tc_crypto::{derive_kid, encode_base64url};
 use tc_test_macros::shared_runtime_test;
 use tinycongress_api::identity::repo::{create_account_with_executor, AccountRepoError};
-use uuid::Uuid;
 
 fn test_keys(seed: u8) -> (String, String) {
     let pubkey = [seed; 32];
@@ -186,18 +185,15 @@ async fn test_isolated_db_basic() {
 
     assert!(exists, "test_items table should exist in isolated database");
 
-    // Insert data that would persist (no transaction rollback)
-    let item_id = Uuid::new_v4();
-    query("INSERT INTO test_items (id, name) VALUES ($1, $2)")
-        .bind(item_id)
-        .bind("isolated test item")
-        .execute(db.pool())
-        .await
-        .expect("Failed to insert item");
+    // Insert using factory (data persists - no transaction rollback)
+    let item = TestItemFactory::new()
+        .with_name("isolated test item")
+        .create(db.pool())
+        .await;
 
     // Verify the insert persisted
     let count: i64 = query_scalar("SELECT COUNT(*) FROM test_items WHERE id = $1")
-        .bind(item_id)
+        .bind(item.id)
         .fetch_one(db.pool())
         .await
         .expect("Failed to count items");
@@ -418,13 +414,10 @@ async fn test_concurrent_select_for_update() {
     let db = isolated_db().await;
 
     // Insert a test row that we'll lock
-    let item_id = Uuid::new_v4();
-    query("INSERT INTO test_items (id, name) VALUES ($1, $2)")
-        .bind(item_id)
-        .bind("lockable item")
-        .execute(db.pool())
-        .await
-        .expect("Failed to insert item");
+    let item = TestItemFactory::new()
+        .with_name("lockable item")
+        .create(db.pool())
+        .await;
 
     // Open two separate connections from the pool
     let mut conn1 = db.pool().acquire().await.expect("Failed to get conn1");
@@ -433,7 +426,7 @@ async fn test_concurrent_select_for_update() {
     // Start transaction on conn1 and lock the row
     query("BEGIN").execute(&mut *conn1).await.unwrap();
     query("SELECT * FROM test_items WHERE id = $1 FOR UPDATE")
-        .bind(item_id)
+        .bind(item.id)
         .fetch_one(&mut *conn1)
         .await
         .expect("Failed to lock row on conn1");
@@ -441,7 +434,7 @@ async fn test_concurrent_select_for_update() {
     // Start transaction on conn2 and try to lock with NOWAIT
     query("BEGIN").execute(&mut *conn2).await.unwrap();
     let result = query("SELECT * FROM test_items WHERE id = $1 FOR UPDATE NOWAIT")
-        .bind(item_id)
+        .bind(item.id)
         .fetch_one(&mut *conn2)
         .await;
 
@@ -468,18 +461,15 @@ async fn test_isolated_dbs_are_independent() {
     let db1 = isolated_db().await;
     let db2 = isolated_db().await;
 
-    // Insert into db1
-    let item_id = Uuid::new_v4();
-    query("INSERT INTO test_items (id, name) VALUES ($1, $2)")
-        .bind(item_id)
-        .bind("db1 item")
-        .execute(db1.pool())
-        .await
-        .expect("Failed to insert into db1");
+    // Insert into db1 using factory
+    let item = TestItemFactory::new()
+        .with_name("db1 item")
+        .create(db1.pool())
+        .await;
 
     // Verify item exists in db1
     let count_db1: i64 = query_scalar("SELECT COUNT(*) FROM test_items WHERE id = $1")
-        .bind(item_id)
+        .bind(item.id)
         .fetch_one(db1.pool())
         .await
         .expect("Failed to count in db1");
@@ -487,7 +477,7 @@ async fn test_isolated_dbs_are_independent() {
 
     // Verify item does NOT exist in db2
     let count_db2: i64 = query_scalar("SELECT COUNT(*) FROM test_items WHERE id = $1")
-        .bind(item_id)
+        .bind(item.id)
         .fetch_one(db2.pool())
         .await
         .expect("Failed to count in db2");
