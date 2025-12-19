@@ -320,7 +320,7 @@ async fn test_migration_rollback_simulation() {
 
 mod factory_tests {
     use super::*;
-    use common::factories::AccountFactory;
+    use common::factories::{AccountFactory, TestItemFactory};
 
     #[shared_runtime_test]
     async fn test_account_factory_creates_with_defaults() {
@@ -366,6 +366,21 @@ mod factory_tests {
 
         // Different seeds should produce different keys
         assert_ne!(account1.root_kid, account2.root_kid);
+    }
+
+    #[shared_runtime_test]
+    async fn test_item_factory_creates_with_defaults() {
+        let mut tx = test_transaction().await;
+
+        let item = TestItemFactory::new().create(&mut *tx).await;
+
+        let name: String = query_scalar("SELECT name FROM test_items WHERE id = $1")
+            .bind(item.id)
+            .fetch_one(&mut *tx)
+            .await
+            .expect("should fetch inserted row");
+
+        assert!(!name.is_empty(), "name should not be empty");
     }
 }
 
