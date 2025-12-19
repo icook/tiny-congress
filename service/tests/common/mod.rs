@@ -79,6 +79,7 @@
 pub mod app_builder;
 pub mod factories;
 pub mod graphql;
+pub mod migration_helpers;
 
 pub mod test_db {
     use once_cell::sync::Lazy;
