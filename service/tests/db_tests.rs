@@ -318,6 +318,46 @@ async fn test_migration_rollback_simulation() {
     assert!(exists_final, "test_items should exist after recreation");
 }
 
+mod factory_tests {
+    use super::*;
+    use common::factories::AccountFactory;
+
+    #[shared_runtime_test]
+    async fn test_account_factory_creates_with_defaults() {
+        let mut tx = test_transaction().await;
+
+        let account = AccountFactory::new().create(&mut *tx).await;
+
+        // Verify account was created
+        let username: String = query_scalar("SELECT username FROM accounts WHERE id = $1")
+            .bind(account.id)
+            .fetch_one(&mut *tx)
+            .await
+            .expect("should fetch inserted row");
+
+        assert!(!username.is_empty(), "username should not be empty");
+        assert!(!account.root_kid.is_empty(), "root_kid should not be empty");
+    }
+
+    #[shared_runtime_test]
+    async fn test_account_factory_with_custom_username() {
+        let mut tx = test_transaction().await;
+
+        let account = AccountFactory::new()
+            .with_username("custom_alice")
+            .create(&mut *tx)
+            .await;
+
+        let username: String = query_scalar("SELECT username FROM accounts WHERE id = $1")
+            .bind(account.id)
+            .fetch_one(&mut *tx)
+            .await
+            .expect("should fetch inserted row");
+
+        assert_eq!(username, "custom_alice");
+    }
+}
+
 /// Test concurrent transaction behavior with SELECT FOR UPDATE.
 /// Demonstrates isolation between two connections to the same isolated database.
 #[shared_runtime_test]
