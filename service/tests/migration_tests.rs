@@ -106,8 +106,7 @@ async fn test_accounts_table_schema() {
     .await
     .expect("Failed to query accounts schema");
 
-    let column_map: std::collections::HashMap<String, String> =
-        columns.into_iter().collect();
+    let column_map: std::collections::HashMap<String, String> = columns.into_iter().collect();
 
     assert_eq!(
         column_map.get("id").map(|s| s.as_str()),
@@ -176,21 +175,19 @@ async fn test_accounts_table_indexes() {
 async fn test_required_extensions_available() {
     let db = isolated_db().await;
 
-    let pgcrypto_exists: bool = sqlx::query_scalar(
-        "SELECT EXISTS (SELECT FROM pg_extension WHERE extname = 'pgcrypto')"
-    )
-    .fetch_one(db.pool())
-    .await
-    .expect("Failed to check pgcrypto");
+    let pgcrypto_exists: bool =
+        sqlx::query_scalar("SELECT EXISTS (SELECT FROM pg_extension WHERE extname = 'pgcrypto')")
+            .fetch_one(db.pool())
+            .await
+            .expect("Failed to check pgcrypto");
 
     assert!(pgcrypto_exists, "pgcrypto extension should be available");
 
-    let pgmq_exists: bool = sqlx::query_scalar(
-        "SELECT EXISTS (SELECT FROM pg_extension WHERE extname = 'pgmq')"
-    )
-    .fetch_one(db.pool())
-    .await
-    .expect("Failed to check pgmq");
+    let pgmq_exists: bool =
+        sqlx::query_scalar("SELECT EXISTS (SELECT FROM pg_extension WHERE extname = 'pgmq')")
+            .fetch_one(db.pool())
+            .await
+            .expect("Failed to check pgmq");
 
     assert!(pgmq_exists, "pgmq extension should be available");
 }

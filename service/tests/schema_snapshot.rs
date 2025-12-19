@@ -12,10 +12,8 @@ mod common;
 use common::test_db::isolated_db;
 use tc_test_macros::shared_runtime_test;
 
-const SCHEMA_SNAPSHOT_PATH: &str = concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/tests/snapshots/schema.sql"
-);
+const SCHEMA_SNAPSHOT_PATH: &str =
+    concat!(env!("CARGO_MANIFEST_DIR"), "/tests/snapshots/schema.sql");
 
 /// Extracts the current schema from the database in a normalized format.
 async fn extract_schema(pool: &sqlx::PgPool) -> String {
@@ -107,7 +105,10 @@ async fn extract_schema(pool: &sqlx::PgPool) -> String {
             format!(" DEFAULT {}", default)
         };
 
-        output.push_str(&format!("    {} {}{}{}", column, type_str, null_str, default_str));
+        output.push_str(&format!(
+            "    {} {}{}{}",
+            column, type_str, null_str, default_str
+        ));
     }
     if !current_table.is_empty() {
         output.push_str("\n);\n\n");
@@ -175,7 +176,8 @@ async fn test_schema_matches_snapshot() {
             }
         }
 
-        diff_output.push_str("\nTo update the snapshot (after verifying changes are intentional):\n");
+        diff_output
+            .push_str("\nTo update the snapshot (after verifying changes are intentional):\n");
         diff_output.push_str("  cargo test -- generate_schema_snapshot --ignored\n");
 
         panic!("{}", diff_output);

@@ -63,12 +63,10 @@ pub fn get_ondisk_migration_versions(migrator: &Migrator) -> HashSet<i64> {
 /// Gets the set of applied migration versions from the database.
 #[allow(clippy::expect_used)]
 pub async fn get_applied_migration_versions(pool: &PgPool) -> HashSet<i64> {
-    let rows: Vec<(i64,)> = sqlx::query_as(
-        "SELECT version FROM _sqlx_migrations ORDER BY version"
-    )
-    .fetch_all(pool)
-    .await
-    .expect("Failed to query _sqlx_migrations table");
+    let rows: Vec<(i64,)> = sqlx::query_as("SELECT version FROM _sqlx_migrations ORDER BY version")
+        .fetch_all(pool)
+        .await
+        .expect("Failed to query _sqlx_migrations table");
 
     rows.into_iter().map(|(v,)| v).collect()
 }
@@ -130,7 +128,10 @@ mod tests {
     async fn test_load_migrator_succeeds() {
         // This will fail if migrations directory is missing or malformed
         let migrator = load_migrator().await;
-        assert!(migrator.iter().count() > 0, "Should have at least one migration");
+        assert!(
+            migrator.iter().count() > 0,
+            "Should have at least one migration"
+        );
     }
 
     #[shared_runtime_test]
