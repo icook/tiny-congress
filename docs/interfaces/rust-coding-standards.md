@@ -274,6 +274,8 @@ Use the `# Errors` section to document when each error variant is returned.
 
 ## Testing
 
+> **See also:** [Backend Testing Patterns](../playbooks/backend-test-patterns.md) for comprehensive testing guidance including database tests, mocking, and test infrastructure.
+
 ### Use `#[sqlx::test]` for DB Tests
 
 ```rust
