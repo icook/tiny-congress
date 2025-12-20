@@ -23,9 +23,9 @@
         <div class='clearfix'>
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">6.81% </span>
+                <span class="strong">6.52% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>3/44</span>
+                <span class='fraction'>3/46</span>
             </div>
         
             
@@ -44,9 +44,9 @@
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">10.71% </span>
+                <span class="strong">10.34% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>3/28</span>
+                <span class='fraction'>3/29</span>
             </div>
         
             
@@ -114,7 +114,8 @@
 <a name='L49'></a><a href='#L49'>49</a>
 <a name='L50'></a><a href='#L50'>50</a>
 <a name='L51'></a><a href='#L51'>51</a>
-<a name='L52'></a><a href='#L52'>52</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
+<a name='L52'></a><a href='#L52'>52</a>
+<a name='L53'></a><a href='#L53'>53</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -125,17 +126,18 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -165,16 +167,17 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">type GraphQLResponse&lt;T&gt; = {
+<span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">interface GraphQLResponse&lt;T&gt; {
   data?: T;
   errors?: { message: string }[];
-};
+}
 &nbsp;
 const defaultGraphqlUrl = 'http://localhost:8080/graphql';
 &nbsp;
-export function getGraphqlUrl() <span class="cstat-no" title="statement not covered" ><span class="fstat-no" title="function not covered" >{</span></span>
-  if (<span class="cstat-no" title="statement not covered" >import.meta.env.VITE_GRAPHQL_URL) <span class="cstat-no" title="statement not covered" >{</span></span>
-    return <span class="cstat-no" title="statement not covered" >import.meta.env.VITE_GRAPHQL_URL;</span>
+export function getGraphqlUrl(): string <span class="fstat-no" title="function not covered" >{</span>
+<span class="cstat-no" title="statement not covered" >  const envUrl = <span class="cstat-no" title="statement not covered" >i</span>mport.meta.env.VITE_GRAPHQL_URL as string | undefined;</span>
+<span class="cstat-no" title="statement not covered" >  if (envUrl) <span class="cstat-no" title="statement not covered" ><span class="cstat-no" title="statement not covered" >{</span></span></span>
+<span class="cstat-no" title="statement not covered" >    return envUrl;</span>
 <span class="cstat-no" title="statement not covered" >  }</span>
 &nbsp;
 <span class="cstat-no" title="statement not covered" >  if (typeof window !== 'undefined') <span class="cstat-no" title="statement not covered" >{</span></span>
@@ -200,7 +203,7 @@ export async function graphqlRequest&lt;TData&gt;(
   });
 &nbsp;
 <span class="cstat-no" title="statement not covered" >  if (!response.ok) <span class="cstat-no" title="statement not covered" ><span class="cstat-no" title="statement not covered" >{</span></span></span>
-<span class="cstat-no" title="statement not covered" >    throw new Error(`GraphQL request failed with status ${response.status}`);</span>
+<span class="cstat-no" title="statement not covered" >    throw new Error(`GraphQL request failed with status ${String(response.status)}`);</span>
 <span class="cstat-no" title="statement not covered" >  }</span>
 &nbsp;
   const payload = (await response.json(<span class="cstat-no" title="statement not covered" >)) as GraphQLResponse&lt;TData&gt;;</span>
@@ -223,7 +226,7 @@ export async function graphqlRequest&lt;TData&gt;(
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2025-12-20T18:19:44.874Z
+                at 2025-12-20T21:34:15.752Z
             </div>
         <script src="../../prettify.js"></script>
         <script>
