@@ -845,54 +845,65 @@ jobs:
 
           rm -rf artifacts
 
-          # Extract coverage percentages from vitest summary
+          # Extract coverage percentages from all test types
+          # Vitest
           if [ -f site/coverage/vitest/coverage-summary.json ]; then
-            COVERAGE_PCT=$(jq -r '.total.lines.pct // "N/A"' site/coverage/vitest/coverage-summary.json)
-            echo "coverage_pct=${COVERAGE_PCT}" >> "$GITHUB_OUTPUT"
-
-            # Calculate per-module coverage (group by first folder under web/src/)
-            jq -r '
-              to_entries
-              | map(select(.key | test("web/src/")))
-              | map(.key |= (split("web/src/")[1] | split("/")[0]))
-              | group_by(.key)
-              | map({
-                  module: .[0].key,
-                  covered: (map(.value.lines.covered) | add),
-                  total: (map(.value.lines.total) | add)
-                })
-              | sort_by(-.total)
-              | map("\(.module):\(.covered)/\(.total)")
-              | join("|")
-            ' site/coverage/vitest/coverage-summary.json > /tmp/module_coverage.txt
-
-            echo "module_coverage=$(cat /tmp/module_coverage.txt)" >> "$GITHUB_OUTPUT"
+            VITEST_LINES=$(jq -r '.total.lines.pct // 0' site/coverage/vitest/coverage-summary.json)
+            VITEST_BRANCHES=$(jq -r '.total.branches.pct // 0' site/coverage/vitest/coverage-summary.json)
+            VITEST_FUNCTIONS=$(jq -r '.total.functions.pct // 0' site/coverage/vitest/coverage-summary.json)
           else
-            echo "coverage_pct=N/A" >> "$GITHUB_OUTPUT"
-            echo "module_coverage=" >> "$GITHUB_OUTPUT"
+            VITEST_LINES=0; VITEST_BRANCHES=0; VITEST_FUNCTIONS=0
           fi
+          echo "vitest_lines=${VITEST_LINES}" >> "$GITHUB_OUTPUT"
+          echo "vitest_branches=${VITEST_BRANCHES}" >> "$GITHUB_OUTPUT"
+          echo "vitest_functions=${VITEST_FUNCTIONS}" >> "$GITHUB_OUTPUT"
+
+          # Playwright
+          if [ -f site/coverage/playwright/coverage-summary.json ]; then
+            PW_LINES=$(jq -r '.total.lines.pct // 0' site/coverage/playwright/coverage-summary.json)
+            PW_BRANCHES=$(jq -r '.total.branches.pct // 0' site/coverage/playwright/coverage-summary.json)
+            PW_FUNCTIONS=$(jq -r '.total.functions.pct // 0' site/coverage/playwright/coverage-summary.json)
+          else
+            PW_LINES=0; PW_BRANCHES=0; PW_FUNCTIONS=0
+          fi
+          echo "pw_lines=${PW_LINES}" >> "$GITHUB_OUTPUT"
+          echo "pw_branches=${PW_BRANCHES}" >> "$GITHUB_OUTPUT"
+          echo "pw_functions=${PW_FUNCTIONS}" >> "$GITHUB_OUTPUT"
+
+          # Rust (parse lcov summary lines)
+          if [ -f site/coverage/rust/index.html ]; then
+            # Extract from genhtml output - look for the header row with percentages
+            RUST_LINES=$(grep -oP 'headerCovTableEntryLo[^>]*>\K[0-9.]+(?= %)' site/coverage/rust/index.html 2>/dev/null | head -1 || echo "0")
+            RUST_FUNCTIONS=$(grep -oP 'headerCovTableEntryLo[^>]*>\K[0-9.]+(?= %)' site/coverage/rust/index.html 2>/dev/null | tail -1 || echo "0")
+            # If extraction failed, try alternate format
+            if [ -z "$RUST_LINES" ] || [ "$RUST_LINES" = "0" ]; then
+              RUST_LINES=$(grep -oP 'headerCovTableEntry[^>]*>\K[0-9.]+(?= %)' site/coverage/rust/index.html 2>/dev/null | head -1 || echo "0")
+              RUST_FUNCTIONS=$(grep -oP 'headerCovTableEntry[^>]*>\K[0-9.]+(?= %)' site/coverage/rust/index.html 2>/dev/null | tail -1 || echo "0")
+            fi
+          else
+            RUST_LINES=0; RUST_FUNCTIONS=0
+          fi
+          echo "rust_lines=${RUST_LINES:-0}" >> "$GITHUB_OUTPUT"
+          echo "rust_functions=${RUST_FUNCTIONS:-0}" >> "$GITHUB_OUTPUT"
+
+          # Overall coverage (vitest lines as primary)
+          echo "coverage_pct=${VITEST_LINES}" >> "$GITHUB_OUTPUT"
 
       - name: Generate landing page
         run: |
           COMMIT_SHORT="${GITHUB_SHA:0:7}"
           BUILD_DATE="$(date -u +"%Y-%m-%d %H:%M UTC")"
           COVERAGE_PCT="${{ steps.artifacts.outputs.coverage_pct }}"
-          MODULE_COVERAGE="${{ steps.artifacts.outputs.module_coverage }}"
 
-          # Generate module coverage table rows
-          MODULE_ROWS=""
-          if [ -n "$MODULE_COVERAGE" ]; then
-            IFS='|' read -ra MODULES <<< "$MODULE_COVERAGE"
-            for entry in "${MODULES[@]}"; do
-              MODULE_NAME=$(echo "$entry" | cut -d: -f1)
-              COVERED=$(echo "$entry" | cut -d: -f2 | cut -d/ -f1)
-              TOTAL=$(echo "$entry" | cut -d: -f2 | cut -d/ -f2)
-              if [ "$TOTAL" -gt 0 ]; then
-                PCT=$(echo "scale=1; $COVERED * 100 / $TOTAL" | bc)
-                MODULE_ROWS="${MODULE_ROWS}<tr><td>${MODULE_NAME}</td><td class=\"pct\">${PCT}%</td><td class=\"ratio\">${COVERED}/${TOTAL}</td></tr>"
-              fi
-            done
-          fi
+          # Coverage by test type
+          VITEST_LINES="${{ steps.artifacts.outputs.vitest_lines }}"
+          VITEST_BRANCHES="${{ steps.artifacts.outputs.vitest_branches }}"
+          VITEST_FUNCTIONS="${{ steps.artifacts.outputs.vitest_functions }}"
+          PW_LINES="${{ steps.artifacts.outputs.pw_lines }}"
+          PW_BRANCHES="${{ steps.artifacts.outputs.pw_branches }}"
+          PW_FUNCTIONS="${{ steps.artifacts.outputs.pw_functions }}"
+          RUST_LINES="${{ steps.artifacts.outputs.rust_lines }}"
+          RUST_FUNCTIONS="${{ steps.artifacts.outputs.rust_functions }}"
 
           cat > site/index.html <<EOF
           <!DOCTYPE html>
@@ -1052,76 +1063,51 @@ jobs:
               .link-icon { font-size: 1.25rem; }
               .link-label { font-weight: 500; }
 
-              /* Coverage section special */
-              .coverage-section {
-                display: flex;
-                align-items: center;
-                justify-content: space-between;
-                flex-wrap: wrap;
-                gap: 16px;
-              }
-              .coverage-main {
-                display: flex;
-                align-items: baseline;
-                gap: 12px;
-              }
-              .coverage-pct {
-                font-size: 2.5rem;
-                font-weight: 700;
-                color: var(--success);
-              }
-              .coverage-links {
-                display: flex;
-                gap: 8px;
-                flex-wrap: wrap;
-              }
-              .coverage-link {
-                padding: 6px 12px;
-                background: var(--bg);
-                border: 1px solid var(--border);
-                border-radius: 6px;
-                color: var(--link);
-                text-decoration: none;
-                font-size: 0.875rem;
-              }
-              .coverage-link:hover {
-                background: var(--bg-hover);
-              }
-
-              /* Module coverage table */
-              .module-table {
+              /* Coverage table */
+              .coverage-table {
                 width: 100%;
                 border-collapse: collapse;
                 margin-top: 16px;
                 font-size: 0.875rem;
+                background: var(--bg-card);
+                border-radius: 8px;
+                overflow: hidden;
               }
-              .module-table th {
+              .coverage-table th {
                 text-align: left;
-                padding: 8px 12px;
-                border-bottom: 2px solid var(--border);
+                padding: 10px 14px;
+                background: var(--bg-hover);
                 color: var(--text-muted);
                 font-weight: 500;
                 text-transform: uppercase;
                 font-size: 0.75rem;
                 letter-spacing: 0.05em;
               }
-              .module-table td {
-                padding: 10px 12px;
+              .coverage-table td {
+                padding: 12px 14px;
                 border-bottom: 1px solid var(--border);
               }
-              .module-table tr:last-child td {
+              .coverage-table tr:last-child td {
                 border-bottom: none;
               }
-              .module-table .pct {
+              .coverage-table .test-type {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+              }
+              .coverage-table .pct {
                 font-weight: 600;
-                color: var(--success);
                 font-family: ui-monospace, monospace;
               }
-              .module-table .ratio {
-                color: var(--text-muted);
-                font-family: ui-monospace, monospace;
-                font-size: 0.8rem;
+              .coverage-table .pct.good { color: #22c55e; }
+              .coverage-table .pct.ok { color: #eab308; }
+              .coverage-table .pct.low { color: #ef4444; }
+              .coverage-table a {
+                color: var(--link);
+                text-decoration: none;
+                font-size: 0.85rem;
               }
+              .coverage-table a:hover { text-decoration: underline; }
             </style>
           </head>
           <body>
@@ -1168,45 +1154,44 @@ jobs:
             </section>
 
             <section class="section">
-              <h2>📋 API Schemas</h2>
-              <div class="link-grid">
-                <a href="coverage/schemas/graphql-viewer.html" class="link-card">
-                  <span class="link-icon">◈</span>
-                  <span class="link-label">GraphQL Schema</span>
-                </a>
-                <a href="coverage/schemas/swagger-ui.html" class="link-card">
-                  <span class="link-icon">{ }</span>
-                  <span class="link-label">OpenAPI / REST</span>
-                </a>
-              </div>
-            </section>
-
-            <section class="section">
               <h2>📊 Coverage Reports</h2>
-              <div class="coverage-section">
-                <div class="coverage-main">
-                  <span class="coverage-pct">${COVERAGE_PCT}%</span>
-                  <span style="color: var(--text-secondary)">line coverage</span>
-                </div>
-                <div class="coverage-links">
-                  <a href="coverage/" class="coverage-link">📊 Combined</a>
-                  <a href="coverage/vitest/" class="coverage-link">Vitest</a>
-                  <a href="coverage/playwright/" class="coverage-link">Playwright</a>
-                  <a href="coverage/rust/" class="coverage-link">Rust</a>
-                </div>
-              </div>
-              <table class="module-table">
+              <table class="coverage-table">
                 <thead>
                   <tr>
-                    <th>Module</th>
-                    <th>Coverage</th>
+                    <th>Test Type</th>
                     <th>Lines</th>
+                    <th>Branches</th>
+                    <th>Functions</th>
+                    <th>Details</th>
                   </tr>
                 </thead>
                 <tbody>
-                  ${MODULE_ROWS}
+                  <tr>
+                    <td><span class="test-type">🧪 Vitest Unit Tests</span></td>
+                    <td class="pct">${VITEST_LINES}%</td>
+                    <td class="pct">${VITEST_BRANCHES}%</td>
+                    <td class="pct">${VITEST_FUNCTIONS}%</td>
+                    <td><a href="coverage/vitest/">View Report</a></td>
+                  </tr>
+                  <tr>
+                    <td><span class="test-type">🎭 Playwright E2E</span></td>
+                    <td class="pct">${PW_LINES}%</td>
+                    <td class="pct">${PW_BRANCHES}%</td>
+                    <td class="pct">${PW_FUNCTIONS}%</td>
+                    <td><a href="coverage/playwright/">View Report</a></td>
+                  </tr>
+                  <tr>
+                    <td><span class="test-type">🦀 Rust Backend</span></td>
+                    <td class="pct">${RUST_LINES}%</td>
+                    <td class="pct">N/A</td>
+                    <td class="pct">${RUST_FUNCTIONS}%</td>
+                    <td><a href="coverage/rust/">View Report</a></td>
+                  </tr>
                 </tbody>
               </table>
+              <div style="margin-top: 12px; text-align: right;">
+                <a href="coverage/" style="color: var(--link); font-size: 0.875rem;">View Full Coverage Report →</a>
+              </div>
             </section>
 
             <section class="section">
@@ -1250,11 +1235,6 @@ jobs:
             | | |
             |---|---|
             | 🦀 [Rust API Docs](${{ steps.deploy.outputs.url }}/rust-docs/tinycongress_api/) | 📘 [TypeScript Docs](${{ steps.deploy.outputs.url }}/ts-docs/) |
-
-            ### 📋 API Schemas
-            | | |
-            |---|---|
-            | [GraphQL Schema](${{ steps.deploy.outputs.url }}/coverage/schemas/graphql-viewer.html) | [OpenAPI / REST](${{ steps.deploy.outputs.url }}/coverage/schemas/swagger-ui.html) |
 
             ### 🧪 Test Artifacts
             | | |
