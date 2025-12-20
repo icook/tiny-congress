@@ -8,15 +8,39 @@ edition = "2021"
 license = "MIT"
 
 [workspace.lints.clippy]
+# Lint groups
 pedantic = { level = "warn", priority = -1 }
 nursery = { level = "warn", priority = -1 }
+suspicious = { level = "warn", priority = -1 }
+
+# Documentation lints
 missing_errors_doc = "warn"
 missing_panics_doc = "warn"
+
+# Error handling - prevent panics in library code
 unwrap_used = "warn"
 expect_used = "warn"
+panic = "warn"
+panic_in_result_fn = "warn"
+unwrap_in_result = "warn"
+
+# Code hygiene - catch debug artifacts
 dbg_macro = "warn"
 todo = "warn"
 unimplemented = "warn"
+print_stdout = "warn"
+print_stderr = "warn"
+
+# Correctness - catch ignored must_use values
+let_underscore_must_use = "warn"
+
+# Intentionally allowed - too noisy or not applicable
 module_name_repetitions = "allow"
 missing_docs_in_private_items = "allow"
 similar_names = "allow"
+
+# Evaluated but not enabled:
+# - cargo group: Reports missing crates.io metadata and duplicate transitive deps (not useful for internal packages)
+# - indexing_slicing: Legitimate uses in crypto code (hash[..16])
+# - string_slice: Legitimate use for debug truncation (url[..20])
+# - arithmetic_side_effects: Too strict for general application code

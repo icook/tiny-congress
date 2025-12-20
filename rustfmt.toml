@@ -1,0 +1,27 @@
+# Rustfmt configuration
+# See https://rust-lang.github.io/rustfmt/
+# Only stable options are enabled; nightly-only options are commented for reference.
+
+# Use edition-appropriate defaults
+edition = "2021"
+
+# Line width - match common editor defaults
+max_width = 100
+
+# Formatting behavior
+use_small_heuristics = "Default"
+use_field_init_shorthand = true
+use_try_shorthand = true
+
+# Imports - reorder alphabetically (stable)
+reorder_imports = true
+
+# Keep formatting stable across platforms
+newline_style = "Unix"
+
+# Nightly-only options (uncomment when using nightly toolchain):
+# imports_granularity = "Crate"
+# group_imports = "StdExternalCrate"
+# format_code_in_doc_comments = true
+# wrap_comments = true
+# comment_width = 80
