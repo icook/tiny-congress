@@ -139,7 +139,96 @@ async fn test_migration_idempotency() {
 
 `#[tokio::test]` creates a runtime per test. When tests finish, async cleanup may not complete before the runtime is destroyed, leaving "zombie" connections with broken sockets. The shared runtime ensures all async teardown completes properly.
 
-### 3. GraphQL Resolver Tests
+### 3. Property-Based Tests
+
+Use [proptest](https://docs.rs/proptest) for testing invariants that should hold for all inputs:
+
+**When to use:**
+- Pure functions with clear invariants (no side effects, deterministic)
+- Roundtrip properties: `decode(encode(x)) == x`
+- Idempotency: `f(f(x)) == f(x)`
+- Discovering edge cases through random generation
+
+```rust
+use proptest::prelude::*;
+
+proptest! {
+    #[test]
+    fn roundtrip_encode_decode(bytes: Vec<u8>) {
+        let encoded = encode_base64url(&bytes);
+        let decoded = decode_base64url_native(&encoded).unwrap();
+        prop_assert_eq!(decoded, bytes);
+    }
+}
+```
+
+Keep strategies tightly scoped to avoid flaky tests:
+
+```rust
+// Good: constrained to valid inputs
+fn valid_hostname() -> impl Strategy<Value = String> {
+    "[a-z]{1,10}\\.[a-z]{2,4}"
+}
+
+// Avoid: overly broad strategies
+fn any_string() -> impl Strategy<Value = String> {
+    ".*"  // May generate inputs that fail for unrelated reasons
+}
+```
+
+Place property tests in a separate module within the same file:
+
+```rust
+#[cfg(test)]
+mod tests { /* example-based tests */ }
+
+#[cfg(test)]
+mod proptests {
+    use super::*;
+    use proptest::prelude::*;
+    // Property tests here
+}
+```
+
+**Examples:** `crates/tc-crypto/src/lib.rs`
+
+### 4. Table-Driven Boundary Tests
+
+Use table-driven tests for validation with enumerable edge cases:
+
+**When to use:**
+- Validation with known boundary conditions
+- Specific regression cases (known bug reproductions)
+- Test vectors from specifications
+- Cases where explicit documentation of boundaries is valuable
+
+```rust
+#[test]
+fn database_url_scheme_boundaries() {
+    let cases = [
+        ("postgres://localhost/db", true, "standard postgres"),
+        ("postgresql://localhost/db", true, "postgresql alias"),
+        ("mysql://localhost/db", false, "wrong scheme"),
+        ("", false, "empty URL"),
+    ];
+
+    for (url, should_pass, desc) in cases {
+        let mut config = Config::default();
+        config.database.url = url.into();
+        let result = config.validate();
+        assert_eq!(result.is_ok(), should_pass, "case '{}': {:?}", desc, result);
+    }
+}
+```
+
+Benefits:
+- Explicit documentation of edge cases
+- Easy to add new cases
+- Clear failure messages
+
+**Examples:** `service/src/config.rs` (validation boundary tests)
+
+### 5. GraphQL Resolver Tests
 
 Test resolvers without HTTP by executing queries directly on the schema:
 

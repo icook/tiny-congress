@@ -465,4 +465,115 @@ mod tests {
         let config: SwaggerConfig = serde_json::from_str(json).expect("should parse");
         assert!(config.enabled);
     }
+
+    // Table-driven boundary tests for validation rules
+
+    #[test]
+    fn database_url_scheme_boundaries() {
+        let cases = [
+            ("postgres://localhost/db", true, "standard postgres"),
+            ("postgresql://localhost/db", true, "postgresql alias"),
+            ("postgres://", true, "minimal postgres URL"),
+            ("", false, "empty URL"),
+            ("mysql://localhost/db", false, "wrong scheme"),
+            ("http://localhost/db", false, "http scheme"),
+            ("postgrex://localhost/db", false, "typo in scheme"),
+            ("POSTGRES://localhost/db", false, "uppercase scheme"),
+        ];
+
+        for (url, should_pass, desc) in cases {
+            let mut config = Config::default();
+            config.database.url = url.into();
+            let result = config.validate();
+            assert_eq!(
+                result.is_ok(),
+                should_pass,
+                "case '{}': expected {}, got {:?}",
+                desc,
+                should_pass,
+                result
+            );
+        }
+    }
+
+    #[test]
+    fn port_boundaries() {
+        let cases = [
+            (0u16, false, "zero port"),
+            (1, true, "minimum valid port"),
+            (80, true, "common HTTP port"),
+            (8080, true, "default port"),
+            (65535, true, "maximum port"),
+        ];
+
+        for (port, should_pass, desc) in cases {
+            let mut config = Config::default();
+            config.database.url = "postgres://localhost/db".into();
+            config.server.port = port;
+            let result = config.validate();
+            assert_eq!(result.is_ok(), should_pass, "case '{}': {:?}", desc, result);
+        }
+    }
+
+    #[test]
+    fn max_connections_boundaries() {
+        let cases = [
+            (0u32, false, "zero connections"),
+            (1, true, "minimum valid"),
+            (10, true, "default value"),
+            (100, true, "high value"),
+        ];
+
+        for (max, should_pass, desc) in cases {
+            let mut config = Config::default();
+            config.database.url = "postgres://localhost/db".into();
+            config.database.max_connections = max;
+            let result = config.validate();
+            assert_eq!(result.is_ok(), should_pass, "case '{}': {:?}", desc, result);
+        }
+    }
+
+    #[test]
+    fn cors_origin_boundaries() {
+        let cases = [
+            (vec!["*"], true, "wildcard"),
+            (vec!["http://localhost"], true, "http localhost"),
+            (vec!["https://example.com"], true, "https domain"),
+            (vec!["http://localhost:3000"], true, "with port"),
+            (vec![], true, "empty list"),
+            (vec!["ftp://files.com"], false, "ftp scheme"),
+            (vec!["localhost"], false, "no scheme"),
+            (vec!["//example.com"], false, "protocol-relative"),
+        ];
+
+        for (origins, should_pass, desc) in cases {
+            let mut config = Config::default();
+            config.database.url = "postgres://localhost/db".into();
+            config.cors.allowed_origins = origins.into_iter().map(String::from).collect();
+            let result = config.validate();
+            assert_eq!(result.is_ok(), should_pass, "case '{}': {:?}", desc, result);
+        }
+    }
+
+    #[test]
+    fn frame_options_boundaries() {
+        let cases = [
+            ("DENY", true, "uppercase DENY"),
+            ("SAMEORIGIN", true, "uppercase SAMEORIGIN"),
+            ("deny", true, "lowercase deny"),
+            ("sameorigin", true, "lowercase sameorigin"),
+            ("Deny", true, "mixed case Deny"),
+            ("ALLOW-FROM", false, "deprecated ALLOW-FROM"),
+            ("", false, "empty string"),
+            ("INVALID", false, "invalid value"),
+        ];
+
+        for (value, should_pass, desc) in cases {
+            let mut config = Config::default();
+            config.database.url = "postgres://localhost/db".into();
+            config.security_headers.frame_options = value.into();
+            let result = config.validate();
+            assert_eq!(result.is_ok(), should_pass, "case '{}': {:?}", desc, result);
+        }
+    }
 }

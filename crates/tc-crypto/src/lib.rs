@@ -131,3 +131,44 @@ mod tests {
         assert!(result.is_err());
     }
 }
+
+#[cfg(test)]
+mod proptests {
+    use super::*;
+    use proptest::prelude::*;
+
+    proptest! {
+        /// Any byte sequence can be encoded and decoded back to the original
+        #[test]
+        fn roundtrip_encode_decode(bytes: Vec<u8>) {
+            let encoded = encode_base64url(&bytes);
+            let decoded = decode_base64url_native(&encoded).unwrap();
+            prop_assert_eq!(decoded, bytes);
+        }
+
+        /// KID derivation is deterministic - same input always produces same output
+        #[test]
+        fn derive_kid_deterministic(pubkey: Vec<u8>) {
+            let kid1 = derive_kid(&pubkey);
+            let kid2 = derive_kid(&pubkey);
+            prop_assert_eq!(kid1, kid2);
+        }
+
+        /// KID output length is always 21-22 chars (16 bytes base64url encoded)
+        #[test]
+        fn derive_kid_length_invariant(pubkey: Vec<u8>) {
+            let kid = derive_kid(&pubkey);
+            prop_assert!(kid.len() >= 21 && kid.len() <= 22,
+                "KID length {} not in expected range 21-22", kid.len());
+        }
+
+        /// Encoded output contains only valid base64url characters
+        #[test]
+        fn encode_produces_valid_base64url_chars(bytes: Vec<u8>) {
+            let encoded = encode_base64url(&bytes);
+            prop_assert!(encoded.chars().all(|c|
+                c.is_ascii_alphanumeric() || c == '-' || c == '_'
+            ));
+        }
+    }
+}
