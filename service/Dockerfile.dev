@@ -43,7 +43,5 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry,id=cargo-registry \
 
 RUN install -m 0755 bin/dev-entrypoint.sh /usr/local/bin/dev-entrypoint
 
-ENV PATH="/usr/local/cargo/bin:${PATH}"
-
 # Default command: run the hot-reload dev entrypoint
 CMD ["/usr/local/bin/dev-entrypoint"]
