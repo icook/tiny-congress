@@ -4,7 +4,8 @@
  */
 
 // === Base Configuration ===
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080';
+const API_BASE_URL: string =
+  (import.meta.env.VITE_API_URL as string | undefined) ?? 'http://localhost:8080';
 
 // === Types ===
 
@@ -18,6 +19,10 @@ export interface SignupResponse {
   root_kid: string;
 }
 
+interface ApiErrorResponse {
+  error?: string;
+}
+
 // === API Functions ===
 
 async function fetchJson<T>(path: string, options?: RequestInit): Promise<T> {
@@ -25,18 +30,22 @@ async function fetchJson<T>(path: string, options?: RequestInit): Promise<T> {
 
   const response = await fetch(url, {
     ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...options?.headers,
-    },
+    headers: { 'Content-Type': 'application/json' },
   });
 
   if (!response.ok) {
-    const error = await response.json().catch(() => ({ error: 'Unknown error' }));
-    throw new Error(error.error || `HTTP ${response.status}: ${response.statusText}`);
+    let errorBody: ApiErrorResponse = { error: 'Unknown error' };
+    try {
+      errorBody = (await response.json()) as ApiErrorResponse;
+    } catch {
+      // JSON parsing failed, use default error
+    }
+    const errorMessage =
+      errorBody.error ?? `HTTP ${String(response.status)}: ${response.statusText}`;
+    throw new Error(errorMessage);
   }
 
-  return response.json();
+  return response.json() as Promise<T>;
 }
 
 // === Auth ===

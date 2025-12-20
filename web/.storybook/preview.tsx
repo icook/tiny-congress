@@ -17,14 +17,18 @@ function ColorSchemeWrapper({ children }: { children: React.ReactNode }) {
   const { setColorScheme } = useMantineColorScheme();
   // useCallback keeps the handler stable so the dark-mode listener doesn't re-register on every render.
   const handleColorScheme = useCallback(
-    (value: boolean) => setColorScheme(value ? 'dark' : 'light'),
+    (value: boolean) => {
+      setColorScheme(value ? 'dark' : 'light');
+    },
     [setColorScheme]
   );
 
   useEffect(() => {
     const channel = addons.getChannel();
     channel.on(DARK_MODE_EVENT_NAME, handleColorScheme);
-    return () => channel.off(DARK_MODE_EVENT_NAME, handleColorScheme);
+    return () => {
+      channel.off(DARK_MODE_EVENT_NAME, handleColorScheme);
+    };
   }, [handleColorScheme]);
 
   return children;

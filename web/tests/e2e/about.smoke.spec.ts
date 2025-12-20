@@ -15,7 +15,7 @@ test('about page reflects API build info @smoke', async ({ page, request }) => {
   const apiResponse = await request.post(API_URL, { data: { query: BUILD_INFO_QUERY } });
   expect(apiResponse.ok()).toBeTruthy();
 
-  type BuildInfoPayload = {
+  interface BuildInfoPayload {
     data?: {
       buildInfo: {
         version: string;
@@ -23,7 +23,7 @@ test('about page reflects API build info @smoke', async ({ page, request }) => {
         buildTime: string;
       };
     };
-  };
+  }
 
   const payload = (await apiResponse.json()) as BuildInfoPayload;
   const apiBuildInfo = payload.data?.buildInfo;

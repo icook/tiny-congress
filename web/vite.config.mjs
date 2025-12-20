@@ -70,6 +70,7 @@ export default defineConfig({
       reportsDirectory: './coverage/vitest',
       exclude: [
         'src/wasm/**',
+        'src/wasm.d.ts',
         'src/providers/CryptoProvider.tsx',
         'src/features/identity/keys/__tests__/**',
       ],

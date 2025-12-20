@@ -98,7 +98,7 @@ export async function generateCoverageReport(): Promise<void> {
         const pct = typeof metricData?.pct === 'number' ? metricData.pct : 0;
         if (pct < threshold) {
           errors.push(
-            `E2E coverage threshold for ${metric} (${pct.toFixed(1)}%) not met: ${threshold}%`
+            `E2E coverage threshold for ${metric} (${pct.toFixed(1)}%) not met: ${String(threshold)}%`
           );
         }
       }

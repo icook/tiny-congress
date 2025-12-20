@@ -6,7 +6,7 @@
 import { IconAlertTriangle, IconCheck } from '@tabler/icons-react';
 import { Alert, Button, Card, Code, Group, Stack, Text, TextInput, Title } from '@mantine/core';
 
-export type SignupFormProps = {
+export interface SignupFormProps {
   // Form state
   username: string;
   onUsernameChange: (value: string) => void;
@@ -24,7 +24,7 @@ export type SignupFormProps = {
     account_id: string;
     root_kid: string;
   } | null;
-};
+}
 
 export function SignupForm({
   username,
@@ -80,15 +80,17 @@ export function SignupForm({
               placeholder="alice"
               required
               value={username}
-              onChange={(e) => onUsernameChange(e.currentTarget.value)}
+              onChange={(e) => {
+                onUsernameChange(e.currentTarget.value);
+              }}
               disabled={isLoading}
             />
 
-            {error && (
+            {error ? (
               <Alert icon={<IconAlertTriangle size={16} />} title="Signup failed" color="red">
                 {error}
               </Alert>
-            )}
+            ) : null}
 
             <Group justify="flex-end">
               <Button type="submit" loading={isLoading}>

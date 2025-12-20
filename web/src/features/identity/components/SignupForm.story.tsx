@@ -4,8 +4,12 @@ export default {
   title: 'Identity/SignupForm',
 };
 
-const noOp = () => {};
-const preventSubmit = (e: React.FormEvent) => e.preventDefault();
+const noOp = () => {
+  // Intentionally empty for storybook
+};
+const preventSubmit = (e: React.FormEvent) => {
+  e.preventDefault();
+};
 
 // Default - empty form ready for input
 export const Default = () => (

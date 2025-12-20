@@ -1,13 +1,14 @@
-type GraphQLResponse<T> = {
+interface GraphQLResponse<T> {
   data?: T;
   errors?: { message: string }[];
-};
+}
 
 const defaultGraphqlUrl = 'http://localhost:8080/graphql';
 
-export function getGraphqlUrl() {
-  if (import.meta.env.VITE_GRAPHQL_URL) {
-    return import.meta.env.VITE_GRAPHQL_URL;
+export function getGraphqlUrl(): string {
+  const envUrl = import.meta.env.VITE_GRAPHQL_URL as string | undefined;
+  if (envUrl) {
+    return envUrl;
   }
 
   if (typeof window !== 'undefined') {
@@ -33,7 +34,7 @@ export async function graphqlRequest<TData>(
   });
 
   if (!response.ok) {
-    throw new Error(`GraphQL request failed with status ${response.status}`);
+    throw new Error(`GraphQL request failed with status ${String(response.status)}`);
   }
 
   const payload = (await response.json()) as GraphQLResponse<TData>;

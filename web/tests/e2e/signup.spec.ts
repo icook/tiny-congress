@@ -2,7 +2,7 @@ import { expect, test } from './fixtures';
 
 test('signup flow creates account @smoke', async ({ page }) => {
   // Generate unique username to avoid conflicts
-  const username = `test-user-${Date.now()}`;
+  const username = `test-user-${String(Date.now())}`;
 
   await page.goto('/signup');
 

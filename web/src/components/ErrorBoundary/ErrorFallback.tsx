@@ -50,23 +50,23 @@ export function ErrorFallback({ context = 'Application', error }: ErrorFallbackP
           Reload Page
         </Button>
 
-        {import.meta.env.DEV && error && (
+        {import.meta.env.DEV && error ? (
           <Stack gap="xs">
             <Title order={4}>Error Details (Development Only)</Title>
             <Alert color="gray" variant="outline">
               <Text size="xs" ff="monospace">
                 <strong>Message:</strong> {error.message}
               </Text>
-              {error.stack && (
+              {error.stack ? (
                 <Text size="xs" ff="monospace" mt="xs" style={{ whiteSpace: 'pre-wrap' }}>
                   <strong>Stack:</strong>
                   {'\n'}
                   {error.stack}
                 </Text>
-              )}
+              ) : null}
             </Alert>
           </Stack>
-        )}
+        ) : null}
       </Stack>
     </Container>
   );
