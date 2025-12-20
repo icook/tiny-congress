@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GraphQL Schema</title>
+  <link rel="stylesheet" href="https://unpkg.com/prismjs@1/themes/prism-tomorrow.min.css">
+  <style>
+    :root {
+      --bg: #1a1a2e;
+      --surface: #16213e;
+      --text: #e4e4e7;
+      --muted: #a1a1aa;
+      --accent: #818cf8;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+    }
+    .header {
+      background: var(--surface);
+      padding: 1rem 2rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid #3f3f46;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .header h1 {
+      font-size: 1.25rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .header-actions {
+      display: flex;
+      gap: 1rem;
+    }
+    .header a {
+      color: var(--accent);
+      text-decoration: none;
+      font-size: 0.875rem;
+    }
+    .header a:hover { text-decoration: underline; }
+    .schema-container {
+      padding: 1rem 2rem 2rem;
+      max-width: 100%;
+      overflow-x: auto;
+    }
+    pre[class*="language-"] {
+      background: var(--surface) !important;
+      border-radius: 8px;
+      padding: 1.5rem !important;
+      margin: 0 !important;
+      font-size: 0.875rem;
+      line-height: 1.7;
+    }
+    code[class*="language-"] {
+      font-family: 'SF Mono', 'Fira Code', 'Monaco', monospace;
+    }
+    /* GraphQL syntax highlighting overrides */
+    .token.keyword { color: #c792ea; }
+    .token.type-def { color: #ffcb6b; }
+    .token.directive { color: #89ddff; }
+    .token.comment { color: #676e95; }
+    .token.string { color: #c3e88d; }
+    .token.punctuation { color: #89ddff; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>&#x1F4DC; GraphQL Schema</h1>
+    <div class="header-actions">
+      <a href="schema.graphql" download>Download SDL</a>
+      <a href="../index.html">&larr; Back to Coverage Report</a>
+    </div>
+  </div>
+  <div class="schema-container">
+    <pre><code class="language-graphql">"""
+Build metadata exposed via GraphQL, REST, and logs.
+"""
+type BuildInfo {
+	"""
+	Application version (from `APP_VERSION` or `VERSION` env var).
+	"""
+	version: String!
+	"""
+	Git commit SHA.
+	"""
+	gitSha: String!
+	"""
+	Build timestamp in RFC3339 format.
+	"""
+	buildTime: String!
+	"""
+	Optional build message or description.
+	"""
+	message: String
+}
+
+type MutationRoot {
+	"""
+	Placeholder mutation - returns the input string
+	
+	This exists because GraphQL requires at least one mutation.
+	Replace with actual mutations as features are implemented.
+	"""
+	echo(message: String!): String!
+}
+
+type QueryRoot {
+	"""
+	Returns build metadata for the running service
+	"""
+	buildInfo: BuildInfo!
+}
+
+"""
+Directs the executor to include this field or fragment only when the `if` argument is true.
+"""
+directive @include(if: Boolean!) on FIELD | FRAGMENT_SPREAD | INLINE_FRAGMENT
+"""
+Directs the executor to skip this field or fragment when the `if` argument is true.
+"""
+directive @skip(if: Boolean!) on FIELD | FRAGMENT_SPREAD | INLINE_FRAGMENT
+schema {
+	query: QueryRoot
+	mutation: MutationRoot
+}
+</code></pre>
+  </div>
+  <script src="https://unpkg.com/prismjs@1/components/prism-core.min.js"></script>
+  <script src="https://unpkg.com/prismjs@1/components/prism-graphql.min.js"></script>
+</body>
+</html>
