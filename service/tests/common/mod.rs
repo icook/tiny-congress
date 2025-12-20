@@ -427,4 +427,69 @@ pub mod test_db {
             port,
         }
     }
+
+    /// Create a truly empty test database with no migrations applied.
+    ///
+    /// Unlike `isolated_db()` which copies from a template with migrations already
+    /// applied, this creates a completely empty database. Use this for tests that
+    /// need to:
+    /// - Verify migrations apply correctly from scratch
+    /// - Test migration idempotency by running migrations multiple times
+    ///
+    /// # Performance
+    /// - Empty DB creation: ~5-10ms
+    /// - Migrations must be run manually after creation
+    ///
+    /// # Example
+    /// ```ignore
+    /// use crate::common::test_db::empty_db;
+    /// use crate::common::migration_helpers::load_migrator;
+    ///
+    /// #[shared_runtime_test]
+    /// async fn test_migrations_from_scratch() {
+    ///     let db = empty_db().await;
+    ///     let migrator = load_migrator().await;
+    ///     migrator.run(db.pool()).await.unwrap();
+    ///     // Now test the result
+    /// }
+    /// ```
+    #[allow(clippy::expect_used)]
+    pub async fn empty_db() -> IsolatedDb {
+        // Ensure shared test DB is initialized (we need the container port)
+        let test_db = get_test_db().await;
+        let port = test_db.port();
+
+        // Generate unique database name
+        let db_name = format!("test_empty_{}", uuid::Uuid::new_v4().simple());
+
+        // Connect to postgres (maintenance) database to create the empty DB
+        let maintenance_url = format!("postgres://postgres:postgres@127.0.0.1:{port}/postgres");
+        let mut maint_conn = PgConnection::connect(&maintenance_url)
+            .await
+            .expect("Failed to connect to postgres database");
+
+        // Create a completely empty database (no template)
+        sqlx::query(&format!("CREATE DATABASE \"{db_name}\""))
+            .execute(&mut maint_conn)
+            .await
+            .expect("Failed to create empty database");
+
+        // Build connection string for the new database
+        let database_url = format!("postgres://postgres:postgres@127.0.0.1:{port}/{db_name}");
+
+        // Connect to the new empty database
+        let pool = PgPoolOptions::new()
+            .max_connections(5)
+            .acquire_timeout(Duration::from_secs(30))
+            .connect(&database_url)
+            .await
+            .expect("Failed to connect to empty database");
+
+        IsolatedDb {
+            pool,
+            database_name: db_name,
+            database_url,
+            port,
+        }
+    }
 }

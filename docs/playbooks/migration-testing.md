@@ -2,72 +2,15 @@
 
 ## Overview
 
-This project uses a two-tier approach to database testing:
-
-| Category | Purpose | Speed | When to Use |
-|----------|---------|-------|-------------|
-| **Query Tests** | Test SQL logic, CRUD operations | ~1-5ms | Default for 95% of DB tests |
-| **Migration Tests** | Test migrations, schema consistency | ~15-30ms | Use `isolated_db()` for full isolation |
-
-## Query Tests (Category A)
-
-Use `test_transaction()` for fast, isolated query tests:
-
-```rust
-use common::test_db::test_transaction;
-use tc_test_macros::shared_runtime_test;
-
-#[shared_runtime_test]
-async fn test_user_query() {
-    let mut tx = test_transaction().await;
-
-    // Your test - transaction auto-rolls back on drop
-    sqlx::query("INSERT INTO users ...")
-        .execute(&mut *tx)
-        .await
-        .unwrap();
-}
-```
-
-**Characteristics:**
-- Runs in shared testcontainer (one postgres for all tests)
-- Uses transaction rollback for isolation
-- ~1-5ms overhead per test
-- Runs with normal `cargo test`
-
-## Migration Tests (Category B)
-
-Use `isolated_db()` for tests requiring full database isolation:
-
-```rust
-use common::test_db::isolated_db;
-use tc_test_macros::shared_runtime_test;
-
-#[shared_runtime_test]
-async fn test_migration_behavior() {
-    let db = isolated_db().await;
-
-    // Full database isolation - can test commits, rollbacks, etc.
-    sqlx::query("BEGIN").execute(db.pool()).await.unwrap();
-    // ...
-}
-```
-
-**Characteristics:**
-- Creates fresh database via PostgreSQL template copy
-- ~15-30ms overhead per test
-- Runs with normal `cargo test`
+This playbook covers migration-specific testing. For general database test patterns
+(when to use `test_transaction()` vs `isolated_db()`), see the documentation in
+`service/tests/common/mod.rs`.
 
 ## Running Migration Tests
-
-### Locally
 
 ```bash
 # Run all tests including migration tests
 just test-backend
-
-# Or directly with cargo
-cd service && cargo test
 
 # Run only migration-specific tests
 cd service && cargo test migration
@@ -76,14 +19,14 @@ cd service && cargo test migration
 cd service && cargo test schema_snapshot
 ```
 
-### Regenerating Schema Snapshot
+## Updating Schema Snapshot
 
-When you intentionally change the schema via a migration:
+When you intentionally change the schema via a migration, update the snapshot:
 
 ```bash
-cd service && cargo test -- generate_schema_snapshot --ignored
-git add service/tests/snapshots/schema.sql
-git commit -m "chore: update schema snapshot after migration XX"
+cd service && cargo insta review
+git add service/tests/snapshots/
+git commit -m "chore: update schema snapshot after migration"
 ```
 
 ## What Migration Tests Validate
