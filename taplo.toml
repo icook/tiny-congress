@@ -1,0 +1,20 @@
+# Taplo TOML formatter configuration
+# https://taplo.tamasfe.dev/configuration/
+
+[formatting]
+align_entries = false
+array_auto_collapse = true
+array_auto_expand = true
+array_trailing_comma = true
+column_width = 100
+compact_arrays = true
+compact_inline_tables = false
+indent_entries = false
+indent_tables = false
+inline_table_expand = true
+reorder_keys = false
+trailing_newline = true
+
+[[rule]]
+keys = ["dependencies", "dev-dependencies", "build-dependencies"]
+formatting = { reorder_keys = true }

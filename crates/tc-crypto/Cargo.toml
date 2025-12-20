@@ -13,15 +13,15 @@ crate-type = ["cdylib", "rlib"]
 wasm-bindgen = "0.2"
 
 # Cryptography
-sha2 = "0.10"
 base64 = "0.22"
+sha2 = "0.10"
 
 # Error handling
 thiserror = "2"
 
 [dev-dependencies]
-wasm-bindgen-test = "0.3"
 proptest = "1.4"
+wasm-bindgen-test = "0.3"
 
 [lints]
 workspace = true
