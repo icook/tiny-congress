@@ -834,9 +834,9 @@ jobs:
 
           rm -rf artifacts
 
-          # Extract coverage percentages from summary
-          if [ -f site/coverage/coverage-summary.json ]; then
-            COVERAGE_PCT=$(jq -r '.total.lines.pct // "N/A"' site/coverage/coverage-summary.json)
+          # Extract coverage percentages from vitest summary
+          if [ -f site/coverage/vitest/coverage-summary.json ]; then
+            COVERAGE_PCT=$(jq -r '.total.lines.pct // "N/A"' site/coverage/vitest/coverage-summary.json)
             echo "coverage_pct=${COVERAGE_PCT}" >> "$GITHUB_OUTPUT"
           else
             echo "coverage_pct=N/A" >> "$GITHUB_OUTPUT"
