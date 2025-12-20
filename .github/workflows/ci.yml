@@ -106,6 +106,51 @@ jobs:
           retention-days: 30
 
   # ============================================================
+  # JOB 0b3: Build API Documentation
+  # ============================================================
+  build-docs:
+    name: Build documentation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build Rust docs
+        run: cargo doc --workspace --no-deps
+
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: web/.nvmrc
+          cache: yarn
+          cache-dependency-path: web/yarn.lock
+
+      - name: Enable corepack
+        run: corepack enable
+
+      - name: Install dependencies
+        run: cd web && yarn install --immutable
+
+      - name: Build TypeScript docs
+        working-directory: web
+        run: yarn typedoc
+
+      - name: Upload docs artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: docs
+          path: |
+            target/doc
+            web/docs
+          retention-days: 7
+
+  # ============================================================
   # JOB 0c: Verify GraphQL codegen is up-to-date
   # ============================================================
   codegen-check:
@@ -726,40 +771,33 @@ jobs:
           kubectl get all -n default || true
 
   # ============================================================
-  # JOB 3: Deploy reports to GitHub Pages
+  # JOB 3: Deploy to Cloudflare Pages
   # ============================================================
-  deploy-pages:
-    name: Deploy to GitHub Pages
+  deploy-cloudflare:
+    name: Deploy to Cloudflare Pages
     runs-on: ubuntu-latest
-    needs: [integration-tests, storybook-build]
+    needs: [integration-tests, storybook-build, build-docs]
     if: always() && needs.integration-tests.result != 'cancelled'
-    concurrency:
-      group: gh-pages-deploy
-      cancel-in-progress: false
     permissions:
-      contents: write
+      contents: read
+      deployments: write
       pull-requests: write
-    env:
-      PAGES_BASE_URL: https://icook.github.io/tiny-congress
     steps:
-      - name: Checkout gh-pages branch
-        uses: actions/checkout@v6
-        with:
-          ref: gh-pages
-          fetch-depth: 0
+      - name: Create site directory
+        run: mkdir -p site
 
       - name: Download coverage report
         uses: actions/download-artifact@v6
         with:
           name: coverage-report
-          path: artifacts/coverage
+          path: site/coverage
         continue-on-error: true
 
       - name: Download Storybook
         uses: actions/download-artifact@v6
         with:
           name: storybook-static
-          path: artifacts/storybook
+          path: site/storybook
         continue-on-error: true
 
       - name: Download Playwright report
@@ -769,126 +807,92 @@ jobs:
           path: artifacts/playwright
         continue-on-error: true
 
-      - name: Determine deployment paths
-        id: paths
+      - name: Download docs
+        uses: actions/download-artifact@v6
+        with:
+          name: docs
+          path: artifacts/docs
+        continue-on-error: true
+
+      - name: Organize artifacts
         run: |
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            echo "is_pr=true" >> "$GITHUB_OUTPUT"
-            echo "pr_number=${{ github.event.pull_request.number }}" >> "$GITHUB_OUTPUT"
-            echo "base_path=pr/${{ github.event.pull_request.number }}" >> "$GITHUB_OUTPUT"
-          else
-            echo "is_pr=false" >> "$GITHUB_OUTPUT"
-            echo "base_path=" >> "$GITHUB_OUTPUT"
+          # Playwright report is nested
+          if [ -d artifacts/playwright/playwright-report ]; then
+            mv artifacts/playwright/playwright-report site/playwright
           fi
 
-      - name: Prepare deployment directory
-        run: |
-          set -euo pipefail
-          BASE_PATH="${{ steps.paths.outputs.base_path }}"
-
-          # For PRs, clean the PR-specific directory; for main, clean root reports
-          if [ -n "$BASE_PATH" ]; then
-            rm -rf "$BASE_PATH"
-            mkdir -p "$BASE_PATH"
+          # Rust docs
+          if [ -d artifacts/docs/target/doc ]; then
+            mv artifacts/docs/target/doc site/rust-docs
           fi
 
-          # Copy artifacts to appropriate locations
-          if [ -d artifacts/coverage ]; then
-            if [ -n "$BASE_PATH" ]; then
-              cp -r artifacts/coverage "$BASE_PATH/coverage"
-            else
-              rm -rf coverage
-              cp -r artifacts/coverage coverage
-            fi
+          # TypeScript docs
+          if [ -d artifacts/docs/web/docs ]; then
+            mv artifacts/docs/web/docs site/ts-docs
           fi
 
-          if [ -d artifacts/storybook ]; then
-            if [ -n "$BASE_PATH" ]; then
-              cp -r artifacts/storybook "$BASE_PATH/storybook"
-            else
-              rm -rf storybook
-              cp -r artifacts/storybook storybook
-            fi
-          fi
-
-          if [ -d artifacts/playwright ]; then
-            # Playwright report is in playwright-report subdirectory
-            if [ -d artifacts/playwright/playwright-report ]; then
-              if [ -n "$BASE_PATH" ]; then
-                cp -r artifacts/playwright/playwright-report "$BASE_PATH/playwright"
-              else
-                rm -rf playwright
-                cp -r artifacts/playwright/playwright-report playwright
-              fi
-            fi
-          fi
-
-          # Clean up artifacts directory
           rm -rf artifacts
 
-          # Generate index page for PR previews
-          if [ -n "$BASE_PATH" ]; then
-            cat > "$BASE_PATH/index.html" <<EOF
+      - name: Generate landing page
+        run: |
+          cat > site/index.html <<'EOF'
           <!DOCTYPE html>
           <html>
           <head>
-            <title>PR #${{ steps.paths.outputs.pr_number }} Reports</title>
+            <title>Tiny Congress - Developer Resources</title>
             <style>
-              body { font-family: system-ui, sans-serif; max-width: 600px; margin: 50px auto; padding: 20px; }
-              h1 { color: #333; }
+              body { font-family: system-ui, -apple-system, sans-serif; max-width: 700px; margin: 50px auto; padding: 20px; line-height: 1.6; }
+              h1 { color: #1a1a1a; border-bottom: 2px solid #e5e5e5; padding-bottom: 10px; }
+              h2 { color: #333; margin-top: 30px; }
               ul { list-style: none; padding: 0; }
-              li { margin: 10px 0; }
-              a { color: #0066cc; text-decoration: none; padding: 10px 15px; display: inline-block; background: #f5f5f5; border-radius: 5px; }
+              li { margin: 8px 0; }
+              a { color: #0066cc; text-decoration: none; padding: 12px 18px; display: inline-block; background: #f5f5f5; border-radius: 6px; transition: background 0.2s; }
               a:hover { background: #e5e5e5; }
-              .timestamp { color: #666; font-size: 0.9em; margin-top: 20px; }
+              .timestamp { color: #666; font-size: 0.85em; margin-top: 40px; padding-top: 20px; border-top: 1px solid #e5e5e5; }
             </style>
           </head>
           <body>
-            <h1>PR #${{ steps.paths.outputs.pr_number }} Reports</h1>
+            <h1>Tiny Congress</h1>
+            <h2>API Documentation</h2>
             <ul>
-              <li><a href="coverage/">📊 Coverage Report</a></li>
-              <li><a href="storybook/">📚 Storybook</a></li>
-              <li><a href="playwright/">🎭 Playwright Report</a></li>
+              <li><a href="rust-docs/tinycongress_api/">Rust API Docs</a></li>
+              <li><a href="ts-docs/">TypeScript Docs</a></li>
             </ul>
-            <p class="timestamp">Generated: $(date -u +"%Y-%m-%d %H:%M:%S UTC")</p>
+            <h2>Reports</h2>
+            <ul>
+              <li><a href="coverage/">Coverage Report</a></li>
+              <li><a href="storybook/">Storybook</a></li>
+              <li><a href="playwright/">Playwright Report</a></li>
+            </ul>
+            <p class="timestamp">Generated from commit ${GITHUB_SHA:0:7} on $(date -u +"%Y-%m-%d %H:%M UTC")</p>
           </body>
           </html>
           EOF
-          fi
 
-      - name: Commit and push to gh-pages
-        run: |
-          set -euo pipefail
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-
-          git add -A
-          if git diff --staged --quiet; then
-            echo "No changes to deploy"
-            exit 0
-          fi
-
-          if [ "${{ steps.paths.outputs.is_pr }}" = "true" ]; then
-            git commit -m "Deploy PR #${{ steps.paths.outputs.pr_number }} reports"
-          else
-            git commit -m "Deploy main branch reports from ${{ github.sha }}"
-          fi
-
-          git push origin gh-pages
+      - name: Deploy to Cloudflare Pages
+        id: deploy
+        uses: cloudflare/pages-action@v1
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          projectName: tiny-congress
+          directory: site
+          gitHubToken: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Add PR comment with report links
-        if: steps.paths.outputs.is_pr == 'true'
+        if: github.event_name == 'pull_request'
         uses: marocchino/sticky-pull-request-comment@v2
         with:
           header: pages-reports
           message: |
-            ## 📊 CI Reports
+            ## CI Reports
 
             | Report | Link |
             |--------|------|
-            | 📊 Coverage | [${{ env.PAGES_BASE_URL }}/pr/${{ steps.paths.outputs.pr_number }}/coverage/](${{ env.PAGES_BASE_URL }}/pr/${{ steps.paths.outputs.pr_number }}/coverage/) |
-            | 📚 Storybook | [${{ env.PAGES_BASE_URL }}/pr/${{ steps.paths.outputs.pr_number }}/storybook/](${{ env.PAGES_BASE_URL }}/pr/${{ steps.paths.outputs.pr_number }}/storybook/) |
-            | 🎭 Playwright | [${{ env.PAGES_BASE_URL }}/pr/${{ steps.paths.outputs.pr_number }}/playwright/](${{ env.PAGES_BASE_URL }}/pr/${{ steps.paths.outputs.pr_number }}/playwright/) |
-            | 📋 API Schemas | [GraphQL](${{ env.PAGES_BASE_URL }}/pr/${{ steps.paths.outputs.pr_number }}/coverage/schemas/graphql-viewer.html) · [OpenAPI](${{ env.PAGES_BASE_URL }}/pr/${{ steps.paths.outputs.pr_number }}/coverage/schemas/swagger-ui.html) |
+            | Rust Docs | [${{ steps.deploy.outputs.url }}/rust-docs/tinycongress_api/](${{ steps.deploy.outputs.url }}/rust-docs/tinycongress_api/) |
+            | TS Docs | [${{ steps.deploy.outputs.url }}/ts-docs/](${{ steps.deploy.outputs.url }}/ts-docs/) |
+            | Coverage | [${{ steps.deploy.outputs.url }}/coverage/](${{ steps.deploy.outputs.url }}/coverage/) |
+            | Storybook | [${{ steps.deploy.outputs.url }}/storybook/](${{ steps.deploy.outputs.url }}/storybook/) |
+            | Playwright | [${{ steps.deploy.outputs.url }}/playwright/](${{ steps.deploy.outputs.url }}/playwright/) |
 
-            <sub>🤖 Reports auto-generated from commit ${{ github.sha }}</sub>
+            <sub>Generated from commit ${{ github.sha }}</sub>
