@@ -2,16 +2,21 @@
 # https://taplo.tamasfe.dev/configuration/
 
 [formatting]
+# Don't vertically align = signs - keeps diffs minimal when adding entries
 align_entries = false
 array_auto_collapse = true
 array_auto_expand = true
 array_trailing_comma = true
 column_width = 100
 compact_arrays = true
+# Don't compact inline tables - keeps them readable on separate lines
 compact_inline_tables = false
+# Don't indent top-level entries - standard TOML style
 indent_entries = false
+# Don't indent table headers - keeps file structure flat and clear
 indent_tables = false
 inline_table_expand = true
+# Don't reorder keys globally - preserves intentional grouping (e.g., comments above entries)
 reorder_keys = false
 trailing_newline = true
 
