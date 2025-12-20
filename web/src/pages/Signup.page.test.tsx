@@ -1,6 +1,6 @@
 import { render, screen, userEvent } from '@test-utils';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
-import { Signup } from './Signup';
+import { SignupPage } from './Signup.page';
 
 // Mock the crypto provider
 const mockCrypto = {
@@ -15,28 +15,28 @@ vi.mock('@/providers/CryptoProvider', () => ({
 
 // Mock the signup mutation
 const mockMutateAsync = vi.fn();
-vi.mock('../api/queries', () => ({
-  useSignup: vi.fn(() => ({
-    mutateAsync: mockMutateAsync,
-    isPending: false,
-    isError: false,
-    error: null,
-  })),
-}));
+vi.mock('@/features/identity', async (importOriginal) => {
+  const original = await importOriginal<typeof import('@/features/identity')>();
+  return {
+    ...original,
+    useSignup: vi.fn(() => ({
+      mutateAsync: mockMutateAsync,
+      isPending: false,
+      isError: false,
+      error: null,
+    })),
+    generateKeyPair: vi.fn(() => ({
+      publicKey: new Uint8Array([
+        1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
+        26, 27, 28, 29, 30, 31, 32,
+      ]),
+      privateKey: new Uint8Array(32),
+      kid: 'kid-123',
+    })),
+  };
+});
 
-// Mock key generation
-vi.mock('../keys', () => ({
-  generateKeyPair: vi.fn(() => ({
-    publicKey: new Uint8Array([
-      1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26,
-      27, 28, 29, 30, 31, 32,
-    ]),
-    privateKey: new Uint8Array(32),
-    kid: 'kid-123',
-  })),
-}));
-
-describe('Signup screen', () => {
+describe('SignupPage', () => {
   beforeEach(() => {
     mockMutateAsync.mockReset();
     mockCrypto.encode_base64url.mockClear();
@@ -47,7 +47,7 @@ describe('Signup screen', () => {
     mockMutateAsync.mockResolvedValue({ account_id: 'abc', root_kid: 'kid-123' });
     const user = userEvent.setup();
 
-    render(<Signup />);
+    render(<SignupPage />);
 
     await user.type(screen.getByLabelText(/username/i), ' alice ');
     await user.click(screen.getByRole('button', { name: /sign up/i }));
@@ -67,7 +67,7 @@ describe('Signup screen', () => {
     mockMutateAsync.mockRejectedValue(new Error('boom'));
 
     // Re-import to get fresh mock with error state
-    const { useSignup } = await import('../api/queries');
+    const { useSignup } = await import('@/features/identity');
     vi.mocked(useSignup).mockReturnValue({
       mutateAsync: mockMutateAsync,
       isPending: false,
@@ -77,7 +77,7 @@ describe('Signup screen', () => {
 
     const user = userEvent.setup();
 
-    render(<Signup />);
+    render(<SignupPage />);
 
     await user.type(screen.getByLabelText(/username/i), 'alice');
     await user.click(screen.getByRole('button', { name: /sign up/i }));
@@ -89,7 +89,7 @@ describe('Signup screen', () => {
     mockMutateAsync.mockResolvedValue({ account_id: 'abc', root_kid: 'kid-123' });
     const user = userEvent.setup();
 
-    render(<Signup />);
+    render(<SignupPage />);
 
     await user.click(screen.getByRole('button', { name: /sign up/i }));
 

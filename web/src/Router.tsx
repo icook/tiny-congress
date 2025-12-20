@@ -1,10 +1,10 @@
 import { createRootRoute, createRoute, createRouter, RouterProvider } from '@tanstack/react-router';
 import { ErrorBoundary } from './components/ErrorBoundary';
-import { Signup } from './features/identity';
 import { AboutPage } from './pages/About.page';
 import { DashboardPage } from './pages/Dashboard.page';
 import { HomePage } from './pages/Home.page';
 import { Layout } from './pages/Layout';
+import { SignupPage } from './pages/Signup.page';
 import { ThreadedConversationPage } from './pages/ThreadedConversation.page';
 
 const rootRoute = createRootRoute({
@@ -38,7 +38,7 @@ const aboutRoute = createRoute({
 const signupRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: 'signup',
-  component: Signup,
+  component: SignupPage,
 });
 
 const routeTree = rootRoute.addChildren([
