@@ -1,0 +1,11 @@
+# ShellCheck configuration
+# https://www.shellcheck.net/
+
+# Only warn on actual issues, not style suggestions
+# Severity levels: error, warning, info, style
+severity=warning
+
+# Common exclusions for GitHub Actions workflows:
+# SC2086 - Double quote to prevent globbing (often intentional in CI)
+# SC2129 - Consider using { cmd1; cmd2; } >> file (style preference)
+disable=SC2086,SC2129

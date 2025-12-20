@@ -70,6 +70,117 @@ jobs:
         run: just lint-frontend
 
   # ============================================================
+  # JOB 0b1: Static Analysis (typos, TOML, Dockerfiles, workflows, scripts)
+  # ============================================================
+  static-analysis:
+    name: Static Analysis
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install tools
+        uses: taiki-e/install-action@v2
+        with:
+          tool: typos-cli,taplo-cli,hadolint,actionlint
+
+      - name: Run static analysis
+        run: |
+          set -euo pipefail
+
+          FAILED=0
+
+          {
+            echo "## Static Analysis Results"
+            echo ""
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          # typos - spell checker
+          echo "### Spell Check (typos)" >> "$GITHUB_STEP_SUMMARY"
+          if typos --format brief 2>&1 | tee /tmp/typos.out; then
+            echo "✅ No typos found" >> "$GITHUB_STEP_SUMMARY"
+          else
+            {
+              echo "❌ Typos found:"
+              echo '```'
+              cat /tmp/typos.out
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+            FAILED=1
+          fi
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+
+          # taplo - TOML formatting
+          echo "### TOML Formatting (taplo)" >> "$GITHUB_STEP_SUMMARY"
+          TOML_FILES=$(find . -name "*.toml" -not -path "./.git/*" | wc -l | tr -d ' ')
+          if taplo fmt --check 2>&1 | tee /tmp/taplo.out; then
+            echo "✅ All ${TOML_FILES} TOML files formatted correctly" >> "$GITHUB_STEP_SUMMARY"
+          else
+            {
+              echo "❌ TOML formatting issues:"
+              echo '```'
+              grep -E "ERROR|not properly" /tmp/taplo.out || true
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+            FAILED=1
+          fi
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+
+          # hadolint - Dockerfile linting
+          echo "### Dockerfile Linting (hadolint)" >> "$GITHUB_STEP_SUMMARY"
+          DOCKERFILES=(service/Dockerfile service/Dockerfile.dev web/Dockerfile web/Dockerfile.dev dockerfiles/Dockerfile.postgres)
+          echo "Checking: ${DOCKERFILES[*]}" >> "$GITHUB_STEP_SUMMARY"
+          if hadolint --config .hadolint.yaml "${DOCKERFILES[@]}" 2>&1 | tee /tmp/hadolint.out; then
+            echo "✅ All Dockerfiles pass linting" >> "$GITHUB_STEP_SUMMARY"
+          else
+            {
+              echo "❌ Dockerfile issues:"
+              echo '```'
+              cat /tmp/hadolint.out
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+            FAILED=1
+          fi
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+
+          # actionlint - GitHub Actions
+          echo "### GitHub Actions (actionlint)" >> "$GITHUB_STEP_SUMMARY"
+          WORKFLOW_COUNT=$(find .github/workflows -name "*.yml" | wc -l | tr -d ' ')
+          if actionlint 2>&1 | tee /tmp/actionlint.out; then
+            echo "✅ All ${WORKFLOW_COUNT} workflows pass linting" >> "$GITHUB_STEP_SUMMARY"
+          else
+            {
+              echo "❌ Workflow issues:"
+              echo '```'
+              cat /tmp/actionlint.out
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+            FAILED=1
+          fi
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+
+          # Shell script linting
+          echo "### Shell Scripts (shellcheck)" >> "$GITHUB_STEP_SUMMARY"
+          mapfile -t SCRIPTS < <(find . -name "*.sh" -not -path "./.git/*")
+          if [ "${#SCRIPTS[@]}" -gt 0 ]; then
+            if shellcheck "${SCRIPTS[@]}" 2>&1 | tee /tmp/shellcheck.out; then
+              echo "✅ All ${#SCRIPTS[@]} shell scripts pass linting" >> "$GITHUB_STEP_SUMMARY"
+            else
+              {
+                echo "❌ Shell script issues:"
+                echo '```'
+                cat /tmp/shellcheck.out
+                echo '```'
+              } >> "$GITHUB_STEP_SUMMARY"
+              FAILED=1
+            fi
+          else
+            echo "ℹ️ No shell scripts found" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+          exit $FAILED
+
+  # ============================================================
   # JOB 0b2: Build Storybook
   # ============================================================
   storybook-build:
@@ -316,9 +427,11 @@ jobs:
           ref="${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}"
           branch="${ref//[^a-zA-Z0-9_.-]/-}"
           branch="${branch,,}"
-          echo "branch_slug=${branch}" >> "$GITHUB_OUTPUT"
-          echo "sha_tag=${{ env.REGISTRY }}/${{ matrix.image }}:${{ github.sha }}" >> "$GITHUB_OUTPUT"
-          echo "branch_tag=${{ env.REGISTRY }}/${{ matrix.image }}:branch-${branch}" >> "$GITHUB_OUTPUT"
+          {
+            echo "branch_slug=${branch}"
+            echo "sha_tag=${{ env.REGISTRY }}/${{ matrix.image }}:${{ github.sha }}"
+            echo "branch_tag=${{ env.REGISTRY }}/${{ matrix.image }}:branch-${branch}"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Extract versions from mise.toml
         id: versions
@@ -403,6 +516,7 @@ jobs:
       - scan-images
       - lint
       - lint-web
+      - static-analysis
       - storybook-build
       - codegen-check
       - sqlx-check
@@ -447,7 +561,7 @@ jobs:
         run: |
           set -euo pipefail
           SKAFFOLD_VERSION=v$(cat .skaffold-version)
-          curl -fsSL -o skaffold https://storage.googleapis.com/skaffold/releases/${SKAFFOLD_VERSION}/skaffold-linux-amd64
+          curl -fsSL -o skaffold "https://storage.googleapis.com/skaffold/releases/${SKAFFOLD_VERSION}/skaffold-linux-amd64"
           sudo install skaffold /usr/local/bin/skaffold
 
       - name: Verify Skaffold installation
@@ -542,7 +656,7 @@ jobs:
           TEST_POSTGRES_IMAGE: ${{ env.REGISTRY }}/postgres:${{ github.sha }}
         run: |
           set -euo pipefail
-          skaffold test -p ${SKAFFOLD_PROFILE} --build-artifacts "${{ steps.artifacts.outputs.file }}"
+          skaffold test -p "${SKAFFOLD_PROFILE}" --build-artifacts "${{ steps.artifacts.outputs.file }}"
 
       - name: Generate Rust coverage
         env:
@@ -592,7 +706,7 @@ jobs:
       - name: Deploy with Skaffold
         run: |
           set -euo pipefail
-          skaffold deploy -p ${SKAFFOLD_PROFILE} --status-check=true \
+          skaffold deploy -p "${SKAFFOLD_PROFILE}" --status-check=true \
             --build-artifacts "${{ steps.artifacts.outputs.file }}"
 
       - name: Build instrumented frontend for E2E tests
@@ -615,13 +729,13 @@ jobs:
               gzip_size=$(gzip -c "$file" | wc -c)
               printf "| %s | %s | %s |\n" \
                 "$(basename "$file")" \
-                "$(numfmt --to=iec-i --suffix=B $size 2>/dev/null || echo "${size}B")" \
-                "$(numfmt --to=iec-i --suffix=B $gzip_size 2>/dev/null || echo "${gzip_size}B")"
+                "$(numfmt --to=iec-i --suffix=B "$size" 2>/dev/null || echo "${size}B")" \
+                "$(numfmt --to=iec-i --suffix=B "$gzip_size" 2>/dev/null || echo "${gzip_size}B")"
             ' _ {} \; | sort -k3 -h -r
             echo ""
             total_size=$(find dist -type f \( -name "*.js" -o -name "*.css" \) -exec stat -f%z {} + 2>/dev/null | awk '{sum+=$1} END {print sum}' || \
                          find dist -type f \( -name "*.js" -o -name "*.css" \) -exec stat -c%s {} + | awk '{sum+=$1} END {print sum}')
-            echo "**Total:** $(numfmt --to=iec-i --suffix=B $total_size 2>/dev/null || echo "${total_size}B")"
+            echo "**Total:** $(numfmt --to=iec-i --suffix=B "$total_size" 2>/dev/null || echo "${total_size}B")"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Run Playwright E2E tests
@@ -650,7 +764,7 @@ jobs:
 
           # Cleanup
           kill $PREVIEW_PID $PF_API_PID 2>/dev/null || true
-          exit ${TEST_EXIT:-0}
+          exit "${TEST_EXIT:-0}"
 
       - name: Publish Playwright test report
         if: always() && hashFiles('web/reports/playwright.xml') != ''
@@ -676,7 +790,7 @@ jobs:
       - name: Analyze Playwright flakiness
         if: always()
         working-directory: web
-        run: node scripts/analyze-playwright-flakiness.mjs >> $GITHUB_STEP_SUMMARY
+        run: node scripts/analyze-playwright-flakiness.mjs >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload Rust coverage artifacts
         if: always()
@@ -694,7 +808,7 @@ jobs:
             --vitest web/coverage/vitest/coverage-summary.json \
             --playwright web/coverage/playwright/coverage-summary.json \
             --rust "service/coverage/backend-unit.lcov:unit" \
-            >> $GITHUB_STEP_SUMMARY
+            >> "$GITHUB_STEP_SUMMARY"
 
       - name: Install lcov for HTML generation
         if: always()
@@ -773,12 +887,16 @@ jobs:
         id: paths
         run: |
           if [ "${{ github.event_name }}" = "pull_request" ]; then
-            echo "is_pr=true" >> "$GITHUB_OUTPUT"
-            echo "pr_number=${{ github.event.pull_request.number }}" >> "$GITHUB_OUTPUT"
-            echo "base_path=pr/${{ github.event.pull_request.number }}" >> "$GITHUB_OUTPUT"
+            {
+              echo "is_pr=true"
+              echo "pr_number=${{ github.event.pull_request.number }}"
+              echo "base_path=pr/${{ github.event.pull_request.number }}"
+            } >> "$GITHUB_OUTPUT"
           else
-            echo "is_pr=false" >> "$GITHUB_OUTPUT"
-            echo "base_path=" >> "$GITHUB_OUTPUT"
+            {
+              echo "is_pr=false"
+              echo "base_path="
+            } >> "$GITHUB_OUTPUT"
           fi
 
       - name: Prepare deployment directory
