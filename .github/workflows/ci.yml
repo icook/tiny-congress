@@ -825,6 +825,13 @@ jobs:
           path: artifacts/docs
         continue-on-error: true
 
+      - name: Download Rust coverage
+        uses: actions/download-artifact@v6
+        with:
+          name: rust-coverage
+          path: artifacts/rust-coverage
+        continue-on-error: true
+
       - name: Organize artifacts
         id: artifacts
         run: |
@@ -842,8 +849,6 @@ jobs:
           if [ -d artifacts/docs/web/docs ]; then
             mv artifacts/docs/web/docs site/ts-docs
           fi
-
-          rm -rf artifacts
 
           # Extract coverage percentages from all test types
           # Vitest
@@ -870,21 +875,33 @@ jobs:
           echo "pw_branches=${PW_BRANCHES}" >> "$GITHUB_OUTPUT"
           echo "pw_functions=${PW_FUNCTIONS}" >> "$GITHUB_OUTPUT"
 
-          # Rust (parse lcov summary lines)
-          if [ -f site/coverage/rust/index.html ]; then
-            # Extract from genhtml output - look for the header row with percentages
-            RUST_LINES=$(grep -oP 'headerCovTableEntryLo[^>]*>\K[0-9.]+(?= %)' site/coverage/rust/index.html 2>/dev/null | head -1 || echo "0")
-            RUST_FUNCTIONS=$(grep -oP 'headerCovTableEntryLo[^>]*>\K[0-9.]+(?= %)' site/coverage/rust/index.html 2>/dev/null | tail -1 || echo "0")
-            # If extraction failed, try alternate format
-            if [ -z "$RUST_LINES" ] || [ "$RUST_LINES" = "0" ]; then
-              RUST_LINES=$(grep -oP 'headerCovTableEntry[^>]*>\K[0-9.]+(?= %)' site/coverage/rust/index.html 2>/dev/null | head -1 || echo "0")
-              RUST_FUNCTIONS=$(grep -oP 'headerCovTableEntry[^>]*>\K[0-9.]+(?= %)' site/coverage/rust/index.html 2>/dev/null | tail -1 || echo "0")
+          # Rust (parse lcov file directly - must happen before artifacts cleanup)
+          RUST_LCOV="artifacts/rust-coverage/backend-unit.lcov"
+          if [ -f "$RUST_LCOV" ]; then
+            # Sum up LF (lines found) and LH (lines hit) from lcov
+            LINES_FOUND=$(grep "^LF:" "$RUST_LCOV" | cut -d: -f2 | awk '{s+=$1} END {print s+0}')
+            LINES_HIT=$(grep "^LH:" "$RUST_LCOV" | cut -d: -f2 | awk '{s+=$1} END {print s+0}')
+            FUNCS_FOUND=$(grep "^FNF:" "$RUST_LCOV" | cut -d: -f2 | awk '{s+=$1} END {print s+0}')
+            FUNCS_HIT=$(grep "^FNH:" "$RUST_LCOV" | cut -d: -f2 | awk '{s+=$1} END {print s+0}')
+
+            if [ "$LINES_FOUND" -gt 0 ]; then
+              RUST_LINES=$(echo "scale=1; $LINES_HIT * 100 / $LINES_FOUND" | bc)
+            else
+              RUST_LINES=0
+            fi
+            if [ "$FUNCS_FOUND" -gt 0 ]; then
+              RUST_FUNCTIONS=$(echo "scale=1; $FUNCS_HIT * 100 / $FUNCS_FOUND" | bc)
+            else
+              RUST_FUNCTIONS=0
             fi
           else
             RUST_LINES=0; RUST_FUNCTIONS=0
           fi
-          echo "rust_lines=${RUST_LINES:-0}" >> "$GITHUB_OUTPUT"
-          echo "rust_functions=${RUST_FUNCTIONS:-0}" >> "$GITHUB_OUTPUT"
+          echo "rust_lines=${RUST_LINES}" >> "$GITHUB_OUTPUT"
+          echo "rust_functions=${RUST_FUNCTIONS}" >> "$GITHUB_OUTPUT"
+
+          # Cleanup artifacts
+          rm -rf artifacts
 
           # Overall coverage (vitest lines as primary)
           echo "coverage_pct=${VITEST_LINES}" >> "$GITHUB_OUTPUT"
