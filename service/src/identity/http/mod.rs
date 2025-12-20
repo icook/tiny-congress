@@ -11,23 +11,28 @@ use uuid::Uuid;
 use super::repo::{AccountRepo, AccountRepoError};
 use tc_crypto::{decode_base64url_native as decode_base64url, derive_kid};
 
-/// Signup request payload
+/// Signup request payload.
 #[derive(Debug, Deserialize)]
 pub struct SignupRequest {
+    /// Desired username for the new account.
     pub username: String,
-    pub root_pubkey: String, // base64url encoded
+    /// Root public key (base64url encoded Ed25519).
+    pub root_pubkey: String,
 }
 
-/// Signup response
+/// Signup response.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SignupResponse {
+    /// Unique identifier for the created account.
     pub account_id: Uuid,
+    /// Key ID derived from the root public key.
     pub root_kid: String,
 }
 
-/// Error response
+/// Error response.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ErrorResponse {
+    /// Human-readable error message.
     pub error: String,
 }
 
