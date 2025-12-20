@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OpenAPI Specification</title>
+  <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css">
+  <style>
+    body { margin: 0; padding: 0; }
+    .swagger-ui .topbar { display: none; }
+    .back-link {
+      position: fixed;
+      top: 10px;
+      left: 10px;
+      z-index: 1000;
+      background: #1a1a2e;
+      color: #818cf8;
+      padding: 8px 16px;
+      border-radius: 4px;
+      text-decoration: none;
+      font-family: system-ui, sans-serif;
+      font-size: 14px;
+    }
+    .back-link:hover { background: #16213e; }
+  </style>
+</head>
+<body>
+  <a href="../index.html" class="back-link">&larr; Back to Coverage Report</a>
+  <div id="swagger-ui"></div>
+  <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
+  <script>
+    SwaggerUIBundle({
+      url: 'openapi.json',
+      dom_id: '#swagger-ui',
+      deepLinking: true,
+      presets: [SwaggerUIBundle.presets.apis, SwaggerUIBundle.SwaggerUIStandalonePreset],
+      layout: 'BaseLayout'
+    });
+  </script>
+</body>
+</html>
