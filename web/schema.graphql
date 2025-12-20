@@ -2,9 +2,21 @@
 Build metadata exposed via GraphQL, REST, and logs.
 """
 type BuildInfo {
+	"""
+	Application version (from `APP_VERSION` or `VERSION` env var).
+	"""
 	version: String!
+	"""
+	Git commit SHA.
+	"""
 	gitSha: String!
+	"""
+	Build timestamp in RFC3339 format.
+	"""
 	buildTime: String!
+	"""
+	Optional build message or description.
+	"""
 	message: String
 }
 

@@ -34,9 +34,13 @@ export interface components {
   schemas: {
     /** @description Build metadata exposed via GraphQL, REST, and logs. */
     BuildInfo: {
+      /** @description Build timestamp in RFC3339 format. */
       buildTime: string;
+      /** @description Git commit SHA. */
       gitSha: string;
+      /** @description Optional build message or description. */
       message?: string | null;
+      /** @description Application version (from `APP_VERSION` or `VERSION` env var). */
       version: string;
     };
     /** @description RFC 7807 Problem Details error response. */
