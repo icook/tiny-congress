@@ -1,0 +1,13 @@
+self-hosted-runner:
+  labels: []
+
+# Configuration variables - null means disable check
+config-variables: null
+
+# Ignore stylistic shellcheck warnings in inline scripts
+# These are info/style level suggestions, not actual issues
+paths:
+  .github/workflows/**/*.yml:
+    ignore:
+      - 'shellcheck reported issue.*SC2086'  # Double quote variables
+      - 'shellcheck reported issue.*SC2129'  # Use grouped redirects
