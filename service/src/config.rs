@@ -14,15 +14,22 @@ use serde_aux::prelude::deserialize_vec_from_string_or_vec;
 /// 4. Environment variables with TC_ prefix (always wins)
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Config {
+    /// Database connection settings.
     pub database: DatabaseConfig,
+    /// HTTP server settings.
     pub server: ServerConfig,
+    /// Logging configuration.
     pub logging: LoggingConfig,
+    /// CORS (Cross-Origin Resource Sharing) settings.
     #[serde(default)]
     pub cors: CorsConfig,
+    /// Security headers configuration.
     #[serde(default)]
     pub security_headers: SecurityHeadersConfig,
+    /// GraphQL endpoint settings.
     #[serde(default)]
     pub graphql: GraphQLConfig,
+    /// Swagger UI settings.
     #[serde(default)]
     pub swagger: SwaggerConfig,
     /// HMAC key for generating synthetic backup envelopes.
@@ -36,6 +43,7 @@ pub struct Config {
     pub idme: Option<IdMeConfig>,
 }
 
+/// Database connection pool configuration.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct DatabaseConfig {
     /// Database host.
@@ -82,6 +90,7 @@ impl DatabaseConfig {
     }
 }
 
+/// HTTP server configuration.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ServerConfig {
     /// HTTP server port.
@@ -93,6 +102,7 @@ pub struct ServerConfig {
     pub host: String,
 }
 
+/// Logging configuration.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct LoggingConfig {
     /// Log level filter (debug, info, warn, error).
@@ -100,6 +110,7 @@ pub struct LoggingConfig {
     pub level: String,
 }
 
+/// Cross-Origin Resource Sharing configuration.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct CorsConfig {
     /// Allowed origins for CORS requests.
@@ -169,6 +180,7 @@ impl Default for CorsConfig {
     }
 }
 
+/// HTTP security headers configuration.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct SecurityHeadersConfig {
     /// Enable security headers (default: true).
@@ -236,6 +248,7 @@ impl Default for SecurityHeadersConfig {
     }
 }
 
+/// GraphQL endpoint configuration.
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct GraphQLConfig {
     /// Enable GraphQL Playground UI at /graphql (GET).
@@ -282,6 +295,7 @@ fn default_idme_userinfo_url() -> String {
     "https://api.idmelabs.com/api/public/v3/userinfo".to_string()
 }
 
+/// Swagger UI configuration.
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct SwaggerConfig {
     /// Enable Swagger UI at /swagger-ui.
@@ -323,9 +337,11 @@ impl Default for Config {
 /// Configuration loading and validation errors.
 #[derive(Debug, thiserror::Error)]
 pub enum ConfigError {
+    /// Error loading configuration from sources (files, env vars).
     #[error("Configuration error: {0}")]
     Figment(#[from] Box<figment::Error>),
 
+    /// Configuration value failed validation.
     #[error("Validation error: {0}")]
     Validation(String),
 }

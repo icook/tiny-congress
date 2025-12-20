@@ -338,6 +338,14 @@ lint-workflows:
 lint-scripts:
     shellcheck web/bin/*.sh web/scripts/*.sh service/bin/*.sh
 
+# Lint Kubernetes manifests (requires kube-linter: brew install kube-linter)
+lint-kube:
+    kube-linter lint kube/ --config .kube-linter.yaml
+
+# Check for rustdoc warnings (broken links)
+lint-docs:
+    cd service && cargo doc --no-deps --document-private-items 2>&1 | (! grep -E "^warning:")
+
 # Fix all formatting (backend + frontend)
 fmt: fmt-backend fmt-frontend
     @echo "✓ All formatting applied"

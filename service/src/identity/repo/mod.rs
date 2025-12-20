@@ -19,6 +19,7 @@ pub use identity::{
 };
 pub use nonces::{check_and_record_nonce, cleanup_expired_nonces, NonceRepoError};
 
+/// Mock implementations for testing.
 #[cfg(any(test, feature = "test-utils"))]
 pub mod mock {
     pub use super::identity::mock::MockIdentityRepo;

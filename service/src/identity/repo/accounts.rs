@@ -3,31 +3,41 @@
 use tc_crypto::Kid;
 use uuid::Uuid;
 
-/// Account creation result
+/// Account creation result.
 #[derive(Debug, Clone)]
 pub struct CreatedAccount {
+    /// Unique account identifier.
     pub id: Uuid,
+    /// Key ID derived from root public key.
     pub root_kid: Kid,
 }
 
-/// Full account record from the database
+/// Full account record from the database.
 #[derive(Debug, Clone)]
 pub struct AccountRecord {
+    /// Unique account identifier.
     pub id: Uuid,
+    /// Account username.
     pub username: String,
+    /// Root public key (base64url encoded).
     pub root_pubkey: String,
+    /// Key ID derived from root public key.
     pub root_kid: Kid,
 }
 
-/// Error types for account operations
+/// Error types for account operations.
 #[derive(Debug, thiserror::Error)]
 pub enum AccountRepoError {
+    /// Username is already taken by another account.
     #[error("username already taken")]
     DuplicateUsername,
+    /// Public key is already registered to another account.
     #[error("public key already registered")]
     DuplicateKey,
+    /// Account not found.
     #[error("account not found")]
     NotFound,
+    /// Database operation failed.
     #[error("database error: {0}")]
     Database(#[from] sqlx::Error),
 }
