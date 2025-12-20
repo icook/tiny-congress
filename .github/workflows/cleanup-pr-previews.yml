@@ -8,6 +8,9 @@ jobs:
   cleanup:
     name: Remove PR preview from GitHub Pages
     runs-on: ubuntu-latest
+    concurrency:
+      group: gh-pages-deploy
+      cancel-in-progress: false
     permissions:
       contents: write
     steps:

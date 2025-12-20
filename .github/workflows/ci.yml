@@ -733,6 +733,9 @@ jobs:
     runs-on: ubuntu-latest
     needs: [integration-tests, storybook-build]
     if: always() && needs.integration-tests.result != 'cancelled'
+    concurrency:
+      group: gh-pages-deploy
+      cancel-in-progress: false
     permissions:
       contents: write
       pull-requests: write
