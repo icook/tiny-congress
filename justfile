@@ -370,6 +370,25 @@ clean: clean-wasm
     @echo "✓ Build artifacts cleaned"
 
 # =============================================================================
+# Documentation
+# =============================================================================
+
+# Build all documentation locally
+docs: docs-rust docs-ts
+    @echo "✓ All docs built"
+    @echo "  Rust: target/doc/tinycongress_api/index.html"
+    @echo "  TypeScript: web/docs/index.html"
+
+# Build and open Rust API docs
+docs-rust:
+    cargo doc --workspace --no-deps --open
+
+# Build TypeScript docs
+docs-ts:
+    cd web && yarn typedoc
+    @echo "TypeScript docs: web/docs/index.html"
+
+# =============================================================================
 # Git Workflows
 # =============================================================================
 # See docs/interfaces/branch-naming-conventions.md for branch naming standards
