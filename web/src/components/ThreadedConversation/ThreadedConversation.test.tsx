@@ -1,5 +1,5 @@
 import { act, render, screen, userEvent } from '@test-utils';
-import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
+import { afterEach, describe, expect, test, vi } from 'vitest';
 import { ThreadedConversation, type ConversationBranch, type Thread } from './ThreadedConversation';
 
 const baseTimestamp = new Date('2024-01-01T00:00:00Z');
