@@ -53,7 +53,7 @@ async fn extract_schema(pool: &sqlx::PgPool) -> String {
     .await
     .expect("Failed to extract indexes");
 
-    // Get all constraints
+    // Get all constraints (excluding FK which we handle separately)
     let constraints: Vec<(String, String, String)> = sqlx::query_as(
         r#"
         SELECT
@@ -63,12 +63,43 @@ async fn extract_schema(pool: &sqlx::PgPool) -> String {
         FROM information_schema.table_constraints tc
         WHERE tc.table_schema = 'public'
         AND tc.table_name NOT LIKE '_sqlx%'
+        AND tc.constraint_type != 'FOREIGN KEY'
         ORDER BY tc.table_name, tc.constraint_name
         "#,
     )
     .fetch_all(pool)
     .await
     .expect("Failed to extract constraints");
+
+    // Get foreign key details
+    let foreign_keys: Vec<(String, String, String, String, String, String)> = sqlx::query_as(
+        r#"
+        SELECT
+            tc.table_name,
+            kcu.column_name,
+            ccu.table_name AS referenced_table,
+            ccu.column_name AS referenced_column,
+            rc.update_rule,
+            rc.delete_rule
+        FROM information_schema.table_constraints tc
+        JOIN information_schema.key_column_usage kcu
+            ON tc.constraint_name = kcu.constraint_name
+            AND tc.table_schema = kcu.table_schema
+        JOIN information_schema.constraint_column_usage ccu
+            ON tc.constraint_name = ccu.constraint_name
+            AND tc.table_schema = ccu.table_schema
+        JOIN information_schema.referential_constraints rc
+            ON tc.constraint_name = rc.constraint_name
+            AND tc.table_schema = rc.constraint_schema
+        WHERE tc.constraint_type = 'FOREIGN KEY'
+        AND tc.table_schema = 'public'
+        AND tc.table_name NOT LIKE '_sqlx%'
+        ORDER BY tc.table_name, kcu.column_name
+        "#,
+    )
+    .fetch_all(pool)
+    .await
+    .expect("Failed to extract foreign keys");
 
     // Build normalized schema representation
     let mut output = String::new();
@@ -117,7 +148,19 @@ async fn extract_schema(pool: &sqlx::PgPool) -> String {
         output.push_str(&format!("-- {}.{}\n{}\n\n", table, name, def));
     }
 
-    // Constraints
+    // Foreign Keys
+    if !foreign_keys.is_empty() {
+        output.push_str("-- Foreign Keys\n");
+        for (table, column, ref_table, ref_column, update_rule, delete_rule) in &foreign_keys {
+            output.push_str(&format!(
+                "-- {}.{} -> {}.{} (ON UPDATE {}, ON DELETE {})\n",
+                table, column, ref_table, ref_column, update_rule, delete_rule
+            ));
+        }
+        output.push('\n');
+    }
+
+    // Constraints (non-FK)
     output.push_str("-- Constraints\n");
     for (table, name, ctype) in &constraints {
         output.push_str(&format!("-- {}: {} ({})\n", table, name, ctype));
