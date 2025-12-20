@@ -1,6 +1,5 @@
 ---
 source: service/tests/schema_snapshot.rs
-assertion_line: 135
 expression: current_schema
 ---
 -- Schema Snapshot
@@ -40,15 +39,15 @@ CREATE INDEX idx_accounts_username ON public.accounts USING btree (username)
 CREATE UNIQUE INDEX test_items_pkey ON public.test_items USING btree (id)
 
 -- Constraints
--- accounts: 2200_16520_1_not_null (CHECK)
--- accounts: 2200_16520_2_not_null (CHECK)
--- accounts: 2200_16520_3_not_null (CHECK)
--- accounts: 2200_16520_4_not_null (CHECK)
--- accounts: 2200_16520_5_not_null (CHECK)
+-- accounts: accounts_created_at_not_null (CHECK)
+-- accounts: accounts_id_not_null (CHECK)
 -- accounts: accounts_pkey (PRIMARY KEY)
 -- accounts: accounts_root_kid_key (UNIQUE)
+-- accounts: accounts_root_kid_not_null (CHECK)
+-- accounts: accounts_root_pubkey_not_null (CHECK)
 -- accounts: accounts_username_key (UNIQUE)
--- test_items: 2200_16511_1_not_null (CHECK)
--- test_items: 2200_16511_2_not_null (CHECK)
--- test_items: 2200_16511_3_not_null (CHECK)
+-- accounts: accounts_username_not_null (CHECK)
+-- test_items: test_items_created_at_not_null (CHECK)
+-- test_items: test_items_id_not_null (CHECK)
+-- test_items: test_items_name_not_null (CHECK)
 -- test_items: test_items_pkey (PRIMARY KEY)

@@ -1,12 +1,12 @@
-FROM postgres:17
+FROM postgres:18
 
-# Ensure pg_config from Postgres 17 is preferred
-ENV PATH="/usr/lib/postgresql/17/bin:${PATH}"
-ENV PG_CONFIG=/usr/lib/postgresql/17/bin/pg_config
+# Ensure pg_config from Postgres 18 is preferred
+ENV PATH="/usr/lib/postgresql/18/bin:${PATH}"
+ENV PG_CONFIG=/usr/lib/postgresql/18/bin/pg_config
 
 # Install pgmq extension and required contrib modules, then clean up build deps and apt cache.
 RUN set -eux; \
-    buildDeps='build-essential libicu-dev postgresql-server-dev-17 pgxnclient'; \
+    buildDeps='build-essential libicu-dev postgresql-server-dev-18 pgxnclient'; \
     apt-get update; \
     apt-get install --no-install-recommends -y $buildDeps postgresql-contrib; \
     pgxn install pgmq; \
