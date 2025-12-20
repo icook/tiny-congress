@@ -1,54 +1,41 @@
 /**
- * Signup screen
- * Creates new account with Ed25519 key pair
+ * SignupForm - Presentational component for signup
+ * Renders the signup form UI based on props, no hooks or side effects
  */
 
-import { useState } from 'react';
 import { IconAlertTriangle, IconCheck } from '@tabler/icons-react';
 import { Alert, Button, Card, Code, Group, Stack, Text, TextInput, Title } from '@mantine/core';
-import { useCryptoRequired } from '@/providers/CryptoProvider';
-import { useSignup } from '../api';
-import { generateKeyPair } from '../keys';
 
-export function Signup() {
-  const crypto = useCryptoRequired();
-  const signup = useSignup();
+export type SignupFormProps = {
+  // Form state
+  username: string;
+  onUsernameChange: (value: string) => void;
+  onSubmit: (e: React.FormEvent) => void;
 
-  const [username, setUsername] = useState('');
-  const [isGeneratingKeys, setIsGeneratingKeys] = useState(false);
-  const [createdAccount, setCreatedAccount] = useState<{
+  // Loading states
+  isLoading: boolean;
+  loadingText?: string;
+
+  // Error state
+  error?: string | null;
+
+  // Success state
+  successData?: {
     account_id: string;
     root_kid: string;
-  } | null>(null);
+  } | null;
+};
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (!username.trim()) {
-      return;
-    }
-
-    setIsGeneratingKeys(true);
-
-    try {
-      // Generate key pair (uses WASM for KID derivation)
-      const keyPair = generateKeyPair(crypto);
-
-      // Call signup API
-      const response = await signup.mutateAsync({
-        username: username.trim(),
-        root_pubkey: crypto.encode_base64url(keyPair.publicKey),
-      });
-
-      setCreatedAccount(response);
-    } catch {
-      // Error is handled by TanStack Query mutation state
-    } finally {
-      setIsGeneratingKeys(false);
-    }
-  };
-
-  if (createdAccount) {
+export function SignupForm({
+  username,
+  onUsernameChange,
+  onSubmit,
+  isLoading,
+  loadingText,
+  error,
+  successData,
+}: SignupFormProps) {
+  if (successData) {
     return (
       <Stack gap="md" maw={500} mx="auto" mt="xl">
         <Alert icon={<IconCheck size={16} />} title="Account Created" color="green">
@@ -59,10 +46,10 @@ export function Signup() {
           <Stack gap="sm">
             <Text fw={500}>Account Details</Text>
             <Text size="sm">
-              <strong>Account ID:</strong> <Code>{createdAccount.account_id}</Code>
+              <strong>Account ID:</strong> <Code>{successData.account_id}</Code>
             </Text>
             <Text size="sm">
-              <strong>Root Key ID:</strong> <Code>{createdAccount.root_kid}</Code>
+              <strong>Root Key ID:</strong> <Code>{successData.root_kid}</Code>
             </Text>
           </Stack>
         </Card>
@@ -86,26 +73,26 @@ export function Signup() {
       </div>
 
       <Card shadow="sm" padding="lg" radius="md" withBorder>
-        <form onSubmit={handleSubmit}>
+        <form onSubmit={onSubmit}>
           <Stack gap="md">
             <TextInput
               label="Username"
               placeholder="alice"
               required
               value={username}
-              onChange={(e) => setUsername(e.currentTarget.value)}
-              disabled={signup.isPending || isGeneratingKeys}
+              onChange={(e) => onUsernameChange(e.currentTarget.value)}
+              disabled={isLoading}
             />
 
-            {signup.isError && (
+            {error && (
               <Alert icon={<IconAlertTriangle size={16} />} title="Signup failed" color="red">
-                {signup.error?.message || 'An error occurred'}
+                {error}
               </Alert>
             )}
 
             <Group justify="flex-end">
-              <Button type="submit" loading={signup.isPending || isGeneratingKeys}>
-                {isGeneratingKeys ? 'Generating keys...' : 'Sign Up'}
+              <Button type="submit" loading={isLoading}>
+                {loadingText ?? 'Sign Up'}
               </Button>
             </Group>
           </Stack>

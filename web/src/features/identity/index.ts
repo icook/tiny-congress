@@ -4,4 +4,4 @@
 
 export * from './api';
 export * from './keys';
-export * from './screens';
+export * from './components';
