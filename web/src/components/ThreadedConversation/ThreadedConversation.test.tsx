@@ -1,5 +1,5 @@
-import { render, screen, userEvent, waitFor } from '@test-utils';
-import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
+import { act, render, screen, userEvent } from '@test-utils';
+import { afterEach, describe, expect, test, vi } from 'vitest';
 import { ThreadedConversation, type ConversationBranch, type Thread } from './ThreadedConversation';
 
 const baseTimestamp = new Date('2024-01-01T00:00:00Z');
@@ -46,15 +46,12 @@ function buildThread(): Thread {
 }
 
 describe('ThreadedConversation', () => {
-  beforeEach(() => {
-    vi.useRealTimers();
-  });
-
   afterEach(() => {
     vi.useRealTimers();
   });
 
   test('selects the highest rated branch when triggered manually', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
     const user = userEvent.setup();
     render(<ThreadedConversation thread={buildThread()} />);
 
@@ -64,12 +61,21 @@ describe('ThreadedConversation', () => {
     expect(screen.queryByText('Option B')).not.toBeInTheDocument();
   });
 
-  test('auto-selects the top branch when the timer elapses', async () => {
+  test('auto-selects the top branch when the timer elapses', () => {
+    vi.useFakeTimers();
     render(<ThreadedConversation thread={buildThread()} />);
 
-    await waitFor(() => expect(screen.getAllByText('Selected').length).toBeGreaterThan(1), {
-      timeout: 3000,
+    // Timer starts at 1000ms, interval fires every 1000ms:
+    // - First tick: decrements 1000 -> 0
+    act(() => {
+      vi.advanceTimersByTime(1000);
     });
+    // - Second tick: sees 0, triggers selection
+    act(() => {
+      vi.advanceTimersByTime(1000);
+    });
+
+    expect(screen.getAllByText('Selected').length).toBeGreaterThan(1);
     expect(screen.queryByText('Option B')).not.toBeInTheDocument();
   });
 });
