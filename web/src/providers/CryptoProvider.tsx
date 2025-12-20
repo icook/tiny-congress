@@ -77,7 +77,7 @@ export function CryptoProvider({ children }: CryptoProviderProps) {
       }
     }
 
-    loadWasm();
+    void loadWasm();
     return () => {
       mounted = false;
     };

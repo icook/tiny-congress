@@ -5,6 +5,7 @@ import playwright from 'eslint-plugin-playwright';
 import reactHooks from 'eslint-plugin-react-hooks';
 import storybook from 'eslint-plugin-storybook';
 import testingLibrary from 'eslint-plugin-testing-library';
+import unicorn from 'eslint-plugin-unicorn';
 import vitest from 'eslint-plugin-vitest';
 import globals from 'globals';
 import tseslint from 'typescript-eslint';
@@ -19,7 +20,9 @@ const testFiles = ['src/**/*.{test,spec}.{ts,tsx}', 'test-utils/**/*.{ts,tsx}'];
 
 export default tseslint.config(
   {
-    // Ignore generated artifacts so lint time stays predictable and CI noise is avoided.
+    // Ignore generated artifacts and config files.
+    // JS/MJS config files are excluded because eslint-config-mantine's TypeScript parser
+    // cannot handle them without type information. They're config files with minimal logic.
     ignores: [
       'dist',
       'coverage/**',
@@ -33,15 +36,25 @@ export default tseslint.config(
       'src/api/generated/**', // Generated code from graphql-codegen
       'src/wasm/**', // Generated code from wasm-pack
       'codegen.ts', // GraphQL codegen config
+      // JS/MJS config files - excluded due to TypeScript parser incompatibility
+      '*.config.js',
+      '*.config.cjs',
+      '*.config.mjs',
+      '.prettierrc.mjs',
+      'scripts/**/*.mjs',
+      'vitest.setup.mjs',
     ],
   },
 
   // Keep Mantine's baseline React/TS/a11y coverage intact.
   ...mantine,
 
+  // Layer TypeScript strict presets for enhanced type safety.
+  // These add: no-explicit-any, no-unsafe-* family, prefer-nullish-coalescing, etc.
+  // Only apply to TypeScript files to avoid parsing issues with JS/MJS config files.
   {
-    // Enable type-aware linting to surface unsafe promise/any misuse during lint, not just tsc.
     files: ['**/*.{ts,tsx}'],
+    extends: [...tseslint.configs.strictTypeChecked, ...tseslint.configs.stylisticTypeChecked],
     languageOptions: {
       parserOptions: {
         // Use ESLint-specific tsconfig so config/test/storybook files are included in the program.
@@ -60,6 +73,70 @@ export default tseslint.config(
     rules: {
       'react-hooks/rules-of-hooks': 'error',
       'react-hooks/exhaustive-deps': 'error',
+    },
+  },
+
+  {
+    // === Enhanced Strictness Rules ===
+    // These rules catch real bugs and enforce best practices.
+    files: ['src/**/*.{ts,tsx}'],
+    plugins: {
+      unicorn,
+    },
+    rules: {
+      // --- TypeScript Promise & Type Safety (errors - catch real bugs) ---
+      // Catch unhandled promises (common source of silent failures)
+      '@typescript-eslint/no-floating-promises': 'error',
+      // Prevent async functions in wrong contexts (onClick={async () => ...})
+      '@typescript-eslint/no-misused-promises': 'error',
+      // Only await actual Promises
+      '@typescript-eslint/await-thenable': 'error',
+      // Avoid unnecessary type assertions
+      '@typescript-eslint/no-unnecessary-type-assertion': 'error',
+      // Exhaustive switch statements on union types
+      '@typescript-eslint/switch-exhaustiveness-check': 'error',
+      // Prefer optional chaining over && chains
+      '@typescript-eslint/prefer-optional-chain': 'error',
+
+      // --- Stylistic Preferences (warnings - auto-fixable) ---
+      // Prefer nullish coalescing over logical OR for null/undefined
+      '@typescript-eslint/prefer-nullish-coalescing': 'warn',
+
+      // --- React Best Practices (errors - prevent rendering bugs) ---
+      // Prevent {count && <Component />} rendering "0" when count is 0
+      'react/jsx-no-leaked-render': 'error',
+      // Enforce [value, setValue] naming pattern for useState
+      'react/hook-use-state': 'error',
+
+      // --- Naming Conventions (errors - enforce codebase standards) ---
+      // Enforce consistent naming for types and interfaces (PascalCase)
+      '@typescript-eslint/naming-convention': [
+        'error',
+        { selector: 'interface', format: ['PascalCase'] },
+        { selector: 'typeAlias', format: ['PascalCase'] },
+        { selector: 'enum', format: ['PascalCase'] },
+        { selector: 'enumMember', format: ['PascalCase', 'UPPER_CASE'] },
+      ],
+
+      // --- Accessibility (errors - stricter than Mantine defaults) ---
+      // Autofocus can cause accessibility issues for screen reader users
+      'jsx-a11y/no-autofocus': 'error',
+
+      // --- Deprecation Detection (warnings - actionable but not blocking) ---
+      // Surface deprecated API usage before it breaks
+      '@typescript-eslint/no-deprecated': 'warn',
+
+      // --- Modern JS Best Practices (errors - Unicorn) ---
+      // Prefer node: protocol for built-in modules
+      'unicorn/prefer-node-protocol': 'error',
+      // Avoid useless undefined (return undefined -> return)
+      'unicorn/no-useless-undefined': 'error',
+      // Always use new with Error
+      'unicorn/throw-new-error': 'error',
+      // Prefer Array.find over filter()[0]
+      'unicorn/prefer-array-find': 'error',
+      // Prefer includes over indexOf !== -1
+      'unicorn/prefer-includes': 'error',
     },
   },
 
@@ -184,6 +261,7 @@ export default tseslint.config(
 
   {
     // Tighten unit test hygiene (Vitest globals, Testing Library patterns, jest-dom assertions).
+    // Relax strict type rules in tests where mocking often requires flexibility.
     files: testFiles,
     plugins: {
       vitest,
@@ -205,11 +283,22 @@ export default tseslint.config(
       ...(vitestRecommended.rules ?? {}),
       ...(testingLibraryReact.rules ?? {}),
       ...(jestDomRecommended.rules ?? {}),
+      // Relax strict type rules in tests - mocking often requires any types
+      '@typescript-eslint/no-explicit-any': 'off',
+      '@typescript-eslint/no-unsafe-assignment': 'off',
+      '@typescript-eslint/no-unsafe-member-access': 'off',
+      '@typescript-eslint/no-unsafe-call': 'off',
+      '@typescript-eslint/no-unsafe-return': 'off',
+      '@typescript-eslint/no-unsafe-argument': 'off',
+      '@typescript-eslint/no-empty-function': 'off',
+      // Allow spreading class instances in tests for creating mock data
+      '@typescript-eslint/no-misused-spread': 'off',
     },
   },
 
   {
     // Keep Playwright suites aligned with official best practices and failure patterns.
+    // Relax strict type rules in E2E tests - test fixtures often need flexibility.
     files: ['tests/e2e/**/*.{ts,tsx}'],
     plugins: {
       playwright,
@@ -233,6 +322,13 @@ export default tseslint.config(
           ],
         },
       ],
+      // Relax strict type rules in E2E tests
+      '@typescript-eslint/no-explicit-any': 'off',
+      '@typescript-eslint/no-unsafe-assignment': 'off',
+      '@typescript-eslint/no-unsafe-member-access': 'off',
+      '@typescript-eslint/no-non-null-assertion': 'off',
+      '@typescript-eslint/no-invalid-void-type': 'off',
+      '@typescript-eslint/require-await': 'off',
     },
   },
   {
@@ -245,7 +341,8 @@ export default tseslint.config(
 
   {
     // Guard stories and Storybook config so CSF/MDX stay consistent with runtime expectations.
-    files: ['src/**/*.story.tsx', '.storybook/**/*.{ts,tsx,js}'],
+    // Relax strict type rules - Storybook decorators often require any types.
+    files: ['src/**/*.story.tsx', '.storybook/**/*.{ts,tsx}'],
     plugins: {
       storybook,
     },
@@ -254,17 +351,20 @@ export default tseslint.config(
     },
     rules: {
       ...(storybookRecommended.rules ?? {}),
+      // Relax strict type rules for Storybook - decorators need flexibility
+      '@typescript-eslint/no-explicit-any': 'off',
+      '@typescript-eslint/no-unsafe-call': 'off',
+      '@typescript-eslint/no-unsafe-assignment': 'off',
+      '@typescript-eslint/no-unsafe-member-access': 'off',
     },
   },
 
   {
-    // Give tooling scripts and configs the Node globals they need without polluting app code.
+    // TypeScript config files need Node globals.
     files: [
-      '*.config.{js,ts,cjs,mjs}',
-      'scripts/**/*.{js,mjs,ts}',
-      '.storybook/**/*.{js,ts}',
-      'vite.config.mjs',
-      'postcss.config.mjs',
+      '*.config.ts',
+      'scripts/**/*.ts',
+      '.storybook/**/*.ts',
       'playwright.config.ts',
     ],
     languageOptions: {
@@ -273,7 +373,6 @@ export default tseslint.config(
       },
     },
     rules: {
-      // Node scripts rely on console output for CLIs; suppress noisy console bans here only.
       'no-console': 'off',
     },
   },

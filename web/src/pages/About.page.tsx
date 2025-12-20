@@ -18,16 +18,16 @@ export function AboutPage() {
         backend revision.
       </Text>
 
-      {isPending && (
+      {isPending ? (
         <Card shadow="sm" padding="lg" radius="md" withBorder data-testid="build-info-loading">
           <Group gap="sm">
             <Loader size="sm" />
             <Text>Loading build information…</Text>
           </Group>
         </Card>
-      )}
+      ) : null}
 
-      {isError && (
+      {isError ? (
         <Alert
           icon={<IconAlertTriangle size={16} />}
           title="Unable to load build info"
@@ -36,20 +36,20 @@ export function AboutPage() {
         >
           {error instanceof Error ? error.message : 'Unable to load build metadata'}
         </Alert>
-      )}
+      ) : null}
 
-      {data && (
+      {data ? (
         <Card shadow="sm" padding="lg" radius="md" withBorder>
           <Stack gap="sm">
             <Metric label="API Version" value={data.version} testId="api-version" />
             <Metric label="Git SHA" value={data.gitSha} testId="api-git-sha" />
             <Metric label="Build time" value={data.buildTime} testId="api-build-time" />
-            {data.message && (
+            {data.message ? (
               <Metric label="Message" value={data.message} testId="api-build-message" />
-            )}
+            ) : null}
           </Stack>
         </Card>
-      )}
+      ) : null}
     </Stack>
   );
 }

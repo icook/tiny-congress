@@ -14,7 +14,9 @@ function createTestQueryClient() {
   });
 }
 
-type WrapperProps = { children: React.ReactNode };
+interface WrapperProps {
+  children: React.ReactNode;
+}
 
 export function render(ui: React.ReactElement, options?: RenderOptions) {
   const testQueryClient = createTestQueryClient();

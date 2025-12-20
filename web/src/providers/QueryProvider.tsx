@@ -24,7 +24,7 @@ export function QueryProvider({ children }: QueryProviderProps) {
   return (
     <QueryClientProvider client={queryClient}>
       <ErrorBoundary context="QueryProvider">{children}</ErrorBoundary>
-      {isDevelopment && <ReactQueryDevtools initialIsOpen={false} />}
+      {isDevelopment ? <ReactQueryDevtools initialIsOpen={false} /> : null}
     </QueryClientProvider>
   );
 }

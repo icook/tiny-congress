@@ -50,10 +50,12 @@ export function SignupPage() {
     <SignupForm
       username={username}
       onUsernameChange={setUsername}
-      onSubmit={handleSubmit}
+      onSubmit={(e) => {
+        void handleSubmit(e);
+      }}
       isLoading={signup.isPending || isGeneratingKeys}
       loadingText={isGeneratingKeys ? 'Generating keys...' : undefined}
-      error={signup.isError ? signup.error?.message || 'An error occurred' : null}
+      error={signup.isError ? signup.error.message : null}
       successData={createdAccount}
     />
   );

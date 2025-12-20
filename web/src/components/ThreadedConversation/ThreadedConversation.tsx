@@ -71,7 +71,9 @@ const useInterval = (callback: () => void, delay: number | null) => {
       return;
     }
     const id = setInterval(callback, delay);
-    return () => clearInterval(id);
+    return () => {
+      clearInterval(id);
+    };
   }, [callback, delay]);
 };
 
@@ -182,24 +184,24 @@ function Branch({
           <div>
             <Text fw={500}>{author.name}</Text>
             <Group gap="xs">
-              <Text size="xs" color="dimmed">
+              <Text size="xs" c="dimmed">
                 {formattedTime}
               </Text>
-              {author.isAI && (
+              {author.isAI ? (
                 <Badge size="xs" variant="outline" color="blue">
                   AI
                 </Badge>
-              )}
-              {isSelected && (
+              ) : null}
+              {isSelected ? (
                 <Badge size="xs" color="green">
                   Selected
                 </Badge>
-              )}
-              {!isSelected && isViable && (
+              ) : null}
+              {!isSelected && isViable ? (
                 <Badge size="xs" color="yellow">
                   Viable
                 </Badge>
-              )}
+              ) : null}
             </Group>
           </div>
         </Group>
@@ -233,7 +235,12 @@ function Branch({
       </Text>
 
       {!isMainBranch && (
-        <Accordion value={expanded ? 'votes' : null} onChange={() => handleExpand()}>
+        <Accordion
+          value={expanded ? 'votes' : null}
+          onChange={() => {
+            handleExpand();
+          }}
+        >
           <Accordion.Item value="votes">
             <Accordion.Control>Rate this response</Accordion.Control>
             <Accordion.Panel>
@@ -243,7 +250,9 @@ function Branch({
                     key={dimension.id}
                     dimension={dimension}
                     _branchId={branch.id}
-                    onVote={(dimensionId, value) => onVote(branch.id, dimensionId, value)}
+                    onVote={(dimensionId, value) => {
+                      onVote(branch.id, dimensionId, value);
+                    }}
                   />
                 ))}
               </Stack>
@@ -259,7 +268,7 @@ function Branch({
 export function ThreadedConversation({ thread }: { thread: Thread }) {
   const [activeThread, setActiveThread] = useState<Thread>(thread);
   const [timeUntilNextSelection, setTimeUntilNextSelection] = useState<number | null>(
-    thread.activeInterval ? thread.activeInterval : null
+    thread.activeInterval ?? null
   );
 
   // Update the timer every second
@@ -397,7 +406,7 @@ export function ThreadedConversation({ thread }: { thread: Thread }) {
     result.push(rootBranches);
 
     // Now build the thread by following selected branches
-    let currentParentId: string | null = rootBranches.find((b) => b.isSelected)?.id || null;
+    let currentParentId: string | null = rootBranches.find((b) => b.isSelected)?.id ?? null;
 
     while (currentParentId !== null) {
       const childBranches = branches.filter(
@@ -412,7 +421,7 @@ export function ThreadedConversation({ thread }: { thread: Thread }) {
 
       // Find the next selected branch
       const nextSelected = childBranches.find((b) => b.isSelected);
-      currentParentId = nextSelected?.id || null;
+      currentParentId = nextSelected?.id ?? null;
     }
 
     return result;
@@ -421,7 +430,7 @@ export function ThreadedConversation({ thread }: { thread: Thread }) {
   // Format the time until next selection
   const formatTimeRemaining = (ms: number) => {
     const seconds = Math.floor(ms / 1000);
-    return `${seconds}s`;
+    return `${String(seconds)}s`;
   };
 
   return (
@@ -443,7 +452,7 @@ export function ThreadedConversation({ thread }: { thread: Thread }) {
       </Paper>
 
       {organizedBranches.map((levelBranches, level) => (
-        <Box key={`level-${level}`} pl={level > 0 ? 20 : 0}>
+        <Box key={`level-${String(level)}`} pl={level > 0 ? 20 : 0}>
           {/* Display selected branch for this level as main */}
           {levelBranches
             .filter((b) => b.isSelected)
@@ -473,7 +482,9 @@ export function ThreadedConversation({ thread }: { thread: Thread }) {
                       branch={branch}
                       dimensions={activeThread.dimensions}
                       onVote={handleVote}
-                      onSelect={() => handleSelectBranch(branch.id)}
+                      onSelect={() => {
+                        handleSelectBranch(branch.id);
+                      }}
                     />
                   </div>
                 )}

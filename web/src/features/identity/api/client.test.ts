@@ -26,8 +26,8 @@ describe('identity api client', () => {
       expect.stringContaining('/auth/signup'),
       expect.objectContaining({
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username: 'alice', root_pubkey: 'mock-key' }),
-        headers: expect.objectContaining({ 'Content-Type': 'application/json' }),
       })
     );
     expect(result).toEqual(responseBody);
@@ -43,5 +43,31 @@ describe('identity api client', () => {
     });
 
     await expect(signup({ username: 'bob', root_pubkey: 'key' })).rejects.toThrow('boom');
+  });
+
+  test('falls back to HTTP status when error body has no error field', async () => {
+    (fetch as unknown as Mock).mockResolvedValue({
+      ok: false,
+      status: 404,
+      statusText: 'Not Found',
+      json: vi.fn().mockResolvedValue({}),
+      headers: {},
+    });
+
+    await expect(signup({ username: 'bob', root_pubkey: 'key' })).rejects.toThrow(
+      'HTTP 404: Not Found'
+    );
+  });
+
+  test('handles JSON parse failure gracefully', async () => {
+    (fetch as unknown as Mock).mockResolvedValue({
+      ok: false,
+      status: 500,
+      statusText: 'Internal Server Error',
+      json: vi.fn().mockRejectedValue(new Error('Invalid JSON')),
+      headers: {},
+    });
+
+    await expect(signup({ username: 'bob', root_pubkey: 'key' })).rejects.toThrow('Unknown error');
   });
 });
