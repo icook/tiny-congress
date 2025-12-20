@@ -1,6 +1,7 @@
 .aider*
 .env
 .claude
+.worktrees/
 
 # Rust build output
 target/
