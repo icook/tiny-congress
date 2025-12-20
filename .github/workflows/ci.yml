@@ -815,6 +815,7 @@ jobs:
         continue-on-error: true
 
       - name: Organize artifacts
+        id: artifacts
         run: |
           # Playwright report is nested
           if [ -d artifacts/playwright/playwright-report ]; then
@@ -833,38 +834,138 @@ jobs:
 
           rm -rf artifacts
 
+          # Extract coverage percentages from summary
+          if [ -f site/coverage/coverage-summary.json ]; then
+            COVERAGE_PCT=$(jq -r '.total.lines.pct // "N/A"' site/coverage/coverage-summary.json)
+            echo "coverage_pct=${COVERAGE_PCT}" >> "$GITHUB_OUTPUT"
+          else
+            echo "coverage_pct=N/A" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Generate landing page
         run: |
-          cat > site/index.html <<'EOF'
+          COMMIT_SHORT="${GITHUB_SHA:0:7}"
+          BUILD_DATE="$(date -u +"%Y-%m-%d %H:%M UTC")"
+          COVERAGE_PCT="${{ steps.artifacts.outputs.coverage_pct }}"
+
+          cat > site/index.html <<EOF
           <!DOCTYPE html>
           <html>
           <head>
             <title>Tiny Congress - Developer Resources</title>
+            <meta name="color-scheme" content="light dark">
             <style>
-              body { font-family: system-ui, -apple-system, sans-serif; max-width: 700px; margin: 50px auto; padding: 20px; line-height: 1.6; }
-              h1 { color: #1a1a1a; border-bottom: 2px solid #e5e5e5; padding-bottom: 10px; }
-              h2 { color: #333; margin-top: 30px; }
+              :root {
+                --bg: #ffffff;
+                --bg-secondary: #f5f5f5;
+                --bg-hover: #e5e5e5;
+                --text: #1a1a1a;
+                --text-secondary: #666;
+                --link: #0066cc;
+                --border: #e5e5e5;
+              }
+              @media (prefers-color-scheme: dark) {
+                :root {
+                  --bg: #1a1a1a;
+                  --bg-secondary: #2d2d2d;
+                  --bg-hover: #3d3d3d;
+                  --text: #e5e5e5;
+                  --text-secondary: #999;
+                  --link: #66b3ff;
+                  --border: #404040;
+                }
+              }
+              body {
+                font-family: system-ui, -apple-system, sans-serif;
+                max-width: 700px;
+                margin: 50px auto;
+                padding: 20px;
+                line-height: 1.6;
+                background: var(--bg);
+                color: var(--text);
+              }
+              h1 { border-bottom: 2px solid var(--border); padding-bottom: 10px; }
+              h2 { color: var(--text); margin-top: 30px; }
               ul { list-style: none; padding: 0; }
               li { margin: 8px 0; }
-              a { color: #0066cc; text-decoration: none; padding: 12px 18px; display: inline-block; background: #f5f5f5; border-radius: 6px; transition: background 0.2s; }
-              a:hover { background: #e5e5e5; }
-              .timestamp { color: #666; font-size: 0.85em; margin-top: 40px; padding-top: 20px; border-top: 1px solid #e5e5e5; }
+              a {
+                color: var(--link);
+                text-decoration: none;
+                padding: 12px 18px;
+                display: inline-block;
+                background: var(--bg-secondary);
+                border-radius: 6px;
+                transition: background 0.2s;
+              }
+              a:hover { background: var(--bg-hover); }
+              .coverage-grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+                gap: 12px;
+                margin: 12px 0;
+              }
+              .coverage-item {
+                background: var(--bg-secondary);
+                padding: 12px 18px;
+                border-radius: 6px;
+              }
+              .coverage-item a { padding: 0; background: none; }
+              .coverage-pct {
+                font-size: 1.4em;
+                font-weight: bold;
+                color: var(--text);
+              }
+              .build-info {
+                color: var(--text-secondary);
+                font-size: 0.85em;
+                margin-top: 40px;
+                padding-top: 20px;
+                border-top: 1px solid var(--border);
+              }
+              .build-info code {
+                background: var(--bg-secondary);
+                padding: 2px 6px;
+                border-radius: 3px;
+                font-family: ui-monospace, monospace;
+              }
             </style>
           </head>
           <body>
-            <h1>Tiny Congress</h1>
-            <h2>API Documentation</h2>
+            <h1>🏛️ Tiny Congress</h1>
+
+            <h2>📚 API Documentation</h2>
             <ul>
-              <li><a href="rust-docs/tinycongress_api/">Rust API Docs</a></li>
-              <li><a href="ts-docs/">TypeScript Docs</a></li>
+              <li><a href="rust-docs/tinycongress_api/">🦀 Rust API Docs</a></li>
+              <li><a href="ts-docs/">📘 TypeScript Docs</a></li>
             </ul>
-            <h2>Reports</h2>
+
+            <h2>📋 API Schemas</h2>
             <ul>
-              <li><a href="coverage/">Coverage Report</a></li>
-              <li><a href="storybook/">Storybook</a></li>
-              <li><a href="playwright/">Playwright Report</a></li>
+              <li><a href="coverage/schemas/graphql-viewer.html">GraphQL Schema</a></li>
+              <li><a href="coverage/schemas/swagger-ui.html">OpenAPI / REST</a></li>
             </ul>
-            <p class="timestamp">Generated from commit ${GITHUB_SHA:0:7} on $(date -u +"%Y-%m-%d %H:%M UTC")</p>
+
+            <h2>📊 Coverage</h2>
+            <div class="coverage-grid">
+              <div class="coverage-item">
+                <div class="coverage-pct">${COVERAGE_PCT}%</div>
+                <a href="coverage/">Combined Coverage Report</a>
+              </div>
+            </div>
+
+            <h2>🧪 Test Reports</h2>
+            <ul>
+              <li><a href="storybook/">📚 Storybook</a></li>
+              <li><a href="playwright/">🎭 Playwright E2E</a></li>
+            </ul>
+
+            <div class="build-info">
+              <strong>Build Info</strong><br>
+              Commit: <code><a href="https://github.com/icook/tiny-congress/commit/${GITHUB_SHA}">${COMMIT_SHORT}</a></code><br>
+              Branch: <code>${GITHUB_REF_NAME}</code><br>
+              Built: ${BUILD_DATE}<br>
+              Workflow: <a href="https://github.com/icook/tiny-congress/actions/runs/${GITHUB_RUN_ID}">Run #${GITHUB_RUN_NUMBER}</a>
+            </div>
           </body>
           </html>
           EOF
@@ -885,14 +986,24 @@ jobs:
         with:
           header: pages-reports
           message: |
-            ## CI Reports
+            ## 🏛️ CI Reports
 
-            | Report | Link |
-            |--------|------|
-            | Rust Docs | [${{ steps.deploy.outputs.url }}/rust-docs/tinycongress_api/](${{ steps.deploy.outputs.url }}/rust-docs/tinycongress_api/) |
-            | TS Docs | [${{ steps.deploy.outputs.url }}/ts-docs/](${{ steps.deploy.outputs.url }}/ts-docs/) |
-            | Coverage | [${{ steps.deploy.outputs.url }}/coverage/](${{ steps.deploy.outputs.url }}/coverage/) |
-            | Storybook | [${{ steps.deploy.outputs.url }}/storybook/](${{ steps.deploy.outputs.url }}/storybook/) |
-            | Playwright | [${{ steps.deploy.outputs.url }}/playwright/](${{ steps.deploy.outputs.url }}/playwright/) |
+            **[📋 All Reports](${{ steps.deploy.outputs.url }}/)**
 
-            <sub>Generated from commit ${{ github.sha }}</sub>
+            ### 📚 API Documentation
+            | | |
+            |---|---|
+            | 🦀 [Rust API Docs](${{ steps.deploy.outputs.url }}/rust-docs/tinycongress_api/) | 📘 [TypeScript Docs](${{ steps.deploy.outputs.url }}/ts-docs/) |
+
+            ### 📋 API Schemas
+            | | |
+            |---|---|
+            | [GraphQL Schema](${{ steps.deploy.outputs.url }}/coverage/schemas/graphql-viewer.html) | [OpenAPI / REST](${{ steps.deploy.outputs.url }}/coverage/schemas/swagger-ui.html) |
+
+            ### 🧪 Test Artifacts
+            | | |
+            |---|---|
+            | 📊 [Coverage](${{ steps.deploy.outputs.url }}/coverage/) | 📚 [Storybook](${{ steps.deploy.outputs.url }}/storybook/) |
+            | 🎭 [Playwright](${{ steps.deploy.outputs.url }}/playwright/) | |
+
+            <sub>🤖 Generated from commit ${{ github.sha }}</sub>
