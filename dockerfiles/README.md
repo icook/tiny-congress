@@ -6,7 +6,7 @@ Custom Docker images for the TinyCongress development and CI environment.
 
 | Dockerfile | Purpose | Base Image |
 |------------|---------|------------|
-| `Dockerfile.postgres` | PostgreSQL with pgmq extension | `postgres:17` |
+| `Dockerfile.postgres` | PostgreSQL with pgmq extension | `postgres:18` |
 
 ## Dockerfile.postgres
 
@@ -18,7 +18,7 @@ just build-test-postgres
 ```
 
 **Key features:**
-- PostgreSQL 17
+- PostgreSQL 18
 - pgmq extension pre-installed
 - Default database: `tiny-congress`
 - Default credentials: `postgres:postgres`
