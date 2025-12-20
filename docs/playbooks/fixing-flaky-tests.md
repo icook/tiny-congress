@@ -147,6 +147,7 @@ test('sometimes flaky', async ({ page }) => {
 
 ## See Also
 
+- [Test Writing Skill](../skills/test-writing.md) - LLM decision tree for test placement
 - [Playwright Best Practices](https://playwright.dev/docs/best-practices)
-- `docs/playbooks/frontend-test-patterns.md` - General frontend testing
+- [Frontend Test Patterns](./frontend-test-patterns.md) - General frontend testing
 - `web/playwright.config.ts` - Test configuration
