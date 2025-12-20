@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2025-12-20 17:38:49</td>
+            <td class="headerValue">2025-12-20 17:49:23</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryLo">60.0&nbsp;%</td>
@@ -193,6 +193,47 @@
 <span id="L131"><span class="lineNum">     131</span>              :         assert!(result.is_err());</span>
 <span id="L132"><span class="lineNum">     132</span>              :     }</span>
 <span id="L133"><span class="lineNum">     133</span>              : }</span>
+<span id="L134"><span class="lineNum">     134</span>              : </span>
+<span id="L135"><span class="lineNum">     135</span>              : #[cfg(test)]</span>
+<span id="L136"><span class="lineNum">     136</span>              : mod proptests {</span>
+<span id="L137"><span class="lineNum">     137</span>              :     use super::*;</span>
+<span id="L138"><span class="lineNum">     138</span>              :     use proptest::prelude::*;</span>
+<span id="L139"><span class="lineNum">     139</span>              : </span>
+<span id="L140"><span class="lineNum">     140</span>              :     proptest! {</span>
+<span id="L141"><span class="lineNum">     141</span>              :         /// Any byte sequence can be encoded and decoded back to the original</span>
+<span id="L142"><span class="lineNum">     142</span>              :         #[test]</span>
+<span id="L143"><span class="lineNum">     143</span>              :         fn roundtrip_encode_decode(bytes: Vec&lt;u8&gt;) {</span>
+<span id="L144"><span class="lineNum">     144</span>              :             let encoded = encode_base64url(&amp;bytes);</span>
+<span id="L145"><span class="lineNum">     145</span>              :             let decoded = decode_base64url_native(&amp;encoded).unwrap();</span>
+<span id="L146"><span class="lineNum">     146</span>              :             prop_assert_eq!(decoded, bytes);</span>
+<span id="L147"><span class="lineNum">     147</span>              :         }</span>
+<span id="L148"><span class="lineNum">     148</span>              : </span>
+<span id="L149"><span class="lineNum">     149</span>              :         /// KID derivation is deterministic - same input always produces same output</span>
+<span id="L150"><span class="lineNum">     150</span>              :         #[test]</span>
+<span id="L151"><span class="lineNum">     151</span>              :         fn derive_kid_deterministic(pubkey: Vec&lt;u8&gt;) {</span>
+<span id="L152"><span class="lineNum">     152</span>              :             let kid1 = derive_kid(&amp;pubkey);</span>
+<span id="L153"><span class="lineNum">     153</span>              :             let kid2 = derive_kid(&amp;pubkey);</span>
+<span id="L154"><span class="lineNum">     154</span>              :             prop_assert_eq!(kid1, kid2);</span>
+<span id="L155"><span class="lineNum">     155</span>              :         }</span>
+<span id="L156"><span class="lineNum">     156</span>              : </span>
+<span id="L157"><span class="lineNum">     157</span>              :         /// KID output length is always 21-22 chars (16 bytes base64url encoded)</span>
+<span id="L158"><span class="lineNum">     158</span>              :         #[test]</span>
+<span id="L159"><span class="lineNum">     159</span>              :         fn derive_kid_length_invariant(pubkey: Vec&lt;u8&gt;) {</span>
+<span id="L160"><span class="lineNum">     160</span>              :             let kid = derive_kid(&amp;pubkey);</span>
+<span id="L161"><span class="lineNum">     161</span>              :             prop_assert!(kid.len() &gt;= 21 &amp;&amp; kid.len() &lt;= 22,</span>
+<span id="L162"><span class="lineNum">     162</span>              :                 &quot;KID length {} not in expected range 21-22&quot;, kid.len());</span>
+<span id="L163"><span class="lineNum">     163</span>              :         }</span>
+<span id="L164"><span class="lineNum">     164</span>              : </span>
+<span id="L165"><span class="lineNum">     165</span>              :         /// Encoded output contains only valid base64url characters</span>
+<span id="L166"><span class="lineNum">     166</span>              :         #[test]</span>
+<span id="L167"><span class="lineNum">     167</span>              :         fn encode_produces_valid_base64url_chars(bytes: Vec&lt;u8&gt;) {</span>
+<span id="L168"><span class="lineNum">     168</span>              :             let encoded = encode_base64url(&amp;bytes);</span>
+<span id="L169"><span class="lineNum">     169</span>              :             prop_assert!(encoded.chars().all(|c|</span>
+<span id="L170"><span class="lineNum">     170</span>              :                 c.is_ascii_alphanumeric() || c == '-' || c == '_'</span>
+<span id="L171"><span class="lineNum">     171</span>              :             ));</span>
+<span id="L172"><span class="lineNum">     172</span>              :         }</span>
+<span id="L173"><span class="lineNum">     173</span>              :     }</span>
+<span id="L174"><span class="lineNum">     174</span>              : }</span>
         </pre>
               </td>
             </tr>
