@@ -4,20 +4,25 @@ use async_trait::async_trait;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-/// Account creation result
+/// Account creation result.
 #[derive(Debug, Clone)]
 pub struct CreatedAccount {
+    /// Unique account identifier.
     pub id: Uuid,
+    /// Key ID derived from root public key.
     pub root_kid: String,
 }
 
-/// Error types for account operations
+/// Error types for account operations.
 #[derive(Debug, thiserror::Error)]
 pub enum AccountRepoError {
+    /// Username is already taken by another account.
     #[error("username already taken")]
     DuplicateUsername,
+    /// Public key is already registered to another account.
     #[error("public key already registered")]
     DuplicateKey,
+    /// Database operation failed.
     #[error("database error: {0}")]
     Database(#[from] sqlx::Error),
 }
@@ -48,6 +53,7 @@ pub struct PgAccountRepo {
 }
 
 impl PgAccountRepo {
+    /// Create a new repository with the given connection pool.
     #[must_use]
     pub const fn new(pool: PgPool) -> Self {
         Self { pool }

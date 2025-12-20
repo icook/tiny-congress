@@ -41,6 +41,22 @@ jobs:
         run: just lint-backend
 
   # ============================================================
+  # JOB 0a: Lint Kubernetes manifests
+  # ============================================================
+  lint-kube:
+    name: Lint Kubernetes manifests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Run kube-linter
+        uses: stackrox/kube-linter-action@v1
+        with:
+          directory: kube/
+          config: .kube-linter.yaml
+
+  # ============================================================
   # JOB 0b: Lint web
   # ============================================================
   lint-web:
@@ -402,6 +418,7 @@ jobs:
       - build-images
       - scan-images
       - lint
+      - lint-kube
       - lint-web
       - storybook-build
       - codegen-check

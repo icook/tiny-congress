@@ -6,6 +6,7 @@ use proc_macro::TokenStream;
 use quote::quote;
 use syn::{parse_macro_input, spanned::Spanned, ItemFn, Meta};
 
+/// Marks an async function as a test that runs on the shared database runtime.
 #[proc_macro_attribute]
 pub fn shared_runtime_test(attr: TokenStream, item: TokenStream) -> TokenStream {
     parse_macro_input!(attr as syn::parse::Nothing);

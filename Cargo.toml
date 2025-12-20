@@ -44,3 +44,12 @@ similar_names = "allow"
 # - indexing_slicing: Legitimate uses in crypto code (hash[..16])
 # - string_slice: Legitimate use for debug truncation (url[..20])
 # - arithmetic_side_effects: Too strict for general application code
+
+[workspace.lints.rust]
+# Require documentation on public items
+missing_docs = "warn"
+
+[workspace.lints.rustdoc]
+# Catch broken documentation links
+broken_intra_doc_links = "warn"
+private_intra_doc_links = "warn"
