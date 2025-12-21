@@ -426,8 +426,9 @@ Migrations haven't run. The test framework runs them automatically, but check:
 
 ## See Also
 
-- `docs/playbooks/frontend-test-patterns.md` - Frontend testing guide
-- `docs/playbooks/adding-migration.md` - Database migration workflow
+- [Test Writing Skill](../skills/test-writing.md) - LLM decision tree for test placement
+- [Frontend Test Patterns](./frontend-test-patterns.md) - Frontend testing guide
+- [Adding Migration](./adding-migration.md) - Database migration workflow
 - `service/tests/common/mod.rs` - Test DB infrastructure (`test_transaction`, `isolated_db`)
 - `service/tests/common/app_builder.rs` - Test Axum app builder
 - `service/tests/common/graphql.rs` - GraphQL response helpers

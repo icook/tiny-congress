@@ -141,3 +141,9 @@ impl Default for EntityFactory {
 3. **Builder pattern**: Methods return `Self` for fluent chaining
 4. **Executor agnostic**: Works with transactions, connections, and pools
 5. **Return Result**: Factories return `Result` types, letting callers decide how to handle errors (use `.expect()` for simple cases, `?` for propagation)
+
+## See Also
+
+- [Test Writing Skill](../skills/test-writing.md) - LLM decision tree for test placement
+- [Backend Test Patterns](./backend-test-patterns.md) - Database testing patterns
+- `service/tests/common/factories/` - Existing factory implementations

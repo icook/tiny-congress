@@ -86,6 +86,7 @@ Pre-flight checks for critical operations:
 
 LLM-specific task guides for AI assistants:
 
+- [test-writing.md](skills/test-writing.md) - Decision tree for choosing test types and placement
 - [testing-local-dev.md](skills/testing-local-dev.md) - Validate Skaffold dev environment (required before Skaffold changes)
 
 ## Related Documentation

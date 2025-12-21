@@ -69,7 +69,9 @@ A migration file was deleted after being applied.
 
 ## See Also
 
+- [Test Writing Skill](../skills/test-writing.md) - LLM decision tree for test placement
+- [Backend Test Patterns](./backend-test-patterns.md) - Database testing patterns
+- [Adding Migration](./adding-migration.md) - How to add new migrations
 - `service/tests/common/mod.rs` - Test infrastructure documentation
 - `service/tests/migration_tests.rs` - Migration test implementations
 - `service/tests/schema_snapshot.rs` - Schema drift detection
-- `docs/playbooks/adding-migration.md` - How to add new migrations

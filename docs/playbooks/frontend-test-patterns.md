@@ -142,6 +142,8 @@ Coverage reports uploaded as artifacts.
 | "Target closed" | Page navigated during test | Wait for navigation to complete |
 
 ## See also
+- [Test Writing Skill](../skills/test-writing.md) - LLM decision tree for test placement
+- [Backend Test Patterns](./backend-test-patterns.md) - Rust/database testing guide
 - `web/test-utils/` - Shared test utilities
 - `web/vitest.setup.mjs` - Test configuration
 - `web/playwright.config.ts` - E2E configuration

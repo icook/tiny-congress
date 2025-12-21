@@ -45,11 +45,17 @@
 
 5. **Add tests** in `service/tests/`:
    ```rust
-   #[tokio::test]
+   use tc_test_macros::shared_runtime_test;
+   use common::test_db::test_transaction;
+
+   #[shared_runtime_test]
    async fn test_my_new_query() {
-       // Setup and assertions
+       let mut tx = test_transaction().await;
+       // Setup and assertions using &mut *tx
    }
    ```
+   Use `#[shared_runtime_test]` with `test_transaction()` for database tests.
+   See [Backend Test Patterns](./backend-test-patterns.md) for detailed guidance.
 
 6. **Regenerate TypeScript types**:
    ```bash
@@ -81,4 +87,6 @@
 ## See also
 - `service/src/` - existing resolvers
 - [GraphQL Codegen Workflow](./graphql-codegen.md) - type generation process
+- [Backend Test Patterns](./backend-test-patterns.md) - database and resolver testing
+- [Test Writing Skill](../skills/test-writing.md) - LLM decision tree for test placement
 - async-graphql docs for patterns
