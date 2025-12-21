@@ -86,99 +86,13 @@ jobs:
 
       - name: Run static analysis
         run: |
-          set -euo pipefail
+          set -euox pipefail
 
-          FAILED=0
-
-          {
-            echo "## Static Analysis Results"
-            echo ""
-          } >> "$GITHUB_STEP_SUMMARY"
-
-          # typos - spell checker
-          echo "### Spell Check (typos)" >> "$GITHUB_STEP_SUMMARY"
-          if typos --format brief 2>&1 | tee /tmp/typos.out; then
-            echo "✅ No typos found" >> "$GITHUB_STEP_SUMMARY"
-          else
-            {
-              echo "❌ Typos found:"
-              echo '```'
-              cat /tmp/typos.out
-              echo '```'
-            } >> "$GITHUB_STEP_SUMMARY"
-            FAILED=1
-          fi
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-
-          # taplo - TOML formatting
-          echo "### TOML Formatting (taplo)" >> "$GITHUB_STEP_SUMMARY"
-          TOML_FILES=$(find . -name "*.toml" -not -path "./.git/*" | wc -l | tr -d ' ')
-          if taplo fmt --check 2>&1 | tee /tmp/taplo.out; then
-            echo "✅ All ${TOML_FILES} TOML files formatted correctly" >> "$GITHUB_STEP_SUMMARY"
-          else
-            {
-              echo "❌ TOML formatting issues:"
-              echo '```'
-              grep -E "ERROR|not properly" /tmp/taplo.out || true
-              echo '```'
-            } >> "$GITHUB_STEP_SUMMARY"
-            FAILED=1
-          fi
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-
-          # hadolint - Dockerfile linting
-          echo "### Dockerfile Linting (hadolint)" >> "$GITHUB_STEP_SUMMARY"
-          DOCKERFILES=(service/Dockerfile service/Dockerfile.dev web/Dockerfile web/Dockerfile.dev dockerfiles/Dockerfile.postgres)
-          echo "Checking: ${DOCKERFILES[*]}" >> "$GITHUB_STEP_SUMMARY"
-          if hadolint --config .hadolint.yaml "${DOCKERFILES[@]}" 2>&1 | tee /tmp/hadolint.out; then
-            echo "✅ All Dockerfiles pass linting" >> "$GITHUB_STEP_SUMMARY"
-          else
-            {
-              echo "❌ Dockerfile issues:"
-              echo '```'
-              cat /tmp/hadolint.out
-              echo '```'
-            } >> "$GITHUB_STEP_SUMMARY"
-            FAILED=1
-          fi
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-
-          # actionlint - GitHub Actions
-          echo "### GitHub Actions (actionlint)" >> "$GITHUB_STEP_SUMMARY"
-          WORKFLOW_COUNT=$(find .github/workflows -name "*.yml" | wc -l | tr -d ' ')
-          if actionlint 2>&1 | tee /tmp/actionlint.out; then
-            echo "✅ All ${WORKFLOW_COUNT} workflows pass linting" >> "$GITHUB_STEP_SUMMARY"
-          else
-            {
-              echo "❌ Workflow issues:"
-              echo '```'
-              cat /tmp/actionlint.out
-              echo '```'
-            } >> "$GITHUB_STEP_SUMMARY"
-            FAILED=1
-          fi
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-
-          # Shell script linting
-          echo "### Shell Scripts (shellcheck)" >> "$GITHUB_STEP_SUMMARY"
-          mapfile -t SCRIPTS < <(find . -name "*.sh" -not -path "./.git/*")
-          if [ "${#SCRIPTS[@]}" -gt 0 ]; then
-            if shellcheck "${SCRIPTS[@]}" 2>&1 | tee /tmp/shellcheck.out; then
-              echo "✅ All ${#SCRIPTS[@]} shell scripts pass linting" >> "$GITHUB_STEP_SUMMARY"
-            else
-              {
-                echo "❌ Shell script issues:"
-                echo '```'
-                cat /tmp/shellcheck.out
-                echo '```'
-              } >> "$GITHUB_STEP_SUMMARY"
-              FAILED=1
-            fi
-          else
-            echo "ℹ️ No shell scripts found" >> "$GITHUB_STEP_SUMMARY"
-          fi
-
-          exit $FAILED
+          typos
+          taplo fmt --check
+          hadolint --config .hadolint.yaml service/Dockerfile service/Dockerfile.dev web/Dockerfile web/Dockerfile.dev dockerfiles/Dockerfile.postgres
+          actionlint
+          find . -name "*.sh" -not -path "./.git/*" -exec shellcheck {} +
 
   # ============================================================
   # JOB 0b2: Build Storybook
