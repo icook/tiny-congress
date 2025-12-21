@@ -3,3 +3,12 @@ self-hosted-runner:
 
 # Configuration variables - null means disable check
 config-variables: null
+
+# Ignore shellcheck rules that are too noisy for CI scripts
+# SC2086: Double quote to prevent globbing - often intentional in CI
+# SC2129: Consider using grouped redirects - stylistic preference
+paths:
+  .github/workflows/**/*.yml:
+    ignore:
+      - 'SC2086:.+'
+      - 'SC2129:.+'
