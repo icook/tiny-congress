@@ -106,6 +106,51 @@ jobs:
           retention-days: 30
 
   # ============================================================
+  # JOB 0b3: Build API Documentation
+  # ============================================================
+  build-docs:
+    name: Build documentation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build Rust docs
+        run: cargo doc --workspace --no-deps
+
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: web/.nvmrc
+          cache: yarn
+          cache-dependency-path: web/yarn.lock
+
+      - name: Enable corepack
+        run: corepack enable
+
+      - name: Install dependencies
+        run: cd web && yarn install --immutable
+
+      - name: Build TypeScript docs
+        working-directory: web
+        run: yarn typedoc
+
+      - name: Upload docs artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: docs
+          path: |
+            target/doc
+            web/docs
+          retention-days: 7
+
+  # ============================================================
   # JOB 0c: Verify GraphQL codegen is up-to-date
   # ============================================================
   codegen-check:
@@ -726,40 +771,44 @@ jobs:
           kubectl get all -n default || true
 
   # ============================================================
-  # JOB 3: Deploy reports to GitHub Pages
+  # JOB 3: Deploy to Cloudflare Pages
   # ============================================================
-  deploy-pages:
-    name: Deploy to GitHub Pages
+  deploy-cloudflare:
+    name: Deploy to Cloudflare Pages
     runs-on: ubuntu-latest
-    needs: [integration-tests, storybook-build]
+    needs: [integration-tests, storybook-build, build-docs]
     if: always() && needs.integration-tests.result != 'cancelled'
-    concurrency:
-      group: gh-pages-deploy
-      cancel-in-progress: false
     permissions:
-      contents: write
+      contents: read
+      deployments: write
       pull-requests: write
-    env:
-      PAGES_BASE_URL: https://icook.github.io/tiny-congress
     steps:
-      - name: Checkout gh-pages branch
+      - name: Checkout for assets
         uses: actions/checkout@v6
         with:
-          ref: gh-pages
-          fetch-depth: 0
+          sparse-checkout: |
+            web/src/logo.png
+            web/src/favicon.ico
+          sparse-checkout-cone-mode: false
+
+      - name: Create site directory
+        run: |
+          mkdir -p site
+          cp web/src/logo.png site/logo.png
+          cp web/src/favicon.ico site/favicon.ico
 
       - name: Download coverage report
         uses: actions/download-artifact@v6
         with:
           name: coverage-report
-          path: artifacts/coverage
+          path: site/coverage
         continue-on-error: true
 
       - name: Download Storybook
         uses: actions/download-artifact@v6
         with:
           name: storybook-static
-          path: artifacts/storybook
+          path: site/storybook
         continue-on-error: true
 
       - name: Download Playwright report
@@ -769,126 +818,445 @@ jobs:
           path: artifacts/playwright
         continue-on-error: true
 
-      - name: Determine deployment paths
-        id: paths
+      - name: Download docs
+        uses: actions/download-artifact@v6
+        with:
+          name: docs
+          path: artifacts/docs
+        continue-on-error: true
+
+      - name: Download Rust coverage
+        uses: actions/download-artifact@v6
+        with:
+          name: rust-coverage
+          path: artifacts/rust-coverage
+        continue-on-error: true
+
+      - name: Organize artifacts
+        id: artifacts
         run: |
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            echo "is_pr=true" >> "$GITHUB_OUTPUT"
-            echo "pr_number=${{ github.event.pull_request.number }}" >> "$GITHUB_OUTPUT"
-            echo "base_path=pr/${{ github.event.pull_request.number }}" >> "$GITHUB_OUTPUT"
+          # Playwright report is nested
+          if [ -d artifacts/playwright/playwright-report ]; then
+            mv artifacts/playwright/playwright-report site/playwright
+          fi
+
+          # Rust docs
+          if [ -d artifacts/docs/target/doc ]; then
+            mv artifacts/docs/target/doc site/rust-docs
+          fi
+
+          # TypeScript docs
+          if [ -d artifacts/docs/web/docs ]; then
+            mv artifacts/docs/web/docs site/ts-docs
+          fi
+
+          # Extract coverage percentages from all test types
+          # Vitest
+          if [ -f site/coverage/vitest/coverage-summary.json ]; then
+            VITEST_LINES=$(jq -r '.total.lines.pct // 0' site/coverage/vitest/coverage-summary.json)
+            VITEST_BRANCHES=$(jq -r '.total.branches.pct // 0' site/coverage/vitest/coverage-summary.json)
+            VITEST_FUNCTIONS=$(jq -r '.total.functions.pct // 0' site/coverage/vitest/coverage-summary.json)
           else
-            echo "is_pr=false" >> "$GITHUB_OUTPUT"
-            echo "base_path=" >> "$GITHUB_OUTPUT"
+            VITEST_LINES=0; VITEST_BRANCHES=0; VITEST_FUNCTIONS=0
           fi
+          echo "vitest_lines=${VITEST_LINES}" >> "$GITHUB_OUTPUT"
+          echo "vitest_branches=${VITEST_BRANCHES}" >> "$GITHUB_OUTPUT"
+          echo "vitest_functions=${VITEST_FUNCTIONS}" >> "$GITHUB_OUTPUT"
 
-      - name: Prepare deployment directory
-        run: |
-          set -euo pipefail
-          BASE_PATH="${{ steps.paths.outputs.base_path }}"
-
-          # For PRs, clean the PR-specific directory; for main, clean root reports
-          if [ -n "$BASE_PATH" ]; then
-            rm -rf "$BASE_PATH"
-            mkdir -p "$BASE_PATH"
+          # Playwright
+          if [ -f site/coverage/playwright/coverage-summary.json ]; then
+            PW_LINES=$(jq -r '.total.lines.pct // 0' site/coverage/playwright/coverage-summary.json)
+            PW_BRANCHES=$(jq -r '.total.branches.pct // 0' site/coverage/playwright/coverage-summary.json)
+            PW_FUNCTIONS=$(jq -r '.total.functions.pct // 0' site/coverage/playwright/coverage-summary.json)
+          else
+            PW_LINES=0; PW_BRANCHES=0; PW_FUNCTIONS=0
           fi
+          echo "pw_lines=${PW_LINES}" >> "$GITHUB_OUTPUT"
+          echo "pw_branches=${PW_BRANCHES}" >> "$GITHUB_OUTPUT"
+          echo "pw_functions=${PW_FUNCTIONS}" >> "$GITHUB_OUTPUT"
 
-          # Copy artifacts to appropriate locations
-          if [ -d artifacts/coverage ]; then
-            if [ -n "$BASE_PATH" ]; then
-              cp -r artifacts/coverage "$BASE_PATH/coverage"
+          # Rust (parse lcov file directly - must happen before artifacts cleanup)
+          RUST_LCOV="artifacts/rust-coverage/backend-unit.lcov"
+          if [ -f "$RUST_LCOV" ]; then
+            # Sum up LF (lines found) and LH (lines hit) from lcov
+            LINES_FOUND=$(grep "^LF:" "$RUST_LCOV" | cut -d: -f2 | awk '{s+=$1} END {print s+0}')
+            LINES_HIT=$(grep "^LH:" "$RUST_LCOV" | cut -d: -f2 | awk '{s+=$1} END {print s+0}')
+            FUNCS_FOUND=$(grep "^FNF:" "$RUST_LCOV" | cut -d: -f2 | awk '{s+=$1} END {print s+0}')
+            FUNCS_HIT=$(grep "^FNH:" "$RUST_LCOV" | cut -d: -f2 | awk '{s+=$1} END {print s+0}')
+
+            if [ "$LINES_FOUND" -gt 0 ]; then
+              RUST_LINES=$(echo "scale=1; $LINES_HIT * 100 / $LINES_FOUND" | bc)
             else
-              rm -rf coverage
-              cp -r artifacts/coverage coverage
+              RUST_LINES=0
             fi
-          fi
-
-          if [ -d artifacts/storybook ]; then
-            if [ -n "$BASE_PATH" ]; then
-              cp -r artifacts/storybook "$BASE_PATH/storybook"
+            if [ "$FUNCS_FOUND" -gt 0 ]; then
+              RUST_FUNCTIONS=$(echo "scale=1; $FUNCS_HIT * 100 / $FUNCS_FOUND" | bc)
             else
-              rm -rf storybook
-              cp -r artifacts/storybook storybook
+              RUST_FUNCTIONS=0
             fi
+          else
+            RUST_LINES=0; RUST_FUNCTIONS=0
           fi
+          echo "rust_lines=${RUST_LINES}" >> "$GITHUB_OUTPUT"
+          echo "rust_functions=${RUST_FUNCTIONS}" >> "$GITHUB_OUTPUT"
 
-          if [ -d artifacts/playwright ]; then
-            # Playwright report is in playwright-report subdirectory
-            if [ -d artifacts/playwright/playwright-report ]; then
-              if [ -n "$BASE_PATH" ]; then
-                cp -r artifacts/playwright/playwright-report "$BASE_PATH/playwright"
-              else
-                rm -rf playwright
-                cp -r artifacts/playwright/playwright-report playwright
-              fi
-            fi
-          fi
-
-          # Clean up artifacts directory
+          # Cleanup artifacts
           rm -rf artifacts
 
-          # Generate index page for PR previews
-          if [ -n "$BASE_PATH" ]; then
-            cat > "$BASE_PATH/index.html" <<EOF
+          # Overall coverage (vitest lines as primary)
+          echo "coverage_pct=${VITEST_LINES}" >> "$GITHUB_OUTPUT"
+
+      - name: Generate landing page
+        run: |
+          COMMIT_SHORT="${GITHUB_SHA:0:7}"
+          BUILD_DATE="$(date -u +"%Y-%m-%d %H:%M UTC")"
+          COVERAGE_PCT="${{ steps.artifacts.outputs.coverage_pct }}"
+
+          # Coverage by test type
+          VITEST_LINES="${{ steps.artifacts.outputs.vitest_lines }}"
+          VITEST_BRANCHES="${{ steps.artifacts.outputs.vitest_branches }}"
+          VITEST_FUNCTIONS="${{ steps.artifacts.outputs.vitest_functions }}"
+          PW_LINES="${{ steps.artifacts.outputs.pw_lines }}"
+          PW_BRANCHES="${{ steps.artifacts.outputs.pw_branches }}"
+          PW_FUNCTIONS="${{ steps.artifacts.outputs.pw_functions }}"
+          RUST_LINES="${{ steps.artifacts.outputs.rust_lines }}"
+          RUST_FUNCTIONS="${{ steps.artifacts.outputs.rust_functions }}"
+
+          cat > site/index.html <<EOF
           <!DOCTYPE html>
-          <html>
+          <html lang="en">
           <head>
-            <title>PR #${{ steps.paths.outputs.pr_number }} Reports</title>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Tiny Congress - Developer Resources</title>
+            <link rel="icon" href="favicon.ico">
+            <meta name="color-scheme" content="light dark">
             <style>
-              body { font-family: system-ui, sans-serif; max-width: 600px; margin: 50px auto; padding: 20px; }
-              h1 { color: #333; }
-              ul { list-style: none; padding: 0; }
-              li { margin: 10px 0; }
-              a { color: #0066cc; text-decoration: none; padding: 10px 15px; display: inline-block; background: #f5f5f5; border-radius: 5px; }
-              a:hover { background: #e5e5e5; }
-              .timestamp { color: #666; font-size: 0.9em; margin-top: 20px; }
+              :root {
+                --bg: #f8fafc;
+                --bg-card: #ffffff;
+                --bg-hover: #f1f5f9;
+                --text: #0f172a;
+                --text-secondary: #64748b;
+                --text-muted: #94a3b8;
+                --link: #2563eb;
+                --border: #e2e8f0;
+                --accent: #3b82f6;
+                --success: #22c55e;
+                --shadow: 0 1px 3px rgba(0,0,0,0.1), 0 1px 2px rgba(0,0,0,0.06);
+              }
+              @media (prefers-color-scheme: dark) {
+                :root {
+                  --bg: #0f172a;
+                  --bg-card: #1e293b;
+                  --bg-hover: #334155;
+                  --text: #f1f5f9;
+                  --text-secondary: #94a3b8;
+                  --text-muted: #64748b;
+                  --link: #60a5fa;
+                  --border: #334155;
+                  --accent: #3b82f6;
+                  --success: #22c55e;
+                  --shadow: 0 1px 3px rgba(0,0,0,0.3);
+                }
+              }
+              * { box-sizing: border-box; }
+              body {
+                font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+                max-width: 800px;
+                margin: 0 auto;
+                padding: 24px;
+                line-height: 1.6;
+                background: var(--bg);
+                color: var(--text);
+              }
+
+              /* Header with build context */
+              .header {
+                background: var(--bg-card);
+                border-radius: 12px;
+                padding: 24px;
+                margin-bottom: 24px;
+                box-shadow: var(--shadow);
+                border: 1px solid var(--border);
+              }
+              .header-top {
+                display: flex;
+                align-items: center;
+                gap: 16px;
+                margin-bottom: 16px;
+              }
+              .logo { height: 48px; width: auto; }
+              .header h1 {
+                margin: 0;
+                font-size: 1.75rem;
+                font-weight: 600;
+              }
+              .build-context {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+                gap: 12px;
+                padding-top: 16px;
+                border-top: 1px solid var(--border);
+              }
+              .build-item {
+                display: flex;
+                flex-direction: column;
+                gap: 2px;
+              }
+              .build-label {
+                font-size: 0.75rem;
+                text-transform: uppercase;
+                letter-spacing: 0.05em;
+                color: var(--text-muted);
+                font-weight: 500;
+              }
+              .build-value {
+                font-family: ui-monospace, 'SF Mono', monospace;
+                font-size: 0.875rem;
+                color: var(--text-secondary);
+              }
+              .build-value a {
+                color: var(--link);
+                text-decoration: none;
+              }
+              .build-value a:hover { text-decoration: underline; }
+
+              /* Coverage highlight */
+              .coverage-badge {
+                background: linear-gradient(135deg, var(--accent), #8b5cf6);
+                color: white;
+                padding: 4px 12px;
+                border-radius: 20px;
+                font-weight: 600;
+                font-size: 0.875rem;
+                display: inline-flex;
+                align-items: center;
+                gap: 6px;
+              }
+
+              /* Sections */
+              .section {
+                background: var(--bg-card);
+                border-radius: 12px;
+                padding: 20px;
+                margin-bottom: 16px;
+                box-shadow: var(--shadow);
+                border: 1px solid var(--border);
+              }
+              .section h2 {
+                margin: 0 0 16px 0;
+                font-size: 1rem;
+                font-weight: 600;
+                color: var(--text-secondary);
+                display: flex;
+                align-items: center;
+                gap: 8px;
+              }
+
+              /* Link grid */
+              .link-grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+                gap: 10px;
+              }
+              .link-card {
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                padding: 12px 16px;
+                background: var(--bg);
+                border: 1px solid var(--border);
+                border-radius: 8px;
+                color: var(--text);
+                text-decoration: none;
+                transition: all 0.15s ease;
+              }
+              .link-card:hover {
+                background: var(--bg-hover);
+                border-color: var(--accent);
+                transform: translateY(-1px);
+              }
+              .link-icon { font-size: 1.25rem; }
+              .link-label { font-weight: 500; }
+
+              /* Coverage table */
+              .coverage-table {
+                width: 100%;
+                border-collapse: collapse;
+                margin-top: 16px;
+                font-size: 0.875rem;
+                background: var(--bg-card);
+                border-radius: 8px;
+                overflow: hidden;
+              }
+              .coverage-table th {
+                text-align: left;
+                padding: 10px 14px;
+                background: var(--bg-hover);
+                color: var(--text-muted);
+                font-weight: 500;
+                text-transform: uppercase;
+                font-size: 0.75rem;
+                letter-spacing: 0.05em;
+              }
+              .coverage-table td {
+                padding: 12px 14px;
+                border-bottom: 1px solid var(--border);
+              }
+              .coverage-table tr:last-child td {
+                border-bottom: none;
+              }
+              .coverage-table .test-type {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+              }
+              .coverage-table .pct {
+                font-weight: 600;
+                font-family: ui-monospace, monospace;
+              }
+              .coverage-table .pct.good { color: #22c55e; }
+              .coverage-table .pct.ok { color: #eab308; }
+              .coverage-table .pct.low { color: #ef4444; }
+              .coverage-table a {
+                color: var(--link);
+                text-decoration: none;
+                font-size: 0.85rem;
+              }
+              .coverage-table a:hover { text-decoration: underline; }
             </style>
           </head>
           <body>
-            <h1>PR #${{ steps.paths.outputs.pr_number }} Reports</h1>
-            <ul>
-              <li><a href="coverage/">📊 Coverage Report</a></li>
-              <li><a href="storybook/">📚 Storybook</a></li>
-              <li><a href="playwright/">🎭 Playwright Report</a></li>
-            </ul>
-            <p class="timestamp">Generated: $(date -u +"%Y-%m-%d %H:%M:%S UTC")</p>
+            <header class="header">
+              <div class="header-top">
+                <img src="logo.png" alt="Tiny Congress" class="logo">
+                <h1>Tiny Congress</h1>
+                <span class="coverage-badge">
+                  📊 ${COVERAGE_PCT}% coverage
+                </span>
+              </div>
+              <div class="build-context">
+                <div class="build-item">
+                  <span class="build-label">Commit</span>
+                  <span class="build-value"><a href="https://github.com/icook/tiny-congress/commit/${GITHUB_SHA}">${COMMIT_SHORT}</a></span>
+                </div>
+                <div class="build-item">
+                  <span class="build-label">Branch</span>
+                  <span class="build-value">${GITHUB_REF_NAME}</span>
+                </div>
+                <div class="build-item">
+                  <span class="build-label">Built</span>
+                  <span class="build-value">${BUILD_DATE}</span>
+                </div>
+                <div class="build-item">
+                  <span class="build-label">Workflow</span>
+                  <span class="build-value"><a href="https://github.com/icook/tiny-congress/actions/runs/${GITHUB_RUN_ID}">#${GITHUB_RUN_NUMBER}</a></span>
+                </div>
+              </div>
+            </header>
+
+            <section class="section">
+              <h2>📚 API Documentation</h2>
+              <div class="link-grid">
+                <a href="rust-docs/tinycongress_api/" class="link-card">
+                  <span class="link-icon">🦀</span>
+                  <span class="link-label">Rust API Docs</span>
+                </a>
+                <a href="ts-docs/" class="link-card">
+                  <span class="link-icon">📘</span>
+                  <span class="link-label">TypeScript Docs</span>
+                </a>
+              </div>
+            </section>
+
+            <section class="section">
+              <h2>📊 Coverage Reports</h2>
+              <table class="coverage-table">
+                <thead>
+                  <tr>
+                    <th>Test Type</th>
+                    <th>Lines</th>
+                    <th>Branches</th>
+                    <th>Functions</th>
+                    <th>Details</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><span class="test-type">🧪 Vitest Unit Tests</span></td>
+                    <td class="pct">${VITEST_LINES}%</td>
+                    <td class="pct">${VITEST_BRANCHES}%</td>
+                    <td class="pct">${VITEST_FUNCTIONS}%</td>
+                    <td><a href="coverage/vitest/">View Report</a></td>
+                  </tr>
+                  <tr>
+                    <td><span class="test-type">🎭 Playwright E2E</span></td>
+                    <td class="pct">${PW_LINES}%</td>
+                    <td class="pct">${PW_BRANCHES}%</td>
+                    <td class="pct">${PW_FUNCTIONS}%</td>
+                    <td><a href="coverage/playwright/">View Report</a></td>
+                  </tr>
+                  <tr>
+                    <td><span class="test-type">🦀 Rust Backend</span></td>
+                    <td class="pct">${RUST_LINES}%</td>
+                    <td class="pct">N/A</td>
+                    <td class="pct">${RUST_FUNCTIONS}%</td>
+                    <td><a href="coverage/rust/">View Report</a></td>
+                  </tr>
+                </tbody>
+              </table>
+              <div style="margin-top: 12px; text-align: right;">
+                <a href="coverage/" style="color: var(--link); font-size: 0.875rem;">View Full Coverage Report →</a>
+              </div>
+            </section>
+
+            <section class="section">
+              <h2>🧪 Test Reports</h2>
+              <div class="link-grid">
+                <a href="storybook/" class="link-card">
+                  <span class="link-icon">📚</span>
+                  <span class="link-label">Storybook</span>
+                </a>
+                <a href="playwright/" class="link-card">
+                  <span class="link-icon">🎭</span>
+                  <span class="link-label">Playwright E2E</span>
+                </a>
+              </div>
+            </section>
           </body>
           </html>
           EOF
-          fi
 
-      - name: Commit and push to gh-pages
-        run: |
-          set -euo pipefail
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-
-          git add -A
-          if git diff --staged --quiet; then
-            echo "No changes to deploy"
-            exit 0
-          fi
-
-          if [ "${{ steps.paths.outputs.is_pr }}" = "true" ]; then
-            git commit -m "Deploy PR #${{ steps.paths.outputs.pr_number }} reports"
-          else
-            git commit -m "Deploy main branch reports from ${{ github.sha }}"
-          fi
-
-          git push origin gh-pages
+      - name: Deploy to Cloudflare Pages
+        id: deploy
+        uses: cloudflare/pages-action@v1
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          projectName: tiny-congress
+          directory: site
+          gitHubToken: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Add PR comment with report links
-        if: steps.paths.outputs.is_pr == 'true'
+        if: github.event_name == 'pull_request'
         uses: marocchino/sticky-pull-request-comment@v2
         with:
           header: pages-reports
           message: |
-            ## 📊 CI Reports
+            ## 🏛️ CI Reports
 
-            | Report | Link |
-            |--------|------|
-            | 📊 Coverage | [${{ env.PAGES_BASE_URL }}/pr/${{ steps.paths.outputs.pr_number }}/coverage/](${{ env.PAGES_BASE_URL }}/pr/${{ steps.paths.outputs.pr_number }}/coverage/) |
-            | 📚 Storybook | [${{ env.PAGES_BASE_URL }}/pr/${{ steps.paths.outputs.pr_number }}/storybook/](${{ env.PAGES_BASE_URL }}/pr/${{ steps.paths.outputs.pr_number }}/storybook/) |
-            | 🎭 Playwright | [${{ env.PAGES_BASE_URL }}/pr/${{ steps.paths.outputs.pr_number }}/playwright/](${{ env.PAGES_BASE_URL }}/pr/${{ steps.paths.outputs.pr_number }}/playwright/) |
-            | 📋 API Schemas | [GraphQL](${{ env.PAGES_BASE_URL }}/pr/${{ steps.paths.outputs.pr_number }}/coverage/schemas/graphql-viewer.html) · [OpenAPI](${{ env.PAGES_BASE_URL }}/pr/${{ steps.paths.outputs.pr_number }}/coverage/schemas/swagger-ui.html) |
+            **[📋 All Reports](${{ steps.deploy.outputs.url }}/)**
 
-            <sub>🤖 Reports auto-generated from commit ${{ github.sha }}</sub>
+            ### 📚 API Documentation
+            | | |
+            |---|---|
+            | 🦀 [Rust API Docs](${{ steps.deploy.outputs.url }}/rust-docs/tinycongress_api/) | 📘 [TypeScript Docs](${{ steps.deploy.outputs.url }}/ts-docs/) |
+
+            ### 🧪 Test Artifacts
+            | | |
+            |---|---|
+            | 📊 [Coverage](${{ steps.deploy.outputs.url }}/coverage/) | 📚 [Storybook](${{ steps.deploy.outputs.url }}/storybook/) |
+            | 🎭 [Playwright](${{ steps.deploy.outputs.url }}/playwright/) | |
+
+            <sub>🤖 Generated from commit ${{ github.sha }}</sub>

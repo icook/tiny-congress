@@ -318,6 +318,14 @@ function generateIndexHtml(reports, schemas = []) {
       padding: 2rem;
     }
     .container { max-width: 900px; margin: 0 auto; }
+    .back-link {
+      display: inline-block;
+      color: var(--accent);
+      text-decoration: none;
+      font-size: 0.875rem;
+      margin-bottom: 1.5rem;
+    }
+    .back-link:hover { text-decoration: underline; }
     h1 {
       font-size: 1.75rem;
       margin-bottom: 0.5rem;
@@ -378,6 +386,7 @@ function generateIndexHtml(reports, schemas = []) {
 </head>
 <body>
   <div class="container">
+    <a href="../index.html" class="back-link">&larr; Back to Developer Resources</a>
     <h1>Coverage Report</h1>
     <p class="subtitle">Generated ${new Date().toISOString().split('T')[0]}</p>
 

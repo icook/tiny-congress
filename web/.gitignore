@@ -140,3 +140,6 @@ reports/
 
 # Storybook build output
 storybook-static
+
+# TypeDoc output
+docs/
