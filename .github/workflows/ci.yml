@@ -798,35 +798,35 @@ jobs:
           cp web/src/favicon.ico site/favicon.ico
 
       - name: Download coverage report
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: coverage-report
           path: site/coverage
         continue-on-error: true
 
       - name: Download Storybook
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: storybook-static
           path: site/storybook
         continue-on-error: true
 
       - name: Download Playwright report
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: playwright-test-results
           path: artifacts/playwright
         continue-on-error: true
 
       - name: Download docs
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: docs
           path: artifacts/docs
         continue-on-error: true
 
       - name: Download Rust coverage
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: rust-coverage
           path: artifacts/rust-coverage
