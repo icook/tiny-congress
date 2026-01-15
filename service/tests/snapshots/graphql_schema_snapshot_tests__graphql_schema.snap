@@ -7,7 +7,7 @@ Build metadata exposed via GraphQL, REST, and logs.
 """
 type BuildInfo {
 	"""
-	Application version (from `APP_VERSION` env var, no `TC_` prefix).
+	Application version (from `APP_VERSION` env var, see #256 for prefix standardization).
 	"""
 	version: String!
 	"""
