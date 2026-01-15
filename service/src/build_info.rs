@@ -9,7 +9,7 @@ use utoipa::ToSchema;
 #[graphql(rename_fields = "camelCase")]
 #[serde(rename_all = "camelCase")]
 pub struct BuildInfo {
-    /// Application version (from `APP_VERSION` env var, no `TC_` prefix).
+    /// Application version (from `APP_VERSION` env var, see #256 for prefix standardization).
     pub version: String,
     /// Git commit SHA.
     pub git_sha: String,
