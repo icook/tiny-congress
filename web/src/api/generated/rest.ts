@@ -40,7 +40,7 @@ export interface components {
       gitSha: string;
       /** @description Optional build message or description. */
       message?: string | null;
-      /** @description Application version (from `APP_VERSION` or `VERSION` env var). */
+      /** @description Application version (from `APP_VERSION` env var, no `TC_` prefix). */
       version: string;
     };
     /** @description RFC 7807 Problem Details error response. */

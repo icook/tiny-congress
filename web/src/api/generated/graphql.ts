@@ -28,7 +28,7 @@ export type BuildInfo = {
   gitSha: Scalars['String']['output'];
   /** Optional build message or description. */
   message?: Maybe<Scalars['String']['output']>;
-  /** Application version (from `APP_VERSION` or `VERSION` env var). */
+  /** Application version (from `APP_VERSION` env var, no `TC_` prefix). */
   version: Scalars['String']['output'];
 };
 

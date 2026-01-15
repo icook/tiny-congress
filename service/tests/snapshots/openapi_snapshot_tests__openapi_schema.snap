@@ -80,7 +80,7 @@ expression: schema
           },
           "version": {
             "type": "string",
-            "description": "Application version (from `APP_VERSION` or `VERSION` env var)."
+            "description": "Application version (from `APP_VERSION` env var, no `TC_` prefix)."
           }
         }
       },
