@@ -9,13 +9,18 @@ use utoipa::ToSchema;
 #[graphql(rename_fields = "camelCase")]
 #[serde(rename_all = "camelCase")]
 pub struct BuildInfo {
+    /// Application version (from `APP_VERSION` env var, see #256 for prefix standardization).
     pub version: String,
+    /// Git commit SHA.
     pub git_sha: String,
+    /// Build timestamp in RFC3339 format.
     pub build_time: String,
+    /// Optional build message or description.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub message: Option<String>,
 }
 
+/// Provides build metadata from environment variables.
 #[derive(Clone, Debug)]
 pub struct BuildInfoProvider {
     info: BuildInfo,

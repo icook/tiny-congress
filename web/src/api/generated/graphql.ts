@@ -22,9 +22,13 @@ export type Scalars = {
 
 /** Build metadata exposed via GraphQL, REST, and logs. */
 export type BuildInfo = {
+  /** Build timestamp in RFC3339 format. */
   buildTime: Scalars['String']['output'];
+  /** Git commit SHA. */
   gitSha: Scalars['String']['output'];
+  /** Optional build message or description. */
   message?: Maybe<Scalars['String']['output']>;
+  /** Application version (from `APP_VERSION` env var, see #256 for prefix standardization). */
   version: Scalars['String']['output'];
 };
 

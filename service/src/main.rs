@@ -1,3 +1,7 @@
+//! `TinyCongress` API server binary.
+//!
+//! Starts the HTTP server with GraphQL and REST endpoints.
+
 #![deny(
     clippy::expect_used,
     clippy::panic,
