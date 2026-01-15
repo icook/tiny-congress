@@ -320,6 +320,38 @@ audit-unused:
 lint: lint-backend lint-frontend
     @echo "✓ All linting passed"
 
+# =============================================================================
+# Static Analysis Tools
+# =============================================================================
+
+# Run all static analysis checks
+lint-static: lint-typos lint-toml lint-dockerfiles lint-workflows lint-scripts
+    @echo "✓ All static analysis passed"
+
+# Check for typos in code and docs (requires typos: cargo install typos-cli)
+lint-typos:
+    typos
+
+# Check TOML formatting (requires taplo: cargo install taplo-cli)
+lint-toml:
+    taplo fmt --check
+
+# Fix TOML formatting
+fmt-toml:
+    taplo fmt
+
+# Lint Dockerfiles (requires hadolint: brew install hadolint)
+lint-dockerfiles:
+    hadolint service/Dockerfile service/Dockerfile.dev web/Dockerfile web/Dockerfile.dev dockerfiles/Dockerfile.postgres
+
+# Lint GitHub Actions workflows (requires actionlint: brew install actionlint)
+lint-workflows:
+    actionlint
+
+# Lint shell scripts (requires shellcheck: brew install shellcheck)
+lint-scripts:
+    shellcheck web/bin/*.sh web/scripts/*.sh service/bin/*.sh
+
 # Fix all formatting (backend + frontend)
 fmt: fmt-backend fmt-frontend
     @echo "✓ All formatting applied"
@@ -432,6 +464,13 @@ setup:
     @echo "Optional prerequisites for full-stack development:"
     @echo "  - Docker: $(docker --version 2>/dev/null || echo "NOT INSTALLED")"
     @echo "  - kubectl: $(kubectl version --client 2>/dev/null | head -1 || echo "NOT INSTALLED")"
+    @echo ""
+    @echo "Static analysis tools (optional, for lint-static):"
+    @echo "  - typos: $(typos --version 2>/dev/null || echo "NOT INSTALLED - cargo install typos-cli")"
+    @echo "  - taplo: $(taplo --version 2>/dev/null || echo "NOT INSTALLED - cargo install taplo-cli")"
+    @echo "  - hadolint: $(hadolint --version 2>/dev/null || echo "NOT INSTALLED - brew install hadolint")"
+    @echo "  - actionlint: $(actionlint --version 2>/dev/null || echo "NOT INSTALLED - brew install actionlint")"
+    @echo "  - shellcheck: $(shellcheck --version 2>/dev/null | head -2 | tail -1 || echo "NOT INSTALLED - brew install shellcheck")"
     @echo ""
     @echo "For local development (no cluster needed):"
     @echo "  just node-use      # Switch to correct Node version (requires nvm)"

@@ -1,0 +1,19 @@
+# Hadolint configuration
+# https://github.com/hadolint/hadolint
+
+# Treat warnings as errors in CI
+failure-threshold: warning
+
+ignored:
+  # Allow unpinned apt packages - we use base image version pinning instead
+  - DL3008
+  # Allow cd in RUN commands - sometimes clearer than multiple WORKDIR switches
+  - DL3003
+  # Allow unquoted variables for intentional word splitting (e.g., package lists)
+  - SC2086
+  # Allow missing yarn cache clean in dev containers (not production)
+  - DL3060
+
+trustedRegistries:
+  - docker.io
+  - ghcr.io

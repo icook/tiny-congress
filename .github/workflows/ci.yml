@@ -70,6 +70,31 @@ jobs:
         run: just lint-frontend
 
   # ============================================================
+  # JOB 0b1: Static Analysis (typos, TOML, Dockerfiles, workflows, scripts)
+  # ============================================================
+  static-analysis:
+    name: Static Analysis
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install tools
+        uses: taiki-e/install-action@v2
+        with:
+          tool: typos-cli,taplo-cli,hadolint,actionlint
+
+      - name: Run static analysis
+        run: |
+          set -euox pipefail
+
+          typos
+          taplo fmt --check
+          hadolint --config .hadolint.yaml service/Dockerfile service/Dockerfile.dev web/Dockerfile web/Dockerfile.dev dockerfiles/Dockerfile.postgres
+          actionlint
+          find . -name "*.sh" -not -path "./.git/*" -exec shellcheck {} +
+
+  # ============================================================
   # JOB 0b2: Build Storybook
   # ============================================================
   storybook-build:
@@ -448,6 +473,7 @@ jobs:
       - scan-images
       - lint
       - lint-web
+      - static-analysis
       - storybook-build
       - codegen-check
       - sqlx-check
