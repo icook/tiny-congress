@@ -1,22 +1,19 @@
 version: 2
+# open-pull-requests-limit: 0 suppresses routine version bump PRs.
+# Security update PRs bypass this limit and will still be opened.
 updates:
   - package-ecosystem: "cargo"
     directory: "/service"
     schedule:
       interval: "weekly"
-    groups:
-      rust-dependencies:
-        patterns:
-          - "*"
+    open-pull-requests-limit: 0
   - package-ecosystem: "npm"
     directory: "/web"
     schedule:
       interval: "weekly"
-    groups:
-      npm-dependencies:
-        patterns:
-          - "*"
+    open-pull-requests-limit: 0
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "weekly"
+    open-pull-requests-limit: 0
