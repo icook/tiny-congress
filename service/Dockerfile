@@ -37,7 +37,8 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry,id=cargo-registry \
 FROM debian:bookworm-slim
 
 RUN apt-get update \
-  && apt-get install -y ca-certificates libpq5 libssl3 \
+  && apt-get install -y --no-install-recommends ca-certificates libpq5 libssl3 \
+  && apt-get upgrade -y libpq5 \
   && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /usr/src/app/target/release/tinycongress-api /usr/local/bin/
