@@ -3,9 +3,7 @@
  * Type-safe REST client for identity endpoints
  */
 
-// === Base Configuration ===
-const API_BASE_URL: string =
-  (import.meta.env.VITE_API_URL as string | undefined) ?? 'http://localhost:8080';
+import { getApiBaseUrl } from '../../../config';
 
 // === Types ===
 
@@ -26,7 +24,7 @@ interface ApiErrorResponse {
 // === API Functions ===
 
 async function fetchJson<T>(path: string, options?: RequestInit): Promise<T> {
-  const url = `${API_BASE_URL}${path}`;
+  const url = `${getApiBaseUrl()}${path}`;
 
   const response = await fetch(url, {
     ...options,
