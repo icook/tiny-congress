@@ -37,6 +37,7 @@ RUN yarn build
 
 # Production stage
 FROM nginx:alpine
+RUN apk upgrade --no-cache
 WORKDIR /usr/share/nginx/html
 
 # SPA routing + runtime config cache headers
