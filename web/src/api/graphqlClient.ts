@@ -3,22 +3,11 @@ interface GraphQLResponse<T> {
   errors?: { message: string }[];
 }
 
-const defaultGraphqlUrl = 'http://localhost:8080/graphql';
+const API_BASE_URL: string =
+  (import.meta.env.VITE_API_URL as string | undefined) ?? 'http://localhost:8080';
 
 export function getGraphqlUrl(): string {
-  const envUrl = import.meta.env.VITE_GRAPHQL_URL as string | undefined;
-  if (envUrl) {
-    return envUrl;
-  }
-
-  if (typeof window !== 'undefined') {
-    const url = new URL(window.location.origin);
-    url.port = '8080';
-    url.pathname = '/graphql';
-    return url.toString();
-  }
-
-  return defaultGraphqlUrl;
+  return `${API_BASE_URL}/graphql`;
 }
 
 export async function graphqlRequest<TData>(
