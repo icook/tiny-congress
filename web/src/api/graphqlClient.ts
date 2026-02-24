@@ -1,13 +1,12 @@
+import { getApiBaseUrl } from '../config';
+
 interface GraphQLResponse<T> {
   data?: T;
   errors?: { message: string }[];
 }
 
-const API_BASE_URL: string =
-  (import.meta.env.VITE_API_URL as string | undefined) ?? 'http://localhost:8080';
-
 export function getGraphqlUrl(): string {
-  return `${API_BASE_URL}/graphql`;
+  return `${getApiBaseUrl()}/graphql`;
 }
 
 export async function graphqlRequest<TData>(

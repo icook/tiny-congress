@@ -43,6 +43,7 @@ export default tseslint.config(
       '.prettierrc.mjs',
       'scripts/**/*.mjs',
       'vitest.setup.mjs',
+      'public/**',
     ],
   },
 

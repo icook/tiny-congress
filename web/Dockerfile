@@ -37,13 +37,18 @@ RUN yarn build
 
 # Production stage
 FROM nginx:alpine
+RUN apk upgrade --no-cache
 WORKDIR /usr/share/nginx/html
+
+# SPA routing + runtime config cache headers
+COPY web/nginx.conf /etc/nginx/conf.d/default.conf
 
 # Copy static assets from builder
 COPY --from=builder /app/dist/ ./
 
-# Expose port
-EXPOSE 80
+# Entrypoint generates /config.js from env vars, then starts nginx
+COPY web/docker-entrypoint.sh /docker-entrypoint.sh
+RUN chmod +x /docker-entrypoint.sh
 
-# Start nginx
-CMD ["nginx", "-g", "daemon off;"]
+EXPOSE 80
+ENTRYPOINT ["/docker-entrypoint.sh"]
