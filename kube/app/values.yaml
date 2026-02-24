@@ -122,8 +122,8 @@ frontend:
     repository: tc/frontend-dev
     tag: latest
     pullPolicy: IfNotPresent
-  # Override GraphQL endpoint (defaults to the API service DNS name).
-  graphqlUrl: ""
+  # Override API base URL (defaults to the API service DNS name).
+  apiUrl: ""
   service:
     type: ClusterIP
     port: 5173
