@@ -40,6 +40,15 @@ test('renders build metadata once loaded', async () => {
   expect(message).toHaveTextContent('deployed from main');
 });
 
+test('renders UI build metadata from compile-time constants', () => {
+  mockFetchBuildInfo.mockReturnValue(new Promise(() => {}));
+
+  render(<AboutPage />);
+
+  expect(screen.getByTestId('ui-git-sha')).toHaveTextContent('unknown');
+  expect(screen.getByTestId('ui-build-time')).toHaveTextContent('unknown');
+});
+
 test('shows an error state when the query fails', async () => {
   mockFetchBuildInfo.mockRejectedValue(new Error('boom'));
 
