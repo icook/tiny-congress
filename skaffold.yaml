@@ -13,9 +13,9 @@ build:
     - "linux/arm64"
   artifacts:
     - image: tc-api-dev
-      context: ./service/
+      context: .
       docker:
-        dockerfile: Dockerfile.dev
+        dockerfile: service/Dockerfile.dev
         buildArgs:
           BUILDKIT_INLINE_CACHE: "1"
           RUST_VERSION: "{{.RUST_VERSION}}"
@@ -24,11 +24,11 @@ build:
           - "tc-api-dev:cache"
       sync:
         manual:
-          - src: "src/**/*.rs"
+          - src: "service/src/**/*.rs"
             dest: /usr/src/app
-          - src: "migrations/**/*"
+          - src: "service/migrations/**/*"
             dest: /usr/src/app
-          - src: "Cargo.toml"
+          - src: "service/Cargo.toml"
             dest: /usr/src/app
           - src: "Cargo.lock"
             dest: /usr/src/app

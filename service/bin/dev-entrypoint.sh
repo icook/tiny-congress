@@ -17,9 +17,10 @@ fi
 export RUST_LOG="${RUST_LOG:-info}"
 
 # Watch core Rust sources and migrations, re-running the API binary on change
+# Paths are relative to workspace root (/usr/src/app)
 exec cargo watch \
-  --watch src \
-  --watch migrations \
-  --watch Cargo.toml \
+  --watch service/src \
+  --watch service/migrations \
+  --watch service/Cargo.toml \
   --watch Cargo.lock \
   -x "run --bin tinycongress-api"

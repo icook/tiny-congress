@@ -259,9 +259,9 @@ rust-version := ```
 # Start full development environment with Skaffold (hot reload, port forwarding)
 # Prerequisites: Docker, Skaffold, KinD cluster (just kind-create)
 dev: check-rust-version
-    @echo "Starting full-stack dev with Skaffold..."
+    @echo "Starting full-stack dev with Skaffold (targeting KinD cluster)..."
     @echo "Prerequisites: run 'just kind-create' first for KinD with shared cargo cache"
-    RUST_VERSION={{rust-version}} skaffold dev --port-forward --cleanup=false --skip-tests
+    RUST_VERSION={{rust-version}} skaffold dev --kube-context kind-kind --port-forward --cleanup=false --skip-tests
 
 # Build all container images (for current profile)
 build-images:

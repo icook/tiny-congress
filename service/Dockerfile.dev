@@ -6,7 +6,10 @@ FROM lukemathwalker/cargo-chef:latest-rust-${RUST_VERSION} AS chef
 WORKDIR /usr/src/app
 
 FROM chef AS planner
-COPY . .
+# Copy workspace root and all crates
+COPY Cargo.toml Cargo.lock ./
+COPY service ./service
+COPY crates ./crates
 RUN cargo chef prepare --recipe-path recipe.json
 
 FROM chef AS builder
@@ -29,8 +32,10 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry,id=cargo-registry \
     --mount=type=cache,target=/usr/src/app/target,id=cargo-target-dev \
     cargo chef cook --recipe-path recipe.json
 
-# Copy source and build with cache mounts
-COPY . .
+# Copy workspace root and all crates
+COPY Cargo.toml Cargo.lock ./
+COPY service ./service
+COPY crates ./crates
 
 ENV SQLX_OFFLINE=true
 
@@ -41,7 +46,7 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry,id=cargo-registry \
     cargo build --bin tinycongress-api && \
     cp target/debug/tinycongress-api /usr/local/bin/tinycongress-api
 
-RUN install -m 0755 bin/dev-entrypoint.sh /usr/local/bin/dev-entrypoint
+RUN install -m 0755 service/bin/dev-entrypoint.sh /usr/local/bin/dev-entrypoint
 
 # Default command: run the hot-reload dev entrypoint
 CMD ["/usr/local/bin/dev-entrypoint"]

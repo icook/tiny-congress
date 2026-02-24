@@ -14,3 +14,21 @@
 # Logs
 *.log
 **/*.log
+
+# Rust build artifacts
+service/target/
+crates/*/target/
+
+# Frontend build artifacts and dependencies
+web/node_modules/
+web/dist/
+web/.vite/
+web/coverage/
+
+# Worktrees
+.worktrees/
+.claude/
+
+# Documentation and Kubernetes (no Dockerfile needs these)
+docs/
+kube/
