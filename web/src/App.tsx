@@ -12,7 +12,7 @@ export default function App() {
     <ErrorBoundary context="Application">
       <CryptoProvider>
         <QueryProvider>
-          <MantineProvider theme={mantineTheme}>
+          <MantineProvider theme={mantineTheme} defaultColorScheme="dark">
             <Router />
           </MantineProvider>
         </QueryProvider>
