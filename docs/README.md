@@ -31,6 +31,7 @@ How-to guides for common development tasks:
 | [backend-test-patterns.md](playbooks/backend-test-patterns.md) | Writing backend tests |
 | [graphql-codegen.md](playbooks/graphql-codegen.md) | Generating GraphQL types |
 | [pr-review-checklist.md](playbooks/pr-review-checklist.md) | Reviewing pull requests |
+| [gitops-cd-setup.md](playbooks/gitops-cd-setup.md) | Setting up gitops CD pipeline |
 | [skaffold-profiles.md](playbooks/skaffold-profiles.md) | Using Skaffold profiles |
 | [test-data-factories.md](playbooks/test-data-factories.md) | Creating backend test data with factories |
 
