@@ -36,6 +36,8 @@ Use the `justfile` as the single source of truth for all commands. Run `just --l
 | Task | Command | Notes |
 |------|---------|-------|
 | **Linting** | `just lint` | Runs backend + frontend linting |
+| **K8s linting** | `just lint-kube` | Kubernetes manifest checks (requires kube-linter) |
+| **Doc linting** | `just lint-docs` | Check for missing/broken rustdoc |
 | **Formatting** | `just fmt` | Fixes all formatting issues |
 | **Unit tests** | `just test` | Backend + frontend unit tests (no cluster) |
 | **Full CI suite** | `just test-ci` | Builds images, runs all tests via Skaffold |
