@@ -25,7 +25,7 @@ spec:
         app: postgres
     spec:
       containers:
-      - image: "{{ .Values.postgres.image.repository }}:{{ .Values.postgres.image.tag }}"
+      - image: "{{ .Values.postgres.image.repository }}:{{ .Values.postgres.image.tag }}{{ if .Values.postgres.image.digest }}@{{ .Values.postgres.image.digest }}{{ end }}"
         imagePullPolicy: {{ .Values.postgres.image.pullPolicy | quote }}
         name: postgres
         env:

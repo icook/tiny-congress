@@ -771,6 +771,65 @@ jobs:
           kubectl get all -n default || true
 
   # ============================================================
+  # JOB 2b: Update gitops repo with image digests (master only)
+  # ============================================================
+  deploy-gitops:
+    name: Update gitops image digests
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    needs: [build-images]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout gitops repo
+        uses: actions/checkout@v6
+        with:
+          repository: icook/homelab-gitops
+          ssh-key: ${{ secrets.GITOPS_DEPLOY_KEY }}
+          ref: main
+
+      - name: Get image digests from GHCR
+        id: digests
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          SHA="${{ github.sha }}"
+          for IMAGE in tc-api-release tc-ui-release postgres; do
+            DIGEST=$(gh api \
+              "/orgs/icook/packages/container/tiny-congress%2F${IMAGE}/versions" \
+              --jq ".[] | select(.metadata.container.tags[] == \"${SHA}\") | .name")
+            echo "${IMAGE}=${DIGEST}" >> "$GITHUB_OUTPUT"
+            echo "  ${IMAGE}: ${DIGEST}"
+          done
+
+      - name: Update HelmRelease digests
+        run: |
+          FILE="clusters/sauce/workloads/tiny-congress/helmrelease-demo.yaml"
+          # Use yq to update only the digest fields
+          yq -i '
+            .spec.values.image.digest = "${{ steps.digests.outputs.tc-api-release }}" |
+            .spec.values.frontend.image.digest = "${{ steps.digests.outputs.tc-ui-release }}" |
+            .spec.values.postgres.image.digest = "${{ steps.digests.outputs.postgres }}"
+          ' "$FILE"
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add clusters/sauce/workloads/tiny-congress/helmrelease-demo.yaml
+          # Only commit if there are actual changes
+          if git diff --cached --quiet; then
+            echo "No digest changes detected"
+            exit 0
+          fi
+          git commit -m "chore: update tiny-congress image digests
+
+          tc-api-release: ${{ steps.digests.outputs.tc-api-release }}
+          tc-ui-release: ${{ steps.digests.outputs.tc-ui-release }}
+          postgres: ${{ steps.digests.outputs.postgres }}"
+          git push
+
+  # ============================================================
   # JOB 3: Deploy to Cloudflare Pages
   # ============================================================
   deploy-cloudflare:

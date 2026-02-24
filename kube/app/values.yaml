@@ -9,6 +9,8 @@ image:
   pullPolicy: IfNotPresent
   # Overrides the image tag whose default is the chart appVersion.
   tag: latest
+  # Optional image digest for immutable deploys (set by CD pipeline)
+  digest: ""
 
 imagePullSecrets: []
 nameOverride: ""
@@ -122,6 +124,7 @@ frontend:
     repository: tc/frontend-dev
     tag: latest
     pullPolicy: IfNotPresent
+    digest: ""
   # API base URL injected at container start via docker-entrypoint.sh.
   # Defaults to the API service's internal DNS name if empty.
   apiUrl: ""
@@ -135,6 +138,7 @@ postgres:
     repository: postgres
     tag: "17"
     pullPolicy: IfNotPresent
+    digest: ""
 
 # Cargo build cache for dev mode (hostPath volume)
 # Shares build cache with local dev via KinD extraMounts
