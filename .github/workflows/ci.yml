@@ -780,6 +780,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      packages: read
     steps:
       - name: Checkout gitops repo
         uses: actions/checkout@v6
@@ -796,7 +797,7 @@ jobs:
           SHA="${{ github.sha }}"
           for IMAGE in tc-api-release tc-ui-release postgres; do
             DIGEST=$(gh api \
-              "/orgs/icook/packages/container/tiny-congress%2F${IMAGE}/versions" \
+              "/users/icook/packages/container/tiny-congress%2F${IMAGE}/versions" \
               --jq ".[] | select(.metadata.container.tags[] == \"${SHA}\") | .name")
             echo "${IMAGE}=${DIGEST}" >> "$GITHUB_OUTPUT"
             echo "  ${IMAGE}: ${DIGEST}"
