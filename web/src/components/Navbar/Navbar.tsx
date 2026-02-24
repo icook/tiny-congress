@@ -8,16 +8,7 @@ import {
   IconUserPlus,
 } from '@tabler/icons-react';
 import { Link, useRouterState } from '@tanstack/react-router';
-import {
-  Box,
-  Group,
-  Image,
-  NavLink,
-  Stack,
-  Text,
-  useComputedColorScheme,
-  useMantineTheme,
-} from '@mantine/core';
+import { Box, NavLink, Stack, useComputedColorScheme, useMantineTheme } from '@mantine/core';
 
 const navLinks = [
   { icon: IconHome2, label: 'Home', path: '/' },
@@ -51,15 +42,6 @@ export function Navbar() {
       bg="var(--mantine-color-body)"
       style={{ borderRight: `1px solid ${borderColor}` }}
     >
-      <Box pb="sm" mb="xs" style={{ borderBottom: `1px solid ${borderColor}` }}>
-        <Group gap="xs">
-          <Image src="/src/logo.png" alt="TinyCongress logo" h={32} w="auto" fit="contain" />
-          <Text fw={700} c="dimmed">
-            TinyCongress
-          </Text>
-        </Group>
-      </Box>
-
       <Stack gap={4} style={{ flex: 1 }}>
         {navLinks.map((link) => (
           <NavLink
