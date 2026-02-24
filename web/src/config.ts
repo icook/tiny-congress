@@ -17,9 +17,15 @@ declare global {
 }
 
 export function getApiBaseUrl(): string {
-  return (
-    window.__TC_ENV__?.VITE_API_URL ||
-    (import.meta.env.VITE_API_URL as string | undefined) ||
-    'http://localhost:8080'
-  );
+  const runtime = window.__TC_ENV__?.VITE_API_URL;
+  if (runtime) {
+    return runtime;
+  }
+
+  const buildTime = import.meta.env.VITE_API_URL as string | undefined;
+  if (buildTime) {
+    return buildTime;
+  }
+
+  return 'http://localhost:8080';
 }

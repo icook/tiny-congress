@@ -3,7 +3,7 @@
  * Type-safe REST client for identity endpoints
  */
 
-import { getApiBaseUrl } from '../../../config';
+import { getApiBaseUrl } from '@/config';
 
 // === Types ===
 
