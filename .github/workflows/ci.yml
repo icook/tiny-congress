@@ -1289,7 +1289,7 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages deploy site --project-name=tiny-congress
+          command: pages deploy site --project-name=tiny-congress --branch=${{ github.head_ref || github.ref_name }}
 
       - name: Add PR comment with report links
         if: github.event_name == 'pull_request'
