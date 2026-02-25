@@ -12,6 +12,7 @@ import {
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import logo from '@/logo.svg';
+import logoDark from '@/logo-dark.svg';
 import { Navbar } from '../components/Navbar/Navbar';
 
 export function Layout() {
@@ -32,7 +33,7 @@ export function Layout() {
       <AppShell.Header>
         <Group h="100%" px="md" gap="sm">
           <Burger opened={opened} onClick={toggle} hiddenFrom="sm" size="sm" />
-          <Image src={logo} alt="TinyCongress logo" h={32} w="auto" />
+          <Image src={colorScheme === 'dark' ? logo : logoDark} alt="TinyCongress logo" h={32} w="auto" />
           <Text fw={700}>TinyCongress</Text>
           <ActionIcon
             variant="subtle"
