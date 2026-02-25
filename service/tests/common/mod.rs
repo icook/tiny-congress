@@ -1,3 +1,4 @@
+#![allow(unused)]
 //! Common test utilities for integration tests.
 //!
 //! This module provides:
