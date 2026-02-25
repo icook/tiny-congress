@@ -11,6 +11,9 @@ use wasm_bindgen::prelude::*;
 mod kid;
 pub use kid::{Kid, KidError};
 
+mod envelope;
+pub use envelope::{BackupEnvelope, EnvelopeError};
+
 /// Error type for base64url decoding failures
 #[derive(Debug, thiserror::Error)]
 #[error("invalid base64url encoding: {0}")]
