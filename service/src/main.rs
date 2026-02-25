@@ -42,8 +42,13 @@ async fn main() -> Result<(), anyhow::Error> {
     let config = Config::load().map_err(|e| anyhow::anyhow!("{e}"))?;
 
     // Set up logging from config
-    std::env::set_var("RUST_LOG", &config.logging.level);
-    tracing_subscriber::fmt::init();
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::try_new(&config.logging.level).map_err(|e| {
+                anyhow::anyhow!("invalid log level '{}': {e}", config.logging.level)
+            })?,
+        )
+        .init();
 
     // Init banner so container logs clearly show startup
     tracing::info!(

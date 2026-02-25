@@ -14,7 +14,7 @@ if ! command -v cargo-watch >/dev/null 2>&1; then
   exec tinycongress-api
 fi
 
-export RUST_LOG="${RUST_LOG:-info}"
+export TC_LOGGING__LEVEL="${TC_LOGGING__LEVEL:-info}"
 
 # Watch core Rust sources and migrations, re-running the API binary on change
 # Paths are relative to workspace root (/usr/src/app)
