@@ -35,17 +35,17 @@ async fn test_db_connection() {
     assert_eq!(result, 1);
 }
 
-/// Test that migrations ran successfully by checking for our test table.
+/// Test that migrations ran successfully by checking for a production table.
 #[shared_runtime_test]
 async fn test_migrations_applied() {
     let db = get_test_db().await;
 
-    // Check that the test_items table exists
+    // Check that the accounts table exists (a production table from migrations)
     let exists: bool = query_scalar(
         r#"
         SELECT EXISTS (
             SELECT FROM information_schema.tables
-            WHERE table_name = 'test_items'
+            WHERE table_name = 'accounts'
         )
         "#,
     )
@@ -53,7 +53,7 @@ async fn test_migrations_applied() {
     .await
     .expect("Failed to check table existence");
 
-    assert!(exists, "test_items table should exist after migrations");
+    assert!(exists, "accounts table should exist after migrations");
 }
 
 /// Test basic CRUD operations.
@@ -233,12 +233,12 @@ async fn test_migration_idempotency() {
         .await
         .expect("Migrations should be idempotent on multiple runs");
 
-    // Verify tables still exist
+    // Verify production tables still exist
     let exists: bool = query_scalar(
         r#"
         SELECT EXISTS (
             SELECT FROM information_schema.tables
-            WHERE table_name = 'test_items'
+            WHERE table_name = 'accounts'
         )
         "#,
     )
@@ -252,18 +252,31 @@ async fn test_migration_idempotency() {
     );
 }
 
-/// Test migration rollback - verify we can drop tables and recreate them.
-/// This is a simple demonstration that isolated DBs allow destructive operations.
+/// Test migration rollback - verify we can drop and recreate tables in isolated DBs.
+/// Uses a temporary table to avoid conflicting with other tests' shared state.
 #[shared_runtime_test]
 async fn test_migration_rollback_simulation() {
     let db = isolated_db().await;
 
-    // Verify test_items exists
+    // Create a temporary table to simulate rollback operations
+    query(
+        r#"
+        CREATE TABLE rollback_test (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            value TEXT NOT NULL
+        )
+        "#,
+    )
+    .execute(db.pool())
+    .await
+    .expect("Failed to create rollback_test table");
+
+    // Verify it exists
     let exists_before: bool = query_scalar(
         r#"
         SELECT EXISTS (
             SELECT FROM information_schema.tables
-            WHERE table_name = 'test_items'
+            WHERE table_name = 'rollback_test'
         )
         "#,
     )
@@ -271,10 +284,10 @@ async fn test_migration_rollback_simulation() {
     .await
     .expect("Failed to check table existence");
 
-    assert!(exists_before, "test_items should exist initially");
+    assert!(exists_before, "rollback_test should exist initially");
 
     // Drop the table (simulating a rollback)
-    query("DROP TABLE test_items")
+    query("DROP TABLE rollback_test")
         .execute(db.pool())
         .await
         .expect("Failed to drop table");
@@ -284,7 +297,7 @@ async fn test_migration_rollback_simulation() {
         r#"
         SELECT EXISTS (
             SELECT FROM information_schema.tables
-            WHERE table_name = 'test_items'
+            WHERE table_name = 'rollback_test'
         )
         "#,
     )
@@ -292,15 +305,14 @@ async fn test_migration_rollback_simulation() {
     .await
     .expect("Failed to check table existence after drop");
 
-    assert!(!exists_after, "test_items should not exist after drop");
+    assert!(!exists_after, "rollback_test should not exist after drop");
 
     // Recreate it (simulating migration re-run)
     query(
         r#"
-        CREATE TABLE test_items (
-            id UUID PRIMARY KEY,
-            name TEXT NOT NULL,
-            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        CREATE TABLE rollback_test (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            value TEXT NOT NULL
         )
         "#,
     )
@@ -313,7 +325,7 @@ async fn test_migration_rollback_simulation() {
         r#"
         SELECT EXISTS (
             SELECT FROM information_schema.tables
-            WHERE table_name = 'test_items'
+            WHERE table_name = 'rollback_test'
         )
         "#,
     )
@@ -321,7 +333,7 @@ async fn test_migration_rollback_simulation() {
     .await
     .expect("Failed to check table existence after recreate");
 
-    assert!(exists_final, "test_items should exist after recreation");
+    assert!(exists_final, "rollback_test should exist after recreation");
 }
 
 mod factory_tests {

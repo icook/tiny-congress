@@ -1,5 +1,6 @@
 ---
 source: service/tests/schema_snapshot.rs
+assertion_line: 178
 expression: current_schema
 ---
 -- Schema Snapshot
@@ -28,12 +29,6 @@ CREATE UNIQUE INDEX accounts_root_kid_key ON public.accounts USING btree (root_k
 
 -- accounts.accounts_username_key
 CREATE UNIQUE INDEX accounts_username_key ON public.accounts USING btree (username)
-
--- accounts.idx_accounts_root_kid
-CREATE INDEX idx_accounts_root_kid ON public.accounts USING btree (root_kid)
-
--- accounts.idx_accounts_username
-CREATE INDEX idx_accounts_username ON public.accounts USING btree (username)
 
 -- test_items.test_items_pkey
 CREATE UNIQUE INDEX test_items_pkey ON public.test_items USING btree (id)

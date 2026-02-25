@@ -43,11 +43,10 @@ async fn test_migration_count_matches() {
 /// can be executed multiple times. Note: sqlx's Migrator tracks applied migrations
 /// in _sqlx_migrations, so we clear that table between runs to force re-execution.
 ///
-/// IGNORED: Current migrations are not fully idempotent (CREATE INDEX without
-/// IF NOT EXISTS). This test should be enabled after migrations are fixed.
-/// See: https://github.com/icook/tiny-congress/issues/XXX
+/// Migration 04 drops the non-idempotent artifacts (bare CREATE INDEX)
+/// from migration 03, making the full migration set idempotent.
+/// See: https://github.com/icook/tiny-congress/issues/291
 #[shared_runtime_test]
-#[ignore]
 async fn test_all_migrations_are_idempotent() {
     let db = empty_db().await;
     let migrator = load_migrator().await;
