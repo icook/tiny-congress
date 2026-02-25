@@ -44,7 +44,15 @@ RUN apt-get update \
 COPY --from=builder /usr/src/app/target/release/tinycongress-api /usr/local/bin/
 COPY --from=builder /usr/src/app/service/migrations /usr/local/migrations
 
+# Build metadata (injected by CI via --build-arg)
+ARG GIT_SHA=unknown
+ARG BUILD_TIME=unknown
+ARG APP_VERSION=dev
+
 ENV SQLX_OFFLINE=true \
-    TC_DATABASE__MIGRATIONS_DIR=/usr/local/migrations
+    TC_DATABASE__MIGRATIONS_DIR=/usr/local/migrations \
+    GIT_SHA=${GIT_SHA} \
+    BUILD_TIME=${BUILD_TIME} \
+    APP_VERSION=${APP_VERSION}
 
 CMD ["tinycongress-api"]

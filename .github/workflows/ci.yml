@@ -385,7 +385,8 @@ jobs:
             RUST_VERSION=${{ steps.versions.outputs.rust }}
             NODE_VERSION=${{ steps.versions.outputs.node }}
             GIT_SHA=${{ github.sha }}
-            BUILD_TIME=${{ github.event.head_commit.timestamp }}
+            APP_VERSION=${{ github.ref_name }}@${{ github.sha }}
+            BUILD_TIME=${{ github.event.head_commit.timestamp || github.event.pull_request.updated_at }}
           tags: |
             ${{ steps.tags.outputs.sha_tag }}
             ${{ steps.tags.outputs.branch_tag }}
@@ -501,14 +502,6 @@ jobs:
         run: |
           echo "Required: v$(cat .skaffold-version)"
           echo "Installed: $(skaffold version)"
-
-      - name: Stamp build metadata
-        run: |
-          {
-            echo "BUILD_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-            echo "APP_VERSION=${GITHUB_SHA}"
-            echo "GIT_SHA=${GITHUB_SHA}"
-          } >> "$GITHUB_ENV"
 
       - name: Login to GHCR
         uses: docker/login-action@v3
