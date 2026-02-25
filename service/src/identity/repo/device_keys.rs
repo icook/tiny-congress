@@ -4,6 +4,7 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use sqlx::PgPool;
 use sqlx::Row;
+use tc_crypto::Kid;
 use uuid::Uuid;
 
 /// Record returned from device key queries
@@ -11,7 +12,7 @@ use uuid::Uuid;
 pub struct DeviceKeyRecord {
     pub id: Uuid,
     pub account_id: Uuid,
-    pub device_kid: String,
+    pub device_kid: Kid,
     pub device_pubkey: String,
     pub device_name: String,
     pub certificate: Vec<u8>,
@@ -24,7 +25,7 @@ pub struct DeviceKeyRecord {
 #[derive(Debug, Clone)]
 pub struct CreatedDeviceKey {
     pub id: Uuid,
-    pub device_kid: String,
+    pub device_kid: Kid,
     pub created_at: DateTime<Utc>,
 }
 
@@ -51,7 +52,7 @@ pub trait DeviceKeyRepo: Send + Sync {
     async fn create(
         &self,
         account_id: Uuid,
-        device_kid: &str,
+        device_kid: &Kid,
         device_pubkey: &str,
         device_name: &str,
         certificate: &[u8],
@@ -93,7 +94,7 @@ impl DeviceKeyRepo for PgDeviceKeyRepo {
     async fn create(
         &self,
         account_id: Uuid,
-        device_kid: &str,
+        device_kid: &Kid,
         device_pubkey: &str,
         device_name: &str,
         certificate: &[u8],
@@ -136,7 +137,7 @@ impl DeviceKeyRepo for PgDeviceKeyRepo {
 async fn create_device_key<'e, E>(
     executor: E,
     account_id: Uuid,
-    device_kid: &str,
+    device_kid: &Kid,
     device_pubkey: &str,
     device_name: &str,
     certificate: &[u8],
@@ -159,7 +160,7 @@ where
     )
     .bind(id)
     .bind(account_id)
-    .bind(device_kid)
+    .bind(device_kid.as_str())
     .bind(device_pubkey)
     .bind(device_name)
     .bind(certificate)
@@ -175,7 +176,7 @@ where
             }
             Ok(CreatedDeviceKey {
                 id,
-                device_kid: device_kid.to_string(),
+                device_kid: device_kid.clone(),
                 created_at: now,
             })
         }
@@ -210,7 +211,7 @@ where
 pub async fn create_device_key_with_executor<'e, E>(
     executor: E,
     account_id: Uuid,
-    device_kid: &str,
+    device_kid: &Kid,
     device_pubkey: &str,
     device_name: &str,
     certificate: &[u8],
@@ -227,6 +228,25 @@ where
         certificate,
     )
     .await
+}
+
+#[allow(clippy::expect_used, clippy::needless_pass_by_value)]
+fn map_device_key_row(row: sqlx::postgres::PgRow) -> DeviceKeyRecord {
+    DeviceKeyRecord {
+        id: row.get("id"),
+        account_id: row.get("account_id"),
+        // A malformed KID in the DB is a data corruption bug, not a user error
+        device_kid: row
+            .get::<String, _>("device_kid")
+            .parse()
+            .expect("invalid KID in database"),
+        device_pubkey: row.get("device_pubkey"),
+        device_name: row.get("device_name"),
+        certificate: row.get("certificate"),
+        last_used_at: row.get("last_used_at"),
+        revoked_at: row.get("revoked_at"),
+        created_at: row.get("created_at"),
+    }
 }
 
 async fn list_device_keys_by_account<'e, E>(
@@ -249,20 +269,7 @@ where
     .fetch_all(executor)
     .await?;
 
-    Ok(rows
-        .into_iter()
-        .map(|row| DeviceKeyRecord {
-            id: row.get("id"),
-            account_id: row.get("account_id"),
-            device_kid: row.get("device_kid"),
-            device_pubkey: row.get("device_pubkey"),
-            device_name: row.get("device_name"),
-            certificate: row.get("certificate"),
-            last_used_at: row.get("last_used_at"),
-            revoked_at: row.get("revoked_at"),
-            created_at: row.get("created_at"),
-        })
-        .collect())
+    Ok(rows.into_iter().map(map_device_key_row).collect())
 }
 
 async fn get_device_key_by_kid<'e, E>(
@@ -285,17 +292,7 @@ where
     .await?
     .ok_or(DeviceKeyRepoError::NotFound)?;
 
-    Ok(DeviceKeyRecord {
-        id: row.get("id"),
-        account_id: row.get("account_id"),
-        device_kid: row.get("device_kid"),
-        device_pubkey: row.get("device_pubkey"),
-        device_name: row.get("device_name"),
-        certificate: row.get("certificate"),
-        last_used_at: row.get("last_used_at"),
-        revoked_at: row.get("revoked_at"),
-        created_at: row.get("created_at"),
-    })
+    Ok(map_device_key_row(row))
 }
 
 async fn revoke_device_key<'e, E>(executor: E, device_kid: &str) -> Result<(), DeviceKeyRepoError>
@@ -365,6 +362,7 @@ pub mod mock {
     use super::{async_trait, CreatedDeviceKey, DeviceKeyRecord, DeviceKeyRepoError, Uuid};
     use chrono::Utc;
     use std::sync::Mutex;
+    use tc_crypto::Kid;
 
     pub struct MockDeviceKeyRepo {
         pub create_result: Mutex<Option<Result<CreatedDeviceKey, DeviceKeyRepoError>>>,
@@ -409,7 +407,7 @@ pub mod mock {
         async fn create(
             &self,
             _account_id: Uuid,
-            device_kid: &str,
+            device_kid: &Kid,
             _device_pubkey: &str,
             _device_name: &str,
             _certificate: &[u8],
@@ -421,7 +419,7 @@ pub mod mock {
                 .unwrap_or_else(|| {
                     Ok(CreatedDeviceKey {
                         id: Uuid::new_v4(),
-                        device_kid: device_kid.to_string(),
+                        device_kid: device_kid.clone(),
                         created_at: Utc::now(),
                     })
                 })

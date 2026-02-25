@@ -1,6 +1,7 @@
 -- Encrypted backup storage for root keys
 -- Stores password-encrypted root private key blobs for account recovery.
 -- The server never sees plaintext key material.
+-- Envelope format is Argon2id-only (version 1).
 
 CREATE TABLE IF NOT EXISTS account_backups (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -8,7 +9,6 @@ CREATE TABLE IF NOT EXISTS account_backups (
     kid TEXT NOT NULL,                   -- denormalized from accounts.root_kid for join-free recovery lookup
     encrypted_backup BYTEA NOT NULL,     -- binary envelope: version + KDF params + salt + nonce + AES-256-GCM ciphertext
     salt BYTEA NOT NULL,                 -- KDF salt (extracted from envelope for indexing)
-    kdf_algorithm TEXT NOT NULL CHECK (kdf_algorithm IN ('argon2id', 'pbkdf2')),
     version INTEGER NOT NULL DEFAULT 1,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
 

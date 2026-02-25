@@ -14,7 +14,6 @@ pub struct BackupRecord {
     pub kid: String,
     pub encrypted_backup: Vec<u8>,
     pub salt: Vec<u8>,
-    pub kdf_algorithm: String,
     pub version: i32,
     pub created_at: DateTime<Utc>,
 }
@@ -50,7 +49,6 @@ pub trait BackupRepo: Send + Sync {
         kid: &str,
         encrypted_backup: &[u8],
         salt: &[u8],
-        kdf_algorithm: &str,
         version: i32,
     ) -> Result<CreatedBackup, BackupRepoError>;
 
@@ -81,7 +79,6 @@ impl BackupRepo for PgBackupRepo {
         kid: &str,
         encrypted_backup: &[u8],
         salt: &[u8],
-        kdf_algorithm: &str,
         version: i32,
     ) -> Result<CreatedBackup, BackupRepoError> {
         create_backup(
@@ -90,7 +87,6 @@ impl BackupRepo for PgBackupRepo {
             kid,
             encrypted_backup,
             salt,
-            kdf_algorithm,
             version,
         )
         .await
@@ -111,7 +107,6 @@ async fn create_backup<'e, E>(
     kid: &str,
     encrypted_backup: &[u8],
     salt: &[u8],
-    kdf_algorithm: &str,
     version: i32,
 ) -> Result<CreatedBackup, BackupRepoError>
 where
@@ -122,8 +117,8 @@ where
 
     let result = sqlx::query(
         r"
-        INSERT INTO account_backups (id, account_id, kid, encrypted_backup, salt, kdf_algorithm, version, created_at)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        INSERT INTO account_backups (id, account_id, kid, encrypted_backup, salt, version, created_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
         ",
     )
     .bind(id)
@@ -131,7 +126,6 @@ where
     .bind(kid)
     .bind(encrypted_backup)
     .bind(salt)
-    .bind(kdf_algorithm)
     .bind(version)
     .bind(now)
     .execute(executor)
@@ -172,7 +166,6 @@ pub async fn create_backup_with_executor<'e, E>(
     kid: &str,
     encrypted_backup: &[u8],
     salt: &[u8],
-    kdf_algorithm: &str,
     version: i32,
 ) -> Result<CreatedBackup, BackupRepoError>
 where
@@ -184,7 +177,6 @@ where
         kid,
         encrypted_backup,
         salt,
-        kdf_algorithm,
         version,
     )
     .await
@@ -196,7 +188,7 @@ where
 {
     let row = sqlx::query(
         r"
-        SELECT id, account_id, kid, encrypted_backup, salt, kdf_algorithm, version, created_at
+        SELECT id, account_id, kid, encrypted_backup, salt, version, created_at
         FROM account_backups
         WHERE kid = $1
         ",
@@ -212,7 +204,6 @@ where
         kid: row.get("kid"),
         encrypted_backup: row.get("encrypted_backup"),
         salt: row.get("salt"),
-        kdf_algorithm: row.get("kdf_algorithm"),
         version: row.get("version"),
         created_at: row.get("created_at"),
     })
@@ -301,7 +292,6 @@ pub mod mock {
             kid: &str,
             _encrypted_backup: &[u8],
             _salt: &[u8],
-            _kdf_algorithm: &str,
             _version: i32,
         ) -> Result<CreatedBackup, BackupRepoError> {
             self.create_result

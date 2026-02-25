@@ -11,7 +11,7 @@ use super::repo::{
     create_account_with_executor, create_backup_with_executor, create_device_key_with_executor,
     AccountRepoError, BackupRepoError, DeviceKeyRepoError,
 };
-use tc_crypto::{decode_base64url_native as decode_base64url, derive_kid, verify_ed25519};
+use tc_crypto::{decode_base64url_native as decode_base64url, verify_ed25519, BackupEnvelope, Kid};
 
 /// Backup data included in signup request
 #[derive(Debug, Deserialize)]
@@ -44,8 +44,8 @@ pub struct SignupRequest {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SignupResponse {
     pub account_id: Uuid,
-    pub root_kid: String,
-    pub device_kid: String,
+    pub root_kid: Kid,
+    pub device_kid: Kid,
 }
 
 /// Error response
@@ -101,47 +101,6 @@ pub fn router() -> Router {
     Router::new().route("/auth/signup", post(signup))
 }
 
-/// Maximum accepted envelope size (defence-in-depth against oversized payloads).
-const MAX_ENVELOPE_SIZE: usize = 4096;
-
-/// Parse and validate the encrypted backup envelope, extracting the salt and KDF info.
-/// Returns (version, KDF algorithm name, salt).
-fn parse_envelope(bytes: &[u8]) -> Result<(i32, &'static str, Vec<u8>), &'static str> {
-    // Need at least version + KDF ID to determine the layout
-    if bytes.len() < 2 {
-        return Err("Encrypted backup envelope too small");
-    }
-
-    if bytes.len() > MAX_ENVELOPE_SIZE {
-        return Err("Encrypted backup envelope too large");
-    }
-
-    let version = bytes[0];
-    if version != 1 {
-        return Err("Unsupported backup envelope version");
-    }
-
-    let kdf_id = bytes[1];
-    // KDF-aware minimum size: header + params + salt(16) + nonce(12) + min ciphertext(48)
-    //   Argon2id: 2 + 12 + 16 + 12 + 48 = 90
-    //   PBKDF2:   2 +  4 + 16 + 12 + 48 = 82
-    // KDF-specific layout: (algorithm name, minimum envelope size, salt byte offset)
-    //   Argon2id: params at bytes 2-13 (12 bytes: m:4, t:4, p:4), salt starts at 14
-    //   PBKDF2:   params at bytes 2-5  ( 4 bytes: iterations),    salt starts at  6
-    let (kdf_algorithm, min_size, salt_offset) = match kdf_id {
-        1 => ("argon2id", 90, 14),
-        2 => ("pbkdf2", 82, 6),
-        _ => return Err("Unknown KDF algorithm in backup envelope"),
-    };
-
-    if bytes.len() < min_size {
-        return Err("Encrypted backup envelope too small for KDF parameters");
-    }
-    let salt = bytes[salt_offset..salt_offset + 16].to_vec();
-
-    Ok((i32::from(version), kdf_algorithm, salt))
-}
-
 /// Handle signup request — atomic creation of account + backup + first device key
 async fn signup(
     Extension(pool): Extension<PgPool>,
@@ -169,16 +128,16 @@ async fn signup(
     };
 
     // Derive root KID
-    let root_kid = derive_kid(&root_pubkey_arr);
+    let root_kid = Kid::derive(&root_pubkey_arr);
 
     // Decode and validate encrypted backup
     let Ok(backup_bytes) = decode_base64url(&req.backup.encrypted_blob) else {
         return bad_request("Invalid base64url encoding for backup.encrypted_blob");
     };
 
-    let (version, kdf_algorithm, salt) = match parse_envelope(&backup_bytes) {
-        Ok(parsed) => parsed,
-        Err(msg) => return bad_request(msg),
+    let envelope = match BackupEnvelope::parse(backup_bytes) {
+        Ok(env) => env,
+        Err(e) => return bad_request(&e.to_string()),
     };
 
     // Decode and validate device public key
@@ -191,7 +150,7 @@ async fn signup(
     }
 
     // Derive device KID
-    let device_kid = derive_kid(&device_pubkey_bytes);
+    let device_kid = Kid::derive(&device_pubkey_bytes);
 
     // Validate device name
     let device_name = req.device.name.trim();
@@ -241,11 +200,10 @@ async fn signup(
     if let Err(e) = create_backup_with_executor(
         &mut *tx,
         account.id,
-        &root_kid,
-        &backup_bytes,
-        &salt,
-        kdf_algorithm,
-        version,
+        root_kid.as_str(),
+        envelope.as_bytes(),
+        envelope.salt(),
+        envelope.version(),
     )
     .await
     {
@@ -402,7 +360,7 @@ mod tests {
     use ed25519_dalek::{Signer, SigningKey};
     use rand::rngs::OsRng;
     use sqlx::postgres::PgPoolOptions;
-    use tc_crypto::encode_base64url;
+    use tc_crypto::{encode_base64url, BackupEnvelope};
     use tower::ServiceExt;
 
     /// Create a router with a lazy pool that never connects.
@@ -417,15 +375,14 @@ mod tests {
             .layer(Extension(pool))
     }
 
-    fn fake_backup_envelope() -> Vec<u8> {
-        let mut envelope = Vec::with_capacity(90);
-        envelope.push(0x01);
-        envelope.push(0x01);
-        envelope.extend_from_slice(&[0u8; 12]);
-        envelope.extend_from_slice(&[0xAA; 16]);
-        envelope.extend_from_slice(&[0xBB; 12]);
-        envelope.extend_from_slice(&[0xCC; 48]);
-        envelope
+    fn test_envelope() -> BackupEnvelope {
+        BackupEnvelope::build(
+            [0xAA; 16],  // salt
+            65536, 3, 1, // m_cost, t_cost, p_cost
+            [0xBB; 12],  // nonce
+            &[0xCC; 48], // ciphertext
+        )
+        .expect("test envelope")
     }
 
     /// Helper that holds valid signup fields which can be individually overridden.
@@ -451,7 +408,7 @@ mod tests {
             Self {
                 username: "alice".to_string(),
                 root_pubkey: encode_base64url(&root_pubkey_bytes),
-                backup_blob: encode_base64url(&fake_backup_envelope()),
+                backup_blob: encode_base64url(test_envelope().as_bytes()),
                 device_pubkey: encode_base64url(&device_pubkey_bytes),
                 device_name: "Test Device".to_string(),
                 certificate: encode_base64url(&certificate_sig.to_bytes()),
