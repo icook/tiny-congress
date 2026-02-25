@@ -776,7 +776,7 @@ jobs:
   deploy-gitops:
     name: Update gitops image digests
     if: github.event_name == 'push' && github.ref == 'refs/heads/master'
-    needs: [build-images]
+    needs: [integration-tests]
     runs-on: ubuntu-latest
     permissions:
       contents: read
