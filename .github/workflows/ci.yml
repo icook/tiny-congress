@@ -842,14 +842,14 @@ jobs:
         uses: actions/checkout@v6
         with:
           sparse-checkout: |
-            web/src/logo.png
+            web/src/logo-dark.svg
             web/src/favicon.ico
           sparse-checkout-cone-mode: false
 
       - name: Create site directory
         run: |
           mkdir -p site
-          cp web/src/logo.png site/logo.png
+          cp web/src/logo-dark.svg site/logo.svg
           cp web/src/favicon.ico site/favicon.ico
 
       - name: Download coverage report
@@ -1185,7 +1185,7 @@ jobs:
           <body>
             <header class="header">
               <div class="header-top">
-                <img src="logo.png" alt="Tiny Congress" class="logo">
+                <img src="logo.svg" alt="Tiny Congress" class="logo">
                 <h1>Tiny Congress</h1>
                 <span class="coverage-badge">
                   📊 ${COVERAGE_PCT}% coverage
