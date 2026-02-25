@@ -31,6 +31,12 @@ RUN yarn install --immutable
 # Copy WASM output from wasm-builder
 COPY --from=wasm-builder /wasm-out ./src/wasm/tc-crypto
 
+# Build metadata (injected by CI via --build-arg)
+ARG GIT_SHA=unknown
+ARG BUILD_TIME=unknown
+ENV GIT_SHA=${GIT_SHA}
+ENV BUILD_TIME=${BUILD_TIME}
+
 # Copy source and build
 COPY web/ ./
 RUN yarn build

@@ -9,6 +9,10 @@ const enablePlaywrightCoverage = truthy(process.env.PLAYWRIGHT_COVERAGE) || trut
 const enableBundleAnalyzer = truthy(process.env.ANALYZE);
 
 export default defineConfig({
+  define: {
+    __UI_GIT_SHA__: JSON.stringify(process.env.GIT_SHA ?? 'unknown'),
+    __UI_BUILD_TIME__: JSON.stringify(process.env.BUILD_TIME ?? 'unknown'),
+  },
   plugins: [
     react(),
     tsconfigPaths(),

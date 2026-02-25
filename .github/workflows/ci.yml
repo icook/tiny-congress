@@ -384,6 +384,8 @@ jobs:
             BUILDKIT_INLINE_CACHE=1
             RUST_VERSION=${{ steps.versions.outputs.rust }}
             NODE_VERSION=${{ steps.versions.outputs.node }}
+            GIT_SHA=${{ github.sha }}
+            BUILD_TIME=${{ github.event.head_commit.timestamp }}
           tags: |
             ${{ steps.tags.outputs.sha_tag }}
             ${{ steps.tags.outputs.branch_tag }}

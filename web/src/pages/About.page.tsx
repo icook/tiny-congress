@@ -14,8 +14,8 @@ export function AboutPage() {
       </Group>
 
       <Text c="dimmed" size="sm">
-        Build metadata comes directly from the API via GraphQL, ensuring the UI reflects the running
-        backend revision.
+        Build metadata for both the API (fetched via GraphQL) and the UI (baked in at build time),
+        so operators can verify exactly which revisions are running.
       </Text>
 
       {isPending ? (
@@ -50,6 +50,13 @@ export function AboutPage() {
           </Stack>
         </Card>
       ) : null}
+
+      <Card shadow="sm" padding="lg" radius="md" withBorder>
+        <Stack gap="sm">
+          <Metric label="UI Git SHA" value={__UI_GIT_SHA__} testId="ui-git-sha" />
+          <Metric label="UI Build time" value={__UI_BUILD_TIME__} testId="ui-build-time" />
+        </Stack>
+      </Card>
     </Stack>
   );
 }
