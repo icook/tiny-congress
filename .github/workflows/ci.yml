@@ -1285,13 +1285,11 @@ jobs:
 
       - name: Deploy to Cloudflare Pages
         id: deploy
-        uses: cloudflare/pages-action@v1
+        uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          projectName: tiny-congress
-          directory: site
-          gitHubToken: ${{ secrets.GITHUB_TOKEN }}
+          command: pages deploy site --project-name=tiny-congress --branch=${{ github.head_ref || github.ref_name }}
 
       - name: Add PR comment with report links
         if: github.event_name == 'pull_request'
@@ -1301,17 +1299,17 @@ jobs:
           message: |
             ## 🏛️ CI Reports
 
-            **[📋 All Reports](${{ steps.deploy.outputs.url }}/)**
+            **[📋 All Reports](${{ steps.deploy.outputs.deployment-url }}/)**
 
             ### 📚 API Documentation
             | | |
             |---|---|
-            | 🦀 [Rust API Docs](${{ steps.deploy.outputs.url }}/rust-docs/tinycongress_api/) | 📘 [TypeScript Docs](${{ steps.deploy.outputs.url }}/ts-docs/) |
+            | 🦀 [Rust API Docs](${{ steps.deploy.outputs.deployment-url }}/rust-docs/tinycongress_api/) | 📘 [TypeScript Docs](${{ steps.deploy.outputs.deployment-url }}/ts-docs/) |
 
             ### 🧪 Test Artifacts
             | | |
             |---|---|
-            | 📊 [Coverage](${{ steps.deploy.outputs.url }}/coverage/) | 📚 [Storybook](${{ steps.deploy.outputs.url }}/storybook/) |
-            | 🎭 [Playwright](${{ steps.deploy.outputs.url }}/playwright/) | |
+            | 📊 [Coverage](${{ steps.deploy.outputs.deployment-url }}/coverage/) | 📚 [Storybook](${{ steps.deploy.outputs.deployment-url }}/storybook/) |
+            | 🎭 [Playwright](${{ steps.deploy.outputs.deployment-url }}/playwright/) | |
 
             <sub>🤖 Generated from commit ${{ github.sha }}</sub>
