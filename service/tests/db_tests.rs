@@ -12,7 +12,10 @@ use sqlx_core::migrate::Migrator;
 use std::path::Path;
 use tc_crypto::{derive_kid, encode_base64url};
 use tc_test_macros::shared_runtime_test;
-use tinycongress_api::identity::repo::{create_account_with_executor, AccountRepoError};
+use tinycongress_api::identity::repo::{
+    create_account_with_executor, create_backup_with_executor, create_device_key_with_executor,
+    AccountRepoError, BackupRepoError, DeviceKeyRepoError,
+};
 
 fn test_keys(seed: u8) -> (String, String) {
     let pubkey = [seed; 32];
@@ -163,6 +166,243 @@ async fn test_pgmq_extension_available() {
     .expect("Failed to check pgmq extension");
 
     assert!(exists, "pgmq extension should be available");
+}
+
+// ============================================================================
+// Backup Repo Tests
+// ============================================================================
+
+/// Build a fake encrypted backup envelope (Argon2id, 90 bytes).
+fn fake_backup_envelope() -> Vec<u8> {
+    let mut envelope = Vec::with_capacity(90);
+    envelope.push(0x01); // version
+    envelope.push(0x01); // kdf_id = argon2id
+    envelope.extend_from_slice(&[0u8; 12]); // kdf params
+    envelope.extend_from_slice(&[0xAA; 16]); // salt
+    envelope.extend_from_slice(&[0xBB; 12]); // nonce
+    envelope.extend_from_slice(&[0xCC; 48]); // ciphertext
+    envelope
+}
+
+#[shared_runtime_test]
+async fn test_backup_repo_creates_backup() {
+    let mut tx = test_transaction().await;
+
+    let account = AccountFactory::new()
+        .with_username("backup_user")
+        .with_seed(10)
+        .create(&mut *tx)
+        .await
+        .expect("create account");
+
+    let envelope = fake_backup_envelope();
+    let salt = &[0xAA; 16];
+    let (_, root_kid) = test_keys(10);
+
+    let backup = create_backup_with_executor(
+        &mut *tx, account.id, &root_kid, &envelope, salt, "argon2id", 1,
+    )
+    .await
+    .expect("create backup");
+
+    assert_eq!(backup.kid, root_kid);
+
+    let kid_from_db: String = query_scalar("SELECT kid FROM account_backups WHERE account_id = $1")
+        .bind(account.id)
+        .fetch_one(&mut *tx)
+        .await
+        .expect("fetch backup");
+
+    assert_eq!(kid_from_db, root_kid);
+}
+
+#[shared_runtime_test]
+async fn test_backup_repo_rejects_duplicate_account() {
+    let mut tx = test_transaction().await;
+
+    let account = AccountFactory::new()
+        .with_seed(11)
+        .create(&mut *tx)
+        .await
+        .expect("create account");
+
+    let envelope = fake_backup_envelope();
+    let salt = &[0xAA; 16];
+    let (_, kid1) = test_keys(11);
+
+    create_backup_with_executor(&mut *tx, account.id, &kid1, &envelope, salt, "argon2id", 1)
+        .await
+        .expect("create first backup");
+
+    // Second backup for same account should fail (uq_account_backups_account)
+    let (_, kid2) = test_keys(12);
+    let err =
+        create_backup_with_executor(&mut *tx, account.id, &kid2, &envelope, salt, "argon2id", 1)
+            .await
+            .expect_err("duplicate account backup should fail");
+
+    assert!(matches!(err, BackupRepoError::DuplicateAccount));
+}
+
+#[shared_runtime_test]
+async fn test_backup_repo_rejects_duplicate_kid() {
+    let mut tx = test_transaction().await;
+
+    let account1 = AccountFactory::new()
+        .with_seed(13)
+        .create(&mut *tx)
+        .await
+        .expect("create account1");
+    let account2 = AccountFactory::new()
+        .with_seed(14)
+        .create(&mut *tx)
+        .await
+        .expect("create account2");
+
+    let envelope = fake_backup_envelope();
+    let salt = &[0xAA; 16];
+    let shared_kid = "shared-kid-value";
+
+    create_backup_with_executor(
+        &mut *tx,
+        account1.id,
+        shared_kid,
+        &envelope,
+        salt,
+        "argon2id",
+        1,
+    )
+    .await
+    .expect("create first backup");
+
+    let err = create_backup_with_executor(
+        &mut *tx,
+        account2.id,
+        shared_kid,
+        &envelope,
+        salt,
+        "argon2id",
+        1,
+    )
+    .await
+    .expect_err("duplicate kid should fail");
+
+    assert!(matches!(err, BackupRepoError::DuplicateKid));
+}
+
+// ============================================================================
+// Device Key Repo Tests
+// ============================================================================
+
+#[shared_runtime_test]
+async fn test_device_key_repo_creates_key() {
+    let mut tx = test_transaction().await;
+
+    let account = AccountFactory::new()
+        .with_seed(20)
+        .create(&mut *tx)
+        .await
+        .expect("create account");
+
+    let certificate = [0x55u8; 64];
+    let device = create_device_key_with_executor(
+        &mut *tx,
+        account.id,
+        "device-kid-1",
+        "device-pubkey-b64",
+        "My Laptop",
+        &certificate,
+    )
+    .await
+    .expect("create device key");
+
+    assert_eq!(device.device_kid, "device-kid-1");
+
+    let name_from_db: String =
+        query_scalar("SELECT device_name FROM device_keys WHERE device_kid = $1")
+            .bind("device-kid-1")
+            .fetch_one(&mut *tx)
+            .await
+            .expect("fetch device key");
+
+    assert_eq!(name_from_db, "My Laptop");
+}
+
+#[shared_runtime_test]
+async fn test_device_key_repo_rejects_duplicate_kid() {
+    let mut tx = test_transaction().await;
+
+    let account = AccountFactory::new()
+        .with_seed(21)
+        .create(&mut *tx)
+        .await
+        .expect("create account");
+
+    let certificate = [0x55u8; 64];
+    create_device_key_with_executor(
+        &mut *tx,
+        account.id,
+        "dup-kid",
+        "pubkey-1",
+        "Device A",
+        &certificate,
+    )
+    .await
+    .expect("create first device key");
+
+    let err = create_device_key_with_executor(
+        &mut *tx,
+        account.id,
+        "dup-kid",
+        "pubkey-2",
+        "Device B",
+        &certificate,
+    )
+    .await
+    .expect_err("duplicate kid should fail");
+
+    assert!(matches!(err, DeviceKeyRepoError::DuplicateKid));
+}
+
+#[shared_runtime_test]
+async fn test_device_key_repo_enforces_max_devices() {
+    let mut tx = test_transaction().await;
+
+    let account = AccountFactory::new()
+        .with_seed(22)
+        .create(&mut *tx)
+        .await
+        .expect("create account");
+
+    let certificate = [0x55u8; 64];
+
+    // Create 10 device keys (the maximum)
+    for i in 0..10 {
+        create_device_key_with_executor(
+            &mut *tx,
+            account.id,
+            &format!("kid-{i}"),
+            &format!("pubkey-{i}"),
+            &format!("Device {i}"),
+            &certificate,
+        )
+        .await
+        .unwrap_or_else(|_| panic!("create device key {i}"));
+    }
+
+    // 11th should fail
+    let err = create_device_key_with_executor(
+        &mut *tx,
+        account.id,
+        "kid-overflow",
+        "pubkey-overflow",
+        "Device Overflow",
+        &certificate,
+    )
+    .await
+    .expect_err("11th device key should fail");
+
+    assert!(matches!(err, DeviceKeyRepoError::MaxDevicesReached));
 }
 
 // ============================================================================
