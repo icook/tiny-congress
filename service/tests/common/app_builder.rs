@@ -42,7 +42,10 @@ use tinycongress_api::{
     config::SecurityHeadersConfig,
     graphql::{graphql_handler, graphql_playground, MutationRoot, QueryRoot},
     http::{build_security_headers, security_headers_middleware},
-    identity::{self, repo::AccountRepo},
+    identity::{
+        self,
+        repo::{AccountRepo, BackupRepo, DeviceKeyRepo},
+    },
     rest::{self, ApiDoc},
 };
 use tower_http::cors::{AllowOrigin, Any, CorsLayer};
@@ -74,6 +77,10 @@ pub struct TestAppBuilder {
     build_info: Option<BuildInfoProvider>,
     /// Mock account repository for identity routes
     account_repo: Option<Arc<dyn AccountRepo>>,
+    /// Mock backup repository for identity routes
+    backup_repo: Option<Arc<dyn BackupRepo>>,
+    /// Mock device key repository for identity routes
+    device_key_repo: Option<Arc<dyn DeviceKeyRepo>>,
     /// CORS allowed origins (None means no CORS layer)
     cors_origins: Option<Vec<String>>,
     /// Security headers config (None means disabled)
@@ -98,6 +105,8 @@ impl TestAppBuilder {
             include_swagger: false,
             build_info: None,
             account_repo: None,
+            backup_repo: None,
+            device_key_repo: None,
             cors_origins: None,
             security_headers: None,
         }
@@ -159,20 +168,31 @@ impl TestAppBuilder {
         self
     }
 
-    /// Include identity routes (/auth/*) with a mock repository.
+    /// Include identity routes (/auth/*) with mock repositories.
     #[must_use]
     pub fn with_identity_mocks(mut self) -> Self {
-        use tinycongress_api::identity::repo::mock::MockAccountRepo;
+        use tinycongress_api::identity::repo::mock::{
+            MockAccountRepo, MockBackupRepo, MockDeviceKeyRepo,
+        };
         self.include_identity = true;
         self.account_repo = Some(Arc::new(MockAccountRepo::new()));
+        self.backup_repo = Some(Arc::new(MockBackupRepo::new()));
+        self.device_key_repo = Some(Arc::new(MockDeviceKeyRepo::new()));
         self
     }
 
-    /// Include identity routes with a custom repository.
+    /// Include identity routes with custom repositories.
     #[must_use]
-    pub fn with_identity(mut self, repo: Arc<dyn AccountRepo>) -> Self {
+    pub fn with_identity(
+        mut self,
+        account_repo: Arc<dyn AccountRepo>,
+        backup_repo: Arc<dyn BackupRepo>,
+        device_key_repo: Arc<dyn DeviceKeyRepo>,
+    ) -> Self {
         self.include_identity = true;
-        self.account_repo = Some(repo);
+        self.account_repo = Some(account_repo);
+        self.backup_repo = Some(backup_repo);
+        self.device_key_repo = Some(device_key_repo);
         self
     }
 
@@ -279,6 +299,14 @@ impl TestAppBuilder {
         app = app.layer(Extension(schema)).layer(Extension(build_info));
 
         if let Some(repo) = self.account_repo {
+            app = app.layer(Extension(repo));
+        }
+
+        if let Some(repo) = self.backup_repo {
+            app = app.layer(Extension(repo));
+        }
+
+        if let Some(repo) = self.device_key_repo {
             app = app.layer(Extension(repo));
         }
 

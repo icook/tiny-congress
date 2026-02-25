@@ -18,9 +18,32 @@ use axum::{
 };
 use common::app_builder::TestAppBuilder;
 use std::sync::Arc;
+use tc_crypto::encode_base64url;
 use tinycongress_api::config::SecurityHeadersConfig;
-use tinycongress_api::identity::repo::{mock::MockAccountRepo, AccountRepoError};
+use tinycongress_api::identity::repo::mock::{MockAccountRepo, MockBackupRepo, MockDeviceKeyRepo};
+use tinycongress_api::identity::repo::AccountRepoError;
 use tower::ServiceExt;
+
+/// Build a valid signup request body for the new atomic signup endpoint
+fn valid_signup_body() -> String {
+    let root_pubkey = encode_base64url(&[1u8; 32]);
+    let device_pubkey = encode_base64url(&[2u8; 32]);
+    let certificate = encode_base64url(&[3u8; 64]);
+
+    // Argon2id envelope: version(1) + kdf_id(1) + params(12) + salt(16) + nonce(12) + ciphertext(48) = 90 bytes
+    let mut envelope = Vec::with_capacity(90);
+    envelope.push(0x01);
+    envelope.push(0x01);
+    envelope.extend_from_slice(&[0u8; 12]);
+    envelope.extend_from_slice(&[0xAA; 16]);
+    envelope.extend_from_slice(&[0xBB; 12]);
+    envelope.extend_from_slice(&[0xCC; 48]);
+    let backup_blob = encode_base64url(&envelope);
+
+    format!(
+        r#"{{"username": "testuser", "root_pubkey": "{root_pubkey}", "backup": {{"encrypted_blob": "{backup_blob}"}}, "device": {{"pubkey": "{device_pubkey}", "name": "Test Device", "certificate": "{certificate}"}}}}"#
+    )
+}
 
 // =============================================================================
 // Health Check Tests
@@ -334,9 +357,7 @@ async fn test_identity_signup_success() {
                 .method(Method::POST)
                 .uri("/auth/signup")
                 .header(CONTENT_TYPE, "application/json")
-                .body(Body::from(
-                    r#"{"username": "testuser", "root_pubkey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"}"#,
-                ))
+                .body(Body::from(valid_signup_body()))
                 .expect("request"),
         )
         .await
@@ -350,6 +371,7 @@ async fn test_identity_signup_success() {
     let body_str = String::from_utf8(body.to_vec()).expect("utf8");
     assert!(body_str.contains("account_id"));
     assert!(body_str.contains("root_kid"));
+    assert!(body_str.contains("device_kid"));
 }
 
 #[tokio::test]
@@ -359,15 +381,14 @@ async fn test_identity_signup_empty_username() {
         .with_health()
         .build();
 
+    let body = valid_signup_body().replace("testuser", "");
     let response = app
         .oneshot(
             Request::builder()
                 .method(Method::POST)
                 .uri("/auth/signup")
                 .header(CONTENT_TYPE, "application/json")
-                .body(Body::from(
-                    r#"{"username": "", "root_pubkey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"}"#,
-                ))
+                .body(Body::from(body))
                 .expect("request"),
         )
         .await
@@ -384,11 +405,13 @@ async fn test_identity_signup_empty_username() {
 
 #[tokio::test]
 async fn test_identity_signup_duplicate_username() {
-    let mock_repo = Arc::new(MockAccountRepo::new());
-    mock_repo.set_create_result(Err(AccountRepoError::DuplicateUsername));
+    let account_repo = Arc::new(MockAccountRepo::new());
+    account_repo.set_create_result(Err(AccountRepoError::DuplicateUsername));
+    let backup_repo = Arc::new(MockBackupRepo::new());
+    let device_key_repo = Arc::new(MockDeviceKeyRepo::new());
 
     let app = TestAppBuilder::new()
-        .with_identity(mock_repo)
+        .with_identity(account_repo, backup_repo, device_key_repo)
         .with_health()
         .build();
 
@@ -398,9 +421,7 @@ async fn test_identity_signup_duplicate_username() {
                 .method(Method::POST)
                 .uri("/auth/signup")
                 .header(CONTENT_TYPE, "application/json")
-                .body(Body::from(
-                    r#"{"username": "alice", "root_pubkey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"}"#,
-                ))
+                .body(Body::from(valid_signup_body()))
                 .expect("request"),
         )
         .await
@@ -422,15 +443,30 @@ async fn test_identity_signup_invalid_pubkey() {
         .with_health()
         .build();
 
+    // Replace the valid root_pubkey with garbage — the whole JSON structure must
+    // still be valid so we construct it manually
+    let device_pubkey = encode_base64url(&[2u8; 32]);
+    let certificate = encode_base64url(&[3u8; 64]);
+    let mut envelope = Vec::with_capacity(90);
+    envelope.push(0x01);
+    envelope.push(0x01);
+    envelope.extend_from_slice(&[0u8; 12]);
+    envelope.extend_from_slice(&[0xAA; 16]);
+    envelope.extend_from_slice(&[0xBB; 12]);
+    envelope.extend_from_slice(&[0xCC; 48]);
+    let backup_blob = encode_base64url(&envelope);
+
+    let body = format!(
+        r#"{{"username": "alice", "root_pubkey": "not-valid-base64url!!!", "backup": {{"encrypted_blob": "{backup_blob}"}}, "device": {{"pubkey": "{device_pubkey}", "name": "Test", "certificate": "{certificate}"}}}}"#
+    );
+
     let response = app
         .oneshot(
             Request::builder()
                 .method(Method::POST)
                 .uri("/auth/signup")
                 .header(CONTENT_TYPE, "application/json")
-                .body(Body::from(
-                    r#"{"username": "alice", "root_pubkey": "not-valid-base64url!!!"}"#,
-                ))
+                .body(Body::from(body))
                 .expect("request"),
         )
         .await
@@ -669,7 +705,7 @@ async fn test_full_app_all_routes_accessible() {
                 .uri("/auth/signup")
                 .header(CONTENT_TYPE, "application/json")
                 .body(Body::from(
-                    r#"{"username": "fulltest", "root_pubkey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"}"#,
+                    valid_signup_body().replace("testuser", "fulltest"),
                 ))
                 .expect("request"),
         )
@@ -819,7 +855,7 @@ async fn test_production_like_full_stack() {
                 .uri("/auth/signup")
                 .header(CONTENT_TYPE, "application/json")
                 .body(Body::from(
-                    r#"{"username": "prodtest", "root_pubkey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"}"#,
+                    valid_signup_body().replace("testuser", "prodtest"),
                 ))
                 .expect("request"),
         )
