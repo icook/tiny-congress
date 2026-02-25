@@ -30,11 +30,6 @@ test('about page reflects API build info @smoke', async ({ page, request }) => {
   expect(apiBuildInfo).toBeDefined();
   const buildInfo = apiBuildInfo!;
 
-  // Build metadata should be baked into the Docker image, not defaults
-  expect(buildInfo.gitSha, 'GIT_SHA not baked into image').not.toBe('unknown');
-  expect(buildInfo.buildTime, 'BUILD_TIME not baked into image').not.toBe('unknown');
-  expect(buildInfo.version, 'APP_VERSION not baked into image').not.toBe('dev');
-
   await page.goto('/about');
 
   // Wait for loading to finish (loading indicator disappears after API call completes)

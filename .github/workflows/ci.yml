@@ -385,6 +385,7 @@ jobs:
             RUST_VERSION=${{ steps.versions.outputs.rust }}
             NODE_VERSION=${{ steps.versions.outputs.node }}
             GIT_SHA=${{ github.sha }}
+            APP_VERSION=${{ github.ref_name }}@${{ github.sha }}
             BUILD_TIME=${{ github.event.head_commit.timestamp || github.event.pull_request.updated_at }}
           tags: |
             ${{ steps.tags.outputs.sha_tag }}
