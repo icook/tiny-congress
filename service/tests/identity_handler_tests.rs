@@ -28,8 +28,10 @@ fn valid_signup_json(username: &str) -> String {
     let certificate = encode_base64url(&certificate_sig.to_bytes());
 
     let envelope = BackupEnvelope::build(
-        [0xAA; 16],  // salt
-        65536, 3, 1, // m_cost, t_cost, p_cost
+        [0xAA; 16], // salt
+        65536,
+        3,
+        1,           // m_cost, t_cost, p_cost
         [0xBB; 12],  // nonce
         &[0xCC; 48], // ciphertext
     )

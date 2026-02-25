@@ -65,16 +65,16 @@ pub trait DeviceKeyRepo: Send + Sync {
     ) -> Result<Vec<DeviceKeyRecord>, DeviceKeyRepoError>;
 
     /// Get a device key by KID
-    async fn get_by_kid(&self, device_kid: &str) -> Result<DeviceKeyRecord, DeviceKeyRepoError>;
+    async fn get_by_kid(&self, device_kid: &Kid) -> Result<DeviceKeyRecord, DeviceKeyRepoError>;
 
     /// Revoke a device key (sets `revoked_at`)
-    async fn revoke(&self, device_kid: &str) -> Result<(), DeviceKeyRepoError>;
+    async fn revoke(&self, device_kid: &Kid) -> Result<(), DeviceKeyRepoError>;
 
     /// Rename a device
-    async fn rename(&self, device_kid: &str, new_name: &str) -> Result<(), DeviceKeyRepoError>;
+    async fn rename(&self, device_kid: &Kid, new_name: &str) -> Result<(), DeviceKeyRepoError>;
 
     /// Update `last_used_at` timestamp
-    async fn touch(&self, device_kid: &str) -> Result<(), DeviceKeyRepoError>;
+    async fn touch(&self, device_kid: &Kid) -> Result<(), DeviceKeyRepoError>;
 }
 
 /// `PostgreSQL` implementation of [`DeviceKeyRepo`]
@@ -117,19 +117,19 @@ impl DeviceKeyRepo for PgDeviceKeyRepo {
         list_device_keys_by_account(&self.pool, account_id).await
     }
 
-    async fn get_by_kid(&self, device_kid: &str) -> Result<DeviceKeyRecord, DeviceKeyRepoError> {
+    async fn get_by_kid(&self, device_kid: &Kid) -> Result<DeviceKeyRecord, DeviceKeyRepoError> {
         get_device_key_by_kid(&self.pool, device_kid).await
     }
 
-    async fn revoke(&self, device_kid: &str) -> Result<(), DeviceKeyRepoError> {
+    async fn revoke(&self, device_kid: &Kid) -> Result<(), DeviceKeyRepoError> {
         revoke_device_key(&self.pool, device_kid).await
     }
 
-    async fn rename(&self, device_kid: &str, new_name: &str) -> Result<(), DeviceKeyRepoError> {
+    async fn rename(&self, device_kid: &Kid, new_name: &str) -> Result<(), DeviceKeyRepoError> {
         rename_device_key(&self.pool, device_kid, new_name).await
     }
 
-    async fn touch(&self, device_kid: &str) -> Result<(), DeviceKeyRepoError> {
+    async fn touch(&self, device_kid: &Kid) -> Result<(), DeviceKeyRepoError> {
         touch_device_key(&self.pool, device_kid).await
     }
 }
@@ -274,7 +274,7 @@ where
 
 async fn get_device_key_by_kid<'e, E>(
     executor: E,
-    device_kid: &str,
+    device_kid: &Kid,
 ) -> Result<DeviceKeyRecord, DeviceKeyRepoError>
 where
     E: sqlx::Executor<'e, Database = sqlx::Postgres>,
@@ -287,7 +287,7 @@ where
         WHERE device_kid = $1
         ",
     )
-    .bind(device_kid)
+    .bind(device_kid.as_str())
     .fetch_optional(executor)
     .await?
     .ok_or(DeviceKeyRepoError::NotFound)?;
@@ -295,14 +295,14 @@ where
     Ok(map_device_key_row(row))
 }
 
-async fn revoke_device_key<'e, E>(executor: E, device_kid: &str) -> Result<(), DeviceKeyRepoError>
+async fn revoke_device_key<'e, E>(executor: E, device_kid: &Kid) -> Result<(), DeviceKeyRepoError>
 where
     E: sqlx::Executor<'e, Database = sqlx::Postgres>,
 {
     let result = sqlx::query(
         "UPDATE device_keys SET revoked_at = now() WHERE device_kid = $1 AND revoked_at IS NULL",
     )
-    .bind(device_kid)
+    .bind(device_kid.as_str())
     .execute(executor)
     .await?;
 
@@ -315,7 +315,7 @@ where
 
 async fn rename_device_key<'e, E>(
     executor: E,
-    device_kid: &str,
+    device_kid: &Kid,
     new_name: &str,
 ) -> Result<(), DeviceKeyRepoError>
 where
@@ -325,7 +325,7 @@ where
         "UPDATE device_keys SET device_name = $1 WHERE device_kid = $2 AND revoked_at IS NULL",
     )
     .bind(new_name)
-    .bind(device_kid)
+    .bind(device_kid.as_str())
     .execute(executor)
     .await?;
 
@@ -336,14 +336,14 @@ where
     Ok(())
 }
 
-async fn touch_device_key<'e, E>(executor: E, device_kid: &str) -> Result<(), DeviceKeyRepoError>
+async fn touch_device_key<'e, E>(executor: E, device_kid: &Kid) -> Result<(), DeviceKeyRepoError>
 where
     E: sqlx::Executor<'e, Database = sqlx::Postgres>,
 {
     let result = sqlx::query(
         "UPDATE device_keys SET last_used_at = now() WHERE device_kid = $1 AND revoked_at IS NULL",
     )
-    .bind(device_kid)
+    .bind(device_kid.as_str())
     .execute(executor)
     .await?;
 
@@ -438,7 +438,7 @@ pub mod mock {
 
         async fn get_by_kid(
             &self,
-            _device_kid: &str,
+            _device_kid: &Kid,
         ) -> Result<DeviceKeyRecord, DeviceKeyRepoError> {
             self.get_result
                 .lock()
@@ -447,7 +447,7 @@ pub mod mock {
                 .unwrap_or(Err(DeviceKeyRepoError::NotFound))
         }
 
-        async fn revoke(&self, _device_kid: &str) -> Result<(), DeviceKeyRepoError> {
+        async fn revoke(&self, _device_kid: &Kid) -> Result<(), DeviceKeyRepoError> {
             self.revoke_result
                 .lock()
                 .expect("lock poisoned")
@@ -457,7 +457,7 @@ pub mod mock {
 
         async fn rename(
             &self,
-            _device_kid: &str,
+            _device_kid: &Kid,
             _new_name: &str,
         ) -> Result<(), DeviceKeyRepoError> {
             self.rename_result
@@ -467,7 +467,7 @@ pub mod mock {
                 .unwrap_or(Ok(()))
         }
 
-        async fn touch(&self, _device_kid: &str) -> Result<(), DeviceKeyRepoError> {
+        async fn touch(&self, _device_kid: &Kid) -> Result<(), DeviceKeyRepoError> {
             self.touch_result
                 .lock()
                 .expect("lock poisoned")

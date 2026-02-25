@@ -37,8 +37,10 @@ fn valid_signup_body() -> String {
     let certificate = encode_base64url(&certificate_sig.to_bytes());
 
     let envelope = BackupEnvelope::build(
-        [0xAA; 16],  // salt
-        65536, 3, 1, // m_cost, t_cost, p_cost
+        [0xAA; 16], // salt
+        65536,
+        3,
+        1,           // m_cost, t_cost, p_cost
         [0xBB; 12],  // nonce
         &[0xCC; 48], // ciphertext
     )
@@ -349,7 +351,7 @@ async fn test_security_headers_disabled() {
 // Identity Routes Tests (with mocks)
 // =============================================================================
 
-// Note: test_identity_signup_success is covered by db_tests.rs since the
+// Note: test_identity_signup_success is covered by identity_handler_tests.rs since the
 // transaction-based handler requires a real Postgres connection.
 
 #[tokio::test]
@@ -381,7 +383,7 @@ async fn test_identity_signup_empty_username() {
     assert!(body_str.contains("Username cannot be empty"));
 }
 
-// Note: test_identity_signup_duplicate_username is covered by db_tests.rs since
+// Note: test_identity_signup_duplicate_username is covered by identity_handler_tests.rs since
 // the transaction-based handler requires a real Postgres connection.
 
 #[tokio::test]
@@ -396,8 +398,10 @@ async fn test_identity_signup_invalid_pubkey() {
     let device_pubkey = encode_base64url(&[2u8; 32]);
     let certificate = encode_base64url(&[3u8; 64]);
     let envelope = BackupEnvelope::build(
-        [0xAA; 16],  // salt
-        65536, 3, 1, // m_cost, t_cost, p_cost
+        [0xAA; 16], // salt
+        65536,
+        3,
+        1,           // m_cost, t_cost, p_cost
         [0xBB; 12],  // nonce
         &[0xCC; 48], // ciphertext
     )
@@ -645,7 +649,7 @@ async fn test_full_app_all_routes_accessible() {
     assert_eq!(response.status(), StatusCode::OK);
 
     // Identity signup route is accessible (validation error proves routing works;
-    // full signup success is tested in db_tests.rs with a real Postgres connection)
+    // full signup success is tested in identity_handler_tests.rs with a real Postgres connection)
     let response = app
         .clone()
         .oneshot(
@@ -795,7 +799,7 @@ async fn test_production_like_full_stack() {
     assert!(body_str.contains("gitSha"));
 
     // 4. Identity signup route is mounted (validation error proves routing;
-    //    full signup tested in db_tests.rs with real Postgres)
+    //    full signup tested in identity_handler_tests.rs with real Postgres)
     let response = app
         .clone()
         .oneshot(

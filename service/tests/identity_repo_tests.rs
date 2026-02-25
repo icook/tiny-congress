@@ -21,8 +21,10 @@ fn test_keys(seed: u8) -> (String, Kid) {
 
 fn test_envelope() -> BackupEnvelope {
     BackupEnvelope::build(
-        [0xAA; 16],  // salt
-        65536, 3, 1, // m_cost, t_cost, p_cost
+        [0xAA; 16], // salt
+        65536,
+        3,
+        1,           // m_cost, t_cost, p_cost
         [0xBB; 12],  // nonce
         &[0xCC; 48], // ciphertext
     )
@@ -123,7 +125,7 @@ async fn test_backup_repo_creates_backup() {
     let backup = create_backup_with_executor(
         &mut *tx,
         account.id,
-        root_kid.as_str(),
+        &root_kid,
         envelope.as_bytes(),
         envelope.salt(),
         envelope.version(),
@@ -131,7 +133,7 @@ async fn test_backup_repo_creates_backup() {
     .await
     .expect("create backup");
 
-    assert_eq!(backup.kid, root_kid.as_str());
+    assert_eq!(backup.kid, root_kid);
 
     let kid_from_db: String = query_scalar("SELECT kid FROM account_backups WHERE account_id = $1")
         .bind(account.id)
@@ -158,7 +160,7 @@ async fn test_backup_repo_rejects_duplicate_account() {
     create_backup_with_executor(
         &mut *tx,
         account.id,
-        kid1.as_str(),
+        &kid1,
         envelope.as_bytes(),
         envelope.salt(),
         envelope.version(),
@@ -172,7 +174,7 @@ async fn test_backup_repo_rejects_duplicate_account() {
     let err = create_backup_with_executor(
         &mut *tx,
         account.id,
-        kid2.as_str(),
+        &kid2,
         envelope2.as_bytes(),
         envelope2.salt(),
         envelope2.version(),
@@ -199,12 +201,12 @@ async fn test_backup_repo_rejects_duplicate_kid() {
         .expect("create account2");
 
     let envelope = test_envelope();
-    let shared_kid = "shared-kid-value";
+    let shared_kid = Kid::derive(&[99u8; 32]);
 
     create_backup_with_executor(
         &mut *tx,
         account1.id,
-        shared_kid,
+        &shared_kid,
         envelope.as_bytes(),
         envelope.salt(),
         envelope.version(),
@@ -216,7 +218,7 @@ async fn test_backup_repo_rejects_duplicate_kid() {
     let err = create_backup_with_executor(
         &mut *tx,
         account2.id,
-        shared_kid,
+        &shared_kid,
         envelope2.as_bytes(),
         envelope2.salt(),
         envelope2.version(),

@@ -200,7 +200,7 @@ async fn signup(
     if let Err(e) = create_backup_with_executor(
         &mut *tx,
         account.id,
-        root_kid.as_str(),
+        &root_kid,
         envelope.as_bytes(),
         envelope.salt(),
         envelope.version(),
@@ -377,8 +377,10 @@ mod tests {
 
     fn test_envelope() -> BackupEnvelope {
         BackupEnvelope::build(
-            [0xAA; 16],  // salt
-            65536, 3, 1, // m_cost, t_cost, p_cost
+            [0xAA; 16], // salt
+            65536,
+            3,
+            1,           // m_cost, t_cost, p_cost
             [0xBB; 12],  // nonce
             &[0xCC; 48], // ciphertext
         )
@@ -441,7 +443,7 @@ mod tests {
             .expect("request builder")
     }
 
-    // Note: test_signup_success is covered by integration tests in http_tests.rs
+    // Note: test_signup_success is covered by integration tests in identity_handler_tests.rs
     // since it requires a real database connection for the transaction.
 
     #[tokio::test]
@@ -578,6 +580,6 @@ mod tests {
     }
 
     // Note: signup_success, duplicate_username, duplicate_key, and database_error
-    // tests are covered by integration tests in http_tests.rs since they require
+    // tests are covered by integration tests in identity_handler_tests.rs since they require
     // a real Postgres connection for the transaction-based signup handler.
 }

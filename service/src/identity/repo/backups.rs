@@ -4,6 +4,7 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use sqlx::PgPool;
 use sqlx::Row;
+use tc_crypto::Kid;
 use uuid::Uuid;
 
 /// Record returned from backup queries
@@ -11,7 +12,7 @@ use uuid::Uuid;
 pub struct BackupRecord {
     pub id: Uuid,
     pub account_id: Uuid,
-    pub kid: String,
+    pub kid: Kid,
     pub encrypted_backup: Vec<u8>,
     pub salt: Vec<u8>,
     pub version: i32,
@@ -22,7 +23,7 @@ pub struct BackupRecord {
 #[derive(Debug, Clone)]
 pub struct CreatedBackup {
     pub id: Uuid,
-    pub kid: String,
+    pub kid: Kid,
     pub created_at: DateTime<Utc>,
 }
 
@@ -46,17 +47,17 @@ pub trait BackupRepo: Send + Sync {
     async fn create(
         &self,
         account_id: Uuid,
-        kid: &str,
+        kid: &Kid,
         encrypted_backup: &[u8],
         salt: &[u8],
         version: i32,
     ) -> Result<CreatedBackup, BackupRepoError>;
 
     /// Retrieve a backup by KID (for recovery)
-    async fn get_by_kid(&self, kid: &str) -> Result<BackupRecord, BackupRepoError>;
+    async fn get_by_kid(&self, kid: &Kid) -> Result<BackupRecord, BackupRepoError>;
 
     /// Delete a backup by KID
-    async fn delete_by_kid(&self, kid: &str) -> Result<(), BackupRepoError>;
+    async fn delete_by_kid(&self, kid: &Kid) -> Result<(), BackupRepoError>;
 }
 
 /// `PostgreSQL` implementation of [`BackupRepo`]
@@ -76,27 +77,19 @@ impl BackupRepo for PgBackupRepo {
     async fn create(
         &self,
         account_id: Uuid,
-        kid: &str,
+        kid: &Kid,
         encrypted_backup: &[u8],
         salt: &[u8],
         version: i32,
     ) -> Result<CreatedBackup, BackupRepoError> {
-        create_backup(
-            &self.pool,
-            account_id,
-            kid,
-            encrypted_backup,
-            salt,
-            version,
-        )
-        .await
+        create_backup(&self.pool, account_id, kid, encrypted_backup, salt, version).await
     }
 
-    async fn get_by_kid(&self, kid: &str) -> Result<BackupRecord, BackupRepoError> {
+    async fn get_by_kid(&self, kid: &Kid) -> Result<BackupRecord, BackupRepoError> {
         get_backup_by_kid(&self.pool, kid).await
     }
 
-    async fn delete_by_kid(&self, kid: &str) -> Result<(), BackupRepoError> {
+    async fn delete_by_kid(&self, kid: &Kid) -> Result<(), BackupRepoError> {
         delete_backup_by_kid(&self.pool, kid).await
     }
 }
@@ -104,7 +97,7 @@ impl BackupRepo for PgBackupRepo {
 async fn create_backup<'e, E>(
     executor: E,
     account_id: Uuid,
-    kid: &str,
+    kid: &Kid,
     encrypted_backup: &[u8],
     salt: &[u8],
     version: i32,
@@ -123,7 +116,7 @@ where
     )
     .bind(id)
     .bind(account_id)
-    .bind(kid)
+    .bind(kid.as_str())
     .bind(encrypted_backup)
     .bind(salt)
     .bind(version)
@@ -134,7 +127,7 @@ where
     match result {
         Ok(_) => Ok(CreatedBackup {
             id,
-            kid: kid.to_string(),
+            kid: kid.clone(),
             created_at: now,
         }),
         Err(e) => {
@@ -163,7 +156,7 @@ where
 pub async fn create_backup_with_executor<'e, E>(
     executor: E,
     account_id: Uuid,
-    kid: &str,
+    kid: &Kid,
     encrypted_backup: &[u8],
     salt: &[u8],
     version: i32,
@@ -171,18 +164,11 @@ pub async fn create_backup_with_executor<'e, E>(
 where
     E: sqlx::Executor<'e, Database = sqlx::Postgres>,
 {
-    create_backup(
-        executor,
-        account_id,
-        kid,
-        encrypted_backup,
-        salt,
-        version,
-    )
-    .await
+    create_backup(executor, account_id, kid, encrypted_backup, salt, version).await
 }
 
-async fn get_backup_by_kid<'e, E>(executor: E, kid: &str) -> Result<BackupRecord, BackupRepoError>
+#[allow(clippy::expect_used)]
+async fn get_backup_by_kid<'e, E>(executor: E, kid: &Kid) -> Result<BackupRecord, BackupRepoError>
 where
     E: sqlx::Executor<'e, Database = sqlx::Postgres>,
 {
@@ -193,7 +179,7 @@ where
         WHERE kid = $1
         ",
     )
-    .bind(kid)
+    .bind(kid.as_str())
     .fetch_optional(executor)
     .await?
     .ok_or(BackupRepoError::NotFound)?;
@@ -201,7 +187,11 @@ where
     Ok(BackupRecord {
         id: row.get("id"),
         account_id: row.get("account_id"),
-        kid: row.get("kid"),
+        // A malformed KID in the DB is a data corruption bug, not a user error
+        kid: row
+            .get::<String, _>("kid")
+            .parse()
+            .expect("invalid KID in database"),
         encrypted_backup: row.get("encrypted_backup"),
         salt: row.get("salt"),
         version: row.get("version"),
@@ -209,12 +199,12 @@ where
     })
 }
 
-async fn delete_backup_by_kid<'e, E>(executor: E, kid: &str) -> Result<(), BackupRepoError>
+async fn delete_backup_by_kid<'e, E>(executor: E, kid: &Kid) -> Result<(), BackupRepoError>
 where
     E: sqlx::Executor<'e, Database = sqlx::Postgres>,
 {
     let result = sqlx::query("DELETE FROM account_backups WHERE kid = $1")
-        .bind(kid)
+        .bind(kid.as_str())
         .execute(executor)
         .await?;
 
@@ -233,6 +223,7 @@ pub mod mock {
     use super::{async_trait, BackupRecord, BackupRepoError, CreatedBackup, Uuid};
     use chrono::Utc;
     use std::sync::Mutex;
+    use tc_crypto::Kid;
 
     pub struct MockBackupRepo {
         pub create_result: Mutex<Option<Result<CreatedBackup, BackupRepoError>>>,
@@ -289,7 +280,7 @@ pub mod mock {
         async fn create(
             &self,
             _account_id: Uuid,
-            kid: &str,
+            kid: &Kid,
             _encrypted_backup: &[u8],
             _salt: &[u8],
             _version: i32,
@@ -301,13 +292,13 @@ pub mod mock {
                 .unwrap_or_else(|| {
                     Ok(CreatedBackup {
                         id: Uuid::new_v4(),
-                        kid: kid.to_string(),
+                        kid: kid.clone(),
                         created_at: Utc::now(),
                     })
                 })
         }
 
-        async fn get_by_kid(&self, _kid: &str) -> Result<BackupRecord, BackupRepoError> {
+        async fn get_by_kid(&self, _kid: &Kid) -> Result<BackupRecord, BackupRepoError> {
             self.get_result
                 .lock()
                 .expect("lock poisoned")
@@ -315,7 +306,7 @@ pub mod mock {
                 .unwrap_or(Err(BackupRepoError::NotFound))
         }
 
-        async fn delete_by_kid(&self, _kid: &str) -> Result<(), BackupRepoError> {
+        async fn delete_by_kid(&self, _kid: &Kid) -> Result<(), BackupRepoError> {
             self.delete_result
                 .lock()
                 .expect("lock poisoned")

@@ -128,7 +128,7 @@ impl TestAppBuilder {
     /// Mirrors production main.rs wiring but with a lazy pool instead
     /// of a real database connection. Includes all routes, CORS, and
     /// security headers. Identity routes will only pass validation-only
-    /// tests; DB-dependent tests belong in db_tests.rs.
+    /// tests; DB-dependent tests belong in identity_handler_tests.rs.
     #[must_use]
     pub fn with_mocks() -> Self {
         Self::new()
@@ -163,7 +163,7 @@ impl TestAppBuilder {
     ///
     /// The lazy pool never actually connects to a database, so tests that
     /// exercise only the validation path (before any DB call) work fine.
-    /// Tests that need real DB behaviour belong in db_tests.rs.
+    /// Tests that need real DB behaviour belong in identity_handler_tests.rs.
     #[must_use]
     pub fn with_identity_lazy(mut self) -> Self {
         self.include_identity = true;
