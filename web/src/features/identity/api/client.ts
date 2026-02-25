@@ -23,12 +23,19 @@ interface ApiErrorResponse {
 
 // === API Functions ===
 
-async function fetchJson<T>(path: string, options?: RequestInit): Promise<T> {
+export async function fetchJson<T>(path: string, options?: RequestInit): Promise<T> {
   const url = `${getApiBaseUrl()}${path}`;
+
+  const merged = new Headers({ 'Content-Type': 'application/json' });
+  if (options?.headers) {
+    new Headers(options.headers).forEach((value, key) => {
+      merged.set(key, value);
+    });
+  }
 
   const response = await fetch(url, {
     ...options,
-    headers: { 'Content-Type': 'application/json' },
+    headers: merged,
   });
 
   if (!response.ok) {

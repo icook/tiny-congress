@@ -1,5 +1,15 @@
 import { afterEach, beforeEach, describe, expect, Mock, test, vi } from 'vitest';
-import { signup } from './client';
+import { fetchJson, signup } from './client';
+
+function headersOf(mockFetch: Mock): Record<string, string> {
+  const call = mockFetch.mock.calls[0] as [string, RequestInit];
+  const h = new Headers(call[1].headers);
+  const out: Record<string, string> = {};
+  h.forEach((v, k) => {
+    out[k] = v;
+  });
+  return out;
+}
 
 describe('identity api client', () => {
   beforeEach(() => {
@@ -26,10 +36,12 @@ describe('identity api client', () => {
       expect.stringContaining('/auth/signup'),
       expect.objectContaining({
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username: 'alice', root_pubkey: 'mock-key' }),
       })
     );
+    expect(headersOf(fetch as unknown as Mock)).toEqual({
+      'content-type': 'application/json',
+    });
     expect(result).toEqual(responseBody);
   });
 
@@ -57,6 +69,43 @@ describe('identity api client', () => {
     await expect(signup({ username: 'bob', root_pubkey: 'key' })).rejects.toThrow(
       'HTTP 404: Not Found'
     );
+  });
+
+  test('preserves caller-provided headers alongside default Content-Type', async () => {
+    (fetch as unknown as Mock).mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: vi.fn().mockResolvedValue({ ok: true }),
+      headers: {},
+    });
+
+    await fetchJson('/test', {
+      headers: { Authorization: 'Bearer token-123' },
+    });
+
+    expect(headersOf(fetch as unknown as Mock)).toEqual({
+      'content-type': 'application/json',
+      authorization: 'Bearer token-123',
+    });
+  });
+
+  test('allows caller to override Content-Type', async () => {
+    (fetch as unknown as Mock).mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: vi.fn().mockResolvedValue({ ok: true }),
+      headers: {},
+    });
+
+    await fetchJson('/test', {
+      headers: { 'Content-Type': 'text/plain' },
+    });
+
+    expect(headersOf(fetch as unknown as Mock)).toEqual({
+      'content-type': 'text/plain',
+    });
   });
 
   test('handles JSON parse failure gracefully', async () => {
