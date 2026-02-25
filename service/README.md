@@ -38,7 +38,7 @@ createdb tiny-congress
 
 2. Set environment variables:
 ```bash
-export DATABASE_URL=postgres://username:password@localhost/tiny-congress
+export TC_DATABASE__URL=postgres://username:password@localhost/tiny-congress
 ```
 
 3. Run the server:
@@ -49,7 +49,7 @@ cargo run
 The server will:
 - Connect to PostgreSQL with retry logic (handles startup race conditions)
 - Run database migrations automatically
-- Start listening on port 8080 (or `PORT` env var)
+- Start listening on port 8080 (or `TC_SERVER__PORT` env var)
 
 ### Development with Skaffold
 
@@ -98,12 +98,20 @@ Access the GraphQL Playground at `http://localhost:8080/graphql` for interactive
 
 ## Environment Variables
 
+Configuration is loaded via [Figment](https://docs.rs/figment/) with `TC_`-prefixed env vars (double underscore `__` separates nesting levels). Env vars override `config.yaml` values.
+
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `DATABASE_URL` | PostgreSQL connection string | `postgres://postgres:postgres@localhost:5432/tiny-congress` |
-| `PORT` | Server port | `8080` |
-| `RUST_LOG` | Log level | `info` |
-| `MIGRATIONS_DIR` | Custom migrations directory | `./migrations` |
+| `TC_DATABASE__URL` | PostgreSQL connection string (required) | — |
+| `TC_DATABASE__MAX_CONNECTIONS` | Connection pool size | `10` |
+| `TC_DATABASE__MIGRATIONS_DIR` | Custom migrations directory | none |
+| `TC_SERVER__PORT` | Server port | `8080` |
+| `TC_SERVER__HOST` | Bind address | `0.0.0.0` |
+| `TC_LOGGING__LEVEL` | tracing filter directive (e.g. `debug`, `info`, `warn`) | `info` |
+| `TC_CORS__ALLOWED_ORIGINS` | Comma-separated origins or `*` | none |
+| `TC_GRAPHQL__PLAYGROUND_ENABLED` | Enable GraphQL Playground at `/graphql` | `false` |
+| `TC_SWAGGER__ENABLED` | Enable Swagger UI at `/swagger-ui` | `false` |
+| `TC_SECURITY_HEADERS__ENABLED` | Enable security response headers | `true` |
 | `APP_VERSION` | Application version for build info | `dev` |
 | `GIT_SHA` | Git commit SHA for build info | `unknown` |
 | `BUILD_TIME` | Build timestamp (RFC3339) | `unknown` |
