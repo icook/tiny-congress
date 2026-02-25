@@ -5,8 +5,15 @@
 
 mod common;
 
+use axum::{
+    body::{to_bytes, Body},
+    http::{header::CONTENT_TYPE, Method, Request, StatusCode},
+};
+use common::app_builder::TestAppBuilder;
 use common::factories::{AccountFactory, TestItemFactory};
 use common::test_db::{get_test_db, isolated_db, test_transaction};
+use ed25519_dalek::{Signer, SigningKey};
+use rand::rngs::OsRng;
 use sqlx::{query, query_scalar};
 use sqlx_core::migrate::Migrator;
 use std::path::Path;
@@ -16,6 +23,7 @@ use tinycongress_api::identity::repo::{
     create_account_with_executor, create_backup_with_executor, create_device_key_with_executor,
     AccountRepoError, BackupRepoError, DeviceKeyRepoError,
 };
+use tower::ServiceExt;
 
 fn test_keys(seed: u8) -> (String, String) {
     let pubkey = [seed; 32];
@@ -403,6 +411,111 @@ async fn test_device_key_repo_enforces_max_devices() {
     .expect_err("11th device key should fail");
 
     assert!(matches!(err, DeviceKeyRepoError::MaxDevicesReached));
+}
+
+// ============================================================================
+// Signup HTTP Handler Integration Tests
+// ============================================================================
+// These tests exercise the full signup handler with a real Postgres pool,
+// covering the transaction-based code path that unit tests cannot reach.
+
+/// Build a valid signup JSON body with real Ed25519 keys and certificate.
+fn valid_signup_json(username: &str) -> String {
+    let root_signing_key = SigningKey::generate(&mut OsRng);
+    let root_pubkey_bytes = root_signing_key.verifying_key().to_bytes();
+    let root_pubkey = encode_base64url(&root_pubkey_bytes);
+
+    let device_signing_key = SigningKey::generate(&mut OsRng);
+    let device_pubkey_bytes = device_signing_key.verifying_key().to_bytes();
+    let device_pubkey = encode_base64url(&device_pubkey_bytes);
+
+    let certificate_sig = root_signing_key.sign(&device_pubkey_bytes);
+    let certificate = encode_base64url(&certificate_sig.to_bytes());
+
+    let backup_blob = encode_base64url(&fake_backup_envelope());
+
+    format!(
+        r#"{{"username": "{username}", "root_pubkey": "{root_pubkey}", "backup": {{"encrypted_blob": "{backup_blob}"}}, "device": {{"pubkey": "{device_pubkey}", "name": "Test Device", "certificate": "{certificate}"}}}}"#
+    )
+}
+
+#[shared_runtime_test]
+async fn test_signup_handler_success() {
+    let db = isolated_db().await;
+    let app = TestAppBuilder::new()
+        .with_identity_pool(db.pool().clone())
+        .build();
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/auth/signup")
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(valid_signup_json("signuptest")))
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+
+    assert_eq!(response.status(), StatusCode::CREATED);
+
+    let body = to_bytes(response.into_body(), 1024 * 1024)
+        .await
+        .expect("body");
+    let body_str = String::from_utf8(body.to_vec()).expect("utf8");
+    assert!(body_str.contains("account_id"));
+    assert!(body_str.contains("root_kid"));
+    assert!(body_str.contains("device_kid"));
+}
+
+#[shared_runtime_test]
+async fn test_signup_handler_duplicate_username() {
+    let db = isolated_db().await;
+
+    // First signup succeeds
+    let app = TestAppBuilder::new()
+        .with_identity_pool(db.pool().clone())
+        .build();
+
+    let body = valid_signup_json("dupuser");
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/auth/signup")
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(body))
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+    assert_eq!(response.status(), StatusCode::CREATED);
+
+    // Second signup with same username fails
+    let app = TestAppBuilder::new()
+        .with_identity_pool(db.pool().clone())
+        .build();
+
+    let body = valid_signup_json("dupuser");
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/auth/signup")
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(body))
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+    assert_eq!(response.status(), StatusCode::CONFLICT);
+
+    let body = to_bytes(response.into_body(), 1024 * 1024)
+        .await
+        .expect("body");
+    let body_str = String::from_utf8(body.to_vec()).expect("utf8");
+    assert!(body_str.contains("Username already taken"));
 }
 
 // ============================================================================
