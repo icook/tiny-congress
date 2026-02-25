@@ -125,20 +125,18 @@ fn parse_envelope(bytes: &[u8]) -> Result<(i32, &'static str, Vec<u8>), &'static
     // KDF-aware minimum size: header + params + salt(16) + nonce(12) + min ciphertext(48)
     //   Argon2id: 2 + 12 + 16 + 12 + 48 = 90
     //   PBKDF2:   2 +  4 + 16 + 12 + 48 = 82
-    let (kdf_algorithm, min_size) = match kdf_id {
-        1 => ("argon2id", 90),
-        2 => ("pbkdf2", 82),
+    // KDF-specific layout: (algorithm name, minimum envelope size, salt byte offset)
+    //   Argon2id: params at bytes 2-13 (12 bytes: m:4, t:4, p:4), salt starts at 14
+    //   PBKDF2:   params at bytes 2-5  ( 4 bytes: iterations),    salt starts at  6
+    let (kdf_algorithm, min_size, salt_offset) = match kdf_id {
+        1 => ("argon2id", 90, 14),
+        2 => ("pbkdf2", 82, 6),
         _ => return Err("Unknown KDF algorithm in backup envelope"),
     };
 
     if bytes.len() < min_size {
         return Err("Encrypted backup envelope too small for KDF parameters");
     }
-
-    // Salt offset depends on KDF params size:
-    // Argon2: params at bytes 2-13 (12 bytes: m:4, t:4, p:4), salt at 14-29
-    // PBKDF2: params at bytes 2-5 (4 bytes: iterations), salt at 6-21
-    let salt_offset = if kdf_id == 1 { 14 } else { 6 };
     let salt = bytes[salt_offset..salt_offset + 16].to_vec();
 
     Ok((i32::from(version), kdf_algorithm, salt))
@@ -214,7 +212,12 @@ async fn signup(
         return bad_request("device.certificate must be 64 bytes (Ed25519 signature)");
     };
 
-    // Verify the certificate: root key must have signed the device public key
+    // Verify the certificate: root key must have signed the device public key.
+    // The signed message is the raw 32-byte device pubkey. This is sufficient because
+    // device KIDs are globally unique (enforced by DB constraint), so a certificate
+    // cannot be replayed for a different device. If a future "rotate device key"
+    // feature reuses key material, the message format must be extended (e.g. with
+    // account binding or a nonce).
     if verify_ed25519(&root_pubkey_arr, &device_pubkey_bytes, &cert_arr).is_err() {
         return bad_request("Invalid device certificate");
     }

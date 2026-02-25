@@ -44,10 +44,15 @@ fn build_cors_origin(origins: &[String]) -> AllowOrigin {
         );
         AllowOrigin::list(Vec::<HeaderValue>::new())
     } else {
-        let header_values: Vec<HeaderValue> = origins
-            .iter()
-            .filter_map(|origin| origin.parse().ok())
-            .collect();
+        let mut header_values: Vec<HeaderValue> = Vec::with_capacity(origins.len());
+        for origin in origins {
+            match origin.parse() {
+                Ok(v) => header_values.push(v),
+                Err(e) => {
+                    tracing::warn!(origin = %origin, error = %e, "Invalid CORS origin in config — skipping");
+                }
+            }
+        }
         tracing::info!(origins = ?origins, "CORS allowed origins configured");
         AllowOrigin::list(header_values)
     }
