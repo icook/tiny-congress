@@ -13,7 +13,7 @@
 //! async fn test_with_full_app() {
 //!     let app = TestAppBuilder::new()
 //!         .with_graphql()
-//!         .with_identity_mocks()
+//!         .with_identity_lazy()
 //!         .with_cors(&["http://localhost:3000"])
 //!         .build();
 //!
@@ -25,9 +25,7 @@
 //!
 //! - [`TestAppBuilder::minimal()`] - Health check only
 //! - [`TestAppBuilder::graphql_only()`] - GraphQL without identity/CORS
-//! - [`TestAppBuilder::with_mocks()`] - Full app with mock repositories
-
-use std::sync::Arc;
+//! - [`TestAppBuilder::with_mocks()`] - Full app with lazy pool (no real DB)
 
 use async_graphql::{EmptySubscription, Schema};
 use axum::{
@@ -37,15 +35,13 @@ use axum::{
     routing::get,
     Extension, Router,
 };
+use sqlx::{postgres::PgPoolOptions, PgPool};
 use tinycongress_api::{
     build_info::BuildInfoProvider,
     config::SecurityHeadersConfig,
     graphql::{graphql_handler, graphql_playground, MutationRoot, QueryRoot},
     http::{build_security_headers, security_headers_middleware},
-    identity::{
-        self,
-        repo::{AccountRepo, BackupRepo, DeviceKeyRepo},
-    },
+    identity,
     rest::{self, ApiDoc},
 };
 use tower_http::cors::{AllowOrigin, Any, CorsLayer};
@@ -75,12 +71,8 @@ pub struct TestAppBuilder {
     include_swagger: bool,
     /// Custom build info provider (None uses from_env())
     build_info: Option<BuildInfoProvider>,
-    /// Mock account repository for identity routes
-    account_repo: Option<Arc<dyn AccountRepo>>,
-    /// Mock backup repository for identity routes
-    backup_repo: Option<Arc<dyn BackupRepo>>,
-    /// Mock device key repository for identity routes
-    device_key_repo: Option<Arc<dyn DeviceKeyRepo>>,
+    /// Database pool for identity routes (lazy pool for validation-only tests)
+    pool: Option<PgPool>,
     /// CORS allowed origins (None means no CORS layer)
     cors_origins: Option<Vec<String>>,
     /// Security headers config (None means disabled)
@@ -104,9 +96,7 @@ impl TestAppBuilder {
             include_health: false,
             include_swagger: false,
             build_info: None,
-            account_repo: None,
-            backup_repo: None,
-            device_key_repo: None,
+            pool: None,
             cors_origins: None,
             security_headers: None,
         }
@@ -133,17 +123,18 @@ impl TestAppBuilder {
         Self::new().with_graphql().with_health()
     }
 
-    /// Create a full app with mock repositories.
+    /// Create a full app with a lazy pool (no real DB).
     ///
-    /// Mirrors production main.rs wiring but with mocks instead of
-    /// real database connections. Includes all routes, CORS, and
-    /// security headers.
+    /// Mirrors production main.rs wiring but with a lazy pool instead
+    /// of a real database connection. Includes all routes, CORS, and
+    /// security headers. Identity routes will only pass validation-only
+    /// tests; DB-dependent tests belong in db_tests.rs.
     #[must_use]
     pub fn with_mocks() -> Self {
         Self::new()
             .with_graphql()
             .with_rest()
-            .with_identity_mocks()
+            .with_identity_lazy()
             .with_health()
             .with_swagger()
             .with_cors(&["http://localhost:3000"])
@@ -168,31 +159,28 @@ impl TestAppBuilder {
         self
     }
 
-    /// Include identity routes (/auth/*) with mock repositories.
+    /// Include identity routes with a lazy pool (for validation-only tests).
+    ///
+    /// The lazy pool never actually connects to a database, so tests that
+    /// exercise only the validation path (before any DB call) work fine.
+    /// Tests that need real DB behaviour belong in db_tests.rs.
     #[must_use]
-    pub fn with_identity_mocks(mut self) -> Self {
-        use tinycongress_api::identity::repo::mock::{
-            MockAccountRepo, MockBackupRepo, MockDeviceKeyRepo,
-        };
+    pub fn with_identity_lazy(mut self) -> Self {
         self.include_identity = true;
-        self.account_repo = Some(Arc::new(MockAccountRepo::new()));
-        self.backup_repo = Some(Arc::new(MockBackupRepo::new()));
-        self.device_key_repo = Some(Arc::new(MockDeviceKeyRepo::new()));
+        self.pool = Some(
+            PgPoolOptions::new()
+                .max_connections(1)
+                .connect_lazy("postgres://fake:fake@localhost/fake")
+                .expect("lazy pool"),
+        );
         self
     }
 
-    /// Include identity routes with custom repositories.
+    /// Include identity routes with a real database pool.
     #[must_use]
-    pub fn with_identity(
-        mut self,
-        account_repo: Arc<dyn AccountRepo>,
-        backup_repo: Arc<dyn BackupRepo>,
-        device_key_repo: Arc<dyn DeviceKeyRepo>,
-    ) -> Self {
+    pub fn with_identity_pool(mut self, pool: PgPool) -> Self {
         self.include_identity = true;
-        self.account_repo = Some(account_repo);
-        self.backup_repo = Some(backup_repo);
-        self.device_key_repo = Some(device_key_repo);
+        self.pool = Some(pool);
         self
     }
 
@@ -298,16 +286,8 @@ impl TestAppBuilder {
         // Add extensions
         app = app.layer(Extension(schema)).layer(Extension(build_info));
 
-        if let Some(repo) = self.account_repo {
-            app = app.layer(Extension(repo));
-        }
-
-        if let Some(repo) = self.backup_repo {
-            app = app.layer(Extension(repo));
-        }
-
-        if let Some(repo) = self.device_key_repo {
-            app = app.layer(Extension(repo));
+        if let Some(pool) = self.pool {
+            app = app.layer(Extension(pool));
         }
 
         // Add CORS layer if configured

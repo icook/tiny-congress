@@ -45,9 +45,11 @@ anyhow = "1.0"
 serde-aux = "4.7.0"
 
 # Cryptography
-tc-crypto = { path = "../crates/tc-crypto", version = "0.1.0" }
+tc-crypto = { path = "../crates/tc-crypto", version = "0.1.0", features = ["ed25519"] }
 
 [dev-dependencies]
+ed25519-dalek = { version = "2", features = ["rand_core"] }
+rand = "0.8"
 hyper = "1.6"
 insta = { version = "1.41", features = ["json"] }
 tower = { version = "0.5", features = ["util"] }

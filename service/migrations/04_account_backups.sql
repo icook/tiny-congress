@@ -15,5 +15,3 @@ CREATE TABLE IF NOT EXISTS account_backups (
     CONSTRAINT uq_account_backups_account UNIQUE (account_id),
     CONSTRAINT uq_account_backups_kid UNIQUE (kid)
 );
-
-CREATE INDEX idx_account_backups_kid ON account_backups(kid);

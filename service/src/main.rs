@@ -7,8 +7,6 @@
     clippy::unwrap_used
 )]
 
-use std::sync::Arc;
-
 use async_graphql::{EmptySubscription, Schema};
 use axum::{
     http::{header::HeaderValue, Method, StatusCode},
@@ -24,10 +22,7 @@ use tinycongress_api::{
     db::setup_database,
     graphql::{graphql_handler, graphql_playground, MutationRoot, QueryRoot},
     http::{build_security_headers, security_headers_middleware},
-    identity::{
-        self,
-        repo::{PgAccountRepo, PgBackupRepo, PgDeviceKeyRepo},
-    },
+    identity,
     rest::{self, ApiDoc},
 };
 use tower_http::cors::{AllowOrigin, Any, CorsLayer};
@@ -97,14 +92,6 @@ async fn main() -> Result<(), anyhow::Error> {
         .data(build_info.clone())
         .finish();
 
-    // Create repositories
-    let account_repo: Arc<dyn identity::repo::AccountRepo> =
-        Arc::new(PgAccountRepo::new(pool.clone()));
-    let backup_repo: Arc<dyn identity::repo::BackupRepo> =
-        Arc::new(PgBackupRepo::new(pool.clone()));
-    let device_key_repo: Arc<dyn identity::repo::DeviceKeyRepo> =
-        Arc::new(PgDeviceKeyRepo::new(pool.clone()));
-
     let allow_origin = build_cors_origin(&config.cors.allowed_origins);
 
     // Build security headers layer if enabled
@@ -143,9 +130,6 @@ async fn main() -> Result<(), anyhow::Error> {
         // Add the schema to the extension
         .layer(Extension(schema))
         .layer(Extension(pool.clone()))
-        .layer(Extension(account_repo))
-        .layer(Extension(backup_repo))
-        .layer(Extension(device_key_repo))
         .layer(Extension(build_info))
         .layer(
             CorsLayer::new()

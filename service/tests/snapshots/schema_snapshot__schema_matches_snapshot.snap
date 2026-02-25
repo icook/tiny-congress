@@ -40,9 +40,6 @@ CREATE TABLE device_keys (
 -- account_backups.account_backups_pkey
 CREATE UNIQUE INDEX account_backups_pkey ON public.account_backups USING btree (id)
 
--- account_backups.idx_account_backups_kid
-CREATE INDEX idx_account_backups_kid ON public.account_backups USING btree (kid)
-
 -- account_backups.uq_account_backups_account
 CREATE UNIQUE INDEX uq_account_backups_account ON public.account_backups USING btree (account_id)
 

@@ -315,11 +315,13 @@ async fn rename_device_key<'e, E>(
 where
     E: sqlx::Executor<'e, Database = sqlx::Postgres>,
 {
-    let result = sqlx::query("UPDATE device_keys SET device_name = $1 WHERE device_kid = $2")
-        .bind(new_name)
-        .bind(device_kid)
-        .execute(executor)
-        .await?;
+    let result = sqlx::query(
+        "UPDATE device_keys SET device_name = $1 WHERE device_kid = $2 AND revoked_at IS NULL",
+    )
+    .bind(new_name)
+    .bind(device_kid)
+    .execute(executor)
+    .await?;
 
     if result.rows_affected() == 0 {
         return Err(DeviceKeyRepoError::NotFound);
@@ -332,10 +334,12 @@ async fn touch_device_key<'e, E>(executor: E, device_kid: &str) -> Result<(), De
 where
     E: sqlx::Executor<'e, Database = sqlx::Postgres>,
 {
-    let result = sqlx::query("UPDATE device_keys SET last_used_at = now() WHERE device_kid = $1")
-        .bind(device_kid)
-        .execute(executor)
-        .await?;
+    let result = sqlx::query(
+        "UPDATE device_keys SET last_used_at = now() WHERE device_kid = $1 AND revoked_at IS NULL",
+    )
+    .bind(device_kid)
+    .execute(executor)
+    .await?;
 
     if result.rows_affected() == 0 {
         return Err(DeviceKeyRepoError::NotFound);
