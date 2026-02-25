@@ -5,8 +5,11 @@
 
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
-use sha2::{Digest, Sha256};
+pub(crate) use sha2::{Digest, Sha256};
 use wasm_bindgen::prelude::*;
+
+mod kid;
+pub use kid::{Kid, KidError};
 
 /// Error type for base64url decoding failures
 #[derive(Debug, thiserror::Error)]
