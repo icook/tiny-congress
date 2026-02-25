@@ -119,5 +119,7 @@ spec:
           env:
             - name: VITE_API_URL
               value: {{ .Values.frontend.apiUrl | default (printf "http://%s:8080" (include "app.fullname" .)) | quote }}
+            - name: TC_ENVIRONMENT
+              value: {{ .Values.frontend.environment | default "" | quote }}
           resources:
             {{- toYaml .Values.frontend.resources | nindent 12 }}
