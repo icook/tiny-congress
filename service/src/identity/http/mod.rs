@@ -579,6 +579,70 @@ mod tests {
         assert!(payload.error.contains("Invalid device certificate"));
     }
 
+    // --- Username validation unit tests (validate_username function) ---
+    // These test the validation function directly. The function is wired into
+    // the handler and tested via HTTP in the tests above (test_signup_empty_username).
+
+    #[test]
+    fn test_validate_username_too_short() {
+        assert!(validate_username("ab").is_err());
+        assert!(validate_username("a").is_err());
+    }
+
+    #[test]
+    fn test_validate_username_min_valid_length() {
+        assert!(validate_username("abc").is_ok());
+    }
+
+    #[test]
+    fn test_validate_username_too_long() {
+        let long = "a".repeat(65);
+        assert!(validate_username(&long).is_err());
+    }
+
+    #[test]
+    fn test_validate_username_max_valid_length() {
+        let max = "a".repeat(64);
+        assert!(validate_username(&max).is_ok());
+    }
+
+    #[test]
+    fn test_validate_username_invalid_chars() {
+        let result = validate_username("al!ce");
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .contains("letters, numbers, hyphens, and underscores"));
+    }
+
+    #[test]
+    fn test_validate_username_unicode_rejected() {
+        assert!(validate_username("álice").is_err());
+    }
+
+    #[test]
+    fn test_validate_username_spaces_rejected() {
+        assert!(validate_username("al ice").is_err());
+    }
+
+    #[test]
+    fn test_validate_username_hyphens_underscores_valid() {
+        assert!(validate_username("a-b_c").is_ok());
+    }
+
+    #[test]
+    fn test_validate_username_reserved() {
+        let result = validate_username("admin");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("reserved"));
+    }
+
+    #[test]
+    fn test_validate_username_reserved_case_insensitive() {
+        assert!(validate_username("Admin").is_err());
+        assert!(validate_username("ROOT").is_err());
+    }
+
     // Note: signup_success, duplicate_username, duplicate_key, and database_error
     // tests are covered by integration tests in identity_handler_tests.rs since they require
     // a real Postgres connection for the transaction-based signup handler.

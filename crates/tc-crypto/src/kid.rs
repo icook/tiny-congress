@@ -3,7 +3,7 @@
 //! A KID is `base64url(SHA-256(pubkey)[0:16])`, always exactly 22 characters
 //! of the base64url alphabet `[A-Za-z0-9_-]`.
 
-use crate::{encode_base64url, Sha256, Digest};
+use crate::{encode_base64url, Digest, Sha256};
 use std::fmt;
 use std::str::FromStr;
 
