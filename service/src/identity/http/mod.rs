@@ -31,6 +31,48 @@ pub struct ErrorResponse {
     pub error: String,
 }
 
+const RESERVED_USERNAMES: &[&str] = &[
+    "admin",
+    "administrator",
+    "root",
+    "system",
+    "mod",
+    "moderator",
+    "support",
+    "help",
+    "api",
+    "graphql",
+    "auth",
+    "signup",
+    "login",
+    "null",
+    "undefined",
+    "anonymous",
+];
+
+/// Validate a username, returning an error message if invalid.
+fn validate_username(username: &str) -> Result<(), &'static str> {
+    if username.is_empty() {
+        return Err("Username cannot be empty");
+    }
+    if username.len() < 3 {
+        return Err("Username must be at least 3 characters");
+    }
+    if username.len() > 64 {
+        return Err("Username too long");
+    }
+    if !username
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+    {
+        return Err("Username may only contain letters, numbers, hyphens, and underscores");
+    }
+    if RESERVED_USERNAMES.contains(&username.to_ascii_lowercase().as_str()) {
+        return Err("This username is reserved");
+    }
+    Ok(())
+}
+
 /// Create identity router
 pub fn router() -> Router {
     Router::new().route("/auth/signup", post(signup))
@@ -43,21 +85,11 @@ async fn signup(
 ) -> impl IntoResponse {
     // Validate username
     let username = req.username.trim();
-    if username.is_empty() {
+    if let Err(msg) = validate_username(username) {
         return (
             StatusCode::BAD_REQUEST,
             Json(ErrorResponse {
-                error: "Username cannot be empty".to_string(),
-            }),
-        )
-            .into_response();
-    }
-
-    if username.len() > 64 {
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(ErrorResponse {
-                error: "Username too long".to_string(),
+                error: msg.to_string(),
             }),
         )
             .into_response();
@@ -319,6 +351,212 @@ mod tests {
             .expect("response");
 
         assert_eq!(response.status(), StatusCode::CONFLICT);
+    }
+
+    #[tokio::test]
+    async fn test_signup_username_too_short() {
+        let mock_repo = Arc::new(MockAccountRepo::new());
+        let app = test_router(mock_repo);
+
+        let (root_pubkey, _) = encoded_pubkey(10);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/auth/signup")
+                    .header("content-type", "application/json")
+                    .body(Body::from(format!(
+                        r#"{{"username": "ab", "root_pubkey": "{root_pubkey}"}}"#
+                    )))
+                    .expect("request builder"),
+            )
+            .await
+            .expect("response");
+
+        let (parts, body) = response.into_parts();
+        assert_eq!(parts.status, StatusCode::BAD_REQUEST);
+        let body_bytes = to_bytes(body, 1024 * 1024).await.expect("body bytes");
+        let payload: ErrorResponse = serde_json::from_slice(&body_bytes).expect("json payload");
+        assert!(payload.error.contains("at least 3 characters"));
+    }
+
+    #[tokio::test]
+    async fn test_signup_username_invalid_chars() {
+        let mock_repo = Arc::new(MockAccountRepo::new());
+        let app = test_router(mock_repo);
+
+        let (root_pubkey, _) = encoded_pubkey(11);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/auth/signup")
+                    .header("content-type", "application/json")
+                    .body(Body::from(format!(
+                        r#"{{"username": "al!ce", "root_pubkey": "{root_pubkey}"}}"#
+                    )))
+                    .expect("request builder"),
+            )
+            .await
+            .expect("response");
+
+        let (parts, body) = response.into_parts();
+        assert_eq!(parts.status, StatusCode::BAD_REQUEST);
+        let body_bytes = to_bytes(body, 1024 * 1024).await.expect("body bytes");
+        let payload: ErrorResponse = serde_json::from_slice(&body_bytes).expect("json payload");
+        assert!(payload
+            .error
+            .contains("letters, numbers, hyphens, and underscores"));
+    }
+
+    #[tokio::test]
+    async fn test_signup_username_unicode_rejected() {
+        let mock_repo = Arc::new(MockAccountRepo::new());
+        let app = test_router(mock_repo);
+
+        let (root_pubkey, _) = encoded_pubkey(12);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/auth/signup")
+                    .header("content-type", "application/json")
+                    .body(Body::from(format!(
+                        r#"{{"username": "álice", "root_pubkey": "{root_pubkey}"}}"#
+                    )))
+                    .expect("request builder"),
+            )
+            .await
+            .expect("response");
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn test_signup_username_spaces_rejected() {
+        let mock_repo = Arc::new(MockAccountRepo::new());
+        let app = test_router(mock_repo);
+
+        let (root_pubkey, _) = encoded_pubkey(13);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/auth/signup")
+                    .header("content-type", "application/json")
+                    .body(Body::from(format!(
+                        r#"{{"username": "al ice", "root_pubkey": "{root_pubkey}"}}"#
+                    )))
+                    .expect("request builder"),
+            )
+            .await
+            .expect("response");
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn test_signup_username_reserved() {
+        let mock_repo = Arc::new(MockAccountRepo::new());
+        let app = test_router(mock_repo);
+
+        let (root_pubkey, _) = encoded_pubkey(14);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/auth/signup")
+                    .header("content-type", "application/json")
+                    .body(Body::from(format!(
+                        r#"{{"username": "admin", "root_pubkey": "{root_pubkey}"}}"#
+                    )))
+                    .expect("request builder"),
+            )
+            .await
+            .expect("response");
+
+        let (parts, body) = response.into_parts();
+        assert_eq!(parts.status, StatusCode::BAD_REQUEST);
+        let body_bytes = to_bytes(body, 1024 * 1024).await.expect("body bytes");
+        let payload: ErrorResponse = serde_json::from_slice(&body_bytes).expect("json payload");
+        assert!(payload.error.contains("reserved"));
+    }
+
+    #[tokio::test]
+    async fn test_signup_username_reserved_case_insensitive() {
+        let mock_repo = Arc::new(MockAccountRepo::new());
+        let app = test_router(mock_repo);
+
+        let (root_pubkey, _) = encoded_pubkey(15);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/auth/signup")
+                    .header("content-type", "application/json")
+                    .body(Body::from(format!(
+                        r#"{{"username": "Admin", "root_pubkey": "{root_pubkey}"}}"#
+                    )))
+                    .expect("request builder"),
+            )
+            .await
+            .expect("response");
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn test_signup_username_min_valid_length() {
+        let mock_repo = Arc::new(MockAccountRepo::new());
+        let app = test_router(mock_repo);
+
+        let (root_pubkey, _) = encoded_pubkey(16);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/auth/signup")
+                    .header("content-type", "application/json")
+                    .body(Body::from(format!(
+                        r#"{{"username": "abc", "root_pubkey": "{root_pubkey}"}}"#
+                    )))
+                    .expect("request builder"),
+            )
+            .await
+            .expect("response");
+
+        assert_eq!(response.status(), StatusCode::CREATED);
+    }
+
+    #[tokio::test]
+    async fn test_signup_username_hyphens_underscores_valid() {
+        let mock_repo = Arc::new(MockAccountRepo::new());
+        let app = test_router(mock_repo);
+
+        let (root_pubkey, _) = encoded_pubkey(17);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/auth/signup")
+                    .header("content-type", "application/json")
+                    .body(Body::from(format!(
+                        r#"{{"username": "a-b_c", "root_pubkey": "{root_pubkey}"}}"#
+                    )))
+                    .expect("request builder"),
+            )
+            .await
+            .expect("response");
+
+        assert_eq!(response.status(), StatusCode::CREATED);
     }
 
     #[tokio::test]
