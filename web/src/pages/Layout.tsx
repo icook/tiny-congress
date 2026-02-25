@@ -3,6 +3,7 @@ import { Outlet } from '@tanstack/react-router';
 import {
   ActionIcon,
   AppShell,
+  Badge,
   Burger,
   Group,
   Image,
@@ -13,6 +14,26 @@ import {
 import { useDisclosure } from '@mantine/hooks';
 import logo from '@/logo.png';
 import { Navbar } from '../components/Navbar/Navbar';
+import { getEnvironment } from '../config';
+
+const ENV_BADGE_CONFIG: Record<string, { color: string; label: string }> = {
+  demo: { color: 'blue', label: 'DEMO' },
+  staging: { color: 'orange', label: 'STAGING' },
+  development: { color: 'green', label: 'DEV' },
+};
+
+function EnvironmentBadge() {
+  const env = getEnvironment();
+  if (env === 'production') {
+    return null;
+  }
+  const config = ENV_BADGE_CONFIG[env] ?? { color: 'red', label: 'UNKNOWN ENV' };
+  return (
+    <Badge color={config.color} variant="filled" size="sm">
+      {config.label}
+    </Badge>
+  );
+}
 
 export function Layout() {
   const [opened, { toggle }] = useDisclosure();
@@ -34,6 +55,7 @@ export function Layout() {
           <Burger opened={opened} onClick={toggle} hiddenFrom="sm" size="sm" />
           <Image src={logo} alt="TinyCongress logo" h={32} w="auto" />
           <Text fw={700}>TinyCongress</Text>
+          <EnvironmentBadge />
           <ActionIcon
             variant="subtle"
             onClick={toggleColorScheme}

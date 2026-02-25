@@ -12,13 +12,18 @@ case "$VITE_API_URL" in
   *) echo "ERROR: VITE_API_URL must start with http:// or https://" >&2; exit 1 ;;
 esac
 
+# Optional environment label for non-production badge (empty = production/hidden)
+TC_ENVIRONMENT="${TC_ENVIRONMENT:-}"
+
 # Use quoted heredoc to prevent shell expansion, then substitute the placeholder
 cat > /usr/share/nginx/html/config.js <<'TEMPLATE'
 window.__TC_ENV__ = {
-  VITE_API_URL: "__VITE_API_URL__"
+  VITE_API_URL: "__VITE_API_URL__",
+  TC_ENVIRONMENT: "__TC_ENVIRONMENT__"
 };
 TEMPLATE
 
 sed -i "s|__VITE_API_URL__|${VITE_API_URL}|" /usr/share/nginx/html/config.js
+sed -i "s|__TC_ENVIRONMENT__|${TC_ENVIRONMENT}|" /usr/share/nginx/html/config.js
 
 exec nginx -g 'daemon off;'

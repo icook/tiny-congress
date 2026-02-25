@@ -8,12 +8,21 @@
 
 interface RuntimeConfig {
   VITE_API_URL?: string;
+  TC_ENVIRONMENT?: string;
 }
 
 declare global {
   interface Window {
     __TC_ENV__?: RuntimeConfig;
   }
+}
+
+export function getEnvironment(): string {
+  const env = window.__TC_ENV__?.TC_ENVIRONMENT;
+  if (!env) {
+    return 'production';
+  }
+  return env;
 }
 
 export function getApiBaseUrl(): string {
