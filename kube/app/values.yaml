@@ -62,6 +62,8 @@ securityContext: {}
 service:
   type: ClusterIP
   port: 8080
+  # Annotations to add to the API service (e.g., external-dns, load-balancer config)
+  annotations: {}
 
 startupProbe:
   httpGet:
@@ -129,6 +131,8 @@ frontend:
     type: ClusterIP
     port: 5173
     targetPort: 5173
+    # Annotations to add to the frontend service (e.g., external-dns, load-balancer config)
+    annotations: {}
 
 postgres:
   image:
@@ -136,6 +140,11 @@ postgres:
     tag: "17"
     pullPolicy: IfNotPresent
     digest: ""
+  persistence:
+    # Enable to use a PersistentVolumeClaim instead of emptyDir
+    enabled: false
+    # Name of an existing PVC to use. If empty, defaults to "<fullname>-postgres"
+    existingClaim: ""
 
 # Cargo build cache for dev mode (hostPath volume)
 # Shares build cache with local dev via KinD extraMounts
