@@ -19,7 +19,7 @@ use axum::{
 use common::app_builder::TestAppBuilder;
 use ed25519_dalek::{Signer, SigningKey};
 use rand::rngs::OsRng;
-use tc_crypto::encode_base64url;
+use tc_crypto::{encode_base64url, BackupEnvelope};
 use tinycongress_api::config::SecurityHeadersConfig;
 use tower::ServiceExt;
 
@@ -36,15 +36,14 @@ fn valid_signup_body() -> String {
     let certificate_sig = root_signing_key.sign(&device_pubkey_bytes);
     let certificate = encode_base64url(&certificate_sig.to_bytes());
 
-    // Argon2id envelope: version(1) + kdf_id(1) + params(12) + salt(16) + nonce(12) + ciphertext(48) = 90 bytes
-    let mut envelope = Vec::with_capacity(90);
-    envelope.push(0x01);
-    envelope.push(0x01);
-    envelope.extend_from_slice(&[0u8; 12]);
-    envelope.extend_from_slice(&[0xAA; 16]);
-    envelope.extend_from_slice(&[0xBB; 12]);
-    envelope.extend_from_slice(&[0xCC; 48]);
-    let backup_blob = encode_base64url(&envelope);
+    let envelope = BackupEnvelope::build(
+        [0xAA; 16],  // salt
+        65536, 3, 1, // m_cost, t_cost, p_cost
+        [0xBB; 12],  // nonce
+        &[0xCC; 48], // ciphertext
+    )
+    .expect("test envelope");
+    let backup_blob = encode_base64url(envelope.as_bytes());
 
     format!(
         r#"{{"username": "testuser", "root_pubkey": "{root_pubkey}", "backup": {{"encrypted_blob": "{backup_blob}"}}, "device": {{"pubkey": "{device_pubkey}", "name": "Test Device", "certificate": "{certificate}"}}}}"#
@@ -396,14 +395,14 @@ async fn test_identity_signup_invalid_pubkey() {
     // still be valid so we construct it manually
     let device_pubkey = encode_base64url(&[2u8; 32]);
     let certificate = encode_base64url(&[3u8; 64]);
-    let mut envelope = Vec::with_capacity(90);
-    envelope.push(0x01);
-    envelope.push(0x01);
-    envelope.extend_from_slice(&[0u8; 12]);
-    envelope.extend_from_slice(&[0xAA; 16]);
-    envelope.extend_from_slice(&[0xBB; 12]);
-    envelope.extend_from_slice(&[0xCC; 48]);
-    let backup_blob = encode_base64url(&envelope);
+    let envelope = BackupEnvelope::build(
+        [0xAA; 16],  // salt
+        65536, 3, 1, // m_cost, t_cost, p_cost
+        [0xBB; 12],  // nonce
+        &[0xCC; 48], // ciphertext
+    )
+    .expect("test envelope");
+    let backup_blob = encode_base64url(envelope.as_bytes());
 
     let body = format!(
         r#"{{"username": "alice", "root_pubkey": "not-valid-base64url!!!", "backup": {{"encrypted_blob": "{backup_blob}"}}, "device": {{"pubkey": "{device_pubkey}", "name": "Test", "certificate": "{certificate}"}}}}"#

@@ -13,7 +13,6 @@ CREATE TABLE account_backups (
     kid TEXT NOT NULL,
     encrypted_backup BYTEA NOT NULL,
     salt BYTEA NOT NULL,
-    kdf_algorithm TEXT NOT NULL,
     version INT4 NOT NULL DEFAULT 1,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now());
 
@@ -73,8 +72,6 @@ CREATE UNIQUE INDEX uq_device_keys_kid ON public.device_keys USING btree (device
 -- account_backups: account_backups_created_at_not_null (CHECK)
 -- account_backups: account_backups_encrypted_backup_not_null (CHECK)
 -- account_backups: account_backups_id_not_null (CHECK)
--- account_backups: account_backups_kdf_algorithm_check (CHECK)
--- account_backups: account_backups_kdf_algorithm_not_null (CHECK)
 -- account_backups: account_backups_kid_not_null (CHECK)
 -- account_backups: account_backups_pkey (PRIMARY KEY)
 -- account_backups: account_backups_salt_not_null (CHECK)
