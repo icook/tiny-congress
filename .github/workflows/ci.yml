@@ -502,14 +502,6 @@ jobs:
           echo "Required: v$(cat .skaffold-version)"
           echo "Installed: $(skaffold version)"
 
-      - name: Stamp build metadata
-        run: |
-          {
-            echo "BUILD_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-            echo "APP_VERSION=${GITHUB_SHA}"
-            echo "GIT_SHA=${GITHUB_SHA}"
-          } >> "$GITHUB_ENV"
-
       - name: Login to GHCR
         uses: docker/login-action@v3
         with:

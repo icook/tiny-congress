@@ -16,12 +16,6 @@ imagePullSecrets: []
 nameOverride: ""
 fullnameOverride: ""
 
-buildInfo:
-  appVersion: dev
-  gitSha: unknown
-  buildTime: unknown
-  message: ""
-
 # CORS configuration
 # For production, override with actual frontend domain(s)
 cors:
