@@ -55,17 +55,14 @@ CREATE UNIQUE INDEX accounts_root_kid_key ON public.accounts USING btree (root_k
 -- accounts.accounts_username_key
 CREATE UNIQUE INDEX accounts_username_key ON public.accounts USING btree (username)
 
--- device_keys.device_keys_device_kid_key
-CREATE UNIQUE INDEX device_keys_device_kid_key ON public.device_keys USING btree (device_kid)
-
 -- device_keys.device_keys_pkey
 CREATE UNIQUE INDEX device_keys_pkey ON public.device_keys USING btree (id)
 
 -- device_keys.idx_device_keys_account
 CREATE INDEX idx_device_keys_account ON public.device_keys USING btree (account_id)
 
--- device_keys.idx_device_keys_kid
-CREATE INDEX idx_device_keys_kid ON public.device_keys USING btree (device_kid)
+-- device_keys.uq_device_keys_kid
+CREATE UNIQUE INDEX uq_device_keys_kid ON public.device_keys USING btree (device_kid)
 
 -- Foreign Keys
 -- account_backups.account_id -> accounts.id (ON UPDATE NO ACTION, ON DELETE CASCADE)
@@ -95,9 +92,9 @@ CREATE INDEX idx_device_keys_kid ON public.device_keys USING btree (device_kid)
 -- device_keys: device_keys_account_id_not_null (CHECK)
 -- device_keys: device_keys_certificate_not_null (CHECK)
 -- device_keys: device_keys_created_at_not_null (CHECK)
--- device_keys: device_keys_device_kid_key (UNIQUE)
 -- device_keys: device_keys_device_kid_not_null (CHECK)
 -- device_keys: device_keys_device_name_not_null (CHECK)
 -- device_keys: device_keys_device_pubkey_not_null (CHECK)
 -- device_keys: device_keys_id_not_null (CHECK)
 -- device_keys: device_keys_pkey (PRIMARY KEY)
+-- device_keys: uq_device_keys_kid (UNIQUE)

@@ -182,7 +182,7 @@ where
         Err(e) => {
             if let sqlx::Error::Database(db_err) = &e {
                 if let Some(constraint) = db_err.constraint() {
-                    if constraint == "device_keys_device_kid_key" {
+                    if constraint == "uq_device_keys_kid" {
                         return Err(DeviceKeyRepoError::DuplicateKid);
                     }
                 }
@@ -193,6 +193,15 @@ where
 }
 
 /// Create a device key using any executor (pool, connection, or transaction).
+///
+/// # Transaction safety
+///
+/// The device-count check and INSERT are **not** atomic under `READ COMMITTED`
+/// isolation. Callers that add devices to an existing account **must** run this
+/// inside a transaction (or hold a `FOR UPDATE` lock on the account row) to
+/// prevent concurrent requests from exceeding `MAX_DEVICES_PER_ACCOUNT`.
+/// The signup handler is safe because it creates a fresh account in a
+/// serialised transaction.
 ///
 /// # Errors
 ///

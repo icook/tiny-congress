@@ -101,14 +101,19 @@ pub fn router() -> Router {
     Router::new().route("/auth/signup", post(signup))
 }
 
-/// Minimum valid envelope size in bytes (version + KDF ID + KDF params + salt + nonce + ciphertext).
-const MIN_ENVELOPE_SIZE: usize = 82;
+/// Maximum accepted envelope size (defence-in-depth against oversized payloads).
+const MAX_ENVELOPE_SIZE: usize = 4096;
 
 /// Parse and validate the encrypted backup envelope, extracting the salt and KDF info.
 /// Returns (version, KDF algorithm name, salt).
 fn parse_envelope(bytes: &[u8]) -> Result<(i32, &'static str, Vec<u8>), &'static str> {
-    if bytes.len() < MIN_ENVELOPE_SIZE {
+    // Need at least version + KDF ID to determine the layout
+    if bytes.len() < 2 {
         return Err("Encrypted backup envelope too small");
+    }
+
+    if bytes.len() > MAX_ENVELOPE_SIZE {
+        return Err("Encrypted backup envelope too large");
     }
 
     let version = bytes[0];
@@ -117,11 +122,18 @@ fn parse_envelope(bytes: &[u8]) -> Result<(i32, &'static str, Vec<u8>), &'static
     }
 
     let kdf_id = bytes[1];
-    let kdf_algorithm = match kdf_id {
-        1 => "argon2id",
-        2 => "pbkdf2",
+    // KDF-aware minimum size: header + params + salt(16) + nonce(12) + min ciphertext(48)
+    //   Argon2id: 2 + 12 + 16 + 12 + 48 = 90
+    //   PBKDF2:   2 +  4 + 16 + 12 + 48 = 82
+    let (kdf_algorithm, min_size) = match kdf_id {
+        1 => ("argon2id", 90),
+        2 => ("pbkdf2", 82),
         _ => return Err("Unknown KDF algorithm in backup envelope"),
     };
+
+    if bytes.len() < min_size {
+        return Err("Encrypted backup envelope too small for KDF parameters");
+    }
 
     // Salt offset depends on KDF params size:
     // Argon2: params at bytes 2-13 (12 bytes: m:4, t:4, p:4), salt at 14-29
@@ -203,11 +215,12 @@ async fn signup(
     };
 
     // Verify the certificate: root key must have signed the device public key
-    if let Err(e) = verify_ed25519(&root_pubkey_arr, &device_pubkey_bytes, &cert_arr) {
-        return bad_request(&format!("Certificate verification failed: {e}"));
+    if verify_ed25519(&root_pubkey_arr, &device_pubkey_bytes, &cert_arr).is_err() {
+        return bad_request("Invalid device certificate");
     }
 
-    // Atomic signup: all three inserts in a single transaction
+    // Atomic signup: all three inserts in a single transaction.
+    // On early return, sqlx auto-rolls back the transaction when `tx` is dropped.
     let mut tx = match pool.begin().await {
         Ok(tx) => tx,
         Err(e) => {
@@ -324,13 +337,11 @@ fn backup_error_response(e: BackupRepoError) -> axum::response::Response {
             }),
         )
             .into_response(),
-        BackupRepoError::NotFound => (
-            StatusCode::NOT_FOUND,
-            Json(ErrorResponse {
-                error: "Backup not found".to_string(),
-            }),
-        )
-            .into_response(),
+        BackupRepoError::NotFound => {
+            // Unreachable from create path — indicates a programming error
+            tracing::error!("Unexpected NotFound from backup create during signup");
+            internal_error()
+        }
         BackupRepoError::Database(db_err) => {
             tracing::error!("Signup failed (backup): {}", db_err);
             (
@@ -360,13 +371,11 @@ fn device_key_error_response(e: DeviceKeyRepoError) -> axum::response::Response 
             }),
         )
             .into_response(),
-        DeviceKeyRepoError::NotFound => (
-            StatusCode::NOT_FOUND,
-            Json(ErrorResponse {
-                error: "Device key not found".to_string(),
-            }),
-        )
-            .into_response(),
+        DeviceKeyRepoError::NotFound => {
+            // Unreachable from create path — indicates a programming error
+            tracing::error!("Unexpected NotFound from device key create during signup");
+            internal_error()
+        }
         DeviceKeyRepoError::Database(db_err) => {
             tracing::error!("Signup failed (device key): {}", db_err);
             (
@@ -605,7 +614,7 @@ mod tests {
         assert_eq!(parts.status, StatusCode::BAD_REQUEST);
         let body_bytes = to_bytes(body, 1024 * 1024).await.expect("body bytes");
         let payload: ErrorResponse = serde_json::from_slice(&body_bytes).expect("json payload");
-        assert!(payload.error.contains("verification failed"));
+        assert!(payload.error.contains("Invalid device certificate"));
     }
 
     // Note: signup_success, duplicate_username, duplicate_key, and database_error
