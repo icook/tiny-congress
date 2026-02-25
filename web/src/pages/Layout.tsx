@@ -11,7 +11,7 @@ import {
   useMantineColorScheme,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
-import logo from '@/logo.png';
+import logo from '@/logo.svg';
 import { Navbar } from '../components/Navbar/Navbar';
 
 export function Layout() {
