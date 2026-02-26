@@ -84,7 +84,7 @@ The constructor enforces the rules; downstream code can trust the type.
 pub struct Kid(String);
 
 impl Kid {
-    pub fn derive(public_key: &[u8]) -> Self { /* always valid */ }
+    pub fn derive(public_key: &[u8]) -> Self { /* deterministic hash — any byte slice is valid input */ }
 }
 
 pub fn get_by_kid(kid: &Kid) -> Result<Record, Error> { ... }
@@ -101,7 +101,9 @@ pub fn get_by_kid(kid: &str) -> Result<Record, Error> { ... }
 
 **When a primitive is fine:**
 - No validation rules exist (free-form display name)
-- The value is only used once in a narrow scope
+**When a primitive is fine:**
+- No validation rules exist (free-form display name, internal counter)
+- The type has no meaningful invariants to enforce
 
 ### Structured Binary Formats
 
