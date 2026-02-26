@@ -60,3 +60,21 @@ Create the name of the service account to use
 {{- default "default" .Values.serviceAccount.name }}
 {{- end }}
 {{- end }}
+
+{{/*
+PostgreSQL fully qualified name.
+*/}}
+{{- define "app.postgresFullname" -}}
+{{- printf "%s-postgres" (include "app.fullname" .) | trunc 63 | trimSuffix "-" }}
+{{- end }}
+
+{{/*
+Database host: uses database.host if set, otherwise in-cluster Postgres service name.
+*/}}
+{{- define "app.databaseHost" -}}
+{{- if .Values.database.host }}
+{{- .Values.database.host }}
+{{- else }}
+{{- include "app.postgresFullname" . }}
+{{- end }}
+{{- end }}

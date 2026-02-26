@@ -9,8 +9,9 @@ use serde_aux::prelude::deserialize_vec_from_string_or_vec;
 ///
 /// Configuration is loaded in priority order (lowest to highest):
 /// 1. Struct defaults
-/// 2. config.yaml file (if exists)
-/// 3. Environment variables with TC_ prefix (always wins)
+/// 2. /etc/tc/config.yaml (Kubernetes `ConfigMap` mount, if exists)
+/// 3. config.yaml file (if exists, local dev override)
+/// 4. Environment variables with TC_ prefix (always wins)
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Config {
     pub database: DatabaseConfig,
@@ -28,9 +29,25 @@ pub struct Config {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct DatabaseConfig {
-    /// `PostgreSQL` connection URL (required).
-    /// Example: `postgres://user:pass@host:5432/dbname`
-    pub url: String,
+    /// Database host.
+    #[serde(default = "default_db_host")]
+    pub host: String,
+
+    /// Database port.
+    #[serde(default = "default_db_port")]
+    pub port: u16,
+
+    /// Database name.
+    #[serde(default = "default_db_name")]
+    pub name: String,
+
+    /// Database user (required — no compiled-in default).
+    #[serde(default)]
+    pub user: String,
+
+    /// Database password (required — no compiled-in default).
+    #[serde(default)]
+    pub password: String,
 
     /// Maximum number of connections in the pool.
     #[serde(default = "default_max_connections")]
@@ -38,6 +55,22 @@ pub struct DatabaseConfig {
 
     /// Optional custom migrations directory path.
     pub migrations_dir: Option<String>,
+}
+
+impl DatabaseConfig {
+    /// Build `PgConnectOptions` from individual fields.
+    ///
+    /// Uses structured options instead of URL assembly to avoid issues with
+    /// URL-reserved characters in usernames or passwords.
+    #[must_use]
+    pub fn connect_options(&self) -> sqlx_postgres::PgConnectOptions {
+        sqlx_postgres::PgConnectOptions::new()
+            .host(&self.host)
+            .port(self.port)
+            .database(&self.name)
+            .username(&self.user)
+            .password(&self.password)
+    }
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -97,6 +130,19 @@ fn default_host() -> String {
 
 fn default_log_level() -> String {
     "info".to_string()
+}
+
+fn default_db_host() -> String {
+    "localhost".to_string()
+}
+
+#[allow(clippy::missing_const_for_fn)]
+fn default_db_port() -> u16 {
+    5432
+}
+
+fn default_db_name() -> String {
+    "tiny-congress".to_string()
 }
 
 #[allow(clippy::missing_const_for_fn)]
@@ -203,7 +249,11 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             database: DatabaseConfig {
-                url: String::new(), // Will fail validation if not provided
+                host: default_db_host(),
+                port: default_db_port(),
+                name: default_db_name(),
+                user: String::new(),
+                password: String::new(),
                 max_connections: default_max_connections(),
                 migrations_dir: None,
             },
@@ -243,14 +293,16 @@ impl Config {
     ///
     /// Sources are merged in priority order:
     /// 1. Struct defaults (lowest)
-    /// 2. config.yaml file (if exists)
-    /// 3. Environment variables with TC_ prefix (highest)
+    /// 2. /etc/tc/config.yaml (Kubernetes `ConfigMap` mount, if exists)
+    /// 3. config.yaml file (if exists, local dev override)
+    /// 4. Environment variables with TC_ prefix (highest)
     ///
     /// # Errors
     /// Returns an error if configuration cannot be loaded or is invalid.
     pub fn load() -> Result<Self, ConfigError> {
         let config: Self = Figment::new()
             .merge(Serialized::defaults(Self::default()))
+            .merge(Yaml::file("/etc/tc/config.yaml"))
             .merge(Yaml::file("config.yaml"))
             .merge(Env::prefixed("TC_").split("__"))
             .extract()?;
@@ -260,6 +312,10 @@ impl Config {
     }
 
     /// Load configuration with a custom YAML file path.
+    ///
+    /// Unlike `load()`, this does NOT read `/etc/tc/config.yaml` — the caller-supplied
+    /// path is the only YAML source. Used in tests and custom bootstraps where the
+    /// system config file should not influence results.
     ///
     /// # Errors
     /// Returns an error if configuration cannot be loaded or is invalid.
@@ -279,20 +335,23 @@ impl Config {
     /// # Errors
     /// Returns an error if any configuration value is invalid.
     pub fn validate(&self) -> Result<(), ConfigError> {
-        // Database URL is required and must be a postgres URL
-        if self.database.url.is_empty() {
+        // Database user is required
+        if self.database.user.is_empty() {
             return Err(ConfigError::Validation(
-                "database.url is required. Set TC_DATABASE__URL environment variable.".into(),
+                "database.user is required. Set TC_DATABASE__USER environment variable or configure in config.yaml.".into(),
             ));
         }
 
-        if !self.database.url.starts_with("postgres://")
-            && !self.database.url.starts_with("postgresql://")
-        {
-            return Err(ConfigError::Validation(format!(
-                "database.url must start with postgres:// or postgresql://, got: {}",
-                &self.database.url[..self.database.url.len().min(20)]
-            )));
+        // Database password is required
+        if self.database.password.is_empty() {
+            return Err(ConfigError::Validation(
+                "database.password is required. Set TC_DATABASE__PASSWORD environment variable or configure in config.yaml.".into(),
+            ));
+        }
+
+        // Database port must be non-zero
+        if self.database.port == 0 {
+            return Err(ConfigError::Validation("database.port cannot be 0".into()));
         }
 
         // Port must be non-zero
@@ -333,6 +392,13 @@ impl Config {
 mod tests {
     use super::*;
 
+    fn valid_config() -> Config {
+        let mut config = Config::default();
+        config.database.user = "postgres".into();
+        config.database.password = "postgres".into();
+        config
+    }
+
     #[test]
     fn test_defaults() {
         let config = Config::default();
@@ -340,43 +406,86 @@ mod tests {
         assert_eq!(config.server.host, "0.0.0.0");
         assert_eq!(config.logging.level, "info");
         assert_eq!(config.database.max_connections, 10);
-    }
-
-    #[test]
-    fn test_validation_rejects_empty_database_url() {
-        let config = Config::default();
-        let result = config.validate();
-        assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("database.url is required"));
-    }
-
-    #[test]
-    fn test_validation_rejects_non_postgres_url() {
-        let mut config = Config::default();
-        config.database.url = "mysql://localhost/db".into();
-        let result = config.validate();
-        assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("must start with postgres://"));
+        assert_eq!(config.database.host, "localhost");
+        assert_eq!(config.database.port, 5432);
+        assert_eq!(config.database.name, "tiny-congress");
+        assert!(config.database.user.is_empty());
+        assert!(config.database.password.is_empty());
     }
 
     #[test]
     fn test_validation_accepts_valid_config() {
-        let mut config = Config::default();
-        config.database.url = "postgres://localhost/test".into();
+        let config = valid_config();
         assert!(config.validate().is_ok());
     }
 
     #[test]
-    fn test_validation_accepts_postgresql_scheme() {
-        let mut config = Config::default();
-        config.database.url = "postgresql://localhost/test".into();
-        assert!(config.validate().is_ok());
+    fn test_database_config_connect_options() {
+        let config = DatabaseConfig {
+            host: "db.example.com".into(),
+            port: 5432,
+            name: "mydb".into(),
+            user: "admin".into(),
+            password: "s3cret".into(),
+            max_connections: 10,
+            migrations_dir: None,
+        };
+        let opts = config.connect_options();
+        // PgConnectOptions exposes getters for host, port, and database
+        assert_eq!(opts.get_host(), "db.example.com");
+        assert_eq!(opts.get_port(), 5432);
+        assert_eq!(opts.get_database().unwrap(), "mydb");
+    }
+
+    #[test]
+    fn test_database_config_connect_options_special_chars() {
+        // Passwords with URL-reserved characters must not break the connection
+        let config = DatabaseConfig {
+            host: "localhost".into(),
+            port: 5432,
+            name: "testdb".into(),
+            user: "user@org".into(),
+            password: "p@ss:word/ok?".into(),
+            max_connections: 10,
+            migrations_dir: None,
+        };
+        let opts = config.connect_options();
+        // PgConnectOptions handles special chars without URL encoding issues.
+        // Note: there are no public getters for username/password (by design), so
+        // this only smoke-tests that construction succeeds; end-to-end credential
+        // verification requires an integration test against a live Postgres server.
+        assert_eq!(opts.get_host(), "localhost");
+        assert_eq!(opts.get_database().unwrap(), "testdb");
+    }
+
+    #[test]
+    fn test_validation_rejects_empty_database_user() {
+        let mut config = valid_config();
+        config.database.user = "".into();
+        let result = config.validate();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("database.user"));
+    }
+
+    #[test]
+    fn test_validation_rejects_empty_database_password() {
+        let mut config = valid_config();
+        config.database.password = "".into();
+        let result = config.validate();
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("database.password"));
+    }
+
+    #[test]
+    fn test_validation_rejects_zero_database_port() {
+        let mut config = valid_config();
+        config.database.port = 0;
+        let result = config.validate();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("database.port"));
     }
 
     #[test]
@@ -387,8 +496,7 @@ mod tests {
 
     #[test]
     fn test_cors_validation_accepts_valid_origins() {
-        let mut config = Config::default();
-        config.database.url = "postgres://localhost/test".into();
+        let mut config = valid_config();
         config.cors.allowed_origins = vec![
             "http://localhost:3000".into(),
             "https://app.example.com".into(),
@@ -398,16 +506,14 @@ mod tests {
 
     #[test]
     fn test_cors_validation_accepts_wildcard() {
-        let mut config = Config::default();
-        config.database.url = "postgres://localhost/test".into();
+        let mut config = valid_config();
         config.cors.allowed_origins = vec!["*".into()];
         assert!(config.validate().is_ok());
     }
 
     #[test]
     fn test_cors_validation_rejects_invalid_origin() {
-        let mut config = Config::default();
-        config.database.url = "postgres://localhost/test".into();
+        let mut config = valid_config();
         config.cors.allowed_origins = vec!["not-a-url".into()];
         let result = config.validate();
         assert!(result.is_err());
@@ -469,34 +575,6 @@ mod tests {
     // Table-driven boundary tests for validation rules
 
     #[test]
-    fn database_url_scheme_boundaries() {
-        let cases = [
-            ("postgres://localhost/db", true, "standard postgres"),
-            ("postgresql://localhost/db", true, "postgresql alias"),
-            ("postgres://", true, "minimal postgres URL"),
-            ("", false, "empty URL"),
-            ("mysql://localhost/db", false, "wrong scheme"),
-            ("http://localhost/db", false, "http scheme"),
-            ("postgrex://localhost/db", false, "typo in scheme"),
-            ("POSTGRES://localhost/db", false, "uppercase scheme"),
-        ];
-
-        for (url, should_pass, desc) in cases {
-            let mut config = Config::default();
-            config.database.url = url.into();
-            let result = config.validate();
-            assert_eq!(
-                result.is_ok(),
-                should_pass,
-                "case '{}': expected {}, got {:?}",
-                desc,
-                should_pass,
-                result
-            );
-        }
-    }
-
-    #[test]
     fn port_boundaries() {
         let cases = [
             (0u16, false, "zero port"),
@@ -507,8 +585,7 @@ mod tests {
         ];
 
         for (port, should_pass, desc) in cases {
-            let mut config = Config::default();
-            config.database.url = "postgres://localhost/db".into();
+            let mut config = valid_config();
             config.server.port = port;
             let result = config.validate();
             assert_eq!(result.is_ok(), should_pass, "case '{}': {:?}", desc, result);
@@ -525,8 +602,7 @@ mod tests {
         ];
 
         for (max, should_pass, desc) in cases {
-            let mut config = Config::default();
-            config.database.url = "postgres://localhost/db".into();
+            let mut config = valid_config();
             config.database.max_connections = max;
             let result = config.validate();
             assert_eq!(result.is_ok(), should_pass, "case '{}': {:?}", desc, result);
@@ -547,8 +623,7 @@ mod tests {
         ];
 
         for (origins, should_pass, desc) in cases {
-            let mut config = Config::default();
-            config.database.url = "postgres://localhost/db".into();
+            let mut config = valid_config();
             config.cors.allowed_origins = origins.into_iter().map(String::from).collect();
             let result = config.validate();
             assert_eq!(result.is_ok(), should_pass, "case '{}': {:?}", desc, result);
@@ -569,8 +644,7 @@ mod tests {
         ];
 
         for (value, should_pass, desc) in cases {
-            let mut config = Config::default();
-            config.database.url = "postgres://localhost/db".into();
+            let mut config = valid_config();
             config.security_headers.frame_options = value.into();
             let result = config.validate();
             assert_eq!(result.is_ok(), should_pass, "case '{}': {:?}", desc, result);

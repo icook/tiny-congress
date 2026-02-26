@@ -41,18 +41,16 @@ spec:
               containerPort: 8080
               protocol: TCP
           env:
-            - name: TC_LOGGING__LEVEL
-              value: info
-            - name: TC_DATABASE__URL
-              value: postgres://postgres:postgres@postgres:5432/tiny-congress
-            - name: TC_SERVER__PORT
-              value: "8080"
-            - name: TC_CORS__ALLOWED_ORIGINS
-              value: {{ .Values.cors.allowedOrigins | default "http://localhost:5173,http://127.0.0.1:5173" | quote }}
-            - name: TC_GRAPHQL__PLAYGROUND_ENABLED
-              value: {{ .Values.graphql.playgroundEnabled | default false | quote }}
-            - name: TC_SWAGGER__ENABLED
-              value: {{ .Values.swagger.enabled | default false | quote }}
+            - name: TC_DATABASE__USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.database.existingSecret | default (printf "%s-database" (include "app.fullname" .)) }}
+                  key: user
+            - name: TC_DATABASE__PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.database.existingSecret | default (printf "%s-database" (include "app.fullname" .)) }}
+                  key: password
           startupProbe:
             {{- toYaml .Values.startupProbe | nindent 12 }}
           livenessProbe:
@@ -65,18 +63,24 @@ spec:
               port: http
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
-          {{- if .Values.cargoCache.enabled }}
           volumeMounts:
+            - name: app-config
+              mountPath: /etc/tc
+              readOnly: true
+            {{- if .Values.cargoCache.enabled }}
             - name: cargo-cache
               mountPath: /usr/src/app/target
-          {{- end }}
-      {{- if .Values.cargoCache.enabled }}
+            {{- end }}
       volumes:
+        - name: app-config
+          configMap:
+            name: {{ include "app.fullname" . }}-config
+        {{- if .Values.cargoCache.enabled }}
         - name: cargo-cache
           hostPath:
             path: {{ .Values.cargoCache.hostPath | default "/tmp/tc-cargo-cache" }}
             type: DirectoryOrCreate
-      {{- end }}
+        {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

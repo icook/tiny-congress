@@ -38,7 +38,8 @@ createdb tiny-congress
 
 2. Set environment variables:
 ```bash
-export TC_DATABASE__URL=postgres://username:password@localhost/tiny-congress
+export TC_DATABASE__USER=postgres
+export TC_DATABASE__PASSWORD=postgres
 ```
 
 3. Run the server:
@@ -102,7 +103,11 @@ Configuration is loaded via [Figment](https://docs.rs/figment/) with `TC_`-prefi
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `TC_DATABASE__URL` | PostgreSQL connection string (required) | — |
+| `TC_DATABASE__HOST` | Database host | `localhost` |
+| `TC_DATABASE__PORT` | Database port | `5432` |
+| `TC_DATABASE__NAME` | Database name | `tiny-congress` |
+| `TC_DATABASE__USER` | Database user (required) | — |
+| `TC_DATABASE__PASSWORD` | Database password (required) | — |
 | `TC_DATABASE__MAX_CONNECTIONS` | Connection pool size | `10` |
 | `TC_DATABASE__MIGRATIONS_DIR` | Custom migrations directory | none |
 | `TC_SERVER__PORT` | Server port | `8080` |

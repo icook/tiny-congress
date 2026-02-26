@@ -3,8 +3,12 @@
 # Environment variables with TC_ prefix override these values.
 
 database:
-  # PostgreSQL connection URL (required)
-  url: postgres://postgres:postgres@localhost:5432/tiny-congress
+  # Connection parameters
+  host: localhost
+  port: 5432
+  name: tiny-congress
+  user: postgres
+  password: postgres
   # Maximum connections in pool
   max_connections: 10
   # Optional: custom migrations directory

@@ -81,6 +81,11 @@ deploy:
             playgroundEnabled: true
           swagger:
             enabled: true
+        # CORS origins use overrides (not setValues) because Helm --set
+        # misparses commas and colons in URLs.
+        overrides:
+          cors:
+            allowedOrigins: "http://localhost:5173,http://127.0.0.1:5173"
 
 # PRE-DEPLOY TESTS (cluster not required)
 # - Rust: unit tests via cargo llvm-cov (auto-discovers all tests except integration tests)
@@ -105,7 +110,7 @@ test:
 # Ensure Postgres is reachable from localhost for developer workflows
 portForward:
   - resourceType: service
-    resourceName: postgres
+    resourceName: tc-postgres
     port: 5432
     localPort: 5432
   - resourceType: service
@@ -191,3 +196,8 @@ profiles:
                 create: false
               frontend.service.port: 80
               frontend.service.targetPort: 80
+            # CORS origins use overrides (not setValues) because Helm --set
+            # misparses commas and colons in URLs.
+            overrides:
+              cors:
+                allowedOrigins: "http://localhost:5173,http://127.0.0.1:5173"

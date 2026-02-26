@@ -14,7 +14,11 @@ All environment variables use the `TC_` prefix. Nested config uses double unders
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `TC_DATABASE__URL` | Yes | - | PostgreSQL connection string |
+| `TC_DATABASE__HOST` | No | `localhost` | Database host |
+| `TC_DATABASE__PORT` | No | `5432` | Database port |
+| `TC_DATABASE__NAME` | No | `tiny-congress` | Database name |
+| `TC_DATABASE__USER` | Yes | - | Database user |
+| `TC_DATABASE__PASSWORD` | Yes | - | Database password |
 | `TC_DATABASE__MAX_CONNECTIONS` | No | `10` | Maximum connections in pool |
 | `TC_DATABASE__MIGRATIONS_DIR` | No | auto-detect | Custom migrations directory path |
 
@@ -151,7 +155,11 @@ Create `service/config.yaml` for local development (see `service/config.yaml.exa
 
 ```yaml
 database:
-  url: postgres://postgres:postgres@localhost:5432/tiny-congress
+  host: localhost
+  port: 5432
+  name: tiny-congress
+  user: postgres
+  password: postgres
   max_connections: 10
 
 server:
@@ -172,37 +180,42 @@ Environment variables always override YAML values.
 
 ## Kubernetes Deployments
 
-Environment variables are set in `kube/app/templates/deployment.yaml`:
+Configuration is delivered to the API pod in two layers:
+
+1. **ConfigMap** (`<release>-config`): mounted as `/etc/tc/config.yaml` — contains non-secret config (database host/port/name, logging, CORS, feature flags)
+2. **Secret** (`<release>-database`): injected as `TC_DATABASE__USER` and `TC_DATABASE__PASSWORD` env vars — credentials only
+
+Figment's priority order (defaults → yaml → env vars) means the env vars from the Secret override the ConfigMap's yaml values for credentials.
+
+To use a pre-existing Secret (e.g., managed Postgres credentials):
 
 ```yaml
-env:
-  - name: TC_LOGGING__LEVEL
-    value: info
-  - name: TC_DATABASE__URL
-    value: postgres://postgres:postgres@postgres:5432/tiny-congress
-  - name: TC_SERVER__PORT
-    value: "8080"
-  - name: TC_CORS__ALLOWED_ORIGINS
-    value: "https://app.example.com"
+database:
+  existingSecret: my-postgres-credentials  # must contain 'user' and 'password' keys
 ```
 
-For production, use Kubernetes secrets:
+### Helm values reference
 
-```yaml
-env:
-  - name: TC_DATABASE__URL
-    valueFrom:
-      secretKeyRef:
-        name: postgres-credentials
-        key: url
-```
+| Value | Default | Maps to |
+|-------|---------|---------|
+| `database.existingSecret` | `""` | Use pre-existing Secret (overrides chart-managed) |
+| `database.host` | `""` (in-cluster Postgres) | `database.host` in ConfigMap |
+| `database.port` | `5432` | `database.port` in ConfigMap |
+| `database.name` | `tiny-congress` | `database.name` in ConfigMap |
+| `database.user` | `postgres` | `user` key in Secret |
+| `database.password` | `postgres` | `password` key in Secret |
+| `logging.level` | `info` | `logging.level` in ConfigMap |
+| `cors.allowedOrigins` | `""` | `cors.allowed_origins` in ConfigMap |
+| `graphql.playgroundEnabled` | `false` | `graphql.playground_enabled` in ConfigMap |
+| `swagger.enabled` | `false` | `swagger.enabled` in ConfigMap |
 
 ## Local Development
 
 ### Option 1: Environment variables
 
 ```bash
-export TC_DATABASE__URL=postgres://postgres:postgres@localhost:5432/tiny-congress
+export TC_DATABASE__USER=postgres
+export TC_DATABASE__PASSWORD=postgres
 export TC_LOGGING__LEVEL=debug
 just dev-backend
 ```
@@ -218,24 +231,20 @@ just dev-backend
 ### Option 3: Inline (one-off)
 
 ```bash
-TC_DATABASE__URL=postgres://... cargo run
+TC_DATABASE__USER=postgres TC_DATABASE__PASSWORD=postgres cargo run
 ```
 
-## Connection String Format
+## Database Connection
 
-PostgreSQL connection strings follow this format:
+The backend assembles a PostgreSQL connection URL internally from individual config fields:
 
-```
-postgres://USER:PASSWORD@HOST:PORT/DATABASE
-```
-
-| Component | Local Default | CI Default |
-|-----------|---------------|------------|
-| USER | `postgres` | `postgres` |
-| PASSWORD | `postgres` | `postgres` |
-| HOST | `localhost` | `postgres` (k8s service) |
-| PORT | `5432` | `5432` |
-| DATABASE | `tiny-congress` | `tiny-congress` |
+| Field | Config key | Env var | Default |
+|-------|-----------|---------|---------|
+| Host | `database.host` | `TC_DATABASE__HOST` | `localhost` |
+| Port | `database.port` | `TC_DATABASE__PORT` | `5432` |
+| Name | `database.name` | `TC_DATABASE__NAME` | `tiny-congress` |
+| User | `database.user` | `TC_DATABASE__USER` | (required) |
+| Password | `database.password` | `TC_DATABASE__PASSWORD` | (required) |
 
 ## Required Extensions
 
@@ -251,7 +260,8 @@ This is handled automatically by `dockerfiles/Dockerfile.postgres`.
 
 | Error | Cause | Fix |
 |-------|-------|-----|
-| "database.url is required" | Missing TC_DATABASE__URL | Set `TC_DATABASE__URL` environment variable |
+| "database.user is required" | Missing TC_DATABASE__USER | Set `TC_DATABASE__USER` environment variable or configure in config.yaml |
+| "database.password is required" | Missing TC_DATABASE__PASSWORD | Set `TC_DATABASE__PASSWORD` environment variable or configure in config.yaml |
 | "connection refused" | Postgres not running | Start postgres or check host/port |
 | "database does not exist" | DB not created | Run `createdb tiny-congress` |
 | "extension pgmq does not exist" | Missing extension | Use provided Dockerfile.postgres |
