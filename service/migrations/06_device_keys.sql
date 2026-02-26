@@ -16,4 +16,4 @@ CREATE TABLE IF NOT EXISTS device_keys (
     CONSTRAINT uq_device_keys_kid UNIQUE (device_kid)
 );
 
-CREATE INDEX idx_device_keys_account ON device_keys(account_id);
+CREATE INDEX IF NOT EXISTS idx_device_keys_account ON device_keys(account_id);
