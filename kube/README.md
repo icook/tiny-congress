@@ -20,7 +20,7 @@ kube/
 Helm chart for the TinyCongress application stack:
 - API deployment (`tc-api`)
 - Frontend deployment (`tc-frontend`)
-- PostgreSQL StatefulSet
+- PostgreSQL deployment (dev/CI; use `database.existingSecret` for external Postgres)
 - Service and ingress configuration
 
 **Install locally:**
