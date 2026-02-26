@@ -160,6 +160,10 @@ logging:
   level: info
 
 postgres:
+  # Deploy an in-cluster Postgres pod. Set to false when using an external
+  # database (e.g. CloudNativePG, managed Postgres) — configure database.host
+  # and database.existingSecret instead.
+  enabled: true
   image:
     repository: postgres
     tag: "17"
