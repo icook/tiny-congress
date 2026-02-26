@@ -81,6 +81,9 @@ deploy:
             playgroundEnabled: true
           swagger:
             enabled: true
+          # CORS: allow local dev frontend origins
+          cors:
+            allowedOrigins: "http://localhost:5173,http://127.0.0.1:5173"
 
 # PRE-DEPLOY TESTS (cluster not required)
 # - Rust: unit tests via cargo llvm-cov (auto-discovers all tests except integration tests)
@@ -191,3 +194,6 @@ profiles:
                 create: false
               frontend.service.port: 80
               frontend.service.targetPort: 80
+              # CORS: allow E2E test origins
+              cors:
+                allowedOrigins: "http://localhost:5173,http://127.0.0.1:5173"
