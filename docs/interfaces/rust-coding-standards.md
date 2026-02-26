@@ -179,6 +179,39 @@ This is not about defensive programming for its own sake — it's about
 making the valid input space small and precisely defined. Everything
 outside it is rejected immediately.
 
+## One Correct Path
+
+When the same operation can be reached through multiple code paths, consolidate
+to a single implementation. Duplicated paths diverge over time — one gets the
+fix, the other doesn't.
+
+```rust
+// Bad: Two create paths with different invariants
+impl DeviceKeyRepo for PgDeviceKeyRepo {
+    async fn create(&self, ...) -> Result<...> {
+        // calls create_device_key() — no row lock, racy
+        create_device_key(&self.pool, ...).await
+    }
+}
+
+pub async fn create_device_key_with_executor(conn: &mut PgConnection, ...) {
+    // FOR UPDATE lock — correct
+    sqlx::query("SELECT id FROM accounts WHERE id = $1 FOR UPDATE")...
+    create_device_key(&mut *conn, ...).await
+}
+
+// Good: One path, callers delegate
+impl DeviceKeyRepo for PgDeviceKeyRepo {
+    async fn create(&self, ...) -> Result<...> {
+        let mut conn = self.pool.acquire().await?;
+        create_device_key_with_executor(&mut conn, ...).await
+    }
+}
+```
+
+This applies at every level: repo functions, validation logic, error mapping.
+If two call sites need the same behavior, extract it and call it from both.
+
 ## Function Size
 
 ### Prefer Focused Functions
