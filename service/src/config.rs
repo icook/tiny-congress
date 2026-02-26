@@ -313,12 +313,15 @@ impl Config {
 
     /// Load configuration with a custom YAML file path.
     ///
+    /// Unlike `load()`, this does NOT read `/etc/tc/config.yaml` — the caller-supplied
+    /// path is the only YAML source. Used in tests and custom bootstraps where the
+    /// system config file should not influence results.
+    ///
     /// # Errors
     /// Returns an error if configuration cannot be loaded or is invalid.
     pub fn load_from(yaml_path: &str) -> Result<Self, ConfigError> {
         let config: Self = Figment::new()
             .merge(Serialized::defaults(Self::default()))
-            .merge(Yaml::file("/etc/tc/config.yaml"))
             .merge(Yaml::file(yaml_path))
             .merge(Env::prefixed("TC_").split("__"))
             .extract()?;
