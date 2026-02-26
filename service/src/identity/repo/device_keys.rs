@@ -101,8 +101,9 @@ impl DeviceKeyRepo for PgDeviceKeyRepo {
         device_name: &str,
         certificate: &[u8],
     ) -> Result<CreatedDeviceKey, DeviceKeyRepoError> {
-        create_device_key(
-            &self.pool,
+        let mut conn = self.pool.acquire().await?;
+        create_device_key_with_executor(
+            &mut conn,
             account_id,
             device_kid,
             device_pubkey,
@@ -215,10 +216,15 @@ pub async fn create_device_key_with_executor(
     certificate: &[u8],
 ) -> Result<CreatedDeviceKey, DeviceKeyRepoError> {
     // Lock the account row to serialize concurrent device additions.
-    sqlx::query("SELECT id FROM accounts WHERE id = $1 FOR UPDATE")
+    // Fail explicitly if the account doesn't exist rather than letting the
+    // FK constraint surface as a generic Database error.
+    let locked = sqlx::query("SELECT id FROM accounts WHERE id = $1 FOR UPDATE")
         .bind(account_id)
         .fetch_optional(&mut *conn)
         .await?;
+    if locked.is_none() {
+        return Err(DeviceKeyRepoError::NotFound);
+    }
 
     create_device_key(
         &mut *conn,
