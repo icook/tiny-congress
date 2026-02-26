@@ -13,7 +13,7 @@
 mod account;
 mod test_item;
 
-pub use account::AccountFactory;
+pub use account::{generate_test_keys, AccountFactory};
 pub use test_item::TestItemFactory;
 
 use std::sync::atomic::{AtomicU64, Ordering};

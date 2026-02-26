@@ -2,22 +2,15 @@
 
 mod common;
 
-use common::factories::AccountFactory;
+use common::factories::{generate_test_keys, AccountFactory};
 use common::test_db::test_transaction;
 use sqlx::query_scalar;
-use tc_crypto::{encode_base64url, BackupEnvelope, Kid};
+use tc_crypto::{BackupEnvelope, Kid};
 use tc_test_macros::shared_runtime_test;
 use tinycongress_api::identity::repo::{
     create_account_with_executor, create_backup_with_executor, create_device_key_with_executor,
     AccountRepoError, BackupRepoError, DeviceKeyRepoError,
 };
-
-fn test_keys(seed: u8) -> (String, Kid) {
-    let pubkey = [seed; 32];
-    let root_pubkey = encode_base64url(&pubkey);
-    let root_kid = Kid::derive(&pubkey);
-    (root_pubkey, root_kid)
-}
 
 fn test_envelope() -> BackupEnvelope {
     BackupEnvelope::build(
@@ -56,7 +49,7 @@ async fn test_accounts_repo_inserts_account() {
     assert_eq!(username, "alice");
 
     // Verify the key matches the expected value for seed 42
-    let (_, expected_kid) = test_keys(42);
+    let (_, expected_kid) = generate_test_keys(42);
     assert_eq!(account.root_kid, expected_kid);
 }
 
@@ -74,7 +67,7 @@ async fn test_accounts_repo_rejects_duplicate_username() {
         .expect("create first account");
 
     // Try to create second account with same username but different key
-    let (second_pubkey, second_kid) = test_keys(2);
+    let (second_pubkey, second_kid) = generate_test_keys(2);
     let err = create_account_with_executor(&mut *tx, "alice", &second_pubkey, &second_kid)
         .await
         .expect_err("duplicate username should error");
@@ -96,7 +89,7 @@ async fn test_accounts_repo_rejects_duplicate_root_key() {
         .expect("create first account");
 
     // Try to create second account with same key (same seed) but different username
-    let (root_pubkey, root_kid) = test_keys(3);
+    let (root_pubkey, root_kid) = generate_test_keys(3);
     let err = create_account_with_executor(&mut *tx, "bob", &root_pubkey, &root_kid)
         .await
         .expect_err("duplicate key should error");
@@ -120,7 +113,7 @@ async fn test_backup_repo_creates_backup() {
         .expect("create account");
 
     let envelope = test_envelope();
-    let (_, root_kid) = test_keys(10);
+    let (_, root_kid) = generate_test_keys(10);
 
     let backup = create_backup_with_executor(
         &mut *tx,
@@ -155,7 +148,7 @@ async fn test_backup_repo_rejects_duplicate_account() {
         .expect("create account");
 
     let envelope = test_envelope();
-    let (_, kid1) = test_keys(11);
+    let (_, kid1) = generate_test_keys(11);
 
     create_backup_with_executor(
         &mut *tx,
@@ -170,7 +163,7 @@ async fn test_backup_repo_rejects_duplicate_account() {
 
     // Second backup for same account should fail (uq_account_backups_account)
     let envelope2 = test_envelope();
-    let (_, kid2) = test_keys(12);
+    let (_, kid2) = generate_test_keys(12);
     let err = create_backup_with_executor(
         &mut *tx,
         account.id,

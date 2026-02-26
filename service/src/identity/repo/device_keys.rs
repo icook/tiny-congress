@@ -319,6 +319,19 @@ async fn not_found_or_revoked(pool: &PgPool, device_kid: &Kid) -> DeviceKeyRepoE
     }
 }
 
+/// Execute a mutation that targets an active (non-revoked) device key and
+/// disambiguate the error when no rows are affected.
+async fn ensure_active_device_updated(
+    pool: &PgPool,
+    result: sqlx::postgres::PgQueryResult,
+    device_kid: &Kid,
+) -> Result<(), DeviceKeyRepoError> {
+    if result.rows_affected() == 0 {
+        return Err(not_found_or_revoked(pool, device_kid).await);
+    }
+    Ok(())
+}
+
 async fn revoke_device_key(pool: &PgPool, device_kid: &Kid) -> Result<(), DeviceKeyRepoError> {
     let result = sqlx::query(
         "UPDATE device_keys SET revoked_at = now() WHERE device_kid = $1 AND revoked_at IS NULL",
@@ -327,11 +340,7 @@ async fn revoke_device_key(pool: &PgPool, device_kid: &Kid) -> Result<(), Device
     .execute(pool)
     .await?;
 
-    if result.rows_affected() == 0 {
-        return Err(not_found_or_revoked(pool, device_kid).await);
-    }
-
-    Ok(())
+    ensure_active_device_updated(pool, result, device_kid).await
 }
 
 async fn rename_device_key(
@@ -347,11 +356,7 @@ async fn rename_device_key(
     .execute(pool)
     .await?;
 
-    if result.rows_affected() == 0 {
-        return Err(not_found_or_revoked(pool, device_kid).await);
-    }
-
-    Ok(())
+    ensure_active_device_updated(pool, result, device_kid).await
 }
 
 async fn touch_device_key(pool: &PgPool, device_kid: &Kid) -> Result<(), DeviceKeyRepoError> {
@@ -362,11 +367,7 @@ async fn touch_device_key(pool: &PgPool, device_kid: &Kid) -> Result<(), DeviceK
     .execute(pool)
     .await?;
 
-    if result.rows_affected() == 0 {
-        return Err(not_found_or_revoked(pool, device_kid).await);
-    }
-
-    Ok(())
+    ensure_active_device_updated(pool, result, device_kid).await
 }
 
 #[cfg(any(test, feature = "test-utils"))]

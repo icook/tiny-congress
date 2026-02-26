@@ -77,8 +77,9 @@ impl Default for AccountFactory {
     }
 }
 
-/// Generate test key pair from a seed byte.
-fn generate_test_keys(seed: u8) -> (String, Kid) {
+/// Generate a deterministic test key pair from a seed byte.
+/// Each seed produces a unique `(base64url_pubkey, Kid)` pair.
+pub fn generate_test_keys(seed: u8) -> (String, Kid) {
     let pubkey = [seed; 32];
     let root_pubkey = encode_base64url(&pubkey);
     let root_kid = Kid::derive(&pubkey);
