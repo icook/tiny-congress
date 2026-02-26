@@ -211,7 +211,7 @@ async fn signup(
     }
 
     let device = match create_device_key_with_executor(
-        &mut *tx,
+        &mut tx,
         account.id,
         &device_kid,
         &req.device.pubkey,
@@ -332,9 +332,11 @@ fn device_key_error_response(e: DeviceKeyRepoError) -> axum::response::Response 
             }),
         )
             .into_response(),
-        DeviceKeyRepoError::NotFound => {
+        DeviceKeyRepoError::NotFound | DeviceKeyRepoError::AlreadyRevoked => {
             // Unreachable from create path — indicates a programming error
-            tracing::error!("Unexpected NotFound from device key create during signup");
+            tracing::error!(
+                "Unexpected NotFound/AlreadyRevoked from device key create during signup"
+            );
             internal_error()
         }
         DeviceKeyRepoError::Database(db_err) => {

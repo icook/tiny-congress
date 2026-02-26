@@ -36,6 +36,8 @@ pub enum DeviceKeyRepoError {
     DuplicateKid,
     #[error("device key not found")]
     NotFound,
+    #[error("device key has been revoked")]
+    AlreadyRevoked,
     #[error("maximum device limit reached")]
     MaxDevicesReached,
     #[error("database error: {0}")]
@@ -193,34 +195,33 @@ where
     }
 }
 
-/// Create a device key using any executor (pool, connection, or transaction).
+/// Create a device key within an existing connection (typically a transaction).
 ///
-/// # Transaction safety
-///
-/// The device-count check and INSERT are **not** atomic under `READ COMMITTED`
-/// isolation. Callers that add devices to an existing account **must** run this
-/// inside a transaction (or hold a `FOR UPDATE` lock on the account row) to
-/// prevent concurrent requests from exceeding `MAX_DEVICES_PER_ACCOUNT`.
-/// The signup handler is safe because it creates a fresh account in a
-/// serialised transaction.
+/// Acquires a `FOR UPDATE` lock on the account row to serialize concurrent
+/// device additions. This prevents two requests from both reading count < 10
+/// and both inserting, which would exceed `MAX_DEVICES_PER_ACCOUNT` under
+/// `READ COMMITTED` isolation.
 ///
 /// # Errors
 ///
 /// Returns `DeviceKeyRepoError::DuplicateKid` if the device key ID is already registered.
 /// Returns `DeviceKeyRepoError::MaxDevicesReached` if the account has reached the device limit.
-pub async fn create_device_key_with_executor<'e, E>(
-    executor: E,
+pub async fn create_device_key_with_executor(
+    conn: &mut sqlx::PgConnection,
     account_id: Uuid,
     device_kid: &Kid,
     device_pubkey: &str,
     device_name: &str,
     certificate: &[u8],
-) -> Result<CreatedDeviceKey, DeviceKeyRepoError>
-where
-    E: sqlx::Executor<'e, Database = sqlx::Postgres>,
-{
+) -> Result<CreatedDeviceKey, DeviceKeyRepoError> {
+    // Lock the account row to serialize concurrent device additions.
+    sqlx::query("SELECT id FROM accounts WHERE id = $1 FOR UPDATE")
+        .bind(account_id)
+        .fetch_optional(&mut *conn)
+        .await?;
+
     create_device_key(
-        executor,
+        &mut *conn,
         account_id,
         device_kid,
         device_pubkey,
@@ -295,60 +296,68 @@ where
     Ok(map_device_key_row(row))
 }
 
-async fn revoke_device_key<'e, E>(executor: E, device_kid: &Kid) -> Result<(), DeviceKeyRepoError>
-where
-    E: sqlx::Executor<'e, Database = sqlx::Postgres>,
-{
+/// Check whether a device key exists but is revoked, or doesn't exist at all.
+/// Used by mutation functions when `UPDATE ... WHERE revoked_at IS NULL` affects 0 rows.
+async fn not_found_or_revoked(pool: &PgPool, device_kid: &Kid) -> DeviceKeyRepoError {
+    let exists = sqlx::query(
+        "SELECT revoked_at IS NOT NULL AS is_revoked FROM device_keys WHERE device_kid = $1",
+    )
+    .bind(device_kid.as_str())
+    .fetch_optional(pool)
+    .await;
+
+    match exists {
+        Ok(Some(row)) if row.get::<bool, _>("is_revoked") => DeviceKeyRepoError::AlreadyRevoked,
+        Ok(Some(_) | None) => DeviceKeyRepoError::NotFound,
+        Err(e) => DeviceKeyRepoError::Database(e),
+    }
+}
+
+async fn revoke_device_key(pool: &PgPool, device_kid: &Kid) -> Result<(), DeviceKeyRepoError> {
     let result = sqlx::query(
         "UPDATE device_keys SET revoked_at = now() WHERE device_kid = $1 AND revoked_at IS NULL",
     )
     .bind(device_kid.as_str())
-    .execute(executor)
+    .execute(pool)
     .await?;
 
     if result.rows_affected() == 0 {
-        return Err(DeviceKeyRepoError::NotFound);
+        return Err(not_found_or_revoked(pool, device_kid).await);
     }
 
     Ok(())
 }
 
-async fn rename_device_key<'e, E>(
-    executor: E,
+async fn rename_device_key(
+    pool: &PgPool,
     device_kid: &Kid,
     new_name: &str,
-) -> Result<(), DeviceKeyRepoError>
-where
-    E: sqlx::Executor<'e, Database = sqlx::Postgres>,
-{
+) -> Result<(), DeviceKeyRepoError> {
     let result = sqlx::query(
         "UPDATE device_keys SET device_name = $1 WHERE device_kid = $2 AND revoked_at IS NULL",
     )
     .bind(new_name)
     .bind(device_kid.as_str())
-    .execute(executor)
+    .execute(pool)
     .await?;
 
     if result.rows_affected() == 0 {
-        return Err(DeviceKeyRepoError::NotFound);
+        return Err(not_found_or_revoked(pool, device_kid).await);
     }
 
     Ok(())
 }
 
-async fn touch_device_key<'e, E>(executor: E, device_kid: &Kid) -> Result<(), DeviceKeyRepoError>
-where
-    E: sqlx::Executor<'e, Database = sqlx::Postgres>,
-{
+async fn touch_device_key(pool: &PgPool, device_kid: &Kid) -> Result<(), DeviceKeyRepoError> {
     let result = sqlx::query(
         "UPDATE device_keys SET last_used_at = now() WHERE device_kid = $1 AND revoked_at IS NULL",
     )
     .bind(device_kid.as_str())
-    .execute(executor)
+    .execute(pool)
     .await?;
 
     if result.rows_affected() == 0 {
-        return Err(DeviceKeyRepoError::NotFound);
+        return Err(not_found_or_revoked(pool, device_kid).await);
     }
 
     Ok(())

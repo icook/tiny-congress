@@ -30,6 +30,14 @@ const MAX_ENVELOPE_SIZE: usize = 4096;
 /// Offset where the 16-byte salt begins.
 const SALT_OFFSET: usize = 14;
 
+/// Minimum acceptable Argon2id memory cost (64 MiB).
+/// Matches OWASP 2024 recommendation for Argon2id.
+const MIN_M_COST: u32 = 65536;
+/// Minimum acceptable Argon2id time cost (iterations).
+const MIN_T_COST: u32 = 3;
+/// Minimum acceptable Argon2id parallelism.
+const MIN_P_COST: u32 = 1;
+
 /// A parsed and validated encrypted backup envelope.
 ///
 /// The envelope is always Argon2id version 1. Construct via [`BackupEnvelope::parse`]
@@ -54,6 +62,8 @@ pub enum EnvelopeError {
     UnsupportedKdf,
     #[error("Ciphertext too small (minimum 48 bytes)")]
     CiphertextTooSmall,
+    #[error("KDF parameters too weak (m_cost >= {MIN_M_COST}, t_cost >= {MIN_T_COST}, p_cost >= {MIN_P_COST})")]
+    WeakKdfParams,
 }
 
 impl BackupEnvelope {
@@ -75,6 +85,14 @@ impl BackupEnvelope {
         }
         if bytes[1] != KDF_ARGON2ID {
             return Err(EnvelopeError::UnsupportedKdf);
+        }
+
+        let m_cost = u32::from_le_bytes([bytes[2], bytes[3], bytes[4], bytes[5]]);
+        let t_cost = u32::from_le_bytes([bytes[6], bytes[7], bytes[8], bytes[9]]);
+        let p_cost = u32::from_le_bytes([bytes[10], bytes[11], bytes[12], bytes[13]]);
+
+        if m_cost < MIN_M_COST || t_cost < MIN_T_COST || p_cost < MIN_P_COST {
+            return Err(EnvelopeError::WeakKdfParams);
         }
 
         let mut salt = [0u8; 16];
@@ -105,6 +123,9 @@ impl BackupEnvelope {
     ) -> Result<Self, EnvelopeError> {
         if ciphertext.len() < MIN_CIPHERTEXT {
             return Err(EnvelopeError::CiphertextTooSmall);
+        }
+        if m_cost < MIN_M_COST || t_cost < MIN_T_COST || p_cost < MIN_P_COST {
+            return Err(EnvelopeError::WeakKdfParams);
         }
         let total = HEADER_SIZE + ciphertext.len();
         if total > MAX_ENVELOPE_SIZE {
@@ -228,16 +249,39 @@ mod tests {
     #[test]
     fn build_rejects_short_ciphertext() {
         assert!(matches!(
-            BackupEnvelope::build([0; 16], 0, 0, 0, [0; 12], &[0u8; 10]),
+            BackupEnvelope::build([0; 16], 65536, 3, 1, [0; 12], &[0u8; 10]),
             Err(EnvelopeError::CiphertextTooSmall)
+        ));
+    }
+
+    #[test]
+    fn build_rejects_weak_kdf_params() {
+        assert!(matches!(
+            BackupEnvelope::build([0; 16], 1, 1, 1, [0; 12], &test_ciphertext()),
+            Err(EnvelopeError::WeakKdfParams)
+        ));
+    }
+
+    #[test]
+    fn parse_rejects_weak_kdf_params() {
+        let mut raw = vec![0u8; MIN_ENVELOPE_SIZE];
+        raw[0] = VERSION;
+        raw[1] = KDF_ARGON2ID;
+        // m_cost = 1 (too weak)
+        raw[2..6].copy_from_slice(&1u32.to_le_bytes());
+        raw[6..10].copy_from_slice(&1u32.to_le_bytes());
+        raw[10..14].copy_from_slice(&1u32.to_le_bytes());
+        assert!(matches!(
+            BackupEnvelope::parse(raw),
+            Err(EnvelopeError::WeakKdfParams)
         ));
     }
 
     #[test]
     fn salt_extracted_correctly() {
         let salt = [0x42; 16];
-        let envelope =
-            BackupEnvelope::build(salt, 1, 2, 3, [0xBB; 12], &test_ciphertext()).expect("build");
+        let envelope = BackupEnvelope::build(salt, 65536, 3, 1, [0xBB; 12], &test_ciphertext())
+            .expect("build");
         assert_eq!(envelope.salt(), &salt);
     }
 }
