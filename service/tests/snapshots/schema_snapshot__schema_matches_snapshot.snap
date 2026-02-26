@@ -1,5 +1,6 @@
 ---
 source: service/tests/schema_snapshot.rs
+assertion_line: 188
 expression: current_schema
 ---
 -- Schema Snapshot
@@ -11,11 +12,6 @@ CREATE TABLE accounts (
     username TEXT NOT NULL,
     root_pubkey TEXT NOT NULL,
     root_kid TEXT NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now());
-
-CREATE TABLE test_items (
-    id UUID NOT NULL DEFAULT gen_random_uuid(),
-    name TEXT NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -29,15 +25,6 @@ CREATE UNIQUE INDEX accounts_root_kid_key ON public.accounts USING btree (root_k
 -- accounts.accounts_username_key
 CREATE UNIQUE INDEX accounts_username_key ON public.accounts USING btree (username)
 
--- accounts.idx_accounts_root_kid
-CREATE INDEX idx_accounts_root_kid ON public.accounts USING btree (root_kid)
-
--- accounts.idx_accounts_username
-CREATE INDEX idx_accounts_username ON public.accounts USING btree (username)
-
--- test_items.test_items_pkey
-CREATE UNIQUE INDEX test_items_pkey ON public.test_items USING btree (id)
-
 -- Constraints
 -- accounts: accounts_created_at_not_null (CHECK)
 -- accounts: accounts_id_not_null (CHECK)
@@ -47,7 +34,3 @@ CREATE UNIQUE INDEX test_items_pkey ON public.test_items USING btree (id)
 -- accounts: accounts_root_pubkey_not_null (CHECK)
 -- accounts: accounts_username_key (UNIQUE)
 -- accounts: accounts_username_not_null (CHECK)
--- test_items: test_items_created_at_not_null (CHECK)
--- test_items: test_items_id_not_null (CHECK)
--- test_items: test_items_name_not_null (CHECK)
--- test_items: test_items_pkey (PRIMARY KEY)

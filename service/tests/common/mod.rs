@@ -250,6 +250,20 @@ pub mod test_db {
                     .await
                     .expect("Failed to run migrations");
 
+                // Create test_items table for test infrastructure.
+                // This table was removed from production migrations (migration 04)
+                // but tests still need it as a lightweight fixture table.
+                sqlx::query(
+                    "CREATE TABLE IF NOT EXISTS test_items (
+                        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                        name TEXT NOT NULL,
+                        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                    )",
+                )
+                .execute(&mut migration_conn)
+                .await
+                .expect("Failed to create test_items table");
+
                 // Close the migration connection so tiny-congress has no active sessions
                 drop(migration_conn);
 

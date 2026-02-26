@@ -9,7 +9,8 @@
 
 mod common;
 
-use common::test_db::isolated_db;
+use common::migration_helpers::load_migrator;
+use common::test_db::empty_db;
 use tc_test_macros::shared_runtime_test;
 
 /// Extracts the current schema from the database in a normalized format.
@@ -170,9 +171,18 @@ async fn extract_schema(pool: &sqlx::PgPool) -> String {
 }
 
 /// Compares current schema against the committed snapshot using insta.
+///
+/// Uses `empty_db()` + migrations (not `isolated_db()`) so the snapshot
+/// reflects the production schema only, without test-bootstrapped tables
+/// like `test_items`.
 #[shared_runtime_test]
 async fn test_schema_matches_snapshot() {
-    let db = isolated_db().await;
+    let db = empty_db().await;
+    let migrator = load_migrator().await;
+    migrator
+        .run(db.pool())
+        .await
+        .expect("Failed to run migrations");
     let current_schema = extract_schema(db.pool()).await;
 
     insta::assert_snapshot!(current_schema);
