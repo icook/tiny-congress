@@ -101,16 +101,18 @@ impl DeviceKeyRepo for PgDeviceKeyRepo {
         device_name: &str,
         certificate: &[u8],
     ) -> Result<CreatedDeviceKey, DeviceKeyRepoError> {
-        let mut conn = self.pool.acquire().await?;
-        create_device_key_with_executor(
-            &mut conn,
+        let mut tx = self.pool.begin().await?;
+        let result = create_device_key_with_executor(
+            &mut tx,
             account_id,
             device_kid,
             device_pubkey,
             device_name,
             certificate,
         )
-        .await
+        .await?;
+        tx.commit().await?;
+        Ok(result)
     }
 
     async fn list_by_account(

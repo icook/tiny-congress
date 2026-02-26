@@ -17,40 +17,10 @@ use axum::{
     },
 };
 use common::app_builder::TestAppBuilder;
-use ed25519_dalek::{Signer, SigningKey};
-use rand::rngs::OsRng;
+use common::factories::valid_signup_json;
 use tc_crypto::{encode_base64url, BackupEnvelope};
 use tinycongress_api::config::SecurityHeadersConfig;
 use tower::ServiceExt;
-
-/// Build a valid signup request body with real Ed25519 keys and certificate.
-fn valid_signup_body() -> String {
-    let root_signing_key = SigningKey::generate(&mut OsRng);
-    let root_pubkey_bytes = root_signing_key.verifying_key().to_bytes();
-    let root_pubkey = encode_base64url(&root_pubkey_bytes);
-
-    let device_signing_key = SigningKey::generate(&mut OsRng);
-    let device_pubkey_bytes = device_signing_key.verifying_key().to_bytes();
-    let device_pubkey = encode_base64url(&device_pubkey_bytes);
-
-    let certificate_sig = root_signing_key.sign(&device_pubkey_bytes);
-    let certificate = encode_base64url(&certificate_sig.to_bytes());
-
-    let envelope = BackupEnvelope::build(
-        [0xAA; 16], // salt
-        65536,
-        3,
-        1,           // m_cost, t_cost, p_cost
-        [0xBB; 12],  // nonce
-        &[0xCC; 48], // ciphertext
-    )
-    .expect("test envelope");
-    let backup_blob = encode_base64url(envelope.as_bytes());
-
-    format!(
-        r#"{{"username": "testuser", "root_pubkey": "{root_pubkey}", "backup": {{"encrypted_blob": "{backup_blob}"}}, "device": {{"pubkey": "{device_pubkey}", "name": "Test Device", "certificate": "{certificate}"}}}}"#
-    )
-}
 
 // =============================================================================
 // Health Check Tests
@@ -361,7 +331,7 @@ async fn test_identity_signup_empty_username() {
         .with_health()
         .build();
 
-    let body = valid_signup_body().replace("testuser", "");
+    let body = valid_signup_json("");
     let response = app
         .oneshot(
             Request::builder()
