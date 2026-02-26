@@ -261,6 +261,7 @@ This is handled automatically by `dockerfiles/Dockerfile.postgres`.
 | Error | Cause | Fix |
 |-------|-------|-----|
 | "database.user is required" | Missing TC_DATABASE__USER | Set `TC_DATABASE__USER` environment variable or configure in config.yaml |
+| "database.password is required" | Missing TC_DATABASE__PASSWORD | Set `TC_DATABASE__PASSWORD` environment variable or configure in config.yaml |
 | "connection refused" | Postgres not running | Start postgres or check host/port |
 | "database does not exist" | DB not created | Run `createdb tiny-congress` |
 | "extension pgmq does not exist" | Missing extension | Use provided Dockerfile.postgres |
