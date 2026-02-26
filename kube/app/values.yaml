@@ -141,6 +141,9 @@ database:
   # Use an existing Kubernetes Secret for credentials instead of chart-managed values.
   # The Secret must contain keys: "user" and "password".
   # When set, database.user and database.password below are ignored.
+  # NOTE: When using existingSecret with an external Postgres, you must also set
+  # database.host to the external hostname; otherwise the API connects to the
+  # in-cluster Postgres pod.
   existingSecret: ""
   # Connection parameters
   host: ""

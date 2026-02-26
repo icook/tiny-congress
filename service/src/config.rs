@@ -450,7 +450,10 @@ mod tests {
             migrations_dir: None,
         };
         let opts = config.connect_options();
-        // PgConnectOptions handles special chars without URL encoding issues
+        // PgConnectOptions handles special chars without URL encoding issues.
+        // Note: there are no public getters for username/password (by design), so
+        // this only smoke-tests that construction succeeds; end-to-end credential
+        // verification requires an integration test against a live Postgres server.
         assert_eq!(opts.get_host(), "localhost");
         assert_eq!(opts.get_database().unwrap(), "testdb");
     }

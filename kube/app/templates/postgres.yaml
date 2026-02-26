@@ -60,6 +60,8 @@ spec:
           exec:
             command:
             - pg_isready
+            - -U
+            - $(POSTGRES_USER)
           initialDelaySeconds: 5
           periodSeconds: 5
       volumes:
