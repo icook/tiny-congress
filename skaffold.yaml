@@ -105,7 +105,7 @@ test:
 # Ensure Postgres is reachable from localhost for developer workflows
 portForward:
   - resourceType: service
-    resourceName: postgres
+    resourceName: tc-postgres
     port: 5432
     localPort: 5432
   - resourceType: service
