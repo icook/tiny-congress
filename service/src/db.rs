@@ -27,7 +27,7 @@ pub async fn setup_database(config: &DatabaseConfig) -> Result<PgPool, anyhow::E
             .max_connections(config.max_connections)
             // Allow extra time to acquire a connection during startup bursts
             .acquire_timeout(Duration::from_secs(30))
-            .connect(&config.connection_url())
+            .connect_with(config.connect_options())
             .await
         {
             Ok(pool) => break pool,

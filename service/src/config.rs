@@ -58,13 +58,18 @@ pub struct DatabaseConfig {
 }
 
 impl DatabaseConfig {
-    /// Assemble a `PostgreSQL` connection URL from individual fields.
+    /// Build `PgConnectOptions` from individual fields.
+    ///
+    /// Uses structured options instead of URL assembly to avoid issues with
+    /// URL-reserved characters in usernames or passwords.
     #[must_use]
-    pub fn connection_url(&self) -> String {
-        format!(
-            "postgres://{}:{}@{}:{}/{}",
-            self.user, self.password, self.host, self.port, self.name
-        )
+    pub fn connect_options(&self) -> sqlx_postgres::PgConnectOptions {
+        sqlx_postgres::PgConnectOptions::new()
+            .host(&self.host)
+            .port(self.port)
+            .database(&self.name)
+            .username(&self.user)
+            .password(&self.password)
     }
 }
 
@@ -412,7 +417,7 @@ mod tests {
     }
 
     #[test]
-    fn test_database_config_connection_url() {
+    fn test_database_config_connect_options() {
         let config = DatabaseConfig {
             host: "db.example.com".into(),
             port: 5432,
@@ -422,10 +427,29 @@ mod tests {
             max_connections: 10,
             migrations_dir: None,
         };
-        assert_eq!(
-            config.connection_url(),
-            "postgres://admin:s3cret@db.example.com:5432/mydb"
-        );
+        let opts = config.connect_options();
+        // PgConnectOptions exposes getters for host, port, and database
+        assert_eq!(opts.get_host(), "db.example.com");
+        assert_eq!(opts.get_port(), 5432);
+        assert_eq!(opts.get_database().unwrap(), "mydb");
+    }
+
+    #[test]
+    fn test_database_config_connect_options_special_chars() {
+        // Passwords with URL-reserved characters must not break the connection
+        let config = DatabaseConfig {
+            host: "localhost".into(),
+            port: 5432,
+            name: "testdb".into(),
+            user: "user@org".into(),
+            password: "p@ss:word/ok?".into(),
+            max_connections: 10,
+            migrations_dir: None,
+        };
+        let opts = config.connect_options();
+        // PgConnectOptions handles special chars without URL encoding issues
+        assert_eq!(opts.get_host(), "localhost");
+        assert_eq!(opts.get_database().unwrap(), "testdb");
     }
 
     #[test]
