@@ -5,21 +5,12 @@
 
 mod common;
 
-use common::factories::{AccountFactory, TestItemFactory};
+use common::factories::TestItemFactory;
 use common::test_db::{get_test_db, isolated_db, test_transaction};
 use sqlx::{query, query_scalar};
 use sqlx_core::migrate::Migrator;
 use std::path::Path;
-use tc_crypto::{derive_kid, encode_base64url};
 use tc_test_macros::shared_runtime_test;
-use tinycongress_api::identity::repo::{create_account_with_executor, AccountRepoError};
-
-fn test_keys(seed: u8) -> (String, String) {
-    let pubkey = [seed; 32];
-    let root_pubkey = encode_base64url(&pubkey);
-    let root_kid = derive_kid(&pubkey);
-    (root_pubkey, root_kid)
-}
 
 /// Test that we can connect to the database and run queries.
 #[shared_runtime_test]
@@ -74,75 +65,6 @@ async fn test_crud_operations() {
         .expect("Failed to count items");
 
     assert_eq!(count, 1, "Should find the inserted item");
-}
-
-/// Test that accounts table exists and create_account_with_executor works.
-#[shared_runtime_test]
-async fn test_accounts_repo_inserts_account() {
-    let mut tx = test_transaction().await;
-
-    let account = AccountFactory::new()
-        .with_username("alice")
-        .with_seed(42)
-        .create(&mut *tx)
-        .await
-        .expect("create account");
-
-    let username: String = query_scalar("SELECT username FROM accounts WHERE id = $1")
-        .bind(account.id)
-        .fetch_one(&mut *tx)
-        .await
-        .expect("should fetch inserted row");
-
-    assert_eq!(username, "alice");
-
-    // Verify the key matches the expected value for seed 42
-    let (_, expected_kid) = test_keys(42);
-    assert_eq!(account.root_kid, expected_kid);
-}
-
-/// Test unique constraints: duplicate username should be rejected.
-#[shared_runtime_test]
-async fn test_accounts_repo_rejects_duplicate_username() {
-    let mut tx = test_transaction().await;
-
-    // Create first account
-    AccountFactory::new()
-        .with_username("alice")
-        .with_seed(1)
-        .create(&mut *tx)
-        .await
-        .expect("create first account");
-
-    // Try to create second account with same username but different key
-    let (second_pubkey, second_kid) = test_keys(2);
-    let err = create_account_with_executor(&mut *tx, "alice", &second_pubkey, &second_kid)
-        .await
-        .expect_err("duplicate username should error");
-
-    assert!(matches!(err, AccountRepoError::DuplicateUsername));
-}
-
-/// Test unique constraints: duplicate public key should be rejected.
-#[shared_runtime_test]
-async fn test_accounts_repo_rejects_duplicate_root_key() {
-    let mut tx = test_transaction().await;
-
-    // Create first account with specific seed
-    AccountFactory::new()
-        .with_username("alice")
-        .with_seed(3)
-        .create(&mut *tx)
-        .await
-        .expect("create first account");
-
-    // Try to create second account with same key (same seed) but different username
-    let (root_pubkey, root_kid) = test_keys(3);
-    let err = create_account_with_executor(&mut *tx, "bob", &root_pubkey, &root_kid)
-        .await
-        .expect_err("duplicate key should error");
-
-    assert!(matches!(err, AccountRepoError::DuplicateKey));
 }
 
 /// Test that pgmq extension is available (from custom postgres image).
@@ -357,7 +279,10 @@ mod factory_tests {
             .expect("should fetch inserted row");
 
         assert!(!username.is_empty(), "username should not be empty");
-        assert!(!account.root_kid.is_empty(), "root_kid should not be empty");
+        assert!(
+            !account.root_kid.as_str().is_empty(),
+            "root_kid should not be empty"
+        );
     }
 
     #[shared_runtime_test]

@@ -7,8 +7,6 @@
     clippy::unwrap_used
 )]
 
-use std::sync::Arc;
-
 use async_graphql::{EmptySubscription, Schema};
 use axum::{
     http::{header::HeaderValue, Method, StatusCode},
@@ -24,7 +22,7 @@ use tinycongress_api::{
     db::setup_database,
     graphql::{graphql_handler, graphql_playground, MutationRoot, QueryRoot},
     http::{build_security_headers, security_headers_middleware},
-    identity::{self, repo::PgAccountRepo},
+    identity,
     rest::{self, ApiDoc},
 };
 use tower_http::cors::{AllowOrigin, Any, CorsLayer};
@@ -34,6 +32,30 @@ use utoipa_swagger_ui::SwaggerUi;
 // Health check handler
 async fn health_check() -> impl IntoResponse {
     StatusCode::OK
+}
+
+fn build_cors_origin(origins: &[String]) -> AllowOrigin {
+    if origins.iter().any(|o| o == "*") {
+        tracing::warn!("CORS configured to allow any origin - not recommended for production");
+        AllowOrigin::any()
+    } else if origins.is_empty() {
+        tracing::info!(
+            "CORS allowed origins not configured - cross-origin requests will be blocked"
+        );
+        AllowOrigin::list(Vec::<HeaderValue>::new())
+    } else {
+        let mut header_values: Vec<HeaderValue> = Vec::with_capacity(origins.len());
+        for origin in origins {
+            match origin.parse() {
+                Ok(v) => header_values.push(v),
+                Err(e) => {
+                    tracing::warn!(origin = %origin, error = %e, "Invalid CORS origin in config — skipping");
+                }
+            }
+        }
+        tracing::info!(origins = ?origins, "CORS allowed origins configured");
+        AllowOrigin::list(header_values)
+    }
 }
 
 #[tokio::main]
@@ -75,28 +97,7 @@ async fn main() -> Result<(), anyhow::Error> {
         .data(build_info.clone())
         .finish();
 
-    // Create repositories
-    let account_repo: Arc<dyn identity::repo::AccountRepo> =
-        Arc::new(PgAccountRepo::new(pool.clone()));
-
-    // Build CORS layer from config
-    let cors_origins = &config.cors.allowed_origins;
-    let allow_origin: AllowOrigin = if cors_origins.iter().any(|o| o == "*") {
-        tracing::warn!("CORS configured to allow any origin - not recommended for production");
-        AllowOrigin::any()
-    } else if cors_origins.is_empty() {
-        tracing::info!(
-            "CORS allowed origins not configured - cross-origin requests will be blocked"
-        );
-        AllowOrigin::list(Vec::<HeaderValue>::new())
-    } else {
-        let origins: Vec<HeaderValue> = cors_origins
-            .iter()
-            .filter_map(|origin| origin.parse().ok())
-            .collect();
-        tracing::info!(origins = ?cors_origins, "CORS allowed origins configured");
-        AllowOrigin::list(origins)
-    };
+    let allow_origin = build_cors_origin(&config.cors.allowed_origins);
 
     // Build security headers layer if enabled
     let security_headers = if config.security_headers.enabled {
@@ -134,7 +135,6 @@ async fn main() -> Result<(), anyhow::Error> {
         // Add the schema to the extension
         .layer(Extension(schema))
         .layer(Extension(pool.clone()))
-        .layer(Extension(account_repo))
         .layer(Extension(build_info))
         .layer(
             CorsLayer::new()

@@ -11,9 +11,11 @@
 //! ```
 
 mod account;
+mod signup;
 mod test_item;
 
-pub use account::AccountFactory;
+pub use account::{generate_test_keys, AccountFactory};
+pub use signup::valid_signup_json;
 pub use test_item::TestItemFactory;
 
 use std::sync::atomic::{AtomicU64, Ordering};

@@ -1,7 +1,7 @@
 //! Account factory for test data creation.
 
 use super::next_id;
-use tc_crypto::{derive_kid, encode_base64url};
+use tc_crypto::{encode_base64url, Kid};
 use tinycongress_api::identity::repo::{
     create_account_with_executor, AccountRepoError, CreatedAccount,
 };
@@ -77,10 +77,11 @@ impl Default for AccountFactory {
     }
 }
 
-/// Generate test key pair from a seed byte.
-fn generate_test_keys(seed: u8) -> (String, String) {
+/// Generate a deterministic test key pair from a seed byte.
+/// Each seed produces a unique `(base64url_pubkey, Kid)` pair.
+pub fn generate_test_keys(seed: u8) -> (String, Kid) {
     let pubkey = [seed; 32];
     let root_pubkey = encode_base64url(&pubkey);
-    let root_kid = derive_kid(&pubkey);
+    let root_kid = Kid::derive(&pubkey);
     (root_pubkey, root_kid)
 }

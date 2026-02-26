@@ -17,9 +17,9 @@ use axum::{
     },
 };
 use common::app_builder::TestAppBuilder;
-use std::sync::Arc;
+use common::factories::valid_signup_json;
+use tc_crypto::{encode_base64url, BackupEnvelope};
 use tinycongress_api::config::SecurityHeadersConfig;
-use tinycongress_api::identity::repo::{mock::MockAccountRepo, AccountRepoError};
 use tower::ServiceExt;
 
 // =============================================================================
@@ -321,53 +321,24 @@ async fn test_security_headers_disabled() {
 // Identity Routes Tests (with mocks)
 // =============================================================================
 
-#[tokio::test]
-async fn test_identity_signup_success() {
-    let app = TestAppBuilder::new()
-        .with_identity_mocks()
-        .with_health()
-        .build();
-
-    let response = app
-        .oneshot(
-            Request::builder()
-                .method(Method::POST)
-                .uri("/auth/signup")
-                .header(CONTENT_TYPE, "application/json")
-                .body(Body::from(
-                    r#"{"username": "testuser", "root_pubkey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"}"#,
-                ))
-                .expect("request"),
-        )
-        .await
-        .expect("response");
-
-    assert_eq!(response.status(), StatusCode::CREATED);
-
-    let body = to_bytes(response.into_body(), 1024 * 1024)
-        .await
-        .expect("body");
-    let body_str = String::from_utf8(body.to_vec()).expect("utf8");
-    assert!(body_str.contains("account_id"));
-    assert!(body_str.contains("root_kid"));
-}
+// Note: test_identity_signup_success is covered by identity_handler_tests.rs since the
+// transaction-based handler requires a real Postgres connection.
 
 #[tokio::test]
 async fn test_identity_signup_empty_username() {
     let app = TestAppBuilder::new()
-        .with_identity_mocks()
+        .with_identity_lazy()
         .with_health()
         .build();
 
+    let body = valid_signup_json("");
     let response = app
         .oneshot(
             Request::builder()
                 .method(Method::POST)
                 .uri("/auth/signup")
                 .header(CONTENT_TYPE, "application/json")
-                .body(Body::from(
-                    r#"{"username": "", "root_pubkey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"}"#,
-                ))
+                .body(Body::from(body))
                 .expect("request"),
         )
         .await
@@ -382,45 +353,34 @@ async fn test_identity_signup_empty_username() {
     assert!(body_str.contains("Username cannot be empty"));
 }
 
-#[tokio::test]
-async fn test_identity_signup_duplicate_username() {
-    let mock_repo = Arc::new(MockAccountRepo::new());
-    mock_repo.set_create_result(Err(AccountRepoError::DuplicateUsername));
-
-    let app = TestAppBuilder::new()
-        .with_identity(mock_repo)
-        .with_health()
-        .build();
-
-    let response = app
-        .oneshot(
-            Request::builder()
-                .method(Method::POST)
-                .uri("/auth/signup")
-                .header(CONTENT_TYPE, "application/json")
-                .body(Body::from(
-                    r#"{"username": "alice", "root_pubkey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"}"#,
-                ))
-                .expect("request"),
-        )
-        .await
-        .expect("response");
-
-    assert_eq!(response.status(), StatusCode::CONFLICT);
-
-    let body = to_bytes(response.into_body(), 1024 * 1024)
-        .await
-        .expect("body");
-    let body_str = String::from_utf8(body.to_vec()).expect("utf8");
-    assert!(body_str.contains("Username already taken"));
-}
+// Note: test_identity_signup_duplicate_username is covered by identity_handler_tests.rs since
+// the transaction-based handler requires a real Postgres connection.
 
 #[tokio::test]
 async fn test_identity_signup_invalid_pubkey() {
     let app = TestAppBuilder::new()
-        .with_identity_mocks()
+        .with_identity_lazy()
         .with_health()
         .build();
+
+    // Replace the valid root_pubkey with garbage — the whole JSON structure must
+    // still be valid so we construct it manually
+    let device_pubkey = encode_base64url(&[2u8; 32]);
+    let certificate = encode_base64url(&[3u8; 64]);
+    let envelope = BackupEnvelope::build(
+        [0xAA; 16], // salt
+        65536,
+        3,
+        1,           // m_cost, t_cost, p_cost
+        [0xBB; 12],  // nonce
+        &[0xCC; 48], // ciphertext
+    )
+    .expect("test envelope");
+    let backup_blob = encode_base64url(envelope.as_bytes());
+
+    let body = format!(
+        r#"{{"username": "alice", "root_pubkey": "not-valid-base64url!!!", "backup": {{"encrypted_blob": "{backup_blob}"}}, "device": {{"pubkey": "{device_pubkey}", "name": "Test", "certificate": "{certificate}"}}}}"#
+    );
 
     let response = app
         .oneshot(
@@ -428,9 +388,7 @@ async fn test_identity_signup_invalid_pubkey() {
                 .method(Method::POST)
                 .uri("/auth/signup")
                 .header(CONTENT_TYPE, "application/json")
-                .body(Body::from(
-                    r#"{"username": "alice", "root_pubkey": "not-valid-base64url!!!"}"#,
-                ))
+                .body(Body::from(body))
                 .expect("request"),
         )
         .await
@@ -660,7 +618,8 @@ async fn test_full_app_all_routes_accessible() {
         .expect("response");
     assert_eq!(response.status(), StatusCode::OK);
 
-    // Identity signup
+    // Identity signup route is accessible (validation error proves routing works;
+    // full signup success is tested in identity_handler_tests.rs with a real Postgres connection)
     let response = app
         .clone()
         .oneshot(
@@ -668,14 +627,13 @@ async fn test_full_app_all_routes_accessible() {
                 .method(Method::POST)
                 .uri("/auth/signup")
                 .header(CONTENT_TYPE, "application/json")
-                .body(Body::from(
-                    r#"{"username": "fulltest", "root_pubkey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"}"#,
-                ))
+                .body(Body::from(r#"{"username": "", "root_pubkey": "x", "backup": {"encrypted_blob": "x"}, "device": {"pubkey": "x", "name": "x", "certificate": "x"}}"#))
                 .expect("request"),
         )
         .await
         .expect("response");
-    assert_eq!(response.status(), StatusCode::CREATED);
+    // BAD_REQUEST (not 404) proves the route is mounted and the handler runs
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 }
 
 #[tokio::test]
@@ -810,7 +768,8 @@ async fn test_production_like_full_stack() {
     assert!(body_str.contains("version"));
     assert!(body_str.contains("gitSha"));
 
-    // 4. Identity signup works with mocks
+    // 4. Identity signup route is mounted (validation error proves routing;
+    //    full signup tested in identity_handler_tests.rs with real Postgres)
     let response = app
         .clone()
         .oneshot(
@@ -818,14 +777,12 @@ async fn test_production_like_full_stack() {
                 .method(Method::POST)
                 .uri("/auth/signup")
                 .header(CONTENT_TYPE, "application/json")
-                .body(Body::from(
-                    r#"{"username": "prodtest", "root_pubkey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"}"#,
-                ))
+                .body(Body::from(r#"{"username": "", "root_pubkey": "x", "backup": {"encrypted_blob": "x"}, "device": {"pubkey": "x", "name": "x", "certificate": "x"}}"#))
                 .expect("request"),
         )
         .await
         .expect("response");
-    assert_eq!(response.status(), StatusCode::CREATED);
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 
     // 5. Swagger UI is accessible
     let response = app

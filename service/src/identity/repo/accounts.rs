@@ -2,13 +2,14 @@
 
 use async_trait::async_trait;
 use sqlx::PgPool;
+use tc_crypto::Kid;
 use uuid::Uuid;
 
 /// Account creation result
 #[derive(Debug, Clone)]
 pub struct CreatedAccount {
     pub id: Uuid,
-    pub root_kid: String,
+    pub root_kid: Kid,
 }
 
 /// Error types for account operations
@@ -38,7 +39,7 @@ pub trait AccountRepo: Send + Sync {
         &self,
         username: &str,
         root_pubkey: &str,
-        root_kid: &str,
+        root_kid: &Kid,
     ) -> Result<CreatedAccount, AccountRepoError>;
 }
 
@@ -60,7 +61,7 @@ impl AccountRepo for PgAccountRepo {
         &self,
         username: &str,
         root_pubkey: &str,
-        root_kid: &str,
+        root_kid: &Kid,
     ) -> Result<CreatedAccount, AccountRepoError> {
         create_account(&self.pool, username, root_pubkey, root_kid).await
     }
@@ -72,7 +73,7 @@ async fn create_account<'e, E>(
     executor: E,
     username: &str,
     root_pubkey: &str,
-    root_kid: &str,
+    root_kid: &Kid,
 ) -> Result<CreatedAccount, AccountRepoError>
 where
     E: sqlx::Executor<'e, Database = sqlx::Postgres>,
@@ -88,14 +89,14 @@ where
     .bind(id)
     .bind(username)
     .bind(root_pubkey)
-    .bind(root_kid)
+    .bind(root_kid.as_str())
     .execute(executor)
     .await;
 
     match result {
         Ok(_) => Ok(CreatedAccount {
             id,
-            root_kid: root_kid.to_string(),
+            root_kid: root_kid.clone(),
         }),
         Err(e) => {
             if let sqlx::Error::Database(db_err) = &e {
@@ -123,7 +124,7 @@ pub async fn create_account_with_executor<'e, E>(
     executor: E,
     username: &str,
     root_pubkey: &str,
-    root_kid: &str,
+    root_kid: &Kid,
 ) -> Result<CreatedAccount, AccountRepoError>
 where
     E: sqlx::Executor<'e, Database = sqlx::Postgres>,
@@ -138,6 +139,7 @@ pub mod mock {
 
     use super::{async_trait, AccountRepo, AccountRepoError, CreatedAccount, Uuid};
     use std::sync::Mutex;
+    use tc_crypto::Kid;
 
     /// Mock account repository for unit tests.
     pub struct MockAccountRepo {
@@ -188,12 +190,12 @@ pub mod mock {
             &self,
             username: &str,
             root_pubkey: &str,
-            root_kid: &str,
+            root_kid: &Kid,
         ) -> Result<CreatedAccount, AccountRepoError> {
             self.calls.lock().expect("lock poisoned").push((
                 username.to_string(),
                 root_pubkey.to_string(),
-                root_kid.to_string(),
+                root_kid.as_str().to_string(),
             ));
             self.create_result
                 .lock()
@@ -202,7 +204,7 @@ pub mod mock {
                 .unwrap_or_else(|| {
                     Ok(CreatedAccount {
                         id: Uuid::new_v4(),
-                        root_kid: root_kid.to_string(),
+                        root_kid: root_kid.clone(),
                     })
                 })
         }

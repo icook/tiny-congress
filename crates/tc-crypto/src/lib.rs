@@ -5,8 +5,14 @@
 
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
-use sha2::{Digest, Sha256};
+pub(crate) use sha2::{Digest, Sha256};
 use wasm_bindgen::prelude::*;
+
+mod kid;
+pub use kid::{Kid, KidError};
+
+mod envelope;
+pub use envelope::{BackupEnvelope, EnvelopeError};
 
 /// Error type for base64url decoding failures
 #[derive(Debug, thiserror::Error)]
@@ -71,6 +77,39 @@ pub fn decode_base64url(encoded: &str) -> Result<Vec<u8>, JsError> {
 /// Returns `DecodeError` if the input is not valid base64url
 pub fn decode_base64url_native(encoded: &str) -> Result<Vec<u8>, DecodeError> {
     URL_SAFE_NO_PAD.decode(encoded).map_err(DecodeError::from)
+}
+
+/// Verify an Ed25519 signature over a message.
+///
+/// Only available with the `ed25519` feature (not compiled to WASM).
+///
+/// # Errors
+/// Returns `VerifyError` if the public key is invalid or the signature
+/// does not match.
+#[cfg(feature = "ed25519")]
+pub fn verify_ed25519(
+    public_key: &[u8; 32],
+    message: &[u8],
+    signature: &[u8; 64],
+) -> Result<(), VerifyError> {
+    use ed25519_dalek::{Signature, VerifyingKey};
+
+    let verifying_key =
+        VerifyingKey::from_bytes(public_key).map_err(|_| VerifyError::InvalidPublicKey)?;
+    let sig = Signature::from_bytes(signature);
+    verifying_key
+        .verify_strict(message, &sig)
+        .map_err(|_| VerifyError::SignatureMismatch)
+}
+
+/// Errors from Ed25519 signature verification.
+#[cfg(feature = "ed25519")]
+#[derive(Debug, thiserror::Error)]
+pub enum VerifyError {
+    #[error("invalid Ed25519 public key")]
+    InvalidPublicKey,
+    #[error("signature verification failed")]
+    SignatureMismatch,
 }
 
 #[cfg(test)]
