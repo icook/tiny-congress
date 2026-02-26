@@ -100,8 +100,6 @@ pub fn get_by_kid(kid: &str) -> Result<Record, Error> { ... }
 - Two `String` parameters could be swapped silently (`kid` vs `pubkey`)
 
 **When a primitive is fine:**
-- No validation rules exist (free-form display name)
-**When a primitive is fine:**
 - No validation rules exist (free-form display name, internal counter)
 - The type has no meaningful invariants to enforce
 
@@ -142,6 +140,77 @@ let result = processor.process(bytes, &key_manager)?;
 - Parse and validate at the boundary; pass typed values internally
 - Don't re-validate what a type already guarantees
 - Don't expose construction paths that skip validation
+
+### Validate What You Store, Even If You Don't Consume It
+
+If the server accepts and stores security-relevant parameters (KDF costs,
+key sizes, algorithm identifiers), validate them even if the server never
+uses them directly. Accepting `m_cost=1` for Argon2id signals that nobody
+checked, and a weak client configuration passes silently into the database.
+Set minimum floors based on current best practice:
+
+```rust
+// Good: Reject unreasonable params even though the server never decrypts
+if m_cost < 65536 || t_cost < 3 || p_cost < 1 {
+    return Err(EnvelopeError::WeakKdfParams);
+}
+
+// Bad: "The server doesn't decrypt, so any params are fine"
+// A reviewer sees this and wonders what else wasn't checked.
+```
+
+### Paranoid Sanity Checks
+
+Add explicit checks for invariants even when "it should be impossible" for
+them to be violated. If the assumption turns out to be wrong, a clear error
+is better than silent misbehavior:
+
+```rust
+// Good: explicit error on violated invariant
+let pubkey_arr: [u8; 32] = bytes
+    .try_into()
+    .map_err(|_| AccountError::InvalidPublicKey)?;
+
+// Bad: "We already checked the length upstream, so this is safe"
+let pubkey_arr: [u8; 32] = bytes.try_into().unwrap();
+```
+
+This is not about defensive programming for its own sake — it's about
+making the valid input space small and precisely defined. Everything
+outside it is rejected immediately.
+
+## One Correct Path
+
+When the same operation can be reached through multiple code paths, consolidate
+to a single implementation. Duplicated paths diverge over time — one gets the
+fix, the other doesn't.
+
+```rust
+// Bad: Two create paths with different invariants
+impl DeviceKeyRepo for PgDeviceKeyRepo {
+    async fn create(&self, ...) -> Result<...> {
+        // calls create_device_key() — no row lock, racy
+        create_device_key(&self.pool, ...).await
+    }
+}
+
+pub async fn create_device_key_with_executor(conn: &mut PgConnection, ...) {
+    // FOR UPDATE lock — correct
+    sqlx::query("SELECT id FROM accounts WHERE id = $1 FOR UPDATE")...
+    create_device_key(&mut *conn, ...).await
+}
+
+// Good: One path, callers delegate
+impl DeviceKeyRepo for PgDeviceKeyRepo {
+    async fn create(&self, ...) -> Result<...> {
+        let mut conn = self.pool.acquire().await?;
+        create_device_key_with_executor(&mut conn, ...).await
+    }
+}
+```
+
+This applies at every level: repo functions, validation logic, error mapping.
+If two call sites need the same behavior, extract it and call it from both.
 
 ## Function Size
 
