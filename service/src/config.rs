@@ -9,8 +9,9 @@ use serde_aux::prelude::deserialize_vec_from_string_or_vec;
 ///
 /// Configuration is loaded in priority order (lowest to highest):
 /// 1. Struct defaults
-/// 2. config.yaml file (if exists)
-/// 3. Environment variables with TC_ prefix (always wins)
+/// 2. /etc/tc/config.yaml (Kubernetes `ConfigMap` mount, if exists)
+/// 3. config.yaml file (if exists, local dev override)
+/// 4. Environment variables with TC_ prefix (always wins)
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Config {
     pub database: DatabaseConfig,
@@ -287,14 +288,16 @@ impl Config {
     ///
     /// Sources are merged in priority order:
     /// 1. Struct defaults (lowest)
-    /// 2. config.yaml file (if exists)
-    /// 3. Environment variables with TC_ prefix (highest)
+    /// 2. /etc/tc/config.yaml (Kubernetes `ConfigMap` mount, if exists)
+    /// 3. config.yaml file (if exists, local dev override)
+    /// 4. Environment variables with TC_ prefix (highest)
     ///
     /// # Errors
     /// Returns an error if configuration cannot be loaded or is invalid.
     pub fn load() -> Result<Self, ConfigError> {
         let config: Self = Figment::new()
             .merge(Serialized::defaults(Self::default()))
+            .merge(Yaml::file("/etc/tc/config.yaml"))
             .merge(Yaml::file("config.yaml"))
             .merge(Env::prefixed("TC_").split("__"))
             .extract()?;
@@ -310,6 +313,7 @@ impl Config {
     pub fn load_from(yaml_path: &str) -> Result<Self, ConfigError> {
         let config: Self = Figment::new()
             .merge(Serialized::defaults(Self::default()))
+            .merge(Yaml::file("/etc/tc/config.yaml"))
             .merge(Yaml::file(yaml_path))
             .merge(Env::prefixed("TC_").split("__"))
             .extract()?;
