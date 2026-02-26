@@ -134,6 +134,26 @@ frontend:
     # Annotations to add to the frontend service (e.g., external-dns, load-balancer config)
     annotations: {}
 
+# Database connection configuration
+# Non-secret fields (host, port, name) go into the ConfigMap.
+# Secret fields (user, password) go into a Kubernetes Secret.
+database:
+  # Use an existing Kubernetes Secret for credentials instead of chart-managed values.
+  # The Secret must contain keys: "user" and "password".
+  # When set, database.user and database.password below are ignored.
+  existingSecret: ""
+  # Connection parameters
+  host: ""
+  port: 5432
+  name: tiny-congress
+  user: postgres
+  password: postgres
+
+# Logging configuration
+logging:
+  # Log level: debug, info, warn, error
+  level: info
+
 postgres:
   image:
     repository: postgres
