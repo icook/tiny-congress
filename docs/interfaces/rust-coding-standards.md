@@ -166,10 +166,10 @@ them to be violated. If the assumption turns out to be wrong, a clear error
 is better than silent misbehavior:
 
 ```rust
-// Good: Assert what we expect, crash if wrong
-let Ok(pubkey_arr): Result<[u8; 32], _> = bytes.try_into() else {
-    return Err(bad_request("pubkey must be 32 bytes"));
-};
+// Good: explicit error on violated invariant
+let pubkey_arr: [u8; 32] = bytes
+    .try_into()
+    .map_err(|_| AccountError::InvalidPublicKey)?;
 
 // Bad: "We already checked the length upstream, so this is safe"
 let pubkey_arr: [u8; 32] = bytes.try_into().unwrap();
