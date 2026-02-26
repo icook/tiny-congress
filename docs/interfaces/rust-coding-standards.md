@@ -143,6 +143,44 @@ let result = processor.process(bytes, &key_manager)?;
 - Don't re-validate what a type already guarantees
 - Don't expose construction paths that skip validation
 
+### Validate What You Store, Even If You Don't Consume It
+
+If the server accepts and stores security-relevant parameters (KDF costs,
+key sizes, algorithm identifiers), validate them even if the server never
+uses them directly. Accepting `m_cost=1` for Argon2id signals that nobody
+checked, and a weak client configuration passes silently into the database.
+Set minimum floors based on current best practice:
+
+```rust
+// Good: Reject unreasonable params even though the server never decrypts
+if m_cost < 65536 || t_cost < 3 || p_cost < 1 {
+    return Err(EnvelopeError::WeakKdfParams);
+}
+
+// Bad: "The server doesn't decrypt, so any params are fine"
+// A reviewer sees this and wonders what else wasn't checked.
+```
+
+### Paranoid Sanity Checks
+
+Add explicit checks for invariants even when "it should be impossible" for
+them to be violated. If the assumption turns out to be wrong, a clear error
+is better than silent misbehavior:
+
+```rust
+// Good: Assert what we expect, crash if wrong
+let Ok(pubkey_arr): Result<[u8; 32], _> = bytes.try_into() else {
+    return Err(bad_request("pubkey must be 32 bytes"));
+};
+
+// Bad: "We already checked the length upstream, so this is safe"
+let pubkey_arr: [u8; 32] = bytes.try_into().unwrap();
+```
+
+This is not about defensive programming for its own sake — it's about
+making the valid input space small and precisely defined. Everything
+outside it is rejected immediately.
+
 ## Function Size
 
 ### Prefer Focused Functions
