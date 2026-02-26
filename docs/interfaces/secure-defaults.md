@@ -108,17 +108,21 @@ See: `service/src/config.rs`, PR #97
 
 ### Database Connection (Implemented)
 
-**Default:** No default (required)
+**Default:** User and password are required (no compiled-in defaults).
 
-Validation fails immediately if `database.url` is empty or not a valid PostgreSQL URL.
+Validation fails immediately if `database.user` or `database.password` is empty.
 
 ```rust
-if self.database.url.is_empty() {
+if self.database.user.is_empty() {
     return Err(ConfigError::Validation(
-        "database.url is required. Set TC_DATABASE__URL environment variable.".into(),
+        "database.user is required. Set TC_DATABASE__USER environment variable or configure in config.yaml.".into(),
     ));
 }
 ```
+
+Non-secret fields have sensible defaults: `host: localhost`, `port: 5432`, `name: tiny-congress`.
+
+See: `service/src/config.rs`
 
 ### Logging Level (Implemented)
 
