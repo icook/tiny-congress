@@ -10,9 +10,9 @@ data:
       host: {{ include "app.databaseHost" . | quote }}
       port: {{ .Values.database.port }}
       name: {{ .Values.database.name | quote }}
-      max_connections: 10
+      max_connections: {{ .Values.database.maxConnections | default 10 }}
     server:
-      port: 8080
+      port: {{ .Values.service.port | default 8080 }}
     logging:
       level: {{ .Values.logging.level | default "info" | quote }}
     cors:

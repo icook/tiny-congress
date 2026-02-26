@@ -148,6 +148,8 @@ database:
   name: tiny-congress
   user: postgres
   password: postgres
+  # Maximum connections in pool
+  maxConnections: 10
 
 # Logging configuration
 logging:
