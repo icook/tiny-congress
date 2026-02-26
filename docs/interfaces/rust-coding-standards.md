@@ -100,8 +100,6 @@ pub fn get_by_kid(kid: &str) -> Result<Record, Error> { ... }
 - Two `String` parameters could be swapped silently (`kid` vs `pubkey`)
 
 **When a primitive is fine:**
-- No validation rules exist (free-form display name)
-**When a primitive is fine:**
 - No validation rules exist (free-form display name, internal counter)
 - The type has no meaningful invariants to enforce
 
