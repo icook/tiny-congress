@@ -72,6 +72,77 @@ async fn get_account(pool: &PgPool, id: Uuid) -> Result<Account, (StatusCode, St
 }
 ```
 
+## Type Safety
+
+### Newtypes for Domain Identifiers
+
+When a value has invariants (format, length, valid character set), wrap it in a newtype.
+The constructor enforces the rules; downstream code can trust the type.
+
+```rust
+// Good: Invalid KIDs cannot exist
+pub struct Kid(String);
+
+impl Kid {
+    pub fn derive(public_key: &[u8]) -> Self { /* deterministic hash — any byte slice is valid input */ }
+}
+
+pub fn get_by_kid(kid: &Kid) -> Result<Record, Error> { ... }
+
+// Bad: Every call site must remember to validate
+pub fn get_by_kid(kid: &str) -> Result<Record, Error> { ... }
+```
+
+**When to use a newtype:**
+- Value has format constraints (base64url, fixed-length, charset)
+- Value is derived from other data (KID from public key, hash from content)
+- Value crosses a trust boundary (user input → validated domain type)
+- Two `String` parameters could be swapped silently (`kid` vs `pubkey`)
+
+**When a primitive is fine:**
+- No validation rules exist (free-form display name)
+**When a primitive is fine:**
+- No validation rules exist (free-form display name, internal counter)
+- The type has no meaningful invariants to enforce
+
+### Structured Binary Formats
+
+Blobs with internal structure (envelopes, certificates, tokens) should be parsed
+into a type on arrival, not passed as `Vec<u8>` through multiple layers:
+
+```rust
+// Good: Parse at boundary, pass typed value
+let envelope = BackupEnvelope::parse(raw_bytes)?;
+repo.create_backup(account_id, &envelope);
+
+// Bad: Raw bytes passed around, re-parsed or offset-indexed in multiple places
+repo.create_backup(account_id, &raw_bytes, &raw_bytes[14..30]);
+```
+
+## Crypto & Security-Sensitive Code
+
+### Obvious Over Clever
+
+Crypto code should be readable by an auditor who has never seen the codebase.
+Prefer boring, linear, well-commented code over abstractions:
+
+```rust
+// Good: Auditor can follow the chain
+let envelope = BackupEnvelope::parse(raw_bytes)?;    // validates structure
+let root_kid = Kid::derive(&root_pubkey);              // deterministic derivation
+verify_ed25519(&root_pubkey, &device_pubkey, &cert)?;  // explicit verification step
+
+// Bad: Hidden behind generic dispatch
+let processor = EnvelopeProcessor::for_version(bytes[0]);
+let result = processor.process(bytes, &key_manager)?;
+```
+
+### Minimize Trust Surface
+
+- Parse and validate at the boundary; pass typed values internally
+- Don't re-validate what a type already guarantees
+- Don't expose construction paths that skip validation
+
 ## Function Size
 
 ### Prefer Focused Functions

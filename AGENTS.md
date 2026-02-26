@@ -62,8 +62,13 @@ Additional notes:
 - Frontend styling follows Mantine-first approach per ADR-005 (`docs/decisions/005-mantine-first-styling.md`).
 
 ## Design Principles
+
+TinyCongress handles cryptographic identity and delegation. The bar is: code that is obviously correct, not merely code that appears to work. These principles serve that standard.
+
+- **Make wrong code hard to write.** Prefer types and APIs where misuse is a compile error, not a runtime bug. A function that accepts `&Kid` instead of `&str` turns a class of bugs into type errors. A `BackupEnvelope` that can only be constructed through parsing turns malformed data into an early, obvious failure. This matters doubly for AI-assisted development: LLMs optimize for "compiles and passes tests", not "makes incorrect usage structurally impossible." Explicit type-level constraints counteract that tendency. See `docs/interfaces/rust-coding-standards.md` for patterns.
 - **Fail loud over silent incorrectness:** Never use default values that mask misconfiguration. Required values should fail fast with clear error messages, not silently fall back to potentially stale defaults. Example: `${VAR:?error message}` over `${VAR:-default}`.
 - **Single source of truth:** Configuration values (versions, ports, feature flags) should be defined in exactly one place. Other files should read from or reference that source, not duplicate the value.
+- **Don't ship dead code paths:** If only one variant exists (one KDF algorithm, one envelope version), don't add dispatch logic or database columns for hypothetical future variants. Add them when the second variant arrives. Unused branches are untested branches.
 
 ## Testing Guidelines
 - Keep specs near code (`*_tests.rs`, `*.test.tsx`). Reuse fixtures before adding mocks.
