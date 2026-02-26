@@ -343,9 +343,7 @@ impl Config {
 
         // Database port must be non-zero
         if self.database.port == 0 {
-            return Err(ConfigError::Validation(
-                "database.port cannot be 0".into(),
-            ));
+            return Err(ConfigError::Validation("database.port cannot be 0".into()));
         }
 
         // Port must be non-zero
