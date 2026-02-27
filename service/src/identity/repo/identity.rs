@@ -37,6 +37,42 @@ pub struct ValidatedSignup {
     pub(crate) certificate: Vec<u8>,
 }
 
+#[cfg(any(test, feature = "test-utils"))]
+impl ValidatedSignup {
+    /// Construct a `ValidatedSignup` from pre-computed fields.
+    ///
+    /// Only available in test builds. Callers are responsible for providing
+    /// valid cryptographic material. See integration tests for a helper that
+    /// generates real Ed25519 keys and certificates.
+    #[must_use]
+    #[allow(clippy::too_many_arguments)]
+    pub const fn new(
+        username: String,
+        root_pubkey: String,
+        root_kid: Kid,
+        backup_bytes: Vec<u8>,
+        backup_salt: Vec<u8>,
+        backup_version: i32,
+        device_pubkey: String,
+        device_kid: Kid,
+        device_name: String,
+        certificate: Vec<u8>,
+    ) -> Self {
+        Self {
+            username,
+            root_pubkey,
+            root_kid,
+            backup_bytes,
+            backup_salt,
+            backup_version,
+            device_pubkey,
+            device_kid,
+            device_name,
+            certificate,
+        }
+    }
+}
+
 /// Successful signup result.
 #[derive(Debug)]
 pub struct SignupResult {
