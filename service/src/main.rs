@@ -23,7 +23,11 @@ use tinycongress_api::{
     db::setup_database,
     graphql::{graphql_handler, graphql_playground, MutationRoot, QueryRoot},
     http::{build_security_headers, security_headers_middleware},
-    identity::{self, service::PgSignupService},
+    identity::{
+        self,
+        repo::PgIdentityRepo,
+        service::{DefaultIdentityService, IdentityService},
+    },
     rest::{self, ApiDoc},
 };
 use tower_http::cors::{AllowOrigin, Any, CorsLayer};
@@ -134,10 +138,10 @@ async fn main() -> Result<(), anyhow::Error> {
         .route("/health", get(health_check))
         // Add the schema to the extension
         .layer(Extension(schema))
-        .layer(Extension(
-            Arc::new(PgSignupService::new(pool.clone()))
-                as Arc<dyn identity::service::SignupService>,
-        ))
+        .layer(Extension({
+            let repo = Arc::new(PgIdentityRepo::new(pool.clone()));
+            Arc::new(DefaultIdentityService::new(repo)) as Arc<dyn IdentityService>
+        }))
         .layer(Extension(build_info))
         .layer(
             CorsLayer::new()
