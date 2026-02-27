@@ -53,12 +53,12 @@ export function useRevokeDevice(
 ) {
   const queryClient = useQueryClient();
 
-  return useMutation<undefined, Error, string>({
-    mutationFn: (targetKid: string) => {
+  return useMutation({
+    mutationFn: async (targetKid: string) => {
       if (!deviceKid || !privateKey || !wasmCrypto) {
         throw new Error('Not authenticated');
       }
-      return revokeDevice(targetKid, deviceKid, privateKey, wasmCrypto);
+      await revokeDevice(targetKid, deviceKid, privateKey, wasmCrypto);
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['devices'] });
@@ -76,12 +76,12 @@ export function useRenameDevice(
 ) {
   const queryClient = useQueryClient();
 
-  return useMutation<undefined, Error, { targetKid: string; name: string }>({
-    mutationFn: ({ targetKid, name }) => {
+  return useMutation({
+    mutationFn: async ({ targetKid, name }: { targetKid: string; name: string }) => {
       if (!deviceKid || !privateKey || !wasmCrypto) {
         throw new Error('Not authenticated');
       }
-      return renameDevice(targetKid, name, deviceKid, privateKey, wasmCrypto);
+      await renameDevice(targetKid, name, deviceKid, privateKey, wasmCrypto);
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['devices'] });
