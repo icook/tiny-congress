@@ -3,6 +3,7 @@
 pub mod auth;
 pub mod backup;
 pub mod devices;
+pub mod login;
 pub mod nonce;
 
 use axum::{
@@ -110,6 +111,7 @@ pub fn router() -> Router {
     Router::new()
         .route("/auth/signup", post(signup))
         .route("/auth/backup/{username}", get(backup::get_backup))
+        .route("/auth/login", post(login::login))
         .route(
             "/auth/devices",
             get(devices::list_devices).post(devices::add_device),
