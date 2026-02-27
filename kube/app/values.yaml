@@ -101,12 +101,10 @@ resources: {}
   #   cpu: 100m
   #   memory: 128Mi
 
-autoscaling:
+podDisruptionBudget:
   enabled: false
-  minReplicas: 1
-  maxReplicas: 100
-  targetCPUUtilizationPercentage: 80
-  # targetMemoryUtilizationPercentage: 80
+  # minAvailable: 1
+  # maxUnavailable: 1
 
 nodeSelector: {}
 
@@ -115,7 +113,7 @@ tolerations: []
 affinity: {}
 
 frontend:
-  replicas: 1
+  replicaCount: 1
   image:
     repository: tc/frontend-dev
     tag: latest
@@ -133,6 +131,10 @@ frontend:
     targetPort: 5173
     # Annotations to add to the frontend service (e.g., external-dns, load-balancer config)
     annotations: {}
+  podDisruptionBudget:
+    enabled: false
+    # minAvailable: 1
+    # maxUnavailable: 1
 
 # Database connection configuration
 # Non-secret fields (host, port, name) go into the ConfigMap.
