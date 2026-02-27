@@ -343,68 +343,96 @@ fn internal_error() -> axum::response::Response {
         .into_response()
 }
 
-/// Map an account repo error to an HTTP response in the signup context.
-fn account_error_response(err: AccountRepoError) -> axum::response::Response {
-    let (status, message) = match err {
-        AccountRepoError::DuplicateUsername => {
-            (StatusCode::CONFLICT, "Username already taken".to_string())
-        }
+fn account_error_response(e: AccountRepoError) -> axum::response::Response {
+    match e {
+        AccountRepoError::DuplicateUsername => (
+            StatusCode::CONFLICT,
+            Json(ErrorResponse {
+                error: "Username already taken".to_string(),
+            }),
+        )
+            .into_response(),
         AccountRepoError::DuplicateKey => (
             StatusCode::CONFLICT,
-            "Public key already registered".to_string(),
-        ),
-        AccountRepoError::Database(e) => {
-            tracing::error!("Account database error: {e}");
-            return internal_error();
+            Json(ErrorResponse {
+                error: "Public key already registered".to_string(),
+            }),
+        )
+            .into_response(),
+        AccountRepoError::Database(db_err) => {
+            tracing::error!("Signup failed (account): {}", db_err);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse {
+                    error: "Internal server error".to_string(),
+                }),
+            )
+                .into_response()
         }
-    };
-    (status, Json(ErrorResponse { error: message })).into_response()
+    }
 }
 
-/// Map a backup repo error to an HTTP response in the signup context.
-fn backup_error_response(err: BackupRepoError) -> axum::response::Response {
-    let (status, message) = match err {
-        BackupRepoError::DuplicateAccount => (
+fn backup_error_response(e: BackupRepoError) -> axum::response::Response {
+    match e {
+        BackupRepoError::DuplicateAccount | BackupRepoError::DuplicateKid => (
             StatusCode::CONFLICT,
-            "Backup already exists for this account".to_string(),
-        ),
-        BackupRepoError::DuplicateKid => (
-            StatusCode::CONFLICT,
-            "Backup already exists for this key ID".to_string(),
-        ),
+            Json(ErrorResponse {
+                error: "Backup already exists".to_string(),
+            }),
+        )
+            .into_response(),
         BackupRepoError::NotFound => {
-            tracing::error!("Unexpected BackupRepoError::NotFound during signup");
-            return internal_error();
+            // Unreachable from create path — indicates a programming error
+            tracing::error!("Unexpected NotFound from backup create during signup");
+            internal_error()
         }
-        BackupRepoError::Database(e) => {
-            tracing::error!("Backup database error: {e}");
-            return internal_error();
+        BackupRepoError::Database(db_err) => {
+            tracing::error!("Signup failed (backup): {}", db_err);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse {
+                    error: "Internal server error".to_string(),
+                }),
+            )
+                .into_response()
         }
-    };
-    (status, Json(ErrorResponse { error: message })).into_response()
+    }
 }
 
-/// Map a device key repo error to an HTTP response in the signup context.
-fn device_key_error_response(err: DeviceKeyRepoError) -> axum::response::Response {
-    let (status, message) = match err {
+fn device_key_error_response(e: DeviceKeyRepoError) -> axum::response::Response {
+    match e {
         DeviceKeyRepoError::DuplicateKid => (
             StatusCode::CONFLICT,
-            "Device key already registered".to_string(),
-        ),
+            Json(ErrorResponse {
+                error: "Device key already registered".to_string(),
+            }),
+        )
+            .into_response(),
         DeviceKeyRepoError::MaxDevicesReached => (
-            StatusCode::CONFLICT,
-            "Maximum device limit reached".to_string(),
-        ),
+            StatusCode::UNPROCESSABLE_ENTITY,
+            Json(ErrorResponse {
+                error: "Maximum device limit reached".to_string(),
+            }),
+        )
+            .into_response(),
         DeviceKeyRepoError::NotFound | DeviceKeyRepoError::AlreadyRevoked => {
-            tracing::error!("Unexpected {err} during signup device key creation");
-            return internal_error();
+            // Unreachable from create path — indicates a programming error
+            tracing::error!(
+                "Unexpected NotFound/AlreadyRevoked from device key create during signup"
+            );
+            internal_error()
         }
-        DeviceKeyRepoError::Database(e) => {
-            tracing::error!("Device key database error: {e}");
-            return internal_error();
+        DeviceKeyRepoError::Database(db_err) => {
+            tracing::error!("Signup failed (device key): {}", db_err);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse {
+                    error: "Internal server error".to_string(),
+                }),
+            )
+                .into_response()
         }
-    };
-    (status, Json(ErrorResponse { error: message })).into_response()
+    }
 }
 
 #[cfg(test)]
