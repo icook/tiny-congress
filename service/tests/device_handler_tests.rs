@@ -263,11 +263,46 @@ async fn test_revoke_device_success() {
 
 #[shared_runtime_test]
 async fn test_revoke_device_wrong_account() {
-    // Sign up two users
-    let (_app1, keys1, db1) = signup_user("revwrong1").await;
-    let (_app2, keys2, _db2) = signup_user("revwrong2").await;
+    // Both users must be in the same database so the cross-account
+    // ownership check (`device.account_id != account_id`) actually fires.
+    let db = isolated_db().await;
+    let app = TestAppBuilder::new()
+        .with_identity_pool(db.pool().clone())
+        .build();
 
-    // User 1 tries to revoke user 2's device — should get 404
+    // Sign up user 1
+    let (json1, keys1) = valid_signup_with_keys("revwrong1");
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/auth/signup")
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(json1))
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+    assert_eq!(response.status(), StatusCode::CREATED);
+
+    // Sign up user 2 in the same database
+    let (json2, keys2) = valid_signup_with_keys("revwrong2");
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/auth/signup")
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(json2))
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+    assert_eq!(response.status(), StatusCode::CREATED);
+
+    // User 1 tries to revoke user 2's device — should get 404 from ownership check
     let path = format!("/auth/devices/{}", keys2.device_kid);
     let req = build_authed_request(
         Method::DELETE,
@@ -276,13 +311,25 @@ async fn test_revoke_device_wrong_account() {
         &keys1.device_signing_key,
         &keys1.device_kid,
     );
-
-    // We need to use db1's app since that's where user1 is authenticated
-    let app = TestAppBuilder::new()
-        .with_identity_pool(db1.pool().clone())
-        .build();
     let response = app.oneshot(req).await.expect("response");
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
+}
+
+#[shared_runtime_test]
+async fn test_revoke_device_self_revocation_rejected() {
+    let (app, keys, _db) = signup_user("selfrevoke").await;
+
+    // Try to revoke own device — should get 422
+    let path = format!("/auth/devices/{}", keys.device_kid);
+    let req = build_authed_request(
+        Method::DELETE,
+        &path,
+        "",
+        &keys.device_signing_key,
+        &keys.device_kid,
+    );
+    let response = app.oneshot(req).await.expect("response");
+    assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
 }
 
 // =========================================================================
