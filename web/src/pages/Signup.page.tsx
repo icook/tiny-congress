@@ -4,7 +4,13 @@
  */
 
 import { useState } from 'react';
-import { buildBackupEnvelope, generateKeyPair, signMessage, useSignup } from '@/features/identity';
+import {
+  buildBackupEnvelope,
+  generateKeyPair,
+  getDeviceName,
+  signMessage,
+  useSignup,
+} from '@/features/identity';
 import { SignupForm } from '@/features/identity/components';
 import { useCryptoRequired } from '@/providers/CryptoProvider';
 import { useDevice } from '@/providers/DeviceProvider';
@@ -85,27 +91,4 @@ export function SignupPage() {
       successData={createdAccount}
     />
   );
-}
-
-/**
- * Attempt to derive a reasonable device name from the browser.
- */
-function getDeviceName(): string {
-  const ua = navigator.userAgent;
-  if (ua.includes('iPhone') || ua.includes('iPad') || ua.includes('iPod')) {
-    return 'iOS Device';
-  }
-  if (ua.includes('Android')) {
-    return 'Android Device';
-  }
-  if (ua.includes('Mac')) {
-    return 'Mac';
-  }
-  if (ua.includes('Windows')) {
-    return 'Windows PC';
-  }
-  if (ua.includes('Linux')) {
-    return 'Linux';
-  }
-  return 'Browser';
 }
