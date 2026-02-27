@@ -16,8 +16,7 @@
 #   - just dev-frontend         # Start Vite frontend dev server
 #
 # Full-Stack Testing (requires Docker + Kubernetes):
-#   - just test-full        # Build images, run all tests via Skaffold (mirrors CI)
-#   - just test-ci          # Alias for test-full
+#   - just test-ci          # Build images, run all tests via Skaffold (mirrors CI)
 #
 # Run `just --list` for complete recipe list
 
@@ -42,10 +41,6 @@ test-backend-cov: _ensure-test-postgres
     mkdir -p service/coverage
     cd service && cargo llvm-cov --lcov --output-path coverage/backend-unit.lcov
 
-# Build postgres image for testcontainers
-build-test-postgres:
-    docker build -t tc-postgres:local -f dockerfiles/Dockerfile.postgres dockerfiles/
-
 # Internal: ensure postgres image exists for testcontainers
 _ensure-test-postgres:
     #!/usr/bin/env bash
@@ -53,11 +48,6 @@ _ensure-test-postgres:
         echo "Building tc-postgres:local image for testcontainers..."
         docker build -t tc-postgres:local -f dockerfiles/Dockerfile.postgres dockerfiles/
     fi
-
-# Run unit tests via Skaffold (requires Docker + Kubernetes)
-test-skaffold:
-    @echo "Building images and running unit tests via Skaffold..."
-    skaffold build --file-output artifacts.json && skaffold test --build-artifacts artifacts.json
 
 # Verify full test suite via Skaffold (CI mode - RECOMMENDED approach per AGENTS.md)
 verify-ci:
@@ -101,8 +91,8 @@ build-wasm:
     cd crates/tc-crypto && wasm-pack build --target web --release --out-dir ../../web/src/wasm/tc-crypto
     @echo "✓ WASM built to web/src/wasm/tc-crypto/"
 
-# Build crypto-wasm for development (faster, debug symbols)
-build-wasm-dev:
+# [internal] Build crypto-wasm for development (faster, debug symbols)
+_build-wasm-dev:
     @echo "Building tc-crypto WASM for development..."
     cd crates/tc-crypto && wasm-pack build --target web --dev --out-dir ../../web/src/wasm/tc-crypto
     @echo "✓ WASM built to web/src/wasm/tc-crypto/"
@@ -111,8 +101,8 @@ build-wasm-dev:
 test-wasm:
     cargo test -p tc-crypto
 
-# Clean WASM build artifacts
-clean-wasm:
+# [internal] Clean WASM build artifacts
+_clean-wasm:
     rm -rf crates/tc-crypto/pkg web/src/wasm/tc-crypto
     @echo "✓ WASM artifacts cleaned"
 
@@ -140,31 +130,28 @@ codegen-openapi:
 codegen: export-schema export-openapi codegen-graphql codegen-openapi
     @echo "✓ GraphQL and REST types generated"
 
-# Legacy alias for codegen-graphql
-codegen-frontend: codegen-graphql
-
 # =============================================================================
 # Frontend (React/TypeScript) Commands
 # =============================================================================
 
 # Run frontend unit tests (requires WASM artifacts)
-test-frontend: build-wasm-dev
+test-frontend: _build-wasm-dev
     cd web && yarn vitest
 
 # Run frontend unit tests in watch mode (requires WASM artifacts)
-test-frontend-watch: build-wasm-dev
+test-frontend-watch: _build-wasm-dev
     cd web && yarn vitest:watch
 
 # Run full frontend test suite (typecheck + lint + vitest + build) - includes E2E via CI
-test-frontend-full: build-wasm-dev
+test-frontend-full: _build-wasm-dev
     cd web && yarn test
 
 # Run frontend E2E tests with Playwright (requires running backend/frontend)
 test-frontend-e2e:
     cd web && yarn playwright:ci
 
-# Check frontend types
-typecheck-frontend:
+# [internal] Check frontend types
+_typecheck-frontend:
     cd web && yarn typecheck
 
 # Run all frontend linting (prettier + eslint + stylelint)
@@ -211,8 +198,8 @@ install-frontend:
 # Full-Stack Development (Requires Skaffold + Kubernetes Cluster)
 # =============================================================================
 
-# Check that local rustc version matches mise.toml (for shared cargo cache)
-check-rust-version:
+# [internal] Check that local rustc version matches mise.toml (for shared cargo cache)
+_check-rust-version:
     #!/usr/bin/env bash
     set -euo pipefail
     EXPECTED=$(grep 'rust' mise.toml | sed 's/.*"\(.*\)"/\1/')
@@ -259,7 +246,7 @@ export RUST_VERSION := ```
 
 # Start full development environment with Skaffold (hot reload, port forwarding)
 # Prerequisites: Docker, Skaffold, KinD cluster (just kind-create)
-dev: check-rust-version
+dev: _check-rust-version
     @echo "Starting full-stack dev with Skaffold (targeting KinD cluster)..."
     @echo "Prerequisites: run 'just kind-create' first for KinD with shared cargo cache"
     skaffold dev --kube-context kind-kind --port-forward --cleanup=false --skip-tests
@@ -269,8 +256,8 @@ build-images:
     @echo "Building container images..."
     skaffold build
 
-# Build images and output artifacts JSON (for reuse with test)
-build-images-artifacts:
+# [internal] Build images and output artifacts JSON (for reuse with test-ci)
+_build-images-artifacts:
     @echo "Building container images and writing artifacts..."
     skaffold build --file-output artifacts.json
 
@@ -326,14 +313,14 @@ fmt: fmt-backend fmt-frontend
     @echo "✓ All formatting applied"
 
 # Type check frontend
-typecheck: typecheck-frontend
+typecheck: _typecheck-frontend
 
 # Run all local unit tests (backend + frontend + wasm)
 test: test-backend test-wasm test-frontend
     @echo "✓ Unit tests passed"
 
 # Run frontend unit tests with coverage
-test-frontend-cov: build-wasm-dev
+test-frontend-cov: _build-wasm-dev
     cd web && yarn vitest:coverage
 
 # Run all unit tests with coverage
@@ -353,19 +340,16 @@ build-release: build-backend-release build-frontend
 # =============================================================================
 
 # Run full test suite via Skaffold (mirrors CI - RECOMMENDED per AGENTS.md)
-test-full: build-images-artifacts
+test-ci: _build-images-artifacts
     @echo "Running full test suite via Skaffold..."
     skaffold test --build-artifacts artifacts.json
-
-# Alias for test-full (CI-friendly naming)
-test-ci: test-full
 
 # =============================================================================
 # Utility Commands
 # =============================================================================
 
 # Clean build artifacts
-clean: clean-wasm
+clean: _clean-wasm
     cd service && cargo clean
     cd web && rm -rf node_modules/.cache dist .vite
     @echo "✓ Build artifacts cleaned"
@@ -435,7 +419,6 @@ setup:
     @echo "  - kubectl: $(kubectl version --client 2>/dev/null | head -1 || echo "NOT INSTALLED")"
     @echo ""
     @echo "For local development (no cluster needed):"
-    @echo "  just node-use      # Switch to correct Node version (requires nvm)"
     @echo "  just lint          # Lint all code"
     @echo "  just fmt           # Format all code"
     @echo "  just build         # Build backend + frontend"
@@ -448,17 +431,6 @@ setup:
     @echo "  just test-ci       # Run full test suite via Skaffold"
     @echo "  just dev           # Start full-stack dev environment"
     @echo ""
-
-# Switch to Node version from .nvmrc (requires nvm)
-node-use:
-    @echo "Switching to Node version from web/.nvmrc..."
-    @echo "Run: cd web && nvm use"
-    @echo ""
-    @echo "Or add this to your shell profile for automatic switching:"
-    @echo '  # Auto-switch node version when entering directory with .nvmrc'
-    @echo '  autoload -U add-zsh-hook'
-    @echo '  load-nvmrc() { [[ -f .nvmrc ]] && nvm use; }'
-    @echo '  add-zsh-hook chpwd load-nvmrc'
 
 # =============================================================================
 # Database Commands
