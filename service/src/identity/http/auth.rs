@@ -138,9 +138,14 @@ impl<S: Send + Sync> FromRequest<S> for AuthenticatedDevice {
             .try_into()
             .map_err(|_| auth_error("Signature must be 64 bytes"))?;
 
-        // Capture method and path before consuming the request
+        // Capture method and path+query before consuming the request.
+        // Include query string in the signed payload so future endpoints
+        // with query parameters are protected against parameter injection.
         let method = req.method().to_string();
-        let path = req.uri().path().to_string();
+        let path = req.uri().path_and_query().map_or_else(
+            || req.uri().path().to_string(),
+            |pq| pq.as_str().to_string(),
+        );
 
         // Read the body
         let body_bytes = axum::body::to_bytes(req.into_body(), 1024 * 1024)

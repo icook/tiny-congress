@@ -34,8 +34,8 @@ export function signMessage(message: Uint8Array, privateKey: Uint8Array): Uint8A
 /**
  * Build a minimal backup envelope for signup.
  *
- * In production this would encrypt the root private key with a password-derived key.
- * For now, we build a valid envelope structure with placeholder encrypted data.
+ * TODO(#319): Replace with real Argon2id + XChaCha20-Poly1305 encryption.
+ * Currently builds a valid envelope structure with placeholder encrypted data.
  */
 export function buildBackupEnvelope(): Uint8Array {
   // Fixed header layout matching BackupEnvelope::build in Rust:

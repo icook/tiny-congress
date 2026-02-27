@@ -243,6 +243,17 @@ pub async fn revoke_device(
         Err(_) => return bad_request("Invalid KID format"),
     };
 
+    // Prevent revoking the currently authenticated device
+    if kid == auth.device_kid {
+        return (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            Json(ErrorResponse {
+                error: "Cannot revoke the device making this request".to_string(),
+            }),
+        )
+            .into_response();
+    }
+
     // Verify the target device belongs to this account
     let repo = PgDeviceKeyRepo::new(pool);
     match get_owned_device(&repo, &kid, auth.account_id).await {

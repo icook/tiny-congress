@@ -309,6 +309,7 @@ impl TestAppBuilder {
                     .allow_methods([
                         Method::GET,
                         Method::POST,
+                        Method::PUT,
                         Method::DELETE,
                         Method::PATCH,
                         Method::OPTIONS,
