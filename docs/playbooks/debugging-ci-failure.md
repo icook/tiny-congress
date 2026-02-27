@@ -31,7 +31,7 @@ just lint              # Check all linting
 just fmt               # Fix all formatting
 just lint-backend      # Backend only
 just lint-frontend     # Frontend only
-just typecheck         # TypeScript type checking
+just lint-typecheck     # TypeScript type checking
 ```
 
 ### Integration test failures

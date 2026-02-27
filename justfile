@@ -1,22 +1,23 @@
 # TinyCongress Development Toolchain
-# Recipes aligned with AGENTS.md guidelines
 #
 # Quick Start:
-#   1. just setup           # Check prerequisites (one-time setup)
-#   2. just dev             # Start full-stack dev environment (requires Skaffold + cluster)
+#   1. just setup           # Check prerequisites (one-time)
+#   2. just dev             # Full-stack dev (requires Skaffold + KinD cluster)
 #
-# Local Development (no cluster needed):
-#   - just lint                 # Lint all code
-#   - just fmt                  # Format all code
-#   - just test-backend         # Run backend unit tests (uses testcontainers)
-#   - just test-backend-watch   # Run backend tests in watch mode
-#   - just test-frontend-watch  # Run frontend tests in watch mode
-#   - just build-backend        # Build backend
-#   - just dev-backend          # Start backend with hot reload
-#   - just dev-frontend         # Start Vite frontend dev server
+# Daily commands (no cluster needed):
+#   just lint               # Lint all code
+#   just fmt                # Fix all formatting
+#   just test               # Unit tests (backend + frontend + wasm)
+#   just test-backend       # Backend unit tests only
+#   just build              # Build everything locally
+#   just dev-backend        # Backend with hot reload
+#   just dev-frontend       # Vite dev server
+#   just dev-storybook      # Storybook dev server
+#   just codegen            # Regenerate GraphQL + REST types
 #
-# Full-Stack Testing (requires Docker + Kubernetes):
-#   - just test-ci          # Build images, run all tests via Skaffold (mirrors CI)
+# Full-stack (requires Docker + KinD):
+#   just test-ci            # Build images + run all tests via Skaffold
+#   just kind-create        # Create local KinD cluster (one-time)
 #
 # Run `just --list` for complete recipe list
 
@@ -48,11 +49,6 @@ _ensure-test-postgres:
         echo "Building tc-postgres:local image for testcontainers..."
         docker build -t tc-postgres:local -f dockerfiles/Dockerfile.postgres dockerfiles/
     fi
-
-# Verify full test suite via Skaffold (CI mode - RECOMMENDED approach per AGENTS.md)
-verify-ci:
-    @echo "Running full CI verification (Skaffold, unit tests, integration tests, E2E)..."
-    skaffold verify -p ci
 
 # Check backend formatting
 lint-backend-fmt:
@@ -110,12 +106,12 @@ _clean-wasm:
 # Code Generation (GraphQL & OpenAPI Types)
 # =============================================================================
 
-# Export GraphQL schema from Rust backend
-export-schema:
+# Internal: Export GraphQL schema from Rust backend
+_export-schema:
     cd service && cargo run --bin export_schema > ../web/schema.graphql
 
-# Export OpenAPI schema from Rust backend
-export-openapi:
+# Internal: Export OpenAPI schema from Rust backend
+_export-openapi:
     cd service && cargo run --bin export_openapi > ../web/openapi.json
 
 # Generate TypeScript types and Zod schemas from GraphQL schema
@@ -127,7 +123,7 @@ codegen-openapi:
     cd web && yarn openapi-typescript openapi.json -o src/api/generated/rest.ts && yarn prettier --write src/api/generated/rest.ts
 
 # Full codegen: export schemas from Rust + generate TypeScript types
-codegen: export-schema export-openapi codegen-graphql codegen-openapi
+codegen: _export-schema _export-openapi codegen-graphql codegen-openapi
     @echo "✓ GraphQL and REST types generated"
 
 # =============================================================================
@@ -183,15 +179,15 @@ dev-frontend:
     cd web && yarn dev
 
 # Run Storybook dev server
-storybook:
+dev-storybook:
     cd web && yarn storybook
 
 # Build Storybook static site
-storybook-build:
+build-storybook:
     cd web && yarn storybook:build
 
-# Install frontend dependencies
-install-frontend:
+# Internal: Install frontend dependencies (used by CI)
+_install-frontend:
     cd web && yarn install
 
 # =============================================================================
@@ -244,8 +240,7 @@ export RUST_VERSION := ```
     echo "$VERSION"
 ```
 
-# Start full development environment with Skaffold (hot reload, port forwarding)
-# Prerequisites: Docker, Skaffold, KinD cluster (just kind-create)
+# Start full-stack dev environment with Skaffold (requires KinD cluster)
 dev: _check-rust-version
     @echo "Starting full-stack dev with Skaffold (targeting KinD cluster)..."
     @echo "Prerequisites: run 'just kind-create' first for KinD with shared cargo cache"
@@ -261,19 +256,19 @@ _build-images-artifacts:
     @echo "Building container images and writing artifacts..."
     skaffold build --file-output artifacts.json
 
-# Deploy to local cluster
-deploy:
-    @echo "Deploying to Kubernetes cluster..."
+# Deploy dev images to local KinD cluster
+kind-deploy:
+    @echo "Deploying to KinD cluster (dev profile)..."
     skaffold run -p dev
 
-# Deploy release images to cluster
-deploy-release:
-    @echo "Deploying release images to cluster..."
+# Deploy release images to local KinD cluster
+kind-deploy-release:
+    @echo "Deploying to KinD cluster (release profile)..."
     skaffold run -p release
 
-# Delete all deployed resources from cluster
-undeploy:
-    @echo "Cleaning up Kubernetes resources..."
+# Remove all deployed resources from local KinD cluster
+kind-undeploy:
+    @echo "Cleaning up KinD resources..."
     skaffold delete
 
 # =============================================================================
@@ -305,15 +300,15 @@ audit-unused:
 # =============================================================================
 
 # Run all linting (backend + frontend) - no cluster required
-lint: lint-backend lint-frontend
+lint: lint-backend lint-frontend lint-typecheck
     @echo "✓ All linting passed"
+
+# Type check frontend (TypeScript)
+lint-typecheck: _typecheck-frontend
 
 # Fix all formatting (backend + frontend)
 fmt: fmt-backend fmt-frontend
     @echo "✓ All formatting applied"
-
-# Type check frontend
-typecheck: _typecheck-frontend
 
 # Run all local unit tests (backend + frontend + wasm)
 test: test-backend test-wasm test-frontend
@@ -332,7 +327,7 @@ build: build-backend build-wasm build-frontend
     @echo "✓ All builds successful"
 
 # Build everything in release mode
-build-release: build-backend-release build-frontend
+build-release: build-backend-release build-wasm build-frontend
     @echo "✓ Release builds successful"
 
 # =============================================================================
@@ -374,37 +369,6 @@ docs-ts:
     @echo "TypeScript docs: web/docs/index.html"
 
 # =============================================================================
-# Git Workflows
-# =============================================================================
-# See docs/interfaces/branch-naming-conventions.md for branch naming standards
-
-# Push current branch and create a PR
-pr title body="":
-    #!/usr/bin/env bash
-    set -euo pipefail
-    branch=$(git rev-parse --abbrev-ref HEAD)
-    echo "→ Pushing branch: $branch"
-    git push -u origin "$branch"
-    echo "→ Creating PR..."
-    gh pr create --title "{{title}}" --body "{{body}}"
-    pr_num=$(gh pr view --json number -q .number)
-    echo "✓ PR #$pr_num created: $(gh pr view --json url -q .url)"
-
-# Push current branch, create PR, and enable auto-merge
-pr-auto title body="":
-    #!/usr/bin/env bash
-    set -euo pipefail
-    branch=$(git rev-parse --abbrev-ref HEAD)
-    echo "→ Pushing branch: $branch"
-    git push -u origin "$branch"
-    echo "→ Creating PR..."
-    gh pr create --title "{{title}}" --body "{{body}}"
-    pr_num=$(gh pr view --json number -q .number)
-    echo "→ Enabling auto-merge for PR #$pr_num..."
-    gh pr merge "$pr_num" --auto --merge
-    echo "✓ PR #$pr_num created with auto-merge enabled: $(gh pr view --json url -q .url)"
-
-# =============================================================================
 # Setup & Prerequisites
 # =============================================================================
 
@@ -422,12 +386,12 @@ setup:
     @echo "  just lint          # Lint all code"
     @echo "  just fmt           # Format all code"
     @echo "  just build         # Build backend + frontend"
-    @echo "  just test-backend  # Run backend unit tests"
+    @echo "  just test          # Run all unit tests"
     @echo "  just dev-backend   # Start backend with hot reload"
     @echo "  just dev-frontend  # Start Vite dev server"
     @echo ""
-    @echo "For full-stack testing (requires Docker + Kubernetes):"
-    @echo "  minikube start     # Start local Kubernetes cluster"
+    @echo "For full-stack testing (requires Docker + KinD):"
+    @echo "  just kind-create   # Create local KinD cluster (one-time)"
     @echo "  just test-ci       # Run full test suite via Skaffold"
     @echo "  just dev           # Start full-stack dev environment"
     @echo ""

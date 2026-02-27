@@ -75,8 +75,9 @@ Tests that need a database use [testcontainers](https://testcontainers.com/) to 
 spin up an isolated PostgreSQL container. First build the custom postgres image:
 
 ```bash
-# One-time setup (from repo root)
-just build-test-postgres
+# The tc-postgres:local image is built automatically on first test run.
+# To force a rebuild:
+docker build -t tc-postgres:local -f dockerfiles/Dockerfile.postgres dockerfiles/
 ```
 
 Or use Skaffold to run tests in containers:
