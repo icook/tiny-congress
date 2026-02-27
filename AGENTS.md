@@ -86,7 +86,7 @@ TinyCongress handles cryptographic identity and delegation. The bar is: code tha
 
 ## Environment & Configuration Tips
 - Keep secrets out of version control; export `DATABASE_URL` and queue settings locally and in CI.
-- Backend tests use testcontainers for DB isolation. Run `just build-test-postgres` once to build the custom image.
+- Backend tests use testcontainers for DB isolation. The custom postgres image is built automatically on first test run.
 - Align Docker tags with `skaffold.yaml` profiles so preview, test, and prod images stay consistent.
 - Follow the secure defaults policy (`docs/interfaces/secure-defaults.md`) when adding configuration options.
 

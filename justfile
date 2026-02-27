@@ -1,22 +1,23 @@
 # TinyCongress Development Toolchain
-# Recipes aligned with AGENTS.md guidelines
 #
 # Quick Start:
-#   1. just setup           # Check prerequisites (one-time setup)
-#   2. just dev             # Start full-stack dev environment (requires Skaffold + cluster)
+#   1. just setup           # Check prerequisites (one-time)
+#   2. just dev             # Full-stack dev (requires Skaffold + KinD cluster)
 #
-# Local Development (no cluster needed):
-#   - just lint                 # Lint all code
-#   - just fmt                  # Format all code
-#   - just test-backend         # Run backend unit tests (uses testcontainers)
-#   - just test-backend-watch   # Run backend tests in watch mode
-#   - just test-frontend-watch  # Run frontend tests in watch mode
-#   - just build-backend        # Build backend
-#   - just dev-backend          # Start backend with hot reload
-#   - just dev-frontend         # Start Vite frontend dev server
+# Daily commands (no cluster needed):
+#   just lint               # Lint all code
+#   just fmt                # Fix all formatting
+#   just test               # Unit tests (backend + frontend + wasm)
+#   just test-backend       # Backend unit tests only
+#   just build              # Build everything locally
+#   just dev-backend        # Backend with hot reload
+#   just dev-frontend       # Vite dev server
+#   just dev-storybook      # Storybook dev server
+#   just codegen            # Regenerate GraphQL + REST types
 #
-# Full-Stack Testing (requires Docker + Kubernetes):
-#   - just test-ci          # Build images, run all tests via Skaffold (mirrors CI)
+# Full-stack (requires Docker + KinD):
+#   just test-ci            # Build images + run all tests via Skaffold
+#   just kind-create        # Create local KinD cluster (one-time)
 #
 # Run `just --list` for complete recipe list
 
@@ -48,11 +49,6 @@ _ensure-test-postgres:
         echo "Building tc-postgres:local image for testcontainers..."
         docker build -t tc-postgres:local -f dockerfiles/Dockerfile.postgres dockerfiles/
     fi
-
-# Verify full test suite via Skaffold (CI mode - RECOMMENDED approach per AGENTS.md)
-verify-ci:
-    @echo "Running full CI verification (Skaffold, unit tests, integration tests, E2E)..."
-    skaffold verify -p ci
 
 # Check backend formatting
 lint-backend-fmt:
@@ -183,11 +179,11 @@ dev-frontend:
     cd web && yarn dev
 
 # Run Storybook dev server
-storybook:
+dev-storybook:
     cd web && yarn storybook
 
 # Build Storybook static site
-storybook-build:
+build-storybook:
     cd web && yarn storybook:build
 
 # Install frontend dependencies
@@ -422,12 +418,12 @@ setup:
     @echo "  just lint          # Lint all code"
     @echo "  just fmt           # Format all code"
     @echo "  just build         # Build backend + frontend"
-    @echo "  just test-backend  # Run backend unit tests"
+    @echo "  just test          # Run all unit tests"
     @echo "  just dev-backend   # Start backend with hot reload"
     @echo "  just dev-frontend  # Start Vite dev server"
     @echo ""
-    @echo "For full-stack testing (requires Docker + Kubernetes):"
-    @echo "  minikube start     # Start local Kubernetes cluster"
+    @echo "For full-stack testing (requires Docker + KinD):"
+    @echo "  just kind-create   # Create local KinD cluster (one-time)"
     @echo "  just test-ci       # Run full test suite via Skaffold"
     @echo "  just dev           # Start full-stack dev environment"
     @echo ""

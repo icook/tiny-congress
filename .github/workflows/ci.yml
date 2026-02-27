@@ -72,7 +72,7 @@ jobs:
   # ============================================================
   # JOB 0b2: Build Storybook
   # ============================================================
-  storybook-build:
+  build-storybook:
     name: Build Storybook
     runs-on: ubuntu-latest
     steps:
@@ -96,7 +96,7 @@ jobs:
         run: just install-frontend
 
       - name: Build Storybook
-        run: just storybook-build
+        run: just build-storybook
 
       - name: Upload Storybook artifact
         uses: actions/upload-artifact@v6
@@ -451,7 +451,7 @@ jobs:
       - scan-images
       - lint
       - lint-web
-      - storybook-build
+      - build-storybook
       - codegen-check
       - sqlx-check
       - security-audit
@@ -831,7 +831,7 @@ jobs:
   deploy-cloudflare:
     name: Deploy to Cloudflare Pages
     runs-on: ubuntu-latest
-    needs: [integration-tests, storybook-build, build-docs]
+    needs: [integration-tests, build-storybook, build-docs]
     if: always() && needs.integration-tests.result != 'cancelled'
     permissions:
       contents: read
