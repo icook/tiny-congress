@@ -37,7 +37,7 @@ use axum::{
 };
 use sqlx::{postgres::PgPoolOptions, PgPool};
 use tinycongress_api::{
-    build_info::BuildInfoProvider,
+    build_info::BuildInfo,
     config::SecurityHeadersConfig,
     graphql::{graphql_handler, graphql_playground, MutationRoot, QueryRoot},
     http::{build_security_headers, security_headers_middleware},
@@ -70,7 +70,7 @@ pub struct TestAppBuilder {
     /// Whether to include Swagger UI
     include_swagger: bool,
     /// Custom build info provider (None uses from_env())
-    build_info: Option<BuildInfoProvider>,
+    build_info: Option<BuildInfo>,
     /// Database pool for identity routes (lazy pool for validation-only tests)
     pool: Option<PgPool>,
     /// CORS allowed origins (None means no CORS layer)
@@ -231,7 +231,7 @@ impl TestAppBuilder {
 
     /// Use a custom build info provider.
     #[must_use]
-    pub fn with_build_info(mut self, provider: BuildInfoProvider) -> Self {
+    pub fn with_build_info(mut self, provider: BuildInfo) -> Self {
         self.build_info = Some(provider);
         self
     }
@@ -249,7 +249,7 @@ impl TestAppBuilder {
     /// 4. Security headers middleware (outermost)
     #[must_use]
     pub fn build(self) -> Router {
-        let build_info = self.build_info.unwrap_or_else(BuildInfoProvider::from_env);
+        let build_info = self.build_info.unwrap_or_else(BuildInfo::from_env);
 
         // Build GraphQL schema
         let schema = Schema::build(QueryRoot, MutationRoot, EmptySubscription)

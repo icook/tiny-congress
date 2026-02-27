@@ -167,6 +167,15 @@ where
     create_backup(executor, account_id, kid, encrypted_backup, salt, version).await
 }
 
+/// Retrieve a backup by KID (for recovery).
+///
+/// # Errors
+///
+/// Returns `BackupRepoError::NotFound` if no backup exists for this KID.
+///
+/// # Panics
+///
+/// Panics if a KID stored in the database fails to parse — this indicates data corruption.
 #[allow(clippy::expect_used)]
 async fn get_backup_by_kid<'e, E>(executor: E, kid: &Kid) -> Result<BackupRecord, BackupRepoError>
 where

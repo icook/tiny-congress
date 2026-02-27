@@ -258,6 +258,11 @@ fn map_device_key_row(row: sqlx::postgres::PgRow) -> DeviceKeyRecord {
     }
 }
 
+/// List all device keys for an account (including revoked).
+///
+/// # Errors
+///
+/// Returns `DeviceKeyRepoError::Database` on database failures.
 async fn list_device_keys_by_account<'e, E>(
     executor: E,
     account_id: Uuid,
@@ -281,6 +286,11 @@ where
     Ok(rows.into_iter().map(map_device_key_row).collect())
 }
 
+/// Get a device key by KID.
+///
+/// # Errors
+///
+/// Returns `DeviceKeyRepoError::NotFound` if no device key matches the given KID.
 async fn get_device_key_by_kid<'e, E>(
     executor: E,
     device_kid: &Kid,
@@ -334,6 +344,12 @@ async fn ensure_active_device_updated(
     Ok(())
 }
 
+/// Revoke a device key (sets `revoked_at`).
+///
+/// # Errors
+///
+/// Returns `DeviceKeyRepoError::NotFound` if no device key matches the given KID.
+/// Returns `DeviceKeyRepoError::AlreadyRevoked` if the device key was already revoked.
 async fn revoke_device_key(pool: &PgPool, device_kid: &Kid) -> Result<(), DeviceKeyRepoError> {
     let result = sqlx::query(
         "UPDATE device_keys SET revoked_at = now() WHERE device_kid = $1 AND revoked_at IS NULL",
@@ -345,6 +361,12 @@ async fn revoke_device_key(pool: &PgPool, device_kid: &Kid) -> Result<(), Device
     ensure_active_device_updated(pool, result, device_kid).await
 }
 
+/// Rename a device.
+///
+/// # Errors
+///
+/// Returns `DeviceKeyRepoError::NotFound` if no device key matches the given KID.
+/// Returns `DeviceKeyRepoError::AlreadyRevoked` if the device key has been revoked.
 async fn rename_device_key(
     pool: &PgPool,
     device_kid: &Kid,
@@ -361,6 +383,12 @@ async fn rename_device_key(
     ensure_active_device_updated(pool, result, device_kid).await
 }
 
+/// Update `last_used_at` timestamp.
+///
+/// # Errors
+///
+/// Returns `DeviceKeyRepoError::NotFound` if no device key matches the given KID.
+/// Returns `DeviceKeyRepoError::AlreadyRevoked` if the device key has been revoked.
 async fn touch_device_key(pool: &PgPool, device_kid: &Kid) -> Result<(), DeviceKeyRepoError> {
     let result = sqlx::query(
         "UPDATE device_keys SET last_used_at = now() WHERE device_kid = $1 AND revoked_at IS NULL",

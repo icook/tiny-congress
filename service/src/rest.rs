@@ -6,10 +6,16 @@
 // The OpenApi derive macro generates code that triggers this lint
 #![allow(clippy::needless_for_each)]
 
-use crate::build_info::{BuildInfo, BuildInfoProvider};
+use crate::build_info::BuildInfo;
 use axum::{extract::Extension, http::StatusCode, response::IntoResponse, Json};
-use serde::Serialize;
+use serde::{Serialize, Serializer};
 use utoipa::{OpenApi, ToSchema};
+
+/// Serialize a `StatusCode` as its `u16` representation.
+#[allow(clippy::trivially_copy_pass_by_ref)] // serde requires `&T` signature
+fn serialize_status_code<S: Serializer>(status: &StatusCode, s: S) -> Result<S::Ok, S::Error> {
+    s.serialize_u16(status.as_u16())
+}
 
 /// RFC 7807 Problem Details error response.
 #[derive(Debug, Serialize, ToSchema)]
@@ -21,7 +27,9 @@ pub struct ProblemDetails {
     /// Short human-readable summary
     pub title: String,
     /// HTTP status code
-    pub status: u16,
+    #[serde(serialize_with = "serialize_status_code")]
+    #[schema(value_type = u16)]
+    pub status: StatusCode,
     /// Human-readable explanation specific to this occurrence
     pub detail: String,
     /// URI reference identifying the specific occurrence
@@ -49,7 +57,7 @@ impl ProblemDetails {
         Self {
             problem_type: "https://tinycongress.com/errors/internal".to_string(),
             title: "Internal Server Error".to_string(),
-            status: 500,
+            status: StatusCode::INTERNAL_SERVER_ERROR,
             detail: detail.to_string(),
             instance: None,
             extensions: Some(ProblemExtensions {
@@ -62,8 +70,7 @@ impl ProblemDetails {
 
 impl IntoResponse for ProblemDetails {
     fn into_response(self) -> axum::response::Response {
-        let status = StatusCode::from_u16(self.status).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
-        (status, Json(self)).into_response()
+        (self.status, Json(self)).into_response()
     }
 }
 
@@ -102,9 +109,9 @@ pub struct ApiDoc;
 )]
 #[allow(clippy::unused_async)] // Required for Axum handler signature
 pub async fn get_build_info(
-    Extension(provider): Extension<BuildInfoProvider>,
+    Extension(build_info): Extension<BuildInfo>,
 ) -> Result<Json<BuildInfo>, ProblemDetails> {
-    Ok(Json(provider.build_info()))
+    Ok(Json(build_info))
 }
 
 #[cfg(test)]

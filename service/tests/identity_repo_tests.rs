@@ -28,7 +28,7 @@ fn test_envelope() -> BackupEnvelope {
 // Account Repo Tests
 // ============================================================================
 
-/// Test that accounts table exists and create_account_with_executor works.
+/// Test that accounts table exists and create_account works.
 #[shared_runtime_test]
 async fn test_accounts_repo_inserts_account() {
     let mut tx = test_transaction().await;

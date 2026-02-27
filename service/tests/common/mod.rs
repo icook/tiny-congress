@@ -83,13 +83,13 @@ pub mod graphql;
 pub mod migration_helpers;
 
 pub mod test_db {
-    use once_cell::sync::Lazy;
     use sqlx::postgres::{PgConnection, PgPool, PgPoolOptions};
     use sqlx::Connection;
     use sqlx_core::migrate::Migrator;
     use std::future::Future;
     use std::path::Path;
     use std::sync::Arc;
+    use std::sync::LazyLock;
     use std::time::Duration;
     use testcontainers::{runners::AsyncRunner, ContainerAsync, GenericImage, ImageExt};
     use tokio::runtime::Runtime;
@@ -97,7 +97,7 @@ pub mod test_db {
 
     /// Global Tokio runtime shared across all tests.
     /// This ensures async cleanup happens while the runtime is still alive.
-    static TEST_RUNTIME: Lazy<Runtime> = Lazy::new(|| {
+    static TEST_RUNTIME: LazyLock<Runtime> = LazyLock::new(|| {
         tokio::runtime::Builder::new_multi_thread()
             .enable_all()
             .build()
