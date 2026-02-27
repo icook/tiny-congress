@@ -375,6 +375,43 @@ async fn test_rename_device_success() {
 }
 
 // =========================================================================
+// Nonce replay prevention
+// =========================================================================
+
+#[shared_runtime_test]
+async fn test_nonce_replay_rejected() {
+    let (app, keys, _db) = signup_user("noncereplay").await;
+
+    // Build a request with a specific nonce
+    let nonce = "fixed-nonce-for-replay-test";
+    let timestamp = chrono::Utc::now().timestamp();
+    let body_hash = Sha256::digest(b"");
+    let body_hash_hex = format!("{body_hash:x}");
+    let canonical = format!("GET\n/auth/devices\n{timestamp}\n{nonce}\n{body_hash_hex}");
+    let signature = keys.device_signing_key.sign(canonical.as_bytes());
+
+    let build_req = || {
+        Request::builder()
+            .method(Method::GET)
+            .uri("/auth/devices")
+            .header("X-Device-Kid", keys.device_kid.to_string())
+            .header("X-Signature", encode_base64url(&signature.to_bytes()))
+            .header("X-Timestamp", timestamp.to_string())
+            .header("X-Nonce", nonce)
+            .body(Body::empty())
+            .expect("request")
+    };
+
+    // First request succeeds
+    let response = app.clone().oneshot(build_req()).await.expect("response");
+    assert_eq!(response.status(), StatusCode::OK);
+
+    // Same nonce replayed — should be rejected
+    let response = app.oneshot(build_req()).await.expect("response");
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+// =========================================================================
 // Auth with revoked device
 // =========================================================================
 
