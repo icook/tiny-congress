@@ -3290,6 +3290,7 @@ dependencies = [
  "anyhow",
  "async-graphql",
  "async-graphql-axum",
+ "async-trait",
  "axum",
  "chrono",
  "ed25519-dalek",

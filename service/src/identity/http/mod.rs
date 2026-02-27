@@ -7,7 +7,9 @@ use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use super::repo::{create_account, create_backup, create_device_key_with_conn};
+use super::repo::{
+    create_account_with_executor, create_backup_with_executor, create_device_key_with_executor,
+};
 use tc_crypto::{decode_base64url, verify_ed25519, BackupEnvelope, Kid};
 
 /// Backup data included in signup request
@@ -228,7 +230,7 @@ async fn signup(
         }
     };
 
-    let account = match create_account(
+    let account = match create_account_with_executor(
         &mut *tx,
         &validated.username,
         &validated.root_pubkey_b64,
@@ -240,7 +242,7 @@ async fn signup(
         Err(e) => return e.into_response(),
     };
 
-    if let Err(e) = create_backup(
+    if let Err(e) = create_backup_with_executor(
         &mut *tx,
         account.id,
         &validated.root_kid,
@@ -253,7 +255,7 @@ async fn signup(
         return e.into_response();
     }
 
-    let device = match create_device_key_with_conn(
+    let device = match create_device_key_with_executor(
         &mut tx,
         account.id,
         &validated.device_kid,

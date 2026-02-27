@@ -6,6 +6,7 @@ license.workspace = true
 
 [features]
 default = []
+test-utils = []
 
 [dependencies]
 # Web server
@@ -32,6 +33,9 @@ sqlx-postgres = { version = "0.8", default-features = false, features = ["chrono
 # Configuration
 figment = { version = "0.10", features = ["yaml", "env"] }
 
+# Async
+async-trait = "0.1"
+
 # Utilities
 chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1.16", features = ["v4", "serde"] }
@@ -53,7 +57,7 @@ tower = { version = "0.5", features = ["util"] }
 testcontainers = "0.26"
 tokio = { version = "1", features = ["sync", "rt-multi-thread"] }
 tc-test-macros = { path = "../crates/test-macros", version = "0.1.0" }
-tinycongress-api = { path = ".", version = "0.1.0" }
+tinycongress-api = { path = ".", version = "0.1.0", features = ["test-utils"] }
 
 [[bin]]
 name = "export_schema"
@@ -65,7 +69,7 @@ path = "src/bin/export_openapi.rs"
 
 # cargo-machete false positives (used via derive macros)
 [package.metadata.cargo-machete]
-ignored = ["serde", "thiserror", "utoipa"]
+ignored = ["serde", "thiserror", "async-trait", "utoipa"]
 
 [lints]
 workspace = true
