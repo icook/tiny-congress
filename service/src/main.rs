@@ -134,7 +134,6 @@ async fn main() -> Result<(), anyhow::Error> {
         .route("/health", get(health_check))
         // Add the schema to the extension
         .layer(Extension(schema))
-        .layer(Extension(pool.clone()))
         .layer(Extension(
             Arc::new(PgSignupService::new(pool.clone()))
                 as Arc<dyn identity::service::SignupService>,

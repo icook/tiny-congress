@@ -114,7 +114,6 @@ impl SignupService for PgSignupService {
 }
 
 #[cfg(any(test, feature = "test-utils"))]
-#[allow(clippy::expect_used)]
 pub mod mock {
     //! Mock signup service composed of mock repositories for unit testing.
 
