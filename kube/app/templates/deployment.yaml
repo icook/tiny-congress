@@ -6,9 +6,7 @@ metadata:
     {{- include "app.labels" . | nindent 4 }}
     app.kubernetes.io/component: api
 spec:
-  {{- if not .Values.autoscaling.enabled }}
   replicas: {{ .Values.replicaCount }}
-  {{- end }}
   selector:
     matchLabels:
       {{- include "app.selectorLabels" . | nindent 6 }}
@@ -104,7 +102,7 @@ metadata:
     {{- include "app.labels" . | nindent 4 }}
     app.kubernetes.io/component: frontend
 spec:
-  replicas: {{ .Values.frontend.replicas | default 1 }}
+  replicas: {{ .Values.frontend.replicaCount | default 1 }}
   selector:
     matchLabels:
       {{- include "app.selectorLabels" . | nindent 6 }}
@@ -125,5 +123,20 @@ spec:
               value: {{ .Values.frontend.apiUrl | default (printf "http://%s:8080" (include "app.fullname" .)) | quote }}
             - name: TC_ENVIRONMENT
               value: {{ .Values.frontend.environment | default "" | quote }}
+          startupProbe:
+            httpGet:
+              path: /
+              port: {{ .Values.frontend.service.targetPort | default .Values.frontend.service.port }}
+            failureThreshold: 30
+            periodSeconds: 2
+            timeoutSeconds: 2
+          livenessProbe:
+            httpGet:
+              path: /
+              port: {{ .Values.frontend.service.targetPort | default .Values.frontend.service.port }}
+          readinessProbe:
+            httpGet:
+              path: /
+              port: {{ .Values.frontend.service.targetPort | default .Values.frontend.service.port }}
           resources:
             {{- toYaml .Values.frontend.resources | nindent 12 }}
