@@ -1,7 +1,14 @@
 //! HTTP handlers for identity system
 
+pub mod auth;
+pub mod devices;
+
 use axum::{
-    extract::Extension, http::StatusCode, response::IntoResponse, routing::post, Json, Router,
+    extract::Extension,
+    http::StatusCode,
+    response::IntoResponse,
+    routing::{get, post},
+    Json, Router,
 };
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
@@ -98,7 +105,16 @@ fn validate_username(username: &str) -> Result<(), &'static str> {
 
 /// Create identity router
 pub fn router() -> Router {
-    Router::new().route("/auth/signup", post(signup))
+    Router::new()
+        .route("/auth/signup", post(signup))
+        .route(
+            "/auth/devices",
+            get(devices::list_devices).post(devices::add_device),
+        )
+        .route(
+            "/auth/devices/{kid}",
+            axum::routing::delete(devices::revoke_device).patch(devices::rename_device),
+        )
 }
 
 /// Handle signup request — atomic creation of account + backup + first device key
@@ -276,6 +292,11 @@ fn account_error_response(e: AccountRepoError) -> axum::response::Response {
             }),
         )
             .into_response(),
+        AccountRepoError::NotFound => {
+            // Unreachable from create path — indicates a programming error
+            tracing::error!("Unexpected NotFound from account create during signup");
+            internal_error()
+        }
         AccountRepoError::Database(db_err) => {
             tracing::error!("Signup failed (account): {}", db_err);
             (

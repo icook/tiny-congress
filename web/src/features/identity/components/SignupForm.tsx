@@ -23,6 +23,7 @@ export interface SignupFormProps {
   successData?: {
     account_id: string;
     root_kid: string;
+    device_kid: string;
   } | null;
 }
 
@@ -51,13 +52,14 @@ export function SignupForm({
             <Text size="sm">
               <strong>Root Key ID:</strong> <Code>{successData.root_kid}</Code>
             </Text>
+            <Text size="sm">
+              <strong>Device Key ID:</strong> <Code>{successData.device_kid}</Code>
+            </Text>
           </Stack>
         </Card>
 
         <Text size="xs" c="dimmed" ta="center">
-          Your keys were generated locally.
-          <br />
-          (Key persistence will be added in a future update)
+          Your keys were generated locally and stored in this browser session.
         </Text>
       </Stack>
     );

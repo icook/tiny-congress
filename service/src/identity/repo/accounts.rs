@@ -12,6 +12,15 @@ pub struct CreatedAccount {
     pub root_kid: Kid,
 }
 
+/// Full account record from the database
+#[derive(Debug, Clone)]
+pub struct AccountRecord {
+    pub id: Uuid,
+    pub username: String,
+    pub root_pubkey: String,
+    pub root_kid: Kid,
+}
+
 /// Error types for account operations
 #[derive(Debug, thiserror::Error)]
 pub enum AccountRepoError {
@@ -19,6 +28,8 @@ pub enum AccountRepoError {
     DuplicateUsername,
     #[error("public key already registered")]
     DuplicateKey,
+    #[error("account not found")]
+    NotFound,
     #[error("database error: {0}")]
     Database(#[from] sqlx::Error),
 }
@@ -130,6 +141,45 @@ where
     E: sqlx::Executor<'e, Database = sqlx::Postgres>,
 {
     create_account(executor, username, root_pubkey, root_kid).await
+}
+
+/// Look up an account by its ID.
+///
+/// # Errors
+///
+/// Returns `AccountRepoError::NotFound` if no account matches.
+pub async fn get_account_by_id<'e, E>(
+    executor: E,
+    account_id: Uuid,
+) -> Result<AccountRecord, AccountRepoError>
+where
+    E: sqlx::Executor<'e, Database = sqlx::Postgres>,
+{
+    let row = sqlx::query_as::<_, (Uuid, String, String, String)>(
+        r"
+        SELECT id, username, root_pubkey, root_kid
+        FROM accounts
+        WHERE id = $1
+        ",
+    )
+    .bind(account_id)
+    .fetch_optional(executor)
+    .await?;
+
+    match row {
+        Some((id, username, root_pubkey, root_kid_str)) => {
+            let root_kid: Kid = root_kid_str
+                .parse()
+                .map_err(|e| sqlx::Error::Decode(Box::new(e)))?;
+            Ok(AccountRecord {
+                id,
+                username,
+                root_pubkey,
+                root_kid,
+            })
+        }
+        None => Err(AccountRepoError::NotFound),
+    }
 }
 
 #[cfg(any(test, feature = "test-utils"))]

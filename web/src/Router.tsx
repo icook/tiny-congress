@@ -4,6 +4,7 @@ import { AboutPage } from './pages/About.page';
 import { DashboardPage } from './pages/Dashboard.page';
 import { HomePage } from './pages/Home.page';
 import { Layout } from './pages/Layout';
+import { SettingsPage } from './pages/Settings.page';
 import { SignupPage } from './pages/Signup.page';
 import { ThreadedConversationPage } from './pages/ThreadedConversation.page';
 
@@ -51,7 +52,11 @@ const routeTree = rootRoute.addChildren([
   createPlaceholderRoute('releases', 'Releases', 'Releases page content'),
   createPlaceholderRoute('account', 'Account', 'Account page content'),
   createPlaceholderRoute('security', 'Security', 'Security page content'),
-  createPlaceholderRoute('settings', 'Settings', 'Settings page content'),
+  createRoute({
+    getParentRoute: () => rootRoute,
+    path: 'settings',
+    component: SettingsPage,
+  }),
 ]);
 
 const router = createRouter({ routeTree });

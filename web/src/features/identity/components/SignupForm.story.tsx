@@ -58,6 +58,7 @@ export const Success = () => (
     successData={{
       account_id: 'acc_abc123def456',
       root_kid: 'kid_xyz789uvw012',
+      device_kid: 'dev_abc123def456',
     }}
   />
 );

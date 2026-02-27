@@ -306,7 +306,13 @@ impl TestAppBuilder {
 
             app = app.layer(
                 CorsLayer::new()
-                    .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
+                    .allow_methods([
+                        Method::GET,
+                        Method::POST,
+                        Method::DELETE,
+                        Method::PATCH,
+                        Method::OPTIONS,
+                    ])
                     .allow_headers(Any)
                     .allow_origin(allow_origin),
             );

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, Mock, test, vi } from 'vitest';
-import { fetchJson, signup } from './client';
+import { fetchJson, signup, type SignupRequest } from './client';
 
 function headersOf(mockFetch: Mock): Record<string, string> {
   const call = mockFetch.mock.calls[0] as [string, RequestInit];
@@ -9,6 +9,16 @@ function headersOf(mockFetch: Mock): Record<string, string> {
     out[k] = v;
   });
   return out;
+}
+
+function makeSignupRequest(overrides?: Partial<SignupRequest>): SignupRequest {
+  return {
+    username: 'alice',
+    root_pubkey: 'mock-key',
+    backup: { encrypted_blob: 'mock-backup' },
+    device: { pubkey: 'mock-device-key', name: 'Test Device', certificate: 'mock-cert' },
+    ...overrides,
+  };
 }
 
 describe('identity api client', () => {
@@ -21,7 +31,7 @@ describe('identity api client', () => {
   });
 
   test('posts signup request and returns parsed payload', async () => {
-    const responseBody = { account_id: 'abc', root_kid: 'kid-123' };
+    const responseBody = { account_id: 'abc', root_kid: 'kid-123', device_kid: 'dev-456' };
     (fetch as unknown as Mock).mockResolvedValue({
       ok: true,
       status: 201,
@@ -30,13 +40,14 @@ describe('identity api client', () => {
       headers: {},
     });
 
-    const result = await signup({ username: 'alice', root_pubkey: 'mock-key' });
+    const req = makeSignupRequest();
+    const result = await signup(req);
 
     expect(fetch).toHaveBeenCalledWith(
       expect.stringContaining('/auth/signup'),
       expect.objectContaining({
         method: 'POST',
-        body: JSON.stringify({ username: 'alice', root_pubkey: 'mock-key' }),
+        body: JSON.stringify(req),
       })
     );
     expect(headersOf(fetch as unknown as Mock)).toEqual({
@@ -54,7 +65,7 @@ describe('identity api client', () => {
       headers: {},
     });
 
-    await expect(signup({ username: 'bob', root_pubkey: 'key' })).rejects.toThrow('boom');
+    await expect(signup(makeSignupRequest({ username: 'bob' }))).rejects.toThrow('boom');
   });
 
   test('falls back to HTTP status when error body has no error field', async () => {
@@ -66,7 +77,7 @@ describe('identity api client', () => {
       headers: {},
     });
 
-    await expect(signup({ username: 'bob', root_pubkey: 'key' })).rejects.toThrow(
+    await expect(signup(makeSignupRequest({ username: 'bob' }))).rejects.toThrow(
       'HTTP 404: Not Found'
     );
   });
@@ -117,6 +128,6 @@ describe('identity api client', () => {
       headers: {},
     });
 
-    await expect(signup({ username: 'bob', root_pubkey: 'key' })).rejects.toThrow('Unknown error');
+    await expect(signup(makeSignupRequest({ username: 'bob' }))).rejects.toThrow('Unknown error');
   });
 });
