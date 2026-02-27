@@ -1,8 +1,6 @@
 //! Account repository for database operations
 
 use async_trait::async_trait;
-use axum::{http::StatusCode, response::IntoResponse, Json};
-use serde_json::json;
 use sqlx::PgPool;
 use tc_crypto::Kid;
 use uuid::Uuid;
@@ -23,31 +21,6 @@ pub enum AccountRepoError {
     DuplicateKey,
     #[error("database error: {0}")]
     Database(#[from] sqlx::Error),
-}
-
-impl IntoResponse for AccountRepoError {
-    fn into_response(self) -> axum::response::Response {
-        match self {
-            Self::DuplicateUsername => (
-                StatusCode::CONFLICT,
-                Json(json!({ "error": "Username already taken" })),
-            )
-                .into_response(),
-            Self::DuplicateKey => (
-                StatusCode::CONFLICT,
-                Json(json!({ "error": "Public key already registered" })),
-            )
-                .into_response(),
-            Self::Database(db_err) => {
-                tracing::error!("Account operation failed: {db_err}");
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(json!({ "error": "Internal server error" })),
-                )
-                    .into_response()
-            }
-        }
-    }
 }
 
 /// Repository trait for account operations

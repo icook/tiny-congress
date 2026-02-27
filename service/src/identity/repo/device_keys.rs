@@ -1,9 +1,7 @@
 //! Device key repository for delegated signing keys
 
 use async_trait::async_trait;
-use axum::{http::StatusCode, response::IntoResponse, Json};
 use chrono::{DateTime, Utc};
-use serde_json::json;
 use sqlx::PgPool;
 use sqlx::Row;
 use tc_crypto::Kid;
@@ -44,41 +42,6 @@ pub enum DeviceKeyRepoError {
     MaxDevicesReached,
     #[error("database error: {0}")]
     Database(#[from] sqlx::Error),
-}
-
-impl IntoResponse for DeviceKeyRepoError {
-    fn into_response(self) -> axum::response::Response {
-        match self {
-            Self::DuplicateKid => (
-                StatusCode::CONFLICT,
-                Json(json!({ "error": "Device key already registered" })),
-            )
-                .into_response(),
-            Self::MaxDevicesReached => (
-                StatusCode::UNPROCESSABLE_ENTITY,
-                Json(json!({ "error": "Maximum device limit reached" })),
-            )
-                .into_response(),
-            Self::NotFound => (
-                StatusCode::NOT_FOUND,
-                Json(json!({ "error": "Device key not found" })),
-            )
-                .into_response(),
-            Self::AlreadyRevoked => (
-                StatusCode::CONFLICT,
-                Json(json!({ "error": "Device key has been revoked" })),
-            )
-                .into_response(),
-            Self::Database(db_err) => {
-                tracing::error!("Device key operation failed: {db_err}");
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(json!({ "error": "Internal server error" })),
-                )
-                    .into_response()
-            }
-        }
-    }
 }
 
 /// Maximum number of devices per account

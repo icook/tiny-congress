@@ -9,6 +9,7 @@ use uuid::Uuid;
 
 use super::repo::{
     create_account_with_executor, create_backup_with_executor, create_device_key_with_executor,
+    AccountRepoError, BackupRepoError, DeviceKeyRepoError,
 };
 use tc_crypto::{decode_base64url, verify_ed25519, BackupEnvelope, Kid};
 
@@ -286,7 +287,7 @@ async fn signup(
     .await
     {
         Ok(account) => account,
-        Err(e) => return e.into_response(),
+        Err(e) => return account_error_response(e),
     };
 
     if let Err(e) = create_backup_with_executor(
@@ -299,11 +300,7 @@ async fn signup(
     )
     .await
     {
-        // NotFound is unreachable from the create path — log if it somehow occurs
-        if matches!(e, super::repo::BackupRepoError::NotFound) {
-            tracing::error!("Unexpected BackupRepoError::NotFound during signup");
-        }
-        return e.into_response();
+        return backup_error_response(e);
     }
 
     let device = match create_device_key_with_executor(
@@ -317,14 +314,7 @@ async fn signup(
     .await
     {
         Ok(device) => device,
-        Err(
-            ref e @ (super::repo::DeviceKeyRepoError::NotFound
-            | super::repo::DeviceKeyRepoError::AlreadyRevoked),
-        ) => {
-            tracing::error!("Unexpected {e} during signup device key creation");
-            return internal_error();
-        }
-        Err(e) => return e.into_response(),
+        Err(e) => return device_key_error_response(e),
     };
 
     if let Err(e) = tx.commit().await {
@@ -351,6 +341,70 @@ fn internal_error() -> axum::response::Response {
         }),
     )
         .into_response()
+}
+
+/// Map an account repo error to an HTTP response in the signup context.
+fn account_error_response(err: AccountRepoError) -> axum::response::Response {
+    let (status, message) = match err {
+        AccountRepoError::DuplicateUsername => {
+            (StatusCode::CONFLICT, "Username already taken".to_string())
+        }
+        AccountRepoError::DuplicateKey => (
+            StatusCode::CONFLICT,
+            "Public key already registered".to_string(),
+        ),
+        AccountRepoError::Database(e) => {
+            tracing::error!("Account database error: {e}");
+            return internal_error();
+        }
+    };
+    (status, Json(ErrorResponse { error: message })).into_response()
+}
+
+/// Map a backup repo error to an HTTP response in the signup context.
+fn backup_error_response(err: BackupRepoError) -> axum::response::Response {
+    let (status, message) = match err {
+        BackupRepoError::DuplicateAccount => (
+            StatusCode::CONFLICT,
+            "Backup already exists for this account".to_string(),
+        ),
+        BackupRepoError::DuplicateKid => (
+            StatusCode::CONFLICT,
+            "Backup already exists for this key ID".to_string(),
+        ),
+        BackupRepoError::NotFound => {
+            tracing::error!("Unexpected BackupRepoError::NotFound during signup");
+            return internal_error();
+        }
+        BackupRepoError::Database(e) => {
+            tracing::error!("Backup database error: {e}");
+            return internal_error();
+        }
+    };
+    (status, Json(ErrorResponse { error: message })).into_response()
+}
+
+/// Map a device key repo error to an HTTP response in the signup context.
+fn device_key_error_response(err: DeviceKeyRepoError) -> axum::response::Response {
+    let (status, message) = match err {
+        DeviceKeyRepoError::DuplicateKid => (
+            StatusCode::CONFLICT,
+            "Device key already registered".to_string(),
+        ),
+        DeviceKeyRepoError::MaxDevicesReached => (
+            StatusCode::CONFLICT,
+            "Maximum device limit reached".to_string(),
+        ),
+        DeviceKeyRepoError::NotFound | DeviceKeyRepoError::AlreadyRevoked => {
+            tracing::error!("Unexpected {err} during signup device key creation");
+            return internal_error();
+        }
+        DeviceKeyRepoError::Database(e) => {
+            tracing::error!("Device key database error: {e}");
+            return internal_error();
+        }
+    };
+    (status, Json(ErrorResponse { error: message })).into_response()
 }
 
 #[cfg(test)]

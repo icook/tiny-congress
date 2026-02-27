@@ -1,9 +1,7 @@
 //! Backup repository for encrypted root key storage
 
 use async_trait::async_trait;
-use axum::{http::StatusCode, response::IntoResponse, Json};
 use chrono::{DateTime, Utc};
-use serde_json::json;
 use sqlx::PgPool;
 use sqlx::Row;
 use tc_crypto::Kid;
@@ -40,31 +38,6 @@ pub enum BackupRepoError {
     NotFound,
     #[error("database error: {0}")]
     Database(#[from] sqlx::Error),
-}
-
-impl IntoResponse for BackupRepoError {
-    fn into_response(self) -> axum::response::Response {
-        match self {
-            Self::DuplicateAccount | Self::DuplicateKid => (
-                StatusCode::CONFLICT,
-                Json(json!({ "error": "Backup already exists" })),
-            )
-                .into_response(),
-            Self::NotFound => (
-                StatusCode::NOT_FOUND,
-                Json(json!({ "error": "Backup not found" })),
-            )
-                .into_response(),
-            Self::Database(db_err) => {
-                tracing::error!("Backup operation failed: {db_err}");
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(json!({ "error": "Internal server error" })),
-                )
-                    .into_response()
-            }
-        }
-    }
 }
 
 /// Repository trait for backup operations
