@@ -149,6 +149,7 @@ export function DeviceList({
                       <ActionIcon
                         size="sm"
                         variant="subtle"
+                        aria-label="Rename"
                         onClick={() => {
                           startEditing(device.device_kid, device.device_name);
                         }}
@@ -161,6 +162,7 @@ export function DeviceList({
                         size="sm"
                         color="red"
                         variant="subtle"
+                        aria-label="Revoke"
                         loading={isRevoking}
                         onClick={() => {
                           onRevoke(device.device_kid);
