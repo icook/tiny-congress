@@ -4,12 +4,25 @@
  */
 
 import { IconAlertTriangle, IconCheck } from '@tabler/icons-react';
-import { Alert, Button, Card, Code, Group, Stack, Text, TextInput, Title } from '@mantine/core';
+import {
+  Alert,
+  Button,
+  Card,
+  Code,
+  Group,
+  PasswordInput,
+  Stack,
+  Text,
+  TextInput,
+  Title,
+} from '@mantine/core';
 
 export interface SignupFormProps {
   // Form state
   username: string;
+  password: string;
   onUsernameChange: (value: string) => void;
+  onPasswordChange: (value: string) => void;
   onSubmit: (e: React.FormEvent) => void;
 
   // Loading states
@@ -29,7 +42,9 @@ export interface SignupFormProps {
 
 export function SignupForm({
   username,
+  password,
   onUsernameChange,
+  onPasswordChange,
   onSubmit,
   isLoading,
   loadingText,
@@ -84,6 +99,17 @@ export function SignupForm({
               value={username}
               onChange={(e) => {
                 onUsernameChange(e.currentTarget.value);
+              }}
+              disabled={isLoading}
+            />
+
+            <PasswordInput
+              label="Backup Password"
+              description="Used to encrypt your root key backup. You'll need this to log in on new devices."
+              required
+              value={password}
+              onChange={(e) => {
+                onPasswordChange(e.currentTarget.value);
               }}
               disabled={isLoading}
             />

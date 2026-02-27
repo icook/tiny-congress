@@ -15,6 +15,7 @@ export function SignupPage() {
   const { setDevice } = useDevice();
 
   const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
   const [isGeneratingKeys, setIsGeneratingKeys] = useState(false);
   const [createdAccount, setCreatedAccount] = useState<{
     account_id: string;
@@ -25,7 +26,7 @@ export function SignupPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!username.trim()) {
+    if (!username.trim() || !password) {
       return;
     }
 
@@ -41,8 +42,8 @@ export function SignupPage() {
       // Sign the device pubkey with the root key (certificate)
       const certificate = signMessage(deviceKeyPair.publicKey, rootKeyPair.privateKey);
 
-      // Build backup envelope
-      const envelope = buildBackupEnvelope();
+      // Build encrypted backup envelope
+      const envelope = await buildBackupEnvelope(rootKeyPair.privateKey, password);
 
       // Call signup API with full payload
       const response = await signup.mutateAsync({
@@ -72,12 +73,14 @@ export function SignupPage() {
   return (
     <SignupForm
       username={username}
+      password={password}
       onUsernameChange={setUsername}
+      onPasswordChange={setPassword}
       onSubmit={(e) => {
         void handleSubmit(e);
       }}
       isLoading={signup.isPending || isGeneratingKeys}
-      loadingText={isGeneratingKeys ? 'Generating keys...' : undefined}
+      loadingText={isGeneratingKeys ? 'Generating keys and encrypting backup...' : undefined}
       error={signup.isError ? signup.error.message : null}
       successData={createdAccount}
     />

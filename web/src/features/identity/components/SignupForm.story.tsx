@@ -13,35 +13,60 @@ const preventSubmit = (e: React.FormEvent) => {
 
 // Default - empty form ready for input
 export const Default = () => (
-  <SignupForm username="" onUsernameChange={noOp} onSubmit={preventSubmit} isLoading={false} />
+  <SignupForm
+    username=""
+    password=""
+    onUsernameChange={noOp}
+    onPasswordChange={noOp}
+    onSubmit={preventSubmit}
+    isLoading={false}
+  />
 );
 
-// Filled - form with username entered
+// Filled - form with username and password entered
 export const Filled = () => (
-  <SignupForm username="alice" onUsernameChange={noOp} onSubmit={preventSubmit} isLoading={false} />
+  <SignupForm
+    username="alice"
+    password="my-secret-password"
+    onUsernameChange={noOp}
+    onPasswordChange={noOp}
+    onSubmit={preventSubmit}
+    isLoading={false}
+  />
 );
 
 // Loading state during key generation
 export const GeneratingKeys = () => (
   <SignupForm
     username="alice"
+    password="my-secret-password"
     onUsernameChange={noOp}
+    onPasswordChange={noOp}
     onSubmit={preventSubmit}
     isLoading
-    loadingText="Generating keys..."
+    loadingText="Generating keys and encrypting backup..."
   />
 );
 
 // Loading state during API submission
 export const Submitting = () => (
-  <SignupForm username="alice" onUsernameChange={noOp} onSubmit={preventSubmit} isLoading />
+  <SignupForm
+    username="alice"
+    password="my-secret-password"
+    onUsernameChange={noOp}
+    onPasswordChange={noOp}
+    onSubmit={preventSubmit}
+    isLoading
+  />
 );
 
 // Error state
 export const Error = () => (
   <SignupForm
     username="alice"
+    password="my-secret-password"
     onUsernameChange={noOp}
+    onPasswordChange={noOp}
     onSubmit={preventSubmit}
     isLoading={false}
     error="Username already taken"
@@ -52,7 +77,9 @@ export const Error = () => (
 export const Success = () => (
   <SignupForm
     username=""
+    password=""
     onUsernameChange={noOp}
+    onPasswordChange={noOp}
     onSubmit={preventSubmit}
     isLoading={false}
     successData={{
