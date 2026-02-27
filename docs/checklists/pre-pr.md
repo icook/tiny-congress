@@ -20,8 +20,7 @@ Complete before opening or marking PR ready for review.
 
 ## Linting
 
-- [ ] All linting passes: `just lint`
-- [ ] Type checking passes: `just typecheck`
+- [ ] All linting passes (includes typecheck): `just lint`
 
 ## Documentation
 

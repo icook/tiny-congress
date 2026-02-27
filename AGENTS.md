@@ -41,7 +41,7 @@ Use the `justfile` as the single source of truth for all commands. Run `just --l
 | **Full CI suite** | `just test-ci` | Builds images, runs all tests via Skaffold |
 | **Backend only** | `just lint-backend`, `just test-backend` | |
 | **Frontend only** | `just lint-frontend`, `just test-frontend` | |
-| **Type checking** | `just typecheck` | Frontend TypeScript checking |
+| **Type checking** | `just lint-typecheck` | Frontend TypeScript checking (included in `just lint`) |
 | **Dev server** | `just dev` | Full-stack with Skaffold (requires cluster) |
 | **Frontend dev** | `just dev-frontend` | Vite dev server only |
 | **Build** | `just build` | Backend + frontend builds |

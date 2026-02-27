@@ -45,7 +45,7 @@ The codegen pipeline has two stages:
 ## Verification
 - [ ] `just codegen` produces no additional changes (idempotent)
 - [ ] `just lint-frontend` passes (generated code is formatted)
-- [ ] `just typecheck` passes
+- [ ] `just lint-typecheck` passes
 - [ ] CI `codegen-check` job will verify this automatically
 
 ## CI enforcement

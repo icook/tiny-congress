@@ -12,9 +12,9 @@ Custom Docker images for the TinyCongress development and CI environment.
 
 Custom PostgreSQL image that includes the [pgmq](https://github.com/tembo-io/pgmq) extension for job queue functionality.
 
-**Build:**
+**Build:** Built automatically on first `just test-backend` run. To rebuild manually:
 ```bash
-just build-test-postgres
+docker build -t tc-postgres:local -f dockerfiles/Dockerfile.postgres dockerfiles/
 ```
 
 **Key features:**
