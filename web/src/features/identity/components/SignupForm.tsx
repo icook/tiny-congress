@@ -4,6 +4,7 @@
  */
 
 import { IconAlertTriangle, IconCheck } from '@tabler/icons-react';
+import { Link } from '@tanstack/react-router';
 import {
   Alert,
   Button,
@@ -131,6 +132,10 @@ export function SignupForm({
 
       <Text size="xs" c="dimmed" ta="center">
         Your keys are generated locally and never leave your device.
+      </Text>
+
+      <Text size="xs" c="dimmed" ta="center">
+        Already have an account? <Link to="/login">Log in</Link>
       </Text>
     </Stack>
   );

@@ -10,12 +10,21 @@ import { useCrypto } from '@/providers/CryptoProvider';
 import { useDevice } from '@/providers/DeviceProvider';
 
 export function SettingsPage() {
-  const { deviceKid, privateKey } = useDevice();
+  const { deviceKid, privateKey, isLoading: deviceLoading } = useDevice();
   const { crypto } = useCrypto();
 
   const devicesQuery = useListDevices(deviceKid, privateKey, crypto);
   const revokeMutation = useRevokeDevice(deviceKid, privateKey, crypto);
   const renameMutation = useRenameDevice(deviceKid, privateKey, crypto);
+
+  if (deviceLoading) {
+    return (
+      <Stack gap="md" maw={800} mx="auto" mt="xl">
+        <Title order={2}>Settings</Title>
+        <Loader size="sm" />
+      </Stack>
+    );
+  }
 
   if (!deviceKid) {
     return (

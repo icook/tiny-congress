@@ -2,6 +2,16 @@ import { render, screen, userEvent } from '@test-utils';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { SignupPage } from './Signup.page';
 
+// Mock router Link to avoid needing RouterProvider in tests
+vi.mock('@tanstack/react-router', () => ({
+  Link: ({ children, to, ...props }: { children: React.ReactNode; to: string }) => (
+    <a href={to} {...props}>
+      {children}
+    </a>
+  ),
+  useNavigate: vi.fn(() => vi.fn()),
+}));
+
 // Mock the crypto provider
 const mockCrypto = {
   derive_kid: vi.fn(() => 'kid-123'),
