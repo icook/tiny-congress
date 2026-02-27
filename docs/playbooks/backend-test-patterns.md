@@ -268,13 +268,7 @@ async fn test_build_info_query() {
 
 ### First-Time Setup
 
-Build the custom Postgres image with pgmq extension:
-
-```bash
-just build-test-postgres
-```
-
-This creates `tc-postgres:local` which tests use by default. The image is built automatically when running `just test-backend` if it doesn't exist.
+The custom Postgres image (`tc-postgres:local`) with the pgmq extension is built automatically on first test run. No manual step needed.
 
 ### How It Works
 
@@ -399,8 +393,8 @@ async fn test_pgmq_extension_available() {
 ### "Failed to start postgres container"
 
 1. Ensure Docker is running
-2. Build the test image: `just build-test-postgres`
-3. Check image exists: `docker images | grep tc-postgres`
+2. Check image exists: `docker images | grep tc-postgres`
+3. If missing, it will be built automatically on next `just test-backend` run
 
 ### "zombie connection" warnings
 

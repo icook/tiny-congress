@@ -34,7 +34,7 @@ The codegen pipeline has two stages:
 
    This runs both stages:
    - `just export-schema` - exports GraphQL SDL from Rust
-   - `just codegen-frontend` - generates TypeScript types
+   - `just codegen-graphql` - generates TypeScript types
 
 3. **Verify the generated types** in `web/src/api/generated/graphql.ts`
 
@@ -47,7 +47,7 @@ The codegen pipeline has two stages:
 ## Verification
 - [ ] `just codegen` produces no additional changes (idempotent)
 - [ ] `just lint-frontend` passes (generated code is formatted)
-- [ ] `just typecheck-frontend` passes
+- [ ] `just typecheck` passes
 - [ ] CI `codegen-check` job will verify this automatically
 
 ## CI enforcement

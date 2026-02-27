@@ -91,7 +91,7 @@ build-wasm:
     cd crates/tc-crypto && wasm-pack build --target web --release --out-dir ../../web/src/wasm/tc-crypto
     @echo "✓ WASM built to web/src/wasm/tc-crypto/"
 
-# [internal] Build crypto-wasm for development (faster, debug symbols)
+# Internal: Build crypto-wasm for development (faster, debug symbols)
 _build-wasm-dev:
     @echo "Building tc-crypto WASM for development..."
     cd crates/tc-crypto && wasm-pack build --target web --dev --out-dir ../../web/src/wasm/tc-crypto
@@ -101,7 +101,7 @@ _build-wasm-dev:
 test-wasm:
     cargo test -p tc-crypto
 
-# [internal] Clean WASM build artifacts
+# Internal: Clean WASM build artifacts
 _clean-wasm:
     rm -rf crates/tc-crypto/pkg web/src/wasm/tc-crypto
     @echo "✓ WASM artifacts cleaned"
@@ -150,7 +150,7 @@ test-frontend-full: _build-wasm-dev
 test-frontend-e2e:
     cd web && yarn playwright:ci
 
-# [internal] Check frontend types
+# Internal: Check frontend types
 _typecheck-frontend:
     cd web && yarn typecheck
 
@@ -198,7 +198,7 @@ install-frontend:
 # Full-Stack Development (Requires Skaffold + Kubernetes Cluster)
 # =============================================================================
 
-# [internal] Check that local rustc version matches mise.toml (for shared cargo cache)
+# Internal: Check that local rustc version matches mise.toml (for shared cargo cache)
 _check-rust-version:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -256,7 +256,7 @@ build-images:
     @echo "Building container images..."
     skaffold build
 
-# [internal] Build images and output artifacts JSON (for reuse with test-ci)
+# Internal: Build images and output artifacts JSON (for reuse with test-ci)
 _build-images-artifacts:
     @echo "Building container images and writing artifacts..."
     skaffold build --file-output artifacts.json
