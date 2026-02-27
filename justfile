@@ -106,12 +106,12 @@ _clean-wasm:
 # Code Generation (GraphQL & OpenAPI Types)
 # =============================================================================
 
-# Export GraphQL schema from Rust backend
-export-schema:
+# Internal: Export GraphQL schema from Rust backend
+_export-schema:
     cd service && cargo run --bin export_schema > ../web/schema.graphql
 
-# Export OpenAPI schema from Rust backend
-export-openapi:
+# Internal: Export OpenAPI schema from Rust backend
+_export-openapi:
     cd service && cargo run --bin export_openapi > ../web/openapi.json
 
 # Generate TypeScript types and Zod schemas from GraphQL schema
@@ -123,7 +123,7 @@ codegen-openapi:
     cd web && yarn openapi-typescript openapi.json -o src/api/generated/rest.ts && yarn prettier --write src/api/generated/rest.ts
 
 # Full codegen: export schemas from Rust + generate TypeScript types
-codegen: export-schema export-openapi codegen-graphql codegen-openapi
+codegen: _export-schema _export-openapi codegen-graphql codegen-openapi
     @echo "✓ GraphQL and REST types generated"
 
 # =============================================================================
@@ -240,8 +240,7 @@ export RUST_VERSION := ```
     echo "$VERSION"
 ```
 
-# Start full development environment with Skaffold (hot reload, port forwarding)
-# Prerequisites: Docker, Skaffold, KinD cluster (just kind-create)
+# Start full-stack dev environment with Skaffold (requires KinD cluster)
 dev: _check-rust-version
     @echo "Starting full-stack dev with Skaffold (targeting KinD cluster)..."
     @echo "Prerequisites: run 'just kind-create' first for KinD with shared cargo cache"
@@ -328,7 +327,7 @@ build: build-backend build-wasm build-frontend
     @echo "✓ All builds successful"
 
 # Build everything in release mode
-build-release: build-backend-release build-frontend
+build-release: build-backend-release build-wasm build-frontend
     @echo "✓ Release builds successful"
 
 # =============================================================================
