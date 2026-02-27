@@ -193,6 +193,46 @@ where
     }
 }
 
+/// Look up an account by its username.
+///
+/// # Errors
+///
+/// Returns `AccountRepoError::NotFound` if no account matches.
+pub async fn get_account_by_username<'e, E>(
+    executor: E,
+    username: &str,
+) -> Result<AccountRecord, AccountRepoError>
+where
+    E: sqlx::Executor<'e, Database = sqlx::Postgres>,
+{
+    let row = sqlx::query_as::<_, AccountRow>(
+        r"
+        SELECT id, username, root_pubkey, root_kid
+        FROM accounts
+        WHERE username = $1
+        ",
+    )
+    .bind(username)
+    .fetch_optional(executor)
+    .await?;
+
+    match row {
+        Some(r) => {
+            let root_kid: Kid = r
+                .root_kid
+                .parse()
+                .map_err(|e| sqlx::Error::Decode(Box::new(e)))?;
+            Ok(AccountRecord {
+                id: r.id,
+                username: r.username,
+                root_pubkey: r.root_pubkey,
+                root_kid,
+            })
+        }
+        None => Err(AccountRepoError::NotFound),
+    }
+}
+
 #[cfg(any(test, feature = "test-utils"))]
 #[allow(clippy::expect_used)]
 pub mod mock {

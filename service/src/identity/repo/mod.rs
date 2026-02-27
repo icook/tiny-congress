@@ -5,8 +5,8 @@ pub mod backups;
 pub mod device_keys;
 
 pub use accounts::{
-    create_account_with_executor, get_account_by_id, AccountRecord, AccountRepo, AccountRepoError,
-    CreatedAccount, PgAccountRepo,
+    create_account_with_executor, get_account_by_id, get_account_by_username, AccountRecord,
+    AccountRepo, AccountRepoError, CreatedAccount, PgAccountRepo,
 };
 pub use backups::{
     create_backup_with_executor, BackupRecord, BackupRepo, BackupRepoError, CreatedBackup,
