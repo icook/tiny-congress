@@ -16,13 +16,14 @@ use axum::{
     Extension, Router,
 };
 use std::net::SocketAddr;
+use std::sync::Arc;
 use tinycongress_api::{
     build_info::BuildInfo,
     config::Config,
     db::setup_database,
     graphql::{graphql_handler, graphql_playground, MutationRoot, QueryRoot},
     http::{build_security_headers, security_headers_middleware},
-    identity,
+    identity::{self, service::PgSignupService},
     rest::{self, ApiDoc},
 };
 use tower_http::cors::{AllowOrigin, Any, CorsLayer};
@@ -134,6 +135,10 @@ async fn main() -> Result<(), anyhow::Error> {
         // Add the schema to the extension
         .layer(Extension(schema))
         .layer(Extension(pool.clone()))
+        .layer(Extension(
+            Arc::new(PgSignupService::new(pool.clone()))
+                as Arc<dyn identity::service::SignupService>,
+        ))
         .layer(Extension(build_info))
         .layer(
             CorsLayer::new()

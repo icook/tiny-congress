@@ -1,16 +1,15 @@
 //! HTTP handlers for identity system
 
+use std::sync::Arc;
+
 use axum::{
     extract::Extension, http::StatusCode, response::IntoResponse, routing::post, Json, Router,
 };
 use serde::{Deserialize, Serialize};
-use sqlx::PgPool;
 use uuid::Uuid;
 
-use super::repo::{
-    create_account_with_executor, create_backup_with_executor, create_device_key_with_executor,
-    AccountRepoError, BackupRepoError, DeviceKeyRepoError,
-};
+use super::repo::{AccountRepoError, BackupRepoError, DeviceKeyRepoError};
+use super::service::{SignupError, SignupService, ValidatedSignupParams};
 use tc_crypto::{decode_base64url, verify_ed25519, BackupEnvelope, Kid};
 
 /// Backup data included in signup request
@@ -259,7 +258,7 @@ pub fn router() -> Router {
 
 /// Handle signup request — atomic creation of account + backup + first device key
 async fn signup(
-    Extension(pool): Extension<PgPool>,
+    Extension(service): Extension<Arc<dyn SignupService>>,
     Json(req): Json<SignupRequest>,
 ) -> impl IntoResponse {
     // Validate and decode all fields
@@ -268,69 +267,38 @@ async fn signup(
         Err(e) => return e.into_response(),
     };
 
-    // Atomic signup: all three inserts in a single transaction.
-    // On early return, sqlx auto-rolls back the transaction when `tx` is dropped.
-    let mut tx = match pool.begin().await {
-        Ok(tx) => tx,
-        Err(e) => {
-            tracing::error!("Failed to begin transaction: {e}");
-            return internal_error();
+    // Bridge validated data to the service layer
+    let params = ValidatedSignupParams {
+        username: validated.username,
+        root_pubkey: validated.root_pubkey_b64,
+        root_kid: validated.root_kid,
+        backup_bytes: validated.envelope.as_bytes().to_vec(),
+        backup_salt: validated.envelope.salt().to_vec(),
+        backup_version: validated.envelope.version(),
+        device_pubkey: validated.device_pubkey_b64,
+        device_kid: validated.device_kid,
+        device_name: validated.device_name,
+        certificate: validated.certificate_bytes,
+    };
+
+    match service.execute(&params).await {
+        Ok(result) => (
+            StatusCode::CREATED,
+            Json(SignupResponse {
+                account_id: result.account_id,
+                root_kid: result.root_kid,
+                device_kid: result.device_kid,
+            }),
+        )
+            .into_response(),
+        Err(SignupError::Account(e)) => account_error_response(e),
+        Err(SignupError::Backup(e)) => backup_error_response(e),
+        Err(SignupError::DeviceKey(e)) => device_key_error_response(e),
+        Err(SignupError::Internal(msg)) => {
+            tracing::error!("Signup failed: {msg}");
+            internal_error()
         }
-    };
-
-    let account = match create_account_with_executor(
-        &mut *tx,
-        &validated.username,
-        &validated.root_pubkey_b64,
-        &validated.root_kid,
-    )
-    .await
-    {
-        Ok(account) => account,
-        Err(e) => return account_error_response(e),
-    };
-
-    if let Err(e) = create_backup_with_executor(
-        &mut *tx,
-        account.id,
-        &validated.root_kid,
-        validated.envelope.as_bytes(),
-        validated.envelope.salt(),
-        validated.envelope.version(),
-    )
-    .await
-    {
-        return backup_error_response(e);
     }
-
-    let device = match create_device_key_with_executor(
-        &mut tx,
-        account.id,
-        &validated.device_kid,
-        &validated.device_pubkey_b64,
-        &validated.device_name,
-        &validated.certificate_bytes,
-    )
-    .await
-    {
-        Ok(device) => device,
-        Err(e) => return device_key_error_response(e),
-    };
-
-    if let Err(e) = tx.commit().await {
-        tracing::error!("Failed to commit signup transaction: {e}");
-        return internal_error();
-    }
-
-    (
-        StatusCode::CREATED,
-        Json(SignupResponse {
-            account_id: account.id,
-            root_kid: account.root_kid,
-            device_kid: device.device_kid,
-        }),
-    )
-        .into_response()
 }
 
 fn internal_error() -> axum::response::Response {
@@ -438,26 +406,27 @@ fn device_key_error_response(e: DeviceKeyRepoError) -> axum::response::Response 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::identity::service::mock::MockSignupService;
     use axum::{
         body::{to_bytes, Body},
         http::{Request, StatusCode},
     };
     use ed25519_dalek::{Signer, SigningKey};
     use rand::rngs::OsRng;
-    use sqlx::postgres::PgPoolOptions;
     use tc_crypto::{encode_base64url, BackupEnvelope};
     use tower::ServiceExt;
 
-    /// Create a router with a lazy pool that never connects.
-    /// Validation-failure tests never reach the DB so this is safe.
+    /// Create a router with a default mock service that will never be reached.
+    /// Validation-failure tests reject the request before calling the service.
     fn test_router_lazy() -> Router {
-        let pool = PgPoolOptions::new()
-            .max_connections(1)
-            .connect_lazy("postgres://fake:fake@localhost/fake")
-            .expect("lazy pool");
+        test_router_with_service(MockSignupService::default())
+    }
+
+    /// Create a router with a specific mock service for testing error paths.
+    fn test_router_with_service(service: MockSignupService) -> Router {
         Router::new()
             .route("/auth/signup", post(signup))
-            .layer(Extension(pool))
+            .layer(Extension(Arc::new(service) as Arc<dyn SignupService>))
     }
 
     fn test_envelope() -> BackupEnvelope {
@@ -731,7 +700,142 @@ mod tests {
         assert_eq!(validate_username("ROOT"), Err(UsernameError::Reserved));
     }
 
-    // Note: signup_success, duplicate_username, duplicate_key, and database_error
-    // tests are covered by integration tests in identity_handler_tests.rs since they require
-    // a real Postgres connection for the transaction-based signup handler.
+    // Note: signup_success and duplicate_username are covered by integration tests
+    // in identity_handler_tests.rs since they require a real Postgres connection.
+
+    // =========================================================================
+    // Error-mapping unit tests (mock service, no database)
+    // =========================================================================
+
+    use crate::identity::repo::mock::{MockAccountRepo, MockBackupRepo, MockDeviceKeyRepo};
+
+    #[tokio::test]
+    async fn test_signup_account_duplicate_key_returns_conflict() {
+        let accounts = MockAccountRepo::new();
+        accounts.set_create_result(Err(AccountRepoError::DuplicateKey));
+        let service =
+            MockSignupService::new(accounts, MockBackupRepo::new(), MockDeviceKeyRepo::new());
+
+        let app = test_router_with_service(service);
+        let response = app
+            .oneshot(signup_request(&valid_signup_body()))
+            .await
+            .expect("response");
+
+        assert_eq!(response.status(), StatusCode::CONFLICT);
+        let body = to_bytes(response.into_body(), 1024 * 1024)
+            .await
+            .expect("body");
+        let payload: ErrorResponse = serde_json::from_slice(&body).expect("json");
+        assert_eq!(payload.error, "Public key already registered");
+    }
+
+    #[tokio::test]
+    async fn test_signup_backup_failure_after_account_success() {
+        let backups = MockBackupRepo::new();
+        backups.set_create_result(Err(BackupRepoError::DuplicateAccount));
+        let service =
+            MockSignupService::new(MockAccountRepo::new(), backups, MockDeviceKeyRepo::new());
+
+        let app = test_router_with_service(service);
+        let response = app
+            .oneshot(signup_request(&valid_signup_body()))
+            .await
+            .expect("response");
+
+        assert_eq!(response.status(), StatusCode::CONFLICT);
+        let body = to_bytes(response.into_body(), 1024 * 1024)
+            .await
+            .expect("body");
+        let payload: ErrorResponse = serde_json::from_slice(&body).expect("json");
+        assert_eq!(payload.error, "Backup already exists");
+    }
+
+    #[tokio::test]
+    async fn test_signup_max_devices_returns_unprocessable() {
+        let devices = MockDeviceKeyRepo::new();
+        devices.set_create_result(Err(DeviceKeyRepoError::MaxDevicesReached));
+        let service =
+            MockSignupService::new(MockAccountRepo::new(), MockBackupRepo::new(), devices);
+
+        let app = test_router_with_service(service);
+        let response = app
+            .oneshot(signup_request(&valid_signup_body()))
+            .await
+            .expect("response");
+
+        assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+        let body = to_bytes(response.into_body(), 1024 * 1024)
+            .await
+            .expect("body");
+        let payload: ErrorResponse = serde_json::from_slice(&body).expect("json");
+        assert_eq!(payload.error, "Maximum device limit reached");
+    }
+
+    #[tokio::test]
+    async fn test_signup_database_error_returns_safe_500() {
+        let accounts = MockAccountRepo::new();
+        accounts.set_create_result(Err(AccountRepoError::Database(sqlx::Error::Protocol(
+            "secret_password@db-host:5432".to_string(),
+        ))));
+        let service =
+            MockSignupService::new(accounts, MockBackupRepo::new(), MockDeviceKeyRepo::new());
+
+        let app = test_router_with_service(service);
+        let response = app
+            .oneshot(signup_request(&valid_signup_body()))
+            .await
+            .expect("response");
+
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        let body = to_bytes(response.into_body(), 1024 * 1024)
+            .await
+            .expect("body");
+        let body_str = String::from_utf8(body.to_vec()).expect("utf8");
+        assert!(body_str.contains("Internal server error"));
+        assert!(!body_str.contains("secret_password"));
+        assert!(!body_str.contains("db-host"));
+    }
+
+    #[tokio::test]
+    async fn test_signup_device_key_duplicate_returns_conflict() {
+        let devices = MockDeviceKeyRepo::new();
+        devices.set_create_result(Err(DeviceKeyRepoError::DuplicateKid));
+        let service =
+            MockSignupService::new(MockAccountRepo::new(), MockBackupRepo::new(), devices);
+
+        let app = test_router_with_service(service);
+        let response = app
+            .oneshot(signup_request(&valid_signup_body()))
+            .await
+            .expect("response");
+
+        assert_eq!(response.status(), StatusCode::CONFLICT);
+        let body = to_bytes(response.into_body(), 1024 * 1024)
+            .await
+            .expect("body");
+        let payload: ErrorResponse = serde_json::from_slice(&body).expect("json");
+        assert_eq!(payload.error, "Device key already registered");
+    }
+
+    #[tokio::test]
+    async fn test_signup_backup_duplicate_kid_returns_conflict() {
+        let backups = MockBackupRepo::new();
+        backups.set_create_result(Err(BackupRepoError::DuplicateKid));
+        let service =
+            MockSignupService::new(MockAccountRepo::new(), backups, MockDeviceKeyRepo::new());
+
+        let app = test_router_with_service(service);
+        let response = app
+            .oneshot(signup_request(&valid_signup_body()))
+            .await
+            .expect("response");
+
+        assert_eq!(response.status(), StatusCode::CONFLICT);
+        let body = to_bytes(response.into_body(), 1024 * 1024)
+            .await
+            .expect("body");
+        let payload: ErrorResponse = serde_json::from_slice(&body).expect("json");
+        assert_eq!(payload.error, "Backup already exists");
+    }
 }

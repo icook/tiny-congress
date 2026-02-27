@@ -27,6 +27,8 @@
 //! - [`TestAppBuilder::graphql_only()`] - GraphQL without identity/CORS
 //! - [`TestAppBuilder::with_mocks()`] - Full app with lazy pool (no real DB)
 
+use std::sync::Arc;
+
 use async_graphql::{EmptySubscription, Schema};
 use axum::{
     http::{header::HeaderValue, Method, StatusCode},
@@ -35,13 +37,16 @@ use axum::{
     routing::get,
     Extension, Router,
 };
-use sqlx::{postgres::PgPoolOptions, PgPool};
+use sqlx::PgPool;
 use tinycongress_api::{
     build_info::BuildInfo,
     config::SecurityHeadersConfig,
     graphql::{graphql_handler, graphql_playground, MutationRoot, QueryRoot},
     http::{build_security_headers, security_headers_middleware},
-    identity,
+    identity::{
+        self,
+        service::{PgSignupService, SignupService},
+    },
     rest::{self, ApiDoc},
 };
 use tower_http::cors::{AllowOrigin, Any, CorsLayer};
@@ -71,8 +76,11 @@ pub struct TestAppBuilder {
     include_swagger: bool,
     /// Custom build info provider (None uses from_env())
     build_info: Option<BuildInfo>,
-    /// Database pool for identity routes (lazy pool for validation-only tests)
+    /// Database pool — only set by `with_identity_pool()` for integration tests
+    /// that need the pool injected into the GraphQL schema.
     pool: Option<PgPool>,
+    /// Signup service for identity routes
+    signup_service: Option<Arc<dyn SignupService>>,
     /// CORS allowed origins (None means no CORS layer)
     cors_origins: Option<Vec<String>>,
     /// Security headers config (None means disabled)
@@ -97,6 +105,7 @@ impl TestAppBuilder {
             include_swagger: false,
             build_info: None,
             pool: None,
+            signup_service: None,
             cors_origins: None,
             security_headers: None,
         }
@@ -159,20 +168,17 @@ impl TestAppBuilder {
         self
     }
 
-    /// Include identity routes with a lazy pool (for validation-only tests).
+    /// Include identity routes with a mock signup service (for validation-only tests).
     ///
-    /// The lazy pool never actually connects to a database, so tests that
-    /// exercise only the validation path (before any DB call) work fine.
+    /// The mock service is never actually called, so tests that exercise only
+    /// the validation path (before any service call) work fine.
     /// Tests that need real DB behaviour belong in identity_handler_tests.rs.
     #[must_use]
     pub fn with_identity_lazy(mut self) -> Self {
+        use tinycongress_api::identity::service::mock::MockSignupService;
         self.include_identity = true;
-        self.pool = Some(
-            PgPoolOptions::new()
-                .max_connections(1)
-                .connect_lazy("postgres://fake:fake@localhost/fake")
-                .expect("lazy pool"),
-        );
+        self.signup_service =
+            Some(Arc::new(MockSignupService::default()) as Arc<dyn SignupService>);
         self
     }
 
@@ -180,6 +186,8 @@ impl TestAppBuilder {
     #[must_use]
     pub fn with_identity_pool(mut self, pool: PgPool) -> Self {
         self.include_identity = true;
+        self.signup_service =
+            Some(Arc::new(PgSignupService::new(pool.clone())) as Arc<dyn SignupService>);
         self.pool = Some(pool);
         self
     }
@@ -288,6 +296,10 @@ impl TestAppBuilder {
 
         if let Some(pool) = self.pool {
             app = app.layer(Extension(pool));
+        }
+
+        if let Some(service) = self.signup_service {
+            app = app.layer(Extension(service));
         }
 
         // Add CORS layer if configured
