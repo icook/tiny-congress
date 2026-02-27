@@ -59,11 +59,6 @@ test-skaffold:
     @echo "Building images and running unit tests via Skaffold..."
     skaffold build --file-output artifacts.json && skaffold test --build-artifacts artifacts.json
 
-# Verify full test suite via Skaffold (CI mode - RECOMMENDED approach per AGENTS.md)
-verify-ci:
-    @echo "Running full CI verification (Skaffold, unit tests, integration tests, E2E)..."
-    skaffold verify -p ci
-
 # Check backend formatting
 lint-backend-fmt:
     cd service && cargo fmt --all -- --check
