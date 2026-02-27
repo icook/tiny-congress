@@ -246,7 +246,8 @@ kind-delete:
 
 # Extract rust version from mise.toml (single source of truth)
 # Fail loud if mise.toml is missing or malformed
-rust-version := ```
+# Exported so skaffold's {{.RUST_VERSION}} template resolves automatically.
+export RUST_VERSION := ```
     VERSION=$(grep 'rust' mise.toml 2>/dev/null | sed 's/.*"\(.*\)"/\1/')
     if [ -z "$VERSION" ]; then
         echo "ERROR: Could not extract rust version from mise.toml" >&2
@@ -261,12 +262,12 @@ rust-version := ```
 dev: check-rust-version
     @echo "Starting full-stack dev with Skaffold (targeting KinD cluster)..."
     @echo "Prerequisites: run 'just kind-create' first for KinD with shared cargo cache"
-    RUST_VERSION={{rust-version}} skaffold dev --kube-context kind-kind --port-forward --cleanup=false --skip-tests
+    skaffold dev --kube-context kind-kind --port-forward --cleanup=false --skip-tests
 
 # Build all container images (for current profile)
 build-images:
     @echo "Building container images..."
-    RUST_VERSION={{rust-version}} skaffold build
+    skaffold build
 
 # Build images and output artifacts JSON (for reuse with test)
 build-images-artifacts:
