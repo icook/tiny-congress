@@ -322,19 +322,18 @@ impl IntoResponse for DeviceKeyRepoError {
                 Json(json!({ "error": "Maximum device limit reached" })),
             )
                 .into_response(),
-            Self::NotFound | Self::AlreadyRevoked => {
-                // Unreachable from create path — indicates a programming error
-                tracing::error!(
-                    "Unexpected NotFound/AlreadyRevoked from device key create during signup"
-                );
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(json!({ "error": "Internal server error" })),
-                )
-                    .into_response()
-            }
+            Self::NotFound => (
+                StatusCode::NOT_FOUND,
+                Json(json!({ "error": "Device key not found" })),
+            )
+                .into_response(),
+            Self::AlreadyRevoked => (
+                StatusCode::CONFLICT,
+                Json(json!({ "error": "Device key has been revoked" })),
+            )
+                .into_response(),
             Self::Database(db_err) => {
-                tracing::error!("Signup failed (device key): {db_err}");
+                tracing::error!("Device key operation failed: {db_err}");
                 (
                     StatusCode::INTERNAL_SERVER_ERROR,
                     Json(json!({ "error": "Internal server error" })),

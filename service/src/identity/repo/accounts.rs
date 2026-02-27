@@ -89,7 +89,7 @@ impl IntoResponse for AccountRepoError {
             )
                 .into_response(),
             Self::Database(db_err) => {
-                tracing::error!("Signup failed (account): {db_err}");
+                tracing::error!("Account operation failed: {db_err}");
                 (
                     StatusCode::INTERNAL_SERVER_ERROR,
                     Json(json!({ "error": "Internal server error" })),

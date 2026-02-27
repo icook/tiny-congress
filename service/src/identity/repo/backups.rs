@@ -174,17 +174,13 @@ impl IntoResponse for BackupRepoError {
                 Json(json!({ "error": "Backup already exists" })),
             )
                 .into_response(),
-            Self::NotFound => {
-                // Unreachable from create path — indicates a programming error
-                tracing::error!("Unexpected NotFound from backup create during signup");
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(json!({ "error": "Internal server error" })),
-                )
-                    .into_response()
-            }
+            Self::NotFound => (
+                StatusCode::NOT_FOUND,
+                Json(json!({ "error": "Backup not found" })),
+            )
+                .into_response(),
             Self::Database(db_err) => {
-                tracing::error!("Signup failed (backup): {db_err}");
+                tracing::error!("Backup operation failed: {db_err}");
                 (
                     StatusCode::INTERNAL_SERVER_ERROR,
                     Json(json!({ "error": "Internal server error" })),
