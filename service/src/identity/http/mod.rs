@@ -120,6 +120,46 @@ fn validate_username(username: &str) -> Result<(), UsernameError> {
     Ok(())
 }
 
+/// Signup validation errors with structured variants.
+///
+/// All variants map to 400 Bad Request — the distinction enables
+/// programmatic error handling without string parsing.
+#[derive(Debug)]
+enum SignupValidationError {
+    Username(UsernameError),
+    InvalidEncoding(&'static str),
+    InvalidKeyLength(&'static str),
+    InvalidBackupEnvelope(String),
+    InvalidDeviceName(&'static str),
+    InvalidCertificate,
+}
+
+impl std::fmt::Display for SignupValidationError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Username(e) => write!(f, "{e}"),
+            Self::InvalidEncoding(field) => {
+                write!(f, "Invalid base64url encoding for {field}")
+            }
+            Self::InvalidKeyLength(msg) | Self::InvalidDeviceName(msg) => f.write_str(msg),
+            Self::InvalidBackupEnvelope(msg) => f.write_str(msg),
+            Self::InvalidCertificate => f.write_str("Invalid device certificate"),
+        }
+    }
+}
+
+impl IntoResponse for SignupValidationError {
+    fn into_response(self) -> axum::response::Response {
+        (
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: self.to_string(),
+            }),
+        )
+            .into_response()
+    }
+}
+
 /// Validated and decoded signup data, ready for database insertion.
 ///
 /// Constructed via `TryFrom<&SignupRequest>`, which performs all
@@ -136,51 +176,58 @@ struct ValidatedSignup {
 }
 
 impl TryFrom<&SignupRequest> for ValidatedSignup {
-    type Error = String;
+    type Error = SignupValidationError;
 
     fn try_from(req: &SignupRequest) -> Result<Self, Self::Error> {
         // Validate username
         let username = req.username.trim().to_string();
-        validate_username(&username).map_err(|e| e.to_string())?;
+        validate_username(&username).map_err(SignupValidationError::Username)?;
 
         // Decode and validate root public key
         let root_pubkey_bytes = decode_base64url(&req.root_pubkey)
-            .map_err(|_| "Invalid base64url encoding for root_pubkey")?;
-        let root_pubkey_arr: [u8; 32] = root_pubkey_bytes
-            .as_slice()
-            .try_into()
-            .map_err(|_| "root_pubkey must be 32 bytes (Ed25519)")?;
+            .map_err(|_| SignupValidationError::InvalidEncoding("root_pubkey"))?;
+        let root_pubkey_arr: [u8; 32] = root_pubkey_bytes.as_slice().try_into().map_err(|_| {
+            SignupValidationError::InvalidKeyLength("root_pubkey must be 32 bytes (Ed25519)")
+        })?;
         let root_kid = Kid::derive(&root_pubkey_arr);
 
         // Decode and validate encrypted backup
         let backup_bytes = decode_base64url(&req.backup.encrypted_blob)
-            .map_err(|_| "Invalid base64url encoding for backup.encrypted_blob")?;
-        let envelope = BackupEnvelope::parse(backup_bytes).map_err(|e| e.to_string())?;
+            .map_err(|_| SignupValidationError::InvalidEncoding("backup.encrypted_blob"))?;
+        let envelope = BackupEnvelope::parse(backup_bytes)
+            .map_err(|e| SignupValidationError::InvalidBackupEnvelope(e.to_string()))?;
 
         // Decode and validate device public key
         let device_pubkey_bytes = decode_base64url(&req.device.pubkey)
-            .map_err(|_| "Invalid base64url encoding for device.pubkey")?;
+            .map_err(|_| SignupValidationError::InvalidEncoding("device.pubkey"))?;
         if device_pubkey_bytes.len() != 32 {
-            return Err("device.pubkey must be 32 bytes (Ed25519)".into());
+            return Err(SignupValidationError::InvalidKeyLength(
+                "device.pubkey must be 32 bytes (Ed25519)",
+            ));
         }
         let device_kid = Kid::derive(&device_pubkey_bytes);
 
         // Validate device name
         let device_name = req.device.name.trim().to_string();
         if device_name.is_empty() {
-            return Err("Device name cannot be empty".into());
+            return Err(SignupValidationError::InvalidDeviceName(
+                "Device name cannot be empty",
+            ));
         }
         if device_name.len() > 128 {
-            return Err("Device name too long".into());
+            return Err(SignupValidationError::InvalidDeviceName(
+                "Device name too long",
+            ));
         }
 
         // Decode and verify certificate
         let certificate_bytes = decode_base64url(&req.device.certificate)
-            .map_err(|_| "Invalid base64url encoding for device.certificate")?;
-        let cert_arr: [u8; 64] = certificate_bytes
-            .as_slice()
-            .try_into()
-            .map_err(|_| "device.certificate must be 64 bytes (Ed25519 signature)")?;
+            .map_err(|_| SignupValidationError::InvalidEncoding("device.certificate"))?;
+        let cert_arr: [u8; 64] = certificate_bytes.as_slice().try_into().map_err(|_| {
+            SignupValidationError::InvalidKeyLength(
+                "device.certificate must be 64 bytes (Ed25519 signature)",
+            )
+        })?;
 
         // Verify the certificate: root key must have signed the device public key.
         // The signed message is the raw 32-byte device pubkey. This is sufficient because
@@ -189,7 +236,7 @@ impl TryFrom<&SignupRequest> for ValidatedSignup {
         // feature reuses key material, the message format must be extended (e.g. with
         // account binding or a nonce).
         verify_ed25519(&root_pubkey_arr, &device_pubkey_bytes, &cert_arr)
-            .map_err(|_| "Invalid device certificate")?;
+            .map_err(|_| SignupValidationError::InvalidCertificate)?;
 
         Ok(Self {
             username,
@@ -217,7 +264,7 @@ async fn signup(
     // Validate and decode all fields
     let validated = match ValidatedSignup::try_from(&req) {
         Ok(v) => v,
-        Err(msg) => return bad_request(&msg),
+        Err(e) => return e.into_response(),
     };
 
     // Atomic signup: all three inserts in a single transaction.
@@ -252,6 +299,10 @@ async fn signup(
     )
     .await
     {
+        // NotFound is unreachable from the create path — log if it somehow occurs
+        if matches!(e, super::repo::BackupRepoError::NotFound) {
+            tracing::error!("Unexpected BackupRepoError::NotFound during signup");
+        }
         return e.into_response();
     }
 
@@ -266,6 +317,13 @@ async fn signup(
     .await
     {
         Ok(device) => device,
+        Err(
+            ref e @ (super::repo::DeviceKeyRepoError::NotFound
+            | super::repo::DeviceKeyRepoError::AlreadyRevoked),
+        ) => {
+            tracing::error!("Unexpected {e} during signup device key creation");
+            return internal_error();
+        }
         Err(e) => return e.into_response(),
     };
 
@@ -290,16 +348,6 @@ fn internal_error() -> axum::response::Response {
         StatusCode::INTERNAL_SERVER_ERROR,
         Json(ErrorResponse {
             error: "Internal server error".to_string(),
-        }),
-    )
-        .into_response()
-}
-
-fn bad_request(msg: &str) -> axum::response::Response {
-    (
-        StatusCode::BAD_REQUEST,
-        Json(ErrorResponse {
-            error: msg.to_string(),
         }),
     )
         .into_response()

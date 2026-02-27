@@ -92,9 +92,10 @@ pub async fn security_headers_middleware(
     next: Next,
 ) -> Response {
     let mut response = next.run(request).await;
-    response
-        .headers_mut()
-        .extend(headers.iter().map(|(k, v)| (k.clone(), v.clone())));
+    let response_headers = response.headers_mut();
+    for (k, v) in headers.iter() {
+        response_headers.insert(k.clone(), v.clone());
+    }
     response
 }
 
