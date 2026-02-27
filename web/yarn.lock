@@ -2118,6 +2118,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@noble/ciphers@npm:^2.1.1":
+  version: 2.1.1
+  resolution: "@noble/ciphers@npm:2.1.1"
+  checksum: 10c0/f02662723475a9785a2f7bcd6e8e12d4b5f77537154f5e21edb0fed398051fb1ae5057eb444987e1c65342f8632474f0143ea612a2dad49593d3358eb730a079
+  languageName: node
+  linkType: hard
+
 "@noble/curves@npm:^2.0.1":
   version: 2.0.1
   resolution: "@noble/curves@npm:2.0.1"
@@ -6306,6 +6313,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"hash-wasm@npm:^4.12.0":
+  version: 4.12.0
+  resolution: "hash-wasm@npm:4.12.0"
+  checksum: 10c0/6cb95055319810b6f673de755289960683a9831807690795f0e8918b2fd7e6ae5b82a9dc47cbace171cf2814b412ef68c315a0ead0b4d96bd3e56a05e4bde136
+  languageName: node
+  linkType: hard
+
 "hashery@npm:^1.2.0":
   version: 1.3.0
   resolution: "hashery@npm:1.3.0"
@@ -6431,6 +6445,13 @@ __metadata:
   dependencies:
     safer-buffer: "npm:>= 2.1.2 < 3.0.0"
   checksum: 10c0/f5c9e2bddd7101a71b07a381ace44ebdc65ca76a10be0e9e64d372b511132acc4ee41b830962f438840d492cd6f9e08c237289f760d6a7fed754e61cffcb6757
+  languageName: node
+  linkType: hard
+
+"idb@npm:^8.0.3":
+  version: 8.0.3
+  resolution: "idb@npm:8.0.3"
+  checksum: 10c0/421cd9a3281b7564528857031cc33fd9e95753f8191e483054cb25d1ceea7303a0d1462f4f69f5b41606f0f066156999e067478abf2460dfcf9cab80dae2a2b2
   languageName: node
   linkType: hard
 
@@ -7546,6 +7567,7 @@ __metadata:
     "@mantine/form": "npm:^8.3.12"
     "@mantine/hooks": "npm:^8.3.12"
     "@mantine/notifications": "npm:^8.3.12"
+    "@noble/ciphers": "npm:^2.1.1"
     "@noble/curves": "npm:^2.0.1"
     "@playwright/test": "npm:^1.57.0"
     "@storybook/react": "npm:^10.2.13"
@@ -7581,7 +7603,9 @@ __metadata:
     globals: "npm:^17.0.0"
     graphql: "npm:^16.12.0"
     graphql-codegen-typescript-validation-schema: "npm:^0.18.1"
+    hash-wasm: "npm:^4.12.0"
     husky: "npm:^9.1.7"
+    idb: "npm:^8.0.3"
     identity-obj-proxy: "npm:^3.0.0"
     jsdom: "npm:^27.4.0"
     lint-staged: "npm:^16.2.7"
