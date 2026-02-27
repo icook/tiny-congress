@@ -175,9 +175,13 @@ fn map_signup_error(e: CreateSignupError) -> SignupError {
             tracing::error!("Signup failed (account): {e}");
             SignupError::Internal("Internal server error".to_string())
         }
-        CreateSignupError::Backup(
-            BackupRepoError::DuplicateAccount | BackupRepoError::DuplicateKid,
-        ) => SignupError::DuplicateKey,
+        CreateSignupError::Backup(BackupRepoError::DuplicateKid) => SignupError::DuplicateKey,
+        CreateSignupError::Backup(BackupRepoError::DuplicateAccount) => {
+            tracing::error!(
+                "Unexpected DuplicateAccount on backup create during signup — account was just inserted"
+            );
+            SignupError::Internal("Internal server error".to_string())
+        }
         CreateSignupError::Backup(BackupRepoError::Database(e)) => {
             tracing::error!("Signup failed (backup): {e}");
             SignupError::Internal("Internal server error".to_string())
@@ -596,6 +600,17 @@ mod tests {
         let repo = MockIdentityRepo::new();
         repo.set_signup_result(Err(CreateSignupError::Account(
             AccountRepoError::DuplicateKey,
+        )));
+        let svc = DefaultIdentityService::new(Arc::new(repo));
+        let err = svc.signup(&valid_signup_request()).await.unwrap_err();
+        assert!(matches!(err, SignupError::DuplicateKey));
+    }
+
+    #[tokio::test]
+    async fn test_signup_device_kid_duplicate_maps_to_duplicate_key() {
+        let repo = MockIdentityRepo::new();
+        repo.set_signup_result(Err(CreateSignupError::DeviceKey(
+            DeviceKeyRepoError::DuplicateKid,
         )));
         let svc = DefaultIdentityService::new(Arc::new(repo));
         let err = svc.signup(&valid_signup_request()).await.unwrap_err();
