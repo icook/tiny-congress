@@ -3,14 +3,53 @@
 mod common;
 
 use common::factories::{generate_test_keys, AccountFactory};
-use common::test_db::test_transaction;
+use common::test_db::{isolated_db, test_transaction};
+use ed25519_dalek::{Signer, SigningKey};
+use rand::rngs::OsRng;
 use sqlx::query_scalar;
-use tc_crypto::{BackupEnvelope, Kid};
+use tc_crypto::{encode_base64url, BackupEnvelope, Kid};
 use tc_test_macros::shared_runtime_test;
 use tinycongress_api::identity::repo::{
     create_account_with_executor, create_backup_with_executor, create_device_key_with_executor,
-    AccountRepoError, BackupRepoError, DeviceKeyRepoError,
+    AccountRepoError, BackupRepoError, CreateSignupError, DeviceKeyRepoError, IdentityRepo,
+    PgIdentityRepo, ValidatedSignup,
 };
+
+/// Build a [`ValidatedSignup`] with real Ed25519 keys and a valid certificate.
+///
+/// Generates fresh keypairs on each call so concurrent tests don't collide.
+fn validated_signup_for_test(username: &str) -> ValidatedSignup {
+    let root_signing_key = SigningKey::generate(&mut OsRng);
+    let root_pubkey_bytes = root_signing_key.verifying_key().to_bytes();
+
+    let device_signing_key = SigningKey::generate(&mut OsRng);
+    let device_pubkey_bytes = device_signing_key.verifying_key().to_bytes();
+
+    let certificate_sig = root_signing_key.sign(&device_pubkey_bytes);
+
+    let envelope = BackupEnvelope::build(
+        [0xAA; 16], // salt
+        65536,
+        3,
+        1,           // m_cost, t_cost, p_cost
+        [0xBB; 12],  // nonce
+        &[0xCC; 48], // ciphertext
+    )
+    .expect("test envelope");
+
+    ValidatedSignup::new(
+        username.to_string(),
+        encode_base64url(&root_pubkey_bytes),
+        Kid::derive(&root_pubkey_bytes),
+        envelope.as_bytes().to_vec(),
+        envelope.salt().to_vec(),
+        envelope.version(),
+        encode_base64url(&device_pubkey_bytes),
+        Kid::derive(&device_pubkey_bytes),
+        "Test Device".to_string(),
+        certificate_sig.to_bytes().to_vec(),
+    )
+}
 
 fn test_envelope() -> BackupEnvelope {
     BackupEnvelope::build(
@@ -339,4 +378,94 @@ async fn test_device_key_repo_enforces_max_devices() {
     .expect_err("11th device key should fail");
 
     assert!(matches!(err, DeviceKeyRepoError::MaxDevicesReached));
+}
+
+// ============================================================================
+// PgIdentityRepo — compound create_signup tests
+// ============================================================================
+
+/// Happy path: `create_signup` inserts account, backup, and device key atomically.
+#[shared_runtime_test]
+async fn test_create_signup_inserts_all_three_rows() {
+    let db = isolated_db().await;
+    let repo = PgIdentityRepo::new(db.pool().clone());
+
+    let data = validated_signup_for_test("signupuser");
+    let result = repo.create_signup(&data).await.expect("create_signup");
+
+    assert!(!result.account_id.is_nil());
+
+    // Verify all three tables have a row
+    let account_count: i64 = query_scalar("SELECT COUNT(*) FROM accounts WHERE id = $1")
+        .bind(result.account_id)
+        .fetch_one(db.pool())
+        .await
+        .expect("count accounts");
+    assert_eq!(account_count, 1);
+
+    let backup_count: i64 =
+        query_scalar("SELECT COUNT(*) FROM account_backups WHERE account_id = $1")
+            .bind(result.account_id)
+            .fetch_one(db.pool())
+            .await
+            .expect("count backups");
+    assert_eq!(backup_count, 1);
+
+    let device_count: i64 = query_scalar("SELECT COUNT(*) FROM device_keys WHERE account_id = $1")
+        .bind(result.account_id)
+        .fetch_one(db.pool())
+        .await
+        .expect("count device keys");
+    assert_eq!(device_count, 1);
+}
+
+/// Transaction rollback: if account creation fails (duplicate username),
+/// no backup or device key rows should be left behind.
+#[shared_runtime_test]
+async fn test_create_signup_rolls_back_on_duplicate_username() {
+    let db = isolated_db().await;
+    let repo = PgIdentityRepo::new(db.pool().clone());
+
+    // First signup succeeds
+    let data1 = validated_signup_for_test("rollbackuser");
+    let first = repo.create_signup(&data1).await.expect("first signup");
+
+    // Second signup with same username fails at account insert
+    let data2 = validated_signup_for_test("rollbackuser");
+    let err = repo
+        .create_signup(&data2)
+        .await
+        .expect_err("duplicate username should fail");
+
+    assert!(matches!(
+        err,
+        CreateSignupError::Account(AccountRepoError::DuplicateUsername)
+    ));
+
+    // Verify only the first signup's rows exist — no orphaned rows from the second attempt
+    let total_backups: i64 = query_scalar("SELECT COUNT(*) FROM account_backups")
+        .fetch_one(db.pool())
+        .await
+        .expect("count all backups");
+    assert_eq!(
+        total_backups, 1,
+        "second signup's backup should have been rolled back"
+    );
+
+    let total_devices: i64 = query_scalar("SELECT COUNT(*) FROM device_keys")
+        .fetch_one(db.pool())
+        .await
+        .expect("count all device keys");
+    assert_eq!(
+        total_devices, 1,
+        "second signup's device key should have been rolled back"
+    );
+
+    // Verify the surviving rows belong to the first signup
+    let surviving_account: i64 = query_scalar("SELECT COUNT(*) FROM accounts WHERE id = $1")
+        .bind(first.account_id)
+        .fetch_one(db.pool())
+        .await
+        .expect("count first account");
+    assert_eq!(surviving_account, 1);
 }

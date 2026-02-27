@@ -1,6 +1,5 @@
 //! Device key repository for delegated signing keys
 
-use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use sqlx::PgPool;
 use sqlx::Row;
@@ -46,98 +45,6 @@ pub enum DeviceKeyRepoError {
 
 /// Maximum number of devices per account
 const MAX_DEVICES_PER_ACCOUNT: i64 = 10;
-
-/// Repository trait for device key operations
-#[async_trait]
-pub trait DeviceKeyRepo: Send + Sync {
-    /// Register a new device key
-    async fn create(
-        &self,
-        account_id: Uuid,
-        device_kid: &Kid,
-        device_pubkey: &str,
-        device_name: &str,
-        certificate: &[u8],
-    ) -> Result<CreatedDeviceKey, DeviceKeyRepoError>;
-
-    /// List all device keys for an account (including revoked)
-    async fn list_by_account(
-        &self,
-        account_id: Uuid,
-    ) -> Result<Vec<DeviceKeyRecord>, DeviceKeyRepoError>;
-
-    /// Get a device key by KID
-    async fn get_by_kid(&self, device_kid: &Kid) -> Result<DeviceKeyRecord, DeviceKeyRepoError>;
-
-    /// Revoke a device key (sets `revoked_at`)
-    async fn revoke(&self, device_kid: &Kid) -> Result<(), DeviceKeyRepoError>;
-
-    /// Rename a device
-    async fn rename(&self, device_kid: &Kid, new_name: &str) -> Result<(), DeviceKeyRepoError>;
-
-    /// Update `last_used_at` timestamp
-    async fn touch(&self, device_kid: &Kid) -> Result<(), DeviceKeyRepoError>;
-}
-
-/// `PostgreSQL` implementation of [`DeviceKeyRepo`]
-pub struct PgDeviceKeyRepo {
-    pool: PgPool,
-}
-
-impl PgDeviceKeyRepo {
-    #[must_use]
-    pub const fn new(pool: PgPool) -> Self {
-        Self { pool }
-    }
-}
-
-#[async_trait]
-impl DeviceKeyRepo for PgDeviceKeyRepo {
-    async fn create(
-        &self,
-        account_id: Uuid,
-        device_kid: &Kid,
-        device_pubkey: &str,
-        device_name: &str,
-        certificate: &[u8],
-    ) -> Result<CreatedDeviceKey, DeviceKeyRepoError> {
-        let mut tx = self.pool.begin().await?;
-        let result = create_device_key_with_executor(
-            &mut tx,
-            account_id,
-            device_kid,
-            device_pubkey,
-            device_name,
-            certificate,
-        )
-        .await?;
-        tx.commit().await?;
-        Ok(result)
-    }
-
-    async fn list_by_account(
-        &self,
-        account_id: Uuid,
-    ) -> Result<Vec<DeviceKeyRecord>, DeviceKeyRepoError> {
-        list_device_keys_by_account(&self.pool, account_id).await
-    }
-
-    async fn get_by_kid(&self, device_kid: &Kid) -> Result<DeviceKeyRecord, DeviceKeyRepoError> {
-        get_device_key_by_kid(&self.pool, device_kid).await
-    }
-
-    async fn revoke(&self, device_kid: &Kid) -> Result<(), DeviceKeyRepoError> {
-        revoke_device_key(&self.pool, device_kid).await
-    }
-
-    async fn rename(&self, device_kid: &Kid, new_name: &str) -> Result<(), DeviceKeyRepoError> {
-        rename_device_key(&self.pool, device_kid, new_name).await
-    }
-
-    async fn touch(&self, device_kid: &Kid) -> Result<(), DeviceKeyRepoError> {
-        touch_device_key(&self.pool, device_kid).await
-    }
-}
 
 async fn create_device_key<'e, E>(
     executor: E,
@@ -263,7 +170,7 @@ fn map_device_key_row(row: sqlx::postgres::PgRow) -> DeviceKeyRecord {
 /// # Errors
 ///
 /// Returns `DeviceKeyRepoError::Database` on database failures.
-async fn list_device_keys_by_account<'e, E>(
+pub(crate) async fn list_device_keys_by_account<'e, E>(
     executor: E,
     account_id: Uuid,
 ) -> Result<Vec<DeviceKeyRecord>, DeviceKeyRepoError>
@@ -291,7 +198,7 @@ where
 /// # Errors
 ///
 /// Returns `DeviceKeyRepoError::NotFound` if no device key matches the given KID.
-async fn get_device_key_by_kid<'e, E>(
+pub(crate) async fn get_device_key_by_kid<'e, E>(
     executor: E,
     device_kid: &Kid,
 ) -> Result<DeviceKeyRecord, DeviceKeyRepoError>
@@ -350,7 +257,10 @@ async fn ensure_active_device_updated(
 ///
 /// Returns `DeviceKeyRepoError::NotFound` if no device key matches the given KID.
 /// Returns `DeviceKeyRepoError::AlreadyRevoked` if the device key was already revoked.
-async fn revoke_device_key(pool: &PgPool, device_kid: &Kid) -> Result<(), DeviceKeyRepoError> {
+pub(crate) async fn revoke_device_key(
+    pool: &PgPool,
+    device_kid: &Kid,
+) -> Result<(), DeviceKeyRepoError> {
     let result = sqlx::query(
         "UPDATE device_keys SET revoked_at = now() WHERE device_kid = $1 AND revoked_at IS NULL",
     )
@@ -367,7 +277,7 @@ async fn revoke_device_key(pool: &PgPool, device_kid: &Kid) -> Result<(), Device
 ///
 /// Returns `DeviceKeyRepoError::NotFound` if no device key matches the given KID.
 /// Returns `DeviceKeyRepoError::AlreadyRevoked` if the device key has been revoked.
-async fn rename_device_key(
+pub(crate) async fn rename_device_key(
     pool: &PgPool,
     device_kid: &Kid,
     new_name: &str,
@@ -389,7 +299,10 @@ async fn rename_device_key(
 ///
 /// Returns `DeviceKeyRepoError::NotFound` if no device key matches the given KID.
 /// Returns `DeviceKeyRepoError::AlreadyRevoked` if the device key has been revoked.
-async fn touch_device_key(pool: &PgPool, device_kid: &Kid) -> Result<(), DeviceKeyRepoError> {
+pub(crate) async fn touch_device_key(
+    pool: &PgPool,
+    device_kid: &Kid,
+) -> Result<(), DeviceKeyRepoError> {
     let result = sqlx::query(
         "UPDATE device_keys SET last_used_at = now() WHERE device_kid = $1 AND revoked_at IS NULL",
     )
@@ -398,127 +311,4 @@ async fn touch_device_key(pool: &PgPool, device_kid: &Kid) -> Result<(), DeviceK
     .await?;
 
     ensure_active_device_updated(pool, result, device_kid).await
-}
-
-#[cfg(any(test, feature = "test-utils"))]
-#[allow(clippy::expect_used)]
-pub mod mock {
-    //! Mock implementation for testing
-
-    use super::{async_trait, CreatedDeviceKey, DeviceKeyRecord, DeviceKeyRepoError, Uuid};
-    use chrono::Utc;
-    use std::sync::Mutex;
-    use tc_crypto::Kid;
-
-    pub struct MockDeviceKeyRepo {
-        pub create_result: Mutex<Option<Result<CreatedDeviceKey, DeviceKeyRepoError>>>,
-        pub list_result: Mutex<Option<Result<Vec<DeviceKeyRecord>, DeviceKeyRepoError>>>,
-        pub get_result: Mutex<Option<Result<DeviceKeyRecord, DeviceKeyRepoError>>>,
-        pub revoke_result: Mutex<Option<Result<(), DeviceKeyRepoError>>>,
-        pub rename_result: Mutex<Option<Result<(), DeviceKeyRepoError>>>,
-        pub touch_result: Mutex<Option<Result<(), DeviceKeyRepoError>>>,
-    }
-
-    impl MockDeviceKeyRepo {
-        #[must_use]
-        pub const fn new() -> Self {
-            Self {
-                create_result: Mutex::new(None),
-                list_result: Mutex::new(None),
-                get_result: Mutex::new(None),
-                revoke_result: Mutex::new(None),
-                rename_result: Mutex::new(None),
-                touch_result: Mutex::new(None),
-            }
-        }
-
-        /// Set the result that `create()` will return.
-        ///
-        /// # Panics
-        ///
-        /// Panics if the internal mutex is poisoned.
-        pub fn set_create_result(&self, result: Result<CreatedDeviceKey, DeviceKeyRepoError>) {
-            *self.create_result.lock().expect("lock poisoned") = Some(result);
-        }
-    }
-
-    impl Default for MockDeviceKeyRepo {
-        fn default() -> Self {
-            Self::new()
-        }
-    }
-
-    #[async_trait]
-    impl super::DeviceKeyRepo for MockDeviceKeyRepo {
-        async fn create(
-            &self,
-            _account_id: Uuid,
-            device_kid: &Kid,
-            _device_pubkey: &str,
-            _device_name: &str,
-            _certificate: &[u8],
-        ) -> Result<CreatedDeviceKey, DeviceKeyRepoError> {
-            self.create_result
-                .lock()
-                .expect("lock poisoned")
-                .take()
-                .unwrap_or_else(|| {
-                    Ok(CreatedDeviceKey {
-                        id: Uuid::new_v4(),
-                        device_kid: device_kid.clone(),
-                        created_at: Utc::now(),
-                    })
-                })
-        }
-
-        async fn list_by_account(
-            &self,
-            _account_id: Uuid,
-        ) -> Result<Vec<DeviceKeyRecord>, DeviceKeyRepoError> {
-            self.list_result
-                .lock()
-                .expect("lock poisoned")
-                .take()
-                .unwrap_or_else(|| Ok(vec![]))
-        }
-
-        async fn get_by_kid(
-            &self,
-            _device_kid: &Kid,
-        ) -> Result<DeviceKeyRecord, DeviceKeyRepoError> {
-            self.get_result
-                .lock()
-                .expect("lock poisoned")
-                .take()
-                .unwrap_or(Err(DeviceKeyRepoError::NotFound))
-        }
-
-        async fn revoke(&self, _device_kid: &Kid) -> Result<(), DeviceKeyRepoError> {
-            self.revoke_result
-                .lock()
-                .expect("lock poisoned")
-                .take()
-                .unwrap_or(Ok(()))
-        }
-
-        async fn rename(
-            &self,
-            _device_kid: &Kid,
-            _new_name: &str,
-        ) -> Result<(), DeviceKeyRepoError> {
-            self.rename_result
-                .lock()
-                .expect("lock poisoned")
-                .take()
-                .unwrap_or(Ok(()))
-        }
-
-        async fn touch(&self, _device_kid: &Kid) -> Result<(), DeviceKeyRepoError> {
-            self.touch_result
-                .lock()
-                .expect("lock poisoned")
-                .take()
-                .unwrap_or(Ok(()))
-        }
-    }
 }

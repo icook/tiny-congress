@@ -45,7 +45,8 @@ use tinycongress_api::{
     http::{build_security_headers, security_headers_middleware},
     identity::{
         self,
-        service::{PgSignupService, SignupService},
+        repo::PgIdentityRepo,
+        service::{DefaultIdentityService, IdentityService},
     },
     rest::{self, ApiDoc},
 };
@@ -79,8 +80,8 @@ pub struct TestAppBuilder {
     /// Database pool — only set by `with_identity_pool()` for integration tests
     /// that need the pool injected into the GraphQL schema.
     pool: Option<PgPool>,
-    /// Signup service for identity routes
-    signup_service: Option<Arc<dyn SignupService>>,
+    /// Identity service for identity routes
+    identity_service: Option<Arc<dyn IdentityService>>,
     /// CORS allowed origins (None means no CORS layer)
     cors_origins: Option<Vec<String>>,
     /// Security headers config (None means disabled)
@@ -105,7 +106,7 @@ impl TestAppBuilder {
             include_swagger: false,
             build_info: None,
             pool: None,
-            signup_service: None,
+            identity_service: None,
             cors_origins: None,
             security_headers: None,
         }
@@ -132,12 +133,13 @@ impl TestAppBuilder {
         Self::new().with_graphql().with_health()
     }
 
-    /// Create a full app with a lazy pool (no real DB).
+    /// Create a full app with mock persistence (no real DB).
     ///
-    /// Mirrors production main.rs wiring but with a lazy pool instead
+    /// Mirrors production main.rs wiring but with a mock repo instead
     /// of a real database connection. Includes all routes, CORS, and
-    /// security headers. Identity routes will only pass validation-only
-    /// tests; DB-dependent tests belong in identity_handler_tests.rs.
+    /// security headers. Identity routes run real validation through
+    /// [`DefaultIdentityService`]; DB-dependent tests belong in
+    /// identity_handler_tests.rs.
     #[must_use]
     pub fn with_mocks() -> Self {
         Self::new()
@@ -168,17 +170,19 @@ impl TestAppBuilder {
         self
     }
 
-    /// Include identity routes with a mock signup service (for validation-only tests).
+    /// Include identity routes with a real service backed by a mock repo (no DB needed).
     ///
-    /// The mock service is never actually called, so tests that exercise only
-    /// the validation path (before any service call) work fine.
-    /// Tests that need real DB behaviour belong in identity_handler_tests.rs.
+    /// Uses [`DefaultIdentityService`] so request validation runs exactly as in
+    /// production.  The underlying repo is a [`MockIdentityRepo`] so persistence
+    /// calls succeed without a database.  Tests that need real DB behaviour
+    /// (duplicate constraints, transactions) belong in identity_handler_tests.rs.
     #[must_use]
     pub fn with_identity_lazy(mut self) -> Self {
-        use tinycongress_api::identity::service::mock::MockSignupService;
+        use tinycongress_api::identity::repo::mock::MockIdentityRepo;
         self.include_identity = true;
-        self.signup_service =
-            Some(Arc::new(MockSignupService::default()) as Arc<dyn SignupService>);
+        let repo = Arc::new(MockIdentityRepo::default());
+        self.identity_service =
+            Some(Arc::new(DefaultIdentityService::new(repo)) as Arc<dyn IdentityService>);
         self
     }
 
@@ -186,8 +190,9 @@ impl TestAppBuilder {
     #[must_use]
     pub fn with_identity_pool(mut self, pool: PgPool) -> Self {
         self.include_identity = true;
-        self.signup_service =
-            Some(Arc::new(PgSignupService::new(pool.clone())) as Arc<dyn SignupService>);
+        let repo = Arc::new(PgIdentityRepo::new(pool.clone()));
+        self.identity_service =
+            Some(Arc::new(DefaultIdentityService::new(repo)) as Arc<dyn IdentityService>);
         self.pool = Some(pool);
         self
     }
@@ -298,7 +303,7 @@ impl TestAppBuilder {
             app = app.layer(Extension(pool));
         }
 
-        if let Some(service) = self.signup_service {
+        if let Some(service) = self.identity_service {
             app = app.layer(Extension(service));
         }
 
