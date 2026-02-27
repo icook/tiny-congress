@@ -197,6 +197,7 @@ describe('signed device API', () => {
     expect(headers.get('X-Device-Kid')).toBe(deviceKid);
     expect(headers.get('X-Signature')).toBeTruthy();
     expect(headers.get('X-Timestamp')).toBeTruthy();
+    expect(headers.get('X-Nonce')).toBeTruthy();
     expect(call[1].method).toBe('GET');
     expect(result).toEqual(devices);
   });
