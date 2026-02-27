@@ -14,17 +14,20 @@ use super::repo::{
 };
 
 /// Validated signup parameters — all validation has passed, ready for persistence.
+///
+/// Fields are `pub(super)` so that only code inside `identity::` can construct
+/// an instance, enforcing that callers go through the handler's validation path.
 pub struct ValidatedSignupParams {
-    pub username: String,
-    pub root_pubkey: String,
-    pub root_kid: Kid,
-    pub backup_bytes: Vec<u8>,
-    pub backup_salt: Vec<u8>,
-    pub backup_version: i32,
-    pub device_pubkey: String,
-    pub device_kid: Kid,
-    pub device_name: String,
-    pub certificate: Vec<u8>,
+    pub(super) username: String,
+    pub(super) root_pubkey: String,
+    pub(super) root_kid: Kid,
+    pub(super) backup_bytes: Vec<u8>,
+    pub(super) backup_salt: Vec<u8>,
+    pub(super) backup_version: i32,
+    pub(super) device_pubkey: String,
+    pub(super) device_kid: Kid,
+    pub(super) device_name: String,
+    pub(super) certificate: Vec<u8>,
 }
 
 /// Successful signup result

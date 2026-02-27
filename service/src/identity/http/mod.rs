@@ -731,7 +731,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_signup_backup_failure_after_account_success() {
+    async fn test_signup_backup_duplicate_account_returns_conflict() {
         let backups = MockBackupRepo::new();
         backups.set_create_result(Err(BackupRepoError::DuplicateAccount));
         let service =
