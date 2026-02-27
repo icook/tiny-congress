@@ -174,7 +174,7 @@ async fn signup(
         return bad_request("Device name cannot be empty");
     }
 
-    if device_name.len() > 128 {
+    if device_name.chars().count() > 128 {
         return bad_request("Device name too long");
     }
 
@@ -266,7 +266,7 @@ fn internal_error() -> axum::response::Response {
         .into_response()
 }
 
-fn bad_request(msg: &str) -> axum::response::Response {
+pub(super) fn bad_request(msg: &str) -> axum::response::Response {
     (
         StatusCode::BAD_REQUEST,
         Json(ErrorResponse {

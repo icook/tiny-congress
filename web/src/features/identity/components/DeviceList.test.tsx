@@ -22,8 +22,8 @@ describe('DeviceList', () => {
         currentDeviceKid={null}
         onRevoke={vi.fn()}
         onRename={vi.fn()}
-        isRevoking={false}
-        isRenaming={false}
+        revokingKid={null}
+        renamingKid={null}
       />
     );
 
@@ -40,8 +40,8 @@ describe('DeviceList', () => {
         currentDeviceKid={null}
         onRevoke={vi.fn()}
         onRename={vi.fn()}
-        isRevoking={false}
-        isRenaming={false}
+        revokingKid={null}
+        renamingKid={null}
       />
     );
 
@@ -56,8 +56,8 @@ describe('DeviceList', () => {
         currentDeviceKid="current-kid"
         onRevoke={vi.fn()}
         onRename={vi.fn()}
-        isRevoking={false}
-        isRenaming={false}
+        revokingKid={null}
+        renamingKid={null}
       />
     );
 
@@ -72,8 +72,8 @@ describe('DeviceList', () => {
         currentDeviceKid={null}
         onRevoke={vi.fn()}
         onRename={vi.fn()}
-        isRevoking={false}
-        isRenaming={false}
+        revokingKid={null}
+        renamingKid={null}
       />
     );
 
@@ -87,8 +87,8 @@ describe('DeviceList', () => {
         currentDeviceKid={null}
         onRevoke={vi.fn()}
         onRename={vi.fn()}
-        isRevoking={false}
-        isRenaming={false}
+        revokingKid={null}
+        renamingKid={null}
       />
     );
 
@@ -102,8 +102,8 @@ describe('DeviceList', () => {
         currentDeviceKid="my-kid"
         onRevoke={vi.fn()}
         onRename={vi.fn()}
-        isRevoking={false}
-        isRenaming={false}
+        revokingKid={null}
+        renamingKid={null}
       />
     );
 
@@ -118,8 +118,8 @@ describe('DeviceList', () => {
         currentDeviceKid={null}
         onRevoke={vi.fn()}
         onRename={vi.fn()}
-        isRevoking={false}
-        isRenaming={false}
+        revokingKid={null}
+        renamingKid={null}
       />
     );
 
@@ -137,8 +137,8 @@ describe('DeviceList', () => {
         currentDeviceKid="kid-1"
         onRevoke={vi.fn()}
         onRename={vi.fn()}
-        isRevoking={false}
-        isRenaming={false}
+        revokingKid={null}
+        renamingKid={null}
       />
     );
 
@@ -154,8 +154,8 @@ describe('DeviceList', () => {
         currentDeviceKid="my-kid"
         onRevoke={vi.fn()}
         onRename={vi.fn()}
-        isRevoking={false}
-        isRenaming={false}
+        revokingKid={null}
+        renamingKid={null}
       />
     );
 
@@ -172,8 +172,8 @@ describe('DeviceList', () => {
         currentDeviceKid="my-kid"
         onRevoke={vi.fn()}
         onRename={onRename}
-        isRevoking={false}
-        isRenaming={false}
+        revokingKid={null}
+        renamingKid={null}
       />
     );
 
@@ -194,8 +194,8 @@ describe('DeviceList', () => {
         currentDeviceKid="my-kid"
         onRevoke={vi.fn()}
         onRename={onRename}
-        isRevoking={false}
-        isRenaming={false}
+        revokingKid={null}
+        renamingKid={null}
       />
     );
 
@@ -216,8 +216,8 @@ describe('DeviceList', () => {
         currentDeviceKid="my-kid"
         onRevoke={onRevoke}
         onRename={vi.fn()}
-        isRevoking={false}
-        isRenaming={false}
+        revokingKid={null}
+        renamingKid={null}
       />
     );
 
@@ -232,8 +232,8 @@ describe('DeviceList', () => {
         currentDeviceKid={null}
         onRevoke={vi.fn()}
         onRename={vi.fn()}
-        isRevoking={false}
-        isRenaming={false}
+        revokingKid={null}
+        renamingKid={null}
       />
     );
 

@@ -184,7 +184,7 @@ async fn validate_add_device_request(
     if device_name.is_empty() {
         return Err(bad_request("Device name cannot be empty"));
     }
-    if device_name.len() > 128 {
+    if device_name.chars().count() > 128 {
         return Err(bad_request("Device name too long"));
     }
 
@@ -297,7 +297,7 @@ pub async fn rename_device(
     if new_name.is_empty() {
         return bad_request("Device name cannot be empty");
     }
-    if new_name.len() > 128 {
+    if new_name.chars().count() > 128 {
         return bad_request("Device name too long");
     }
 
@@ -349,13 +349,7 @@ async fn get_owned_device(
 }
 
 fn bad_request(msg: &str) -> axum::response::Response {
-    (
-        StatusCode::BAD_REQUEST,
-        Json(ErrorResponse {
-            error: msg.to_string(),
-        }),
-    )
-        .into_response()
+    super::bad_request(msg)
 }
 
 fn not_found(msg: &str) -> axum::response::Response {

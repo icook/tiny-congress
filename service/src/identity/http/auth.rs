@@ -49,15 +49,8 @@ impl AuthenticatedDevice {
     /// Returns a 400 response if the body is not valid JSON for `T`.
     #[allow(clippy::result_large_err)]
     pub fn json<T: serde::de::DeserializeOwned>(&self) -> Result<T, Response> {
-        serde_json::from_slice(&self.body_bytes).map_err(|e| {
-            (
-                StatusCode::BAD_REQUEST,
-                Json(ErrorResponse {
-                    error: format!("Invalid JSON body: {e}"),
-                }),
-            )
-                .into_response()
-        })
+        serde_json::from_slice(&self.body_bytes)
+            .map_err(|e| super::bad_request(&format!("Invalid JSON body: {e}")))
     }
 }
 
@@ -175,11 +168,6 @@ impl<S: Send + Sync> FromRequest<S> for AuthenticatedDevice {
             }
         })?;
 
-        // Check if revoked
-        if device.revoked_at.is_some() {
-            return Err(forbidden_error("Device has been revoked"));
-        }
-
         // Decode stored public key
         let pubkey_bytes = decode_base64url(&device.device_pubkey)
             .map_err(|_| auth_error("Corrupted device key"))?;
@@ -188,9 +176,17 @@ impl<S: Send + Sync> FromRequest<S> for AuthenticatedDevice {
             .try_into()
             .map_err(|_| auth_error("Corrupted device key"))?;
 
-        // Verify signature
+        // Verify signature BEFORE checking revocation status.
+        // If we checked revocation first, an unauthenticated caller who knows
+        // a valid KID could distinguish revoked (403) from active (401) devices
+        // without possessing the private key.
         verify_ed25519(&pubkey_arr, canonical.as_bytes(), &sig_arr)
             .map_err(|_| auth_error("Invalid signature"))?;
+
+        // Check if revoked (after signature verification to avoid status oracle)
+        if device.revoked_at.is_some() {
+            return Err(forbidden_error("Device has been revoked"));
+        }
 
         // Touch last_used_at (fire-and-forget, don't fail the request)
         let touch_kid = kid.clone();

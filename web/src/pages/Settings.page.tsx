@@ -71,8 +71,8 @@ export function SettingsPage() {
               onRename={(kid, name) => {
                 renameMutation.mutate({ targetKid: kid, name });
               }}
-              isRevoking={revokeMutation.isPending}
-              isRenaming={renameMutation.isPending}
+              revokingKid={revokeMutation.isPending ? revokeMutation.variables : null}
+              renamingKid={renameMutation.isPending ? renameMutation.variables.targetKid : null}
             />
           ) : null}
         </Stack>

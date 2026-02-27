@@ -12,8 +12,8 @@ export interface DeviceListProps {
   currentDeviceKid: string | null;
   onRevoke: (kid: string) => void;
   onRename: (kid: string, name: string) => void;
-  isRevoking: boolean;
-  isRenaming: boolean;
+  revokingKid: string | null;
+  renamingKid: string | null;
 }
 
 function formatDate(dateStr: string | null): string {
@@ -34,8 +34,8 @@ export function DeviceList({
   currentDeviceKid,
   onRevoke,
   onRename,
-  isRevoking,
-  isRenaming,
+  revokingKid,
+  renamingKid,
 }: DeviceListProps) {
   const [editingKid, setEditingKid] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
@@ -103,7 +103,7 @@ export function DeviceList({
                       onClick={() => {
                         submitRename(device.device_kid);
                       }}
-                      loading={isRenaming}
+                      loading={renamingKid === device.device_kid}
                     >
                       <IconCheck size={14} />
                     </ActionIcon>
@@ -163,7 +163,7 @@ export function DeviceList({
                         color="red"
                         variant="subtle"
                         aria-label="Revoke"
-                        loading={isRevoking}
+                        loading={revokingKid === device.device_kid}
                         onClick={() => {
                           onRevoke(device.device_kid);
                         }}
