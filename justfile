@@ -186,8 +186,8 @@ dev-storybook:
 build-storybook:
     cd web && yarn storybook:build
 
-# Install frontend dependencies
-install-frontend:
+# Internal: Install frontend dependencies (used by CI)
+_install-frontend:
     cd web && yarn install
 
 # =============================================================================
@@ -256,18 +256,18 @@ _build-images-artifacts:
     @echo "Building container images and writing artifacts..."
     skaffold build --file-output artifacts.json
 
-# Deploy to local cluster
+# Deploy dev images to KinD cluster via Skaffold
 deploy:
     @echo "Deploying to Kubernetes cluster..."
     skaffold run -p dev
 
-# Deploy release images to cluster
+# Deploy release images to KinD cluster via Skaffold
 deploy-release:
     @echo "Deploying release images to cluster..."
     skaffold run -p release
 
-# Delete all deployed resources from cluster
-undeploy:
+# Remove all Skaffold-deployed resources from cluster
+deploy-delete:
     @echo "Cleaning up Kubernetes resources..."
     skaffold delete
 
@@ -300,15 +300,15 @@ audit-unused:
 # =============================================================================
 
 # Run all linting (backend + frontend) - no cluster required
-lint: lint-backend lint-frontend
+lint: lint-backend lint-frontend lint-typecheck
     @echo "✓ All linting passed"
+
+# Type check frontend (TypeScript)
+lint-typecheck: _typecheck-frontend
 
 # Fix all formatting (backend + frontend)
 fmt: fmt-backend fmt-frontend
     @echo "✓ All formatting applied"
-
-# Type check frontend
-typecheck: _typecheck-frontend
 
 # Run all local unit tests (backend + frontend + wasm)
 test: test-backend test-wasm test-frontend
@@ -367,37 +367,6 @@ docs-rust:
 docs-ts:
     cd web && yarn typedoc
     @echo "TypeScript docs: web/docs/index.html"
-
-# =============================================================================
-# Git Workflows
-# =============================================================================
-# See docs/interfaces/branch-naming-conventions.md for branch naming standards
-
-# Push current branch and create a PR
-pr title body="":
-    #!/usr/bin/env bash
-    set -euo pipefail
-    branch=$(git rev-parse --abbrev-ref HEAD)
-    echo "→ Pushing branch: $branch"
-    git push -u origin "$branch"
-    echo "→ Creating PR..."
-    gh pr create --title "{{title}}" --body "{{body}}"
-    pr_num=$(gh pr view --json number -q .number)
-    echo "✓ PR #$pr_num created: $(gh pr view --json url -q .url)"
-
-# Push current branch, create PR, and enable auto-merge
-pr-auto title body="":
-    #!/usr/bin/env bash
-    set -euo pipefail
-    branch=$(git rev-parse --abbrev-ref HEAD)
-    echo "→ Pushing branch: $branch"
-    git push -u origin "$branch"
-    echo "→ Creating PR..."
-    gh pr create --title "{{title}}" --body "{{body}}"
-    pr_num=$(gh pr view --json number -q .number)
-    echo "→ Enabling auto-merge for PR #$pr_num..."
-    gh pr merge "$pr_num" --auto --merge
-    echo "✓ PR #$pr_num created with auto-merge enabled: $(gh pr view --json url -q .url)"
 
 # =============================================================================
 # Setup & Prerequisites
