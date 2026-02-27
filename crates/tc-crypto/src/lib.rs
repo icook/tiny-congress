@@ -52,6 +52,19 @@ pub fn encode_base64url(bytes: &[u8]) -> String {
     URL_SAFE_NO_PAD.encode(bytes)
 }
 
+/// Decode a base64url-encoded string (RFC 4648) to bytes (WASM binding).
+///
+/// For native Rust code, use [`decode_base64url`] instead.
+///
+/// # Errors
+/// Returns `JsError` if the input is not valid base64url
+#[wasm_bindgen(js_name = "decode_base64url")]
+pub fn decode_base64url_js(encoded: &str) -> Result<Vec<u8>, JsError> {
+    URL_SAFE_NO_PAD
+        .decode(encoded)
+        .map_err(|e| JsError::new(&e.to_string()))
+}
+
 /// Decode a base64url-encoded string (RFC 4648) to bytes.
 ///
 /// Accepts input with or without padding.
@@ -63,19 +76,8 @@ pub fn encode_base64url(bytes: &[u8]) -> String {
 /// The decoded bytes
 ///
 /// # Errors
-/// Returns `JsError` if the input is not valid base64url
-#[wasm_bindgen]
-pub fn decode_base64url(encoded: &str) -> Result<Vec<u8>, JsError> {
-    URL_SAFE_NO_PAD
-        .decode(encoded)
-        .map_err(|e| JsError::new(&e.to_string()))
-}
-
-/// Native Rust API for decoding base64url (returns proper Rust error type)
-///
-/// # Errors
 /// Returns `DecodeError` if the input is not valid base64url
-pub fn decode_base64url_native(encoded: &str) -> Result<Vec<u8>, DecodeError> {
+pub fn decode_base64url(encoded: &str) -> Result<Vec<u8>, DecodeError> {
     URL_SAFE_NO_PAD.decode(encoded).map_err(DecodeError::from)
 }
 
@@ -149,9 +151,9 @@ mod tests {
     }
 
     #[test]
-    fn test_decode_base64url_native() {
+    fn test_decode_base64url() {
         let encoded = "SGVsbG8";
-        let decoded = decode_base64url_native(encoded).expect("decode should succeed");
+        let decoded = decode_base64url(encoded).expect("decode should succeed");
         assert_eq!(decoded, b"Hello");
     }
 
@@ -159,14 +161,14 @@ mod tests {
     fn test_roundtrip() {
         let original = b"test data for roundtrip";
         let encoded = encode_base64url(original);
-        let decoded = decode_base64url_native(&encoded).expect("decode should succeed");
+        let decoded = decode_base64url(&encoded).expect("decode should succeed");
         assert_eq!(decoded, original);
     }
 
     #[test]
     fn test_decode_invalid_base64url() {
         let invalid = "not valid base64!!!";
-        let result = decode_base64url_native(invalid);
+        let result = decode_base64url(invalid);
         assert!(result.is_err());
     }
 }
@@ -181,7 +183,7 @@ mod proptests {
         #[test]
         fn roundtrip_encode_decode(bytes: Vec<u8>) {
             let encoded = encode_base64url(&bytes);
-            let decoded = decode_base64url_native(&encoded).unwrap();
+            let decoded = decode_base64url(&encoded).unwrap();
             prop_assert_eq!(decoded, bytes);
         }
 

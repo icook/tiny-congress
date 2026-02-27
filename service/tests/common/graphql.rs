@@ -5,13 +5,13 @@
 
 use async_graphql::{EmptySubscription, Schema};
 use serde_json::Value;
-use tinycongress_api::build_info::BuildInfoProvider;
+use tinycongress_api::build_info::BuildInfo;
 use tinycongress_api::graphql::{MutationRoot, QueryRoot};
 
 /// Execute a GraphQL query against the test schema and return parsed JSON.
 pub async fn execute_query(query: &str) -> Value {
     let schema = Schema::build(QueryRoot, MutationRoot, EmptySubscription)
-        .data(BuildInfoProvider::from_env())
+        .data(BuildInfo::from_env())
         .finish();
     let response = schema.execute(query).await;
     serde_json::to_value(response).expect("Failed to serialize GraphQL response")

@@ -4,22 +4,13 @@ pub mod accounts;
 pub mod backups;
 pub mod device_keys;
 
-pub use accounts::{
-    create_account_with_executor, AccountRepo, AccountRepoError, CreatedAccount, PgAccountRepo,
-};
+pub use accounts::{create_account, AccountRepoError, CreatedAccount};
 pub use backups::{
-    create_backup_with_executor, BackupRecord, BackupRepo, BackupRepoError, CreatedBackup,
-    PgBackupRepo,
+    create_backup, delete_backup_by_kid, get_backup_by_kid, BackupRecord, BackupRepoError,
+    CreatedBackup,
 };
 pub use device_keys::{
-    create_device_key_with_executor, CreatedDeviceKey, DeviceKeyRecord, DeviceKeyRepo,
-    DeviceKeyRepoError, PgDeviceKeyRepo,
+    create_device_key_with_conn, get_device_key_by_kid, list_device_keys_by_account,
+    rename_device_key, revoke_device_key, touch_device_key, CreatedDeviceKey, DeviceKeyRecord,
+    DeviceKeyRepoError,
 };
-
-// Re-export mock for use in tests across the crate and integration tests
-#[cfg(any(test, feature = "test-utils"))]
-pub mod mock {
-    pub use super::accounts::mock::MockAccountRepo;
-    pub use super::backups::mock::MockBackupRepo;
-    pub use super::device_keys::mock::MockDeviceKeyRepo;
-}

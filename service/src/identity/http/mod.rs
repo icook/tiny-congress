@@ -7,11 +7,8 @@ use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use super::repo::{
-    create_account_with_executor, create_backup_with_executor, create_device_key_with_executor,
-    AccountRepoError, BackupRepoError, DeviceKeyRepoError,
-};
-use tc_crypto::{decode_base64url_native as decode_base64url, verify_ed25519, BackupEnvelope, Kid};
+use super::repo::{create_account, create_backup, create_device_key_with_conn};
+use tc_crypto::{decode_base64url, verify_ed25519, BackupEnvelope, Kid};
 
 /// Backup data included in signup request
 #[derive(Debug, Deserialize)]
@@ -73,27 +70,136 @@ const RESERVED_USERNAMES: &[&str] = &[
     "anonymous",
 ];
 
-/// Validate a username, returning an error message if invalid.
-fn validate_username(username: &str) -> Result<(), &'static str> {
+/// Structured error type for username validation failures.
+#[derive(Debug, PartialEq, Eq)]
+pub enum UsernameError {
+    Empty,
+    TooShort,
+    TooLong,
+    InvalidCharacters,
+    Reserved,
+}
+
+impl std::fmt::Display for UsernameError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Empty => write!(f, "Username cannot be empty"),
+            Self::TooShort => write!(f, "Username must be at least 3 characters"),
+            Self::TooLong => write!(f, "Username too long"),
+            Self::InvalidCharacters => write!(
+                f,
+                "Username may only contain letters, numbers, hyphens, and underscores"
+            ),
+            Self::Reserved => write!(f, "This username is reserved"),
+        }
+    }
+}
+
+/// Validate a username, returning a structured error if invalid.
+fn validate_username(username: &str) -> Result<(), UsernameError> {
     if username.is_empty() {
-        return Err("Username cannot be empty");
+        return Err(UsernameError::Empty);
     }
     if username.len() < 3 {
-        return Err("Username must be at least 3 characters");
+        return Err(UsernameError::TooShort);
     }
     if username.len() > 64 {
-        return Err("Username too long");
+        return Err(UsernameError::TooLong);
     }
     if !username
         .chars()
         .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
     {
-        return Err("Username may only contain letters, numbers, hyphens, and underscores");
+        return Err(UsernameError::InvalidCharacters);
     }
     if RESERVED_USERNAMES.contains(&username.to_ascii_lowercase().as_str()) {
-        return Err("This username is reserved");
+        return Err(UsernameError::Reserved);
     }
     Ok(())
+}
+
+/// Validated and decoded signup data, ready for database insertion.
+///
+/// Constructed via `TryFrom<&SignupRequest>`, which performs all
+/// decode/validate/derive steps and returns a structured error on failure.
+struct ValidatedSignup {
+    username: String,
+    root_pubkey_b64: String,
+    root_kid: Kid,
+    envelope: BackupEnvelope,
+    device_pubkey_b64: String,
+    device_kid: Kid,
+    device_name: String,
+    certificate_bytes: Vec<u8>,
+}
+
+impl TryFrom<&SignupRequest> for ValidatedSignup {
+    type Error = String;
+
+    fn try_from(req: &SignupRequest) -> Result<Self, Self::Error> {
+        // Validate username
+        let username = req.username.trim().to_string();
+        validate_username(&username).map_err(|e| e.to_string())?;
+
+        // Decode and validate root public key
+        let root_pubkey_bytes = decode_base64url(&req.root_pubkey)
+            .map_err(|_| "Invalid base64url encoding for root_pubkey")?;
+        let root_pubkey_arr: [u8; 32] = root_pubkey_bytes
+            .as_slice()
+            .try_into()
+            .map_err(|_| "root_pubkey must be 32 bytes (Ed25519)")?;
+        let root_kid = Kid::derive(&root_pubkey_arr);
+
+        // Decode and validate encrypted backup
+        let backup_bytes = decode_base64url(&req.backup.encrypted_blob)
+            .map_err(|_| "Invalid base64url encoding for backup.encrypted_blob")?;
+        let envelope = BackupEnvelope::parse(backup_bytes).map_err(|e| e.to_string())?;
+
+        // Decode and validate device public key
+        let device_pubkey_bytes = decode_base64url(&req.device.pubkey)
+            .map_err(|_| "Invalid base64url encoding for device.pubkey")?;
+        if device_pubkey_bytes.len() != 32 {
+            return Err("device.pubkey must be 32 bytes (Ed25519)".into());
+        }
+        let device_kid = Kid::derive(&device_pubkey_bytes);
+
+        // Validate device name
+        let device_name = req.device.name.trim().to_string();
+        if device_name.is_empty() {
+            return Err("Device name cannot be empty".into());
+        }
+        if device_name.len() > 128 {
+            return Err("Device name too long".into());
+        }
+
+        // Decode and verify certificate
+        let certificate_bytes = decode_base64url(&req.device.certificate)
+            .map_err(|_| "Invalid base64url encoding for device.certificate")?;
+        let cert_arr: [u8; 64] = certificate_bytes
+            .as_slice()
+            .try_into()
+            .map_err(|_| "device.certificate must be 64 bytes (Ed25519 signature)")?;
+
+        // Verify the certificate: root key must have signed the device public key.
+        // The signed message is the raw 32-byte device pubkey. This is sufficient because
+        // device KIDs are globally unique (enforced by DB constraint), so a certificate
+        // cannot be replayed for a different device. If a future "rotate device key"
+        // feature reuses key material, the message format must be extended (e.g. with
+        // account binding or a nonce).
+        verify_ed25519(&root_pubkey_arr, &device_pubkey_bytes, &cert_arr)
+            .map_err(|_| "Invalid device certificate")?;
+
+        Ok(Self {
+            username,
+            root_pubkey_b64: req.root_pubkey.clone(),
+            root_kid,
+            envelope,
+            device_pubkey_b64: req.device.pubkey.clone(),
+            device_kid,
+            device_name,
+            certificate_bytes,
+        })
+    }
 }
 
 /// Create identity router
@@ -106,80 +212,11 @@ async fn signup(
     Extension(pool): Extension<PgPool>,
     Json(req): Json<SignupRequest>,
 ) -> impl IntoResponse {
-    // Validate username
-    let username = req.username.trim();
-    if let Err(msg) = validate_username(username) {
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(ErrorResponse {
-                error: msg.to_string(),
-            }),
-        )
-            .into_response();
-    }
-
-    // Decode and validate root public key
-    let Ok(root_pubkey_bytes) = decode_base64url(&req.root_pubkey) else {
-        return bad_request("Invalid base64url encoding for root_pubkey");
+    // Validate and decode all fields
+    let validated = match ValidatedSignup::try_from(&req) {
+        Ok(v) => v,
+        Err(msg) => return bad_request(&msg),
     };
-
-    let Ok(root_pubkey_arr): Result<[u8; 32], _> = root_pubkey_bytes.as_slice().try_into() else {
-        return bad_request("root_pubkey must be 32 bytes (Ed25519)");
-    };
-
-    // Derive root KID
-    let root_kid = Kid::derive(&root_pubkey_arr);
-
-    // Decode and validate encrypted backup
-    let Ok(backup_bytes) = decode_base64url(&req.backup.encrypted_blob) else {
-        return bad_request("Invalid base64url encoding for backup.encrypted_blob");
-    };
-
-    let envelope = match BackupEnvelope::parse(backup_bytes) {
-        Ok(env) => env,
-        Err(e) => return bad_request(&e.to_string()),
-    };
-
-    // Decode and validate device public key
-    let Ok(device_pubkey_bytes) = decode_base64url(&req.device.pubkey) else {
-        return bad_request("Invalid base64url encoding for device.pubkey");
-    };
-
-    if device_pubkey_bytes.len() != 32 {
-        return bad_request("device.pubkey must be 32 bytes (Ed25519)");
-    }
-
-    // Derive device KID
-    let device_kid = Kid::derive(&device_pubkey_bytes);
-
-    // Validate device name
-    let device_name = req.device.name.trim();
-    if device_name.is_empty() {
-        return bad_request("Device name cannot be empty");
-    }
-
-    if device_name.len() > 128 {
-        return bad_request("Device name too long");
-    }
-
-    // Decode certificate
-    let Ok(certificate_bytes) = decode_base64url(&req.device.certificate) else {
-        return bad_request("Invalid base64url encoding for device.certificate");
-    };
-
-    let Ok(cert_arr): Result<[u8; 64], _> = certificate_bytes.as_slice().try_into() else {
-        return bad_request("device.certificate must be 64 bytes (Ed25519 signature)");
-    };
-
-    // Verify the certificate: root key must have signed the device public key.
-    // The signed message is the raw 32-byte device pubkey. This is sufficient because
-    // device KIDs are globally unique (enforced by DB constraint), so a certificate
-    // cannot be replayed for a different device. If a future "rotate device key"
-    // feature reuses key material, the message format must be extended (e.g. with
-    // account binding or a nonce).
-    if verify_ed25519(&root_pubkey_arr, &device_pubkey_bytes, &cert_arr).is_err() {
-        return bad_request("Invalid device certificate");
-    }
 
     // Atomic signup: all three inserts in a single transaction.
     // On early return, sqlx auto-rolls back the transaction when `tx` is dropped.
@@ -191,37 +228,43 @@ async fn signup(
         }
     };
 
-    let account =
-        match create_account_with_executor(&mut *tx, username, &req.root_pubkey, &root_kid).await {
-            Ok(account) => account,
-            Err(e) => return account_error_response(e),
-        };
-
-    if let Err(e) = create_backup_with_executor(
+    let account = match create_account(
         &mut *tx,
-        account.id,
-        &root_kid,
-        envelope.as_bytes(),
-        envelope.salt(),
-        envelope.version(),
+        &validated.username,
+        &validated.root_pubkey_b64,
+        &validated.root_kid,
     )
     .await
     {
-        return backup_error_response(e);
+        Ok(account) => account,
+        Err(e) => return e.into_response(),
+    };
+
+    if let Err(e) = create_backup(
+        &mut *tx,
+        account.id,
+        &validated.root_kid,
+        validated.envelope.as_bytes(),
+        validated.envelope.salt(),
+        validated.envelope.version(),
+    )
+    .await
+    {
+        return e.into_response();
     }
 
-    let device = match create_device_key_with_executor(
+    let device = match create_device_key_with_conn(
         &mut tx,
         account.id,
-        &device_kid,
-        &req.device.pubkey,
-        device_name,
-        &certificate_bytes,
+        &validated.device_kid,
+        &validated.device_pubkey_b64,
+        &validated.device_name,
+        &validated.certificate_bytes,
     )
     .await
     {
         Ok(device) => device,
-        Err(e) => return device_key_error_response(e),
+        Err(e) => return e.into_response(),
     };
 
     if let Err(e) = tx.commit().await {
@@ -258,98 +301,6 @@ fn bad_request(msg: &str) -> axum::response::Response {
         }),
     )
         .into_response()
-}
-
-fn account_error_response(e: AccountRepoError) -> axum::response::Response {
-    match e {
-        AccountRepoError::DuplicateUsername => (
-            StatusCode::CONFLICT,
-            Json(ErrorResponse {
-                error: "Username already taken".to_string(),
-            }),
-        )
-            .into_response(),
-        AccountRepoError::DuplicateKey => (
-            StatusCode::CONFLICT,
-            Json(ErrorResponse {
-                error: "Public key already registered".to_string(),
-            }),
-        )
-            .into_response(),
-        AccountRepoError::Database(db_err) => {
-            tracing::error!("Signup failed (account): {}", db_err);
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorResponse {
-                    error: "Internal server error".to_string(),
-                }),
-            )
-                .into_response()
-        }
-    }
-}
-
-fn backup_error_response(e: BackupRepoError) -> axum::response::Response {
-    match e {
-        BackupRepoError::DuplicateAccount | BackupRepoError::DuplicateKid => (
-            StatusCode::CONFLICT,
-            Json(ErrorResponse {
-                error: "Backup already exists".to_string(),
-            }),
-        )
-            .into_response(),
-        BackupRepoError::NotFound => {
-            // Unreachable from create path — indicates a programming error
-            tracing::error!("Unexpected NotFound from backup create during signup");
-            internal_error()
-        }
-        BackupRepoError::Database(db_err) => {
-            tracing::error!("Signup failed (backup): {}", db_err);
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorResponse {
-                    error: "Internal server error".to_string(),
-                }),
-            )
-                .into_response()
-        }
-    }
-}
-
-fn device_key_error_response(e: DeviceKeyRepoError) -> axum::response::Response {
-    match e {
-        DeviceKeyRepoError::DuplicateKid => (
-            StatusCode::CONFLICT,
-            Json(ErrorResponse {
-                error: "Device key already registered".to_string(),
-            }),
-        )
-            .into_response(),
-        DeviceKeyRepoError::MaxDevicesReached => (
-            StatusCode::UNPROCESSABLE_ENTITY,
-            Json(ErrorResponse {
-                error: "Maximum device limit reached".to_string(),
-            }),
-        )
-            .into_response(),
-        DeviceKeyRepoError::NotFound | DeviceKeyRepoError::AlreadyRevoked => {
-            // Unreachable from create path — indicates a programming error
-            tracing::error!(
-                "Unexpected NotFound/AlreadyRevoked from device key create during signup"
-            );
-            internal_error()
-        }
-        DeviceKeyRepoError::Database(db_err) => {
-            tracing::error!("Signup failed (device key): {}", db_err);
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorResponse {
-                    error: "Internal server error".to_string(),
-                }),
-            )
-                .into_response()
-        }
-    }
 }
 
 #[cfg(test)]
@@ -587,8 +538,8 @@ mod tests {
 
     #[test]
     fn test_validate_username_too_short() {
-        assert!(validate_username("ab").is_err());
-        assert!(validate_username("a").is_err());
+        assert_eq!(validate_username("ab"), Err(UsernameError::TooShort));
+        assert_eq!(validate_username("a"), Err(UsernameError::TooShort));
     }
 
     #[test]
@@ -599,7 +550,7 @@ mod tests {
     #[test]
     fn test_validate_username_too_long() {
         let long = "a".repeat(65);
-        assert!(validate_username(&long).is_err());
+        assert_eq!(validate_username(&long), Err(UsernameError::TooLong));
     }
 
     #[test]
@@ -610,21 +561,26 @@ mod tests {
 
     #[test]
     fn test_validate_username_invalid_chars() {
-        let result = validate_username("al!ce");
-        assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .contains("letters, numbers, hyphens, and underscores"));
+        assert_eq!(
+            validate_username("al!ce"),
+            Err(UsernameError::InvalidCharacters)
+        );
     }
 
     #[test]
     fn test_validate_username_unicode_rejected() {
-        assert!(validate_username("álice").is_err());
+        assert_eq!(
+            validate_username("álice"),
+            Err(UsernameError::InvalidCharacters)
+        );
     }
 
     #[test]
     fn test_validate_username_spaces_rejected() {
-        assert!(validate_username("al ice").is_err());
+        assert_eq!(
+            validate_username("al ice"),
+            Err(UsernameError::InvalidCharacters)
+        );
     }
 
     #[test]
@@ -634,15 +590,13 @@ mod tests {
 
     #[test]
     fn test_validate_username_reserved() {
-        let result = validate_username("admin");
-        assert!(result.is_err());
-        assert!(result.unwrap_err().contains("reserved"));
+        assert_eq!(validate_username("admin"), Err(UsernameError::Reserved));
     }
 
     #[test]
     fn test_validate_username_reserved_case_insensitive() {
-        assert!(validate_username("Admin").is_err());
-        assert!(validate_username("ROOT").is_err());
+        assert_eq!(validate_username("Admin"), Err(UsernameError::Reserved));
+        assert_eq!(validate_username("ROOT"), Err(UsernameError::Reserved));
     }
 
     // Note: signup_success, duplicate_username, duplicate_key, and database_error

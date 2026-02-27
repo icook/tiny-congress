@@ -47,17 +47,16 @@ cargo test --test db_tests test_crud_operations
 Use `#[test]` or `#[tokio::test]` for tests without database dependencies:
 
 ```rust
-use tinycongress_api::build_info::BuildInfoProvider;
+use tinycongress_api::build_info::BuildInfo;
 
 #[test]
 fn uses_env_values_when_provided() {
-    let provider = BuildInfoProvider::from_lookup(|key| match key {
+    let info = BuildInfo::from_lookup(|key| match key {
         "APP_VERSION" => Some("1.2.3".to_string()),
         "GIT_SHA" => Some("abc123".to_string()),
         _ => None,
     });
 
-    let info = provider.build_info();
     assert_eq!(info.version, "1.2.3");
 }
 ```
@@ -156,7 +155,7 @@ proptest! {
     #[test]
     fn roundtrip_encode_decode(bytes: Vec<u8>) {
         let encoded = encode_base64url(&bytes);
-        let decoded = decode_base64url_native(&encoded).unwrap();
+        let decoded = decode_base64url(&encoded).unwrap();
         prop_assert_eq!(decoded, bytes);
     }
 }
@@ -239,7 +238,7 @@ use tinycongress_api::graphql::{MutationRoot, QueryRoot};
 
 async fn execute_query(query: &str) -> Value {
     let schema = Schema::build(QueryRoot, MutationRoot, EmptySubscription)
-        .data(BuildInfoProvider::from_env())
+        .data(BuildInfo::from_env())
         .finish();
     let response = schema.execute(query).await;
     serde_json::to_value(response).unwrap()
@@ -345,7 +344,7 @@ Use constructor injection for testable code:
 
 ```rust
 // Production code
-impl BuildInfoProvider {
+impl BuildInfo {
     pub fn from_env() -> Self {
         Self::from_lookup(std::env::var)
     }
@@ -361,7 +360,7 @@ impl BuildInfoProvider {
 // Test code
 #[test]
 fn test_with_custom_values() {
-    let provider = BuildInfoProvider::from_lookup(|key| match key {
+    let provider = BuildInfo::from_lookup(|key| match key {
         "APP_VERSION" => Some("test".to_string()),
         _ => None,
     });

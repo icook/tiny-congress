@@ -1,8 +1,8 @@
 //! Backup repository for encrypted root key storage
 
-use async_trait::async_trait;
+use axum::{http::StatusCode, response::IntoResponse, Json};
 use chrono::{DateTime, Utc};
-use sqlx::PgPool;
+use serde_json::json;
 use sqlx::Row;
 use tc_crypto::Kid;
 use uuid::Uuid;
@@ -40,61 +40,15 @@ pub enum BackupRepoError {
     Database(#[from] sqlx::Error),
 }
 
-/// Repository trait for backup operations
-#[async_trait]
-pub trait BackupRepo: Send + Sync {
-    /// Create a new encrypted backup
-    async fn create(
-        &self,
-        account_id: Uuid,
-        kid: &Kid,
-        encrypted_backup: &[u8],
-        salt: &[u8],
-        version: i32,
-    ) -> Result<CreatedBackup, BackupRepoError>;
-
-    /// Retrieve a backup by KID (for recovery)
-    async fn get_by_kid(&self, kid: &Kid) -> Result<BackupRecord, BackupRepoError>;
-
-    /// Delete a backup by KID
-    async fn delete_by_kid(&self, kid: &Kid) -> Result<(), BackupRepoError>;
-}
-
-/// `PostgreSQL` implementation of [`BackupRepo`]
-pub struct PgBackupRepo {
-    pool: PgPool,
-}
-
-impl PgBackupRepo {
-    #[must_use]
-    pub const fn new(pool: PgPool) -> Self {
-        Self { pool }
-    }
-}
-
-#[async_trait]
-impl BackupRepo for PgBackupRepo {
-    async fn create(
-        &self,
-        account_id: Uuid,
-        kid: &Kid,
-        encrypted_backup: &[u8],
-        salt: &[u8],
-        version: i32,
-    ) -> Result<CreatedBackup, BackupRepoError> {
-        create_backup(&self.pool, account_id, kid, encrypted_backup, salt, version).await
-    }
-
-    async fn get_by_kid(&self, kid: &Kid) -> Result<BackupRecord, BackupRepoError> {
-        get_backup_by_kid(&self.pool, kid).await
-    }
-
-    async fn delete_by_kid(&self, kid: &Kid) -> Result<(), BackupRepoError> {
-        delete_backup_by_kid(&self.pool, kid).await
-    }
-}
-
-async fn create_backup<'e, E>(
+/// Create a new encrypted backup.
+///
+/// Works with any sqlx executor (pool, connection, or transaction).
+///
+/// # Errors
+///
+/// Returns `BackupRepoError::DuplicateAccount` if a backup already exists for this account.
+/// Returns `BackupRepoError::DuplicateKid` if a backup already exists for this key ID.
+pub async fn create_backup<'e, E>(
     executor: E,
     account_id: Uuid,
     kid: &Kid,
@@ -147,28 +101,20 @@ where
     }
 }
 
-/// Create a backup using any executor (pool, connection, or transaction).
+/// Retrieve a backup by KID (for recovery).
 ///
 /// # Errors
 ///
-/// Returns `BackupRepoError::DuplicateAccount` if a backup already exists for this account.
-/// Returns `BackupRepoError::DuplicateKid` if a backup already exists for this key ID.
-pub async fn create_backup_with_executor<'e, E>(
-    executor: E,
-    account_id: Uuid,
-    kid: &Kid,
-    encrypted_backup: &[u8],
-    salt: &[u8],
-    version: i32,
-) -> Result<CreatedBackup, BackupRepoError>
-where
-    E: sqlx::Executor<'e, Database = sqlx::Postgres>,
-{
-    create_backup(executor, account_id, kid, encrypted_backup, salt, version).await
-}
-
+/// Returns `BackupRepoError::NotFound` if no backup exists for this KID.
+///
+/// # Panics
+///
+/// Panics if a KID stored in the database fails to parse — this indicates data corruption.
 #[allow(clippy::expect_used)]
-async fn get_backup_by_kid<'e, E>(executor: E, kid: &Kid) -> Result<BackupRecord, BackupRepoError>
+pub async fn get_backup_by_kid<'e, E>(
+    executor: E,
+    kid: &Kid,
+) -> Result<BackupRecord, BackupRepoError>
 where
     E: sqlx::Executor<'e, Database = sqlx::Postgres>,
 {
@@ -199,7 +145,12 @@ where
     })
 }
 
-async fn delete_backup_by_kid<'e, E>(executor: E, kid: &Kid) -> Result<(), BackupRepoError>
+/// Delete a backup by KID.
+///
+/// # Errors
+///
+/// Returns `BackupRepoError::NotFound` if no backup exists for this KID.
+pub async fn delete_backup_by_kid<'e, E>(executor: E, kid: &Kid) -> Result<(), BackupRepoError>
 where
     E: sqlx::Executor<'e, Database = sqlx::Postgres>,
 {
@@ -215,103 +166,31 @@ where
     Ok(())
 }
 
-#[cfg(any(test, feature = "test-utils"))]
-#[allow(clippy::expect_used)]
-pub mod mock {
-    //! Mock implementation for testing
-
-    use super::{async_trait, BackupRecord, BackupRepoError, CreatedBackup, Uuid};
-    use chrono::Utc;
-    use std::sync::Mutex;
-    use tc_crypto::Kid;
-
-    pub struct MockBackupRepo {
-        pub create_result: Mutex<Option<Result<CreatedBackup, BackupRepoError>>>,
-        pub get_result: Mutex<Option<Result<BackupRecord, BackupRepoError>>>,
-        pub delete_result: Mutex<Option<Result<(), BackupRepoError>>>,
-    }
-
-    impl MockBackupRepo {
-        #[must_use]
-        pub const fn new() -> Self {
-            Self {
-                create_result: Mutex::new(None),
-                get_result: Mutex::new(None),
-                delete_result: Mutex::new(None),
+impl IntoResponse for BackupRepoError {
+    fn into_response(self) -> axum::response::Response {
+        match self {
+            Self::DuplicateAccount | Self::DuplicateKid => (
+                StatusCode::CONFLICT,
+                Json(json!({ "error": "Backup already exists" })),
+            )
+                .into_response(),
+            Self::NotFound => {
+                // Unreachable from create path — indicates a programming error
+                tracing::error!("Unexpected NotFound from backup create during signup");
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({ "error": "Internal server error" })),
+                )
+                    .into_response()
             }
-        }
-
-        /// Set the result that `create()` will return.
-        ///
-        /// # Panics
-        ///
-        /// Panics if the internal mutex is poisoned.
-        pub fn set_create_result(&self, result: Result<CreatedBackup, BackupRepoError>) {
-            *self.create_result.lock().expect("lock poisoned") = Some(result);
-        }
-
-        /// Set the result that `get_by_kid()` will return.
-        ///
-        /// # Panics
-        ///
-        /// Panics if the internal mutex is poisoned.
-        pub fn set_get_result(&self, result: Result<BackupRecord, BackupRepoError>) {
-            *self.get_result.lock().expect("lock poisoned") = Some(result);
-        }
-
-        /// Set the result that `delete_by_kid()` will return.
-        ///
-        /// # Panics
-        ///
-        /// Panics if the internal mutex is poisoned.
-        pub fn set_delete_result(&self, result: Result<(), BackupRepoError>) {
-            *self.delete_result.lock().expect("lock poisoned") = Some(result);
-        }
-    }
-
-    impl Default for MockBackupRepo {
-        fn default() -> Self {
-            Self::new()
-        }
-    }
-
-    #[async_trait]
-    impl super::BackupRepo for MockBackupRepo {
-        async fn create(
-            &self,
-            _account_id: Uuid,
-            kid: &Kid,
-            _encrypted_backup: &[u8],
-            _salt: &[u8],
-            _version: i32,
-        ) -> Result<CreatedBackup, BackupRepoError> {
-            self.create_result
-                .lock()
-                .expect("lock poisoned")
-                .take()
-                .unwrap_or_else(|| {
-                    Ok(CreatedBackup {
-                        id: Uuid::new_v4(),
-                        kid: kid.clone(),
-                        created_at: Utc::now(),
-                    })
-                })
-        }
-
-        async fn get_by_kid(&self, _kid: &Kid) -> Result<BackupRecord, BackupRepoError> {
-            self.get_result
-                .lock()
-                .expect("lock poisoned")
-                .take()
-                .unwrap_or(Err(BackupRepoError::NotFound))
-        }
-
-        async fn delete_by_kid(&self, _kid: &Kid) -> Result<(), BackupRepoError> {
-            self.delete_result
-                .lock()
-                .expect("lock poisoned")
-                .take()
-                .unwrap_or(Ok(()))
+            Self::Database(db_err) => {
+                tracing::error!("Signup failed (backup): {db_err}");
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({ "error": "Internal server error" })),
+                )
+                    .into_response()
+            }
         }
     }
 }

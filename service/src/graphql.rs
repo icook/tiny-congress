@@ -1,4 +1,4 @@
-use crate::build_info::{BuildInfo as BuildInfoObject, BuildInfoProvider};
+use crate::build_info::BuildInfo;
 use async_graphql::http::{playground_source, GraphQLPlaygroundConfig};
 use async_graphql::{Context, EmptySubscription, Object, Result, Schema};
 use async_graphql_axum::{GraphQLRequest, GraphQLResponse};
@@ -15,9 +15,8 @@ pub struct QueryRoot;
 impl QueryRoot {
     /// Returns build metadata for the running service
     #[allow(clippy::unused_async)]
-    async fn build_info(&self, ctx: &Context<'_>) -> Result<BuildInfoObject> {
-        let provider = ctx.data::<BuildInfoProvider>()?;
-        Ok(provider.build_info())
+    async fn build_info(&self, ctx: &Context<'_>) -> Result<BuildInfo> {
+        Ok(ctx.data::<BuildInfo>()?.clone())
     }
 }
 

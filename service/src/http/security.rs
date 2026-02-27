@@ -7,9 +7,12 @@ use std::sync::Arc;
 
 use axum::{
     extract::Request,
-    http::header::{
-        HeaderName, HeaderValue, CONTENT_SECURITY_POLICY, REFERRER_POLICY,
-        STRICT_TRANSPORT_SECURITY, X_CONTENT_TYPE_OPTIONS, X_FRAME_OPTIONS, X_XSS_PROTECTION,
+    http::{
+        header::{
+            CONTENT_SECURITY_POLICY, REFERRER_POLICY, STRICT_TRANSPORT_SECURITY,
+            X_CONTENT_TYPE_OPTIONS, X_FRAME_OPTIONS, X_XSS_PROTECTION,
+        },
+        HeaderMap, HeaderValue,
     },
     middleware::Next,
     response::Response,
@@ -20,33 +23,31 @@ use crate::config::SecurityHeadersConfig;
 
 /// Build security headers from configuration.
 ///
-/// Returns an `Arc`-wrapped vector of header name/value pairs that can be
-/// shared across requests via Axum's `Extension` layer.
+/// Returns an `Arc`-wrapped `HeaderMap` that can be shared across requests
+/// via Axum's `Extension` layer.
 #[must_use]
-pub fn build_security_headers(
-    config: &SecurityHeadersConfig,
-) -> Arc<Vec<(HeaderName, HeaderValue)>> {
-    let mut headers = Vec::new();
+pub fn build_security_headers(config: &SecurityHeadersConfig) -> Arc<HeaderMap> {
+    let mut headers = HeaderMap::new();
 
     // X-Content-Type-Options: nosniff (always)
-    headers.push((X_CONTENT_TYPE_OPTIONS, HeaderValue::from_static("nosniff")));
+    headers.insert(X_CONTENT_TYPE_OPTIONS, HeaderValue::from_static("nosniff"));
 
     // X-Frame-Options
     if let Ok(value) = HeaderValue::from_str(&config.frame_options) {
-        headers.push((X_FRAME_OPTIONS, value));
+        headers.insert(X_FRAME_OPTIONS, value);
     }
 
     // X-XSS-Protection (legacy but still useful for older browsers)
-    headers.push((X_XSS_PROTECTION, HeaderValue::from_static("1; mode=block")));
+    headers.insert(X_XSS_PROTECTION, HeaderValue::from_static("1; mode=block"));
 
     // Content-Security-Policy
     if let Ok(value) = HeaderValue::from_str(&config.content_security_policy) {
-        headers.push((CONTENT_SECURITY_POLICY, value));
+        headers.insert(CONTENT_SECURITY_POLICY, value);
     }
 
     // Referrer-Policy
     if let Ok(value) = HeaderValue::from_str(&config.referrer_policy) {
-        headers.push((REFERRER_POLICY, value));
+        headers.insert(REFERRER_POLICY, value);
     }
 
     // HSTS (only if enabled - should only be used with HTTPS)
@@ -57,7 +58,7 @@ pub fn build_security_headers(
             format!("max-age={}", config.hsts_max_age)
         };
         if let Ok(value) = HeaderValue::from_str(&hsts_value) {
-            headers.push((STRICT_TRANSPORT_SECURITY, value));
+            headers.insert(STRICT_TRANSPORT_SECURITY, value);
         }
     }
 
@@ -66,9 +67,9 @@ pub fn build_security_headers(
 
 /// Middleware to add security headers to all responses.
 ///
-/// This middleware reads the pre-built headers from an `Extension` and applies
-/// them to every response. It should be added as the outermost layer so headers
-/// are applied to all routes.
+/// This middleware reads the pre-built `HeaderMap` from an `Extension` and
+/// extends every response with those headers. It should be added as the
+/// outermost layer so headers are applied to all routes.
 ///
 /// # Example
 ///
@@ -86,15 +87,14 @@ pub fn build_security_headers(
 ///     .layer(Extension(headers));
 /// ```
 pub async fn security_headers_middleware(
-    Extension(headers): Extension<Arc<Vec<(HeaderName, HeaderValue)>>>,
+    Extension(headers): Extension<Arc<HeaderMap>>,
     request: Request,
     next: Next,
 ) -> Response {
     let mut response = next.run(request).await;
-    let response_headers = response.headers_mut();
-    for (name, value) in headers.iter() {
-        response_headers.insert(name.clone(), value.clone());
-    }
+    response
+        .headers_mut()
+        .extend(headers.iter().map(|(k, v)| (k.clone(), v.clone())));
     response
 }
 
@@ -108,11 +108,11 @@ mod tests {
         let headers = build_security_headers(&config);
 
         // Should have at least the mandatory headers
-        assert!(headers.iter().any(|(n, _)| n == X_CONTENT_TYPE_OPTIONS));
-        assert!(headers.iter().any(|(n, _)| n == X_FRAME_OPTIONS));
-        assert!(headers.iter().any(|(n, _)| n == X_XSS_PROTECTION));
-        assert!(headers.iter().any(|(n, _)| n == CONTENT_SECURITY_POLICY));
-        assert!(headers.iter().any(|(n, _)| n == REFERRER_POLICY));
+        assert!(headers.contains_key(X_CONTENT_TYPE_OPTIONS));
+        assert!(headers.contains_key(X_FRAME_OPTIONS));
+        assert!(headers.contains_key(X_XSS_PROTECTION));
+        assert!(headers.contains_key(CONTENT_SECURITY_POLICY));
+        assert!(headers.contains_key(REFERRER_POLICY));
     }
 
     #[test]
@@ -125,9 +125,8 @@ mod tests {
         let headers = build_security_headers(&config);
 
         let hsts = headers
-            .iter()
-            .find(|(n, _)| n == STRICT_TRANSPORT_SECURITY)
-            .map(|(_, v)| v.to_str().unwrap_or_default());
+            .get(STRICT_TRANSPORT_SECURITY)
+            .map(|v| v.to_str().unwrap_or_default());
 
         assert!(hsts.is_some());
         assert!(hsts.unwrap().contains("max-age=31536000"));
@@ -142,9 +141,8 @@ mod tests {
         let headers = build_security_headers(&config);
 
         let frame_options = headers
-            .iter()
-            .find(|(n, _)| n == X_FRAME_OPTIONS)
-            .map(|(_, v)| v.to_str().unwrap_or_default());
+            .get(X_FRAME_OPTIONS)
+            .map(|v| v.to_str().unwrap_or_default());
 
         assert_eq!(frame_options, Some("SAMEORIGIN"));
     }

@@ -8,8 +8,8 @@ use sqlx::query_scalar;
 use tc_crypto::{BackupEnvelope, Kid};
 use tc_test_macros::shared_runtime_test;
 use tinycongress_api::identity::repo::{
-    create_account_with_executor, create_backup_with_executor, create_device_key_with_executor,
-    AccountRepoError, BackupRepoError, DeviceKeyRepoError,
+    create_account, create_backup, create_device_key_with_conn, AccountRepoError, BackupRepoError,
+    DeviceKeyRepoError,
 };
 
 fn test_envelope() -> BackupEnvelope {
@@ -28,7 +28,7 @@ fn test_envelope() -> BackupEnvelope {
 // Account Repo Tests
 // ============================================================================
 
-/// Test that accounts table exists and create_account_with_executor works.
+/// Test that accounts table exists and create_account works.
 #[shared_runtime_test]
 async fn test_accounts_repo_inserts_account() {
     let mut tx = test_transaction().await;
@@ -68,7 +68,7 @@ async fn test_accounts_repo_rejects_duplicate_username() {
 
     // Try to create second account with same username but different key
     let (second_pubkey, second_kid) = generate_test_keys(2);
-    let err = create_account_with_executor(&mut *tx, "alice", &second_pubkey, &second_kid)
+    let err = create_account(&mut *tx, "alice", &second_pubkey, &second_kid)
         .await
         .expect_err("duplicate username should error");
 
@@ -90,7 +90,7 @@ async fn test_accounts_repo_rejects_duplicate_root_key() {
 
     // Try to create second account with same key (same seed) but different username
     let (root_pubkey, root_kid) = generate_test_keys(3);
-    let err = create_account_with_executor(&mut *tx, "bob", &root_pubkey, &root_kid)
+    let err = create_account(&mut *tx, "bob", &root_pubkey, &root_kid)
         .await
         .expect_err("duplicate key should error");
 
@@ -115,7 +115,7 @@ async fn test_backup_repo_creates_backup() {
     let envelope = test_envelope();
     let (_, root_kid) = generate_test_keys(10);
 
-    let backup = create_backup_with_executor(
+    let backup = create_backup(
         &mut *tx,
         account.id,
         &root_kid,
@@ -150,7 +150,7 @@ async fn test_backup_repo_rejects_duplicate_account() {
     let envelope = test_envelope();
     let (_, kid1) = generate_test_keys(11);
 
-    create_backup_with_executor(
+    create_backup(
         &mut *tx,
         account.id,
         &kid1,
@@ -164,7 +164,7 @@ async fn test_backup_repo_rejects_duplicate_account() {
     // Second backup for same account should fail (uq_account_backups_account)
     let envelope2 = test_envelope();
     let (_, kid2) = generate_test_keys(12);
-    let err = create_backup_with_executor(
+    let err = create_backup(
         &mut *tx,
         account.id,
         &kid2,
@@ -196,7 +196,7 @@ async fn test_backup_repo_rejects_duplicate_kid() {
     let envelope = test_envelope();
     let shared_kid = Kid::derive(&[99u8; 32]);
 
-    create_backup_with_executor(
+    create_backup(
         &mut *tx,
         account1.id,
         &shared_kid,
@@ -208,7 +208,7 @@ async fn test_backup_repo_rejects_duplicate_kid() {
     .expect("create first backup");
 
     let envelope2 = test_envelope();
-    let err = create_backup_with_executor(
+    let err = create_backup(
         &mut *tx,
         account2.id,
         &shared_kid,
@@ -238,7 +238,7 @@ async fn test_device_key_repo_creates_key() {
 
     let device_kid = Kid::derive(&[20u8; 32]);
     let certificate = [0x55u8; 64];
-    let device = create_device_key_with_executor(
+    let device = create_device_key_with_conn(
         &mut *tx,
         account.id,
         &device_kid,
@@ -273,7 +273,7 @@ async fn test_device_key_repo_rejects_duplicate_kid() {
 
     let device_kid = Kid::derive(&[21u8; 32]);
     let certificate = [0x55u8; 64];
-    create_device_key_with_executor(
+    create_device_key_with_conn(
         &mut *tx,
         account.id,
         &device_kid,
@@ -284,7 +284,7 @@ async fn test_device_key_repo_rejects_duplicate_kid() {
     .await
     .expect("create first device key");
 
-    let err = create_device_key_with_executor(
+    let err = create_device_key_with_conn(
         &mut *tx,
         account.id,
         &device_kid,
@@ -313,7 +313,7 @@ async fn test_device_key_repo_enforces_max_devices() {
     // Create 10 device keys (the maximum)
     for i in 0u8..10 {
         let device_kid = Kid::derive(&[100 + i; 32]);
-        create_device_key_with_executor(
+        create_device_key_with_conn(
             &mut *tx,
             account.id,
             &device_kid,
@@ -327,7 +327,7 @@ async fn test_device_key_repo_enforces_max_devices() {
 
     // 11th should fail
     let overflow_kid = Kid::derive(&[200u8; 32]);
-    let err = create_device_key_with_executor(
+    let err = create_device_key_with_conn(
         &mut *tx,
         account.id,
         &overflow_kid,

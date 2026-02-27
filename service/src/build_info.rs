@@ -16,19 +16,14 @@ pub struct BuildInfo {
     pub message: Option<String>,
 }
 
-#[derive(Clone, Debug)]
-pub struct BuildInfoProvider {
-    info: BuildInfo,
-}
-
-impl BuildInfoProvider {
-    /// Construct a provider using environment variables, falling back to sensible defaults.
+impl BuildInfo {
+    /// Construct build info from environment variables, falling back to sensible defaults.
     #[must_use]
     pub fn from_env() -> Self {
         Self::from_lookup(|key| env::var(key).ok())
     }
 
-    /// Construct a provider using a custom lookup function (useful for tests).
+    /// Construct build info using a custom lookup function (useful for tests).
     #[must_use]
     pub fn from_lookup<F>(mut lookup: F) -> Self
     where
@@ -46,20 +41,12 @@ impl BuildInfoProvider {
 
         let message = lookup("BUILD_MESSAGE");
 
-        let info = BuildInfo {
+        Self {
             version,
             git_sha,
             build_time,
             message,
-        };
-
-        Self { info }
-    }
-
-    /// Fetch the resolved build info values.
-    #[must_use]
-    pub fn build_info(&self) -> BuildInfo {
-        self.info.clone()
+        }
     }
 }
 

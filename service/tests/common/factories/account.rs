@@ -2,9 +2,7 @@
 
 use super::next_id;
 use tc_crypto::{encode_base64url, Kid};
-use tinycongress_api::identity::repo::{
-    create_account_with_executor, AccountRepoError, CreatedAccount,
-};
+use tinycongress_api::identity::repo::{create_account, AccountRepoError, CreatedAccount};
 
 /// Builder for creating test accounts with sensible defaults.
 ///
@@ -67,7 +65,7 @@ impl AccountFactory {
 
         let (root_pubkey, root_kid) = generate_test_keys(seed);
 
-        create_account_with_executor(executor, &username, &root_pubkey, &root_kid).await
+        create_account(executor, &username, &root_pubkey, &root_kid).await
     }
 }
 

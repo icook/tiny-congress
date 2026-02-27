@@ -17,7 +17,7 @@ use axum::{
 };
 use std::net::SocketAddr;
 use tinycongress_api::{
-    build_info::BuildInfoProvider,
+    build_info::BuildInfo,
     config::Config,
     db::setup_database,
     graphql::{graphql_handler, graphql_playground, MutationRoot, QueryRoot},
@@ -82,12 +82,11 @@ async fn main() -> Result<(), anyhow::Error> {
     tracing::info!("Connecting to database...");
     let pool = setup_database(&config.database).await?;
 
-    let build_info = BuildInfoProvider::from_env();
-    let build_info_snapshot = build_info.build_info();
+    let build_info = BuildInfo::from_env();
     tracing::info!(
-        version = %build_info_snapshot.version,
-        git_sha = %build_info_snapshot.git_sha,
-        build_time = %build_info_snapshot.build_time,
+        version = %build_info.version,
+        git_sha = %build_info.git_sha,
+        build_time = %build_info.build_time,
         "resolved build metadata"
     );
 
