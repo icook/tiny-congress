@@ -3,6 +3,7 @@
 pub mod auth;
 pub mod backup;
 pub mod devices;
+pub mod nonce;
 
 use axum::{
     extract::Extension,

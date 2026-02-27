@@ -135,6 +135,9 @@ async fn main() -> Result<(), anyhow::Error> {
         // Add the schema to the extension
         .layer(Extension(schema))
         .layer(Extension(pool.clone()))
+        .layer(Extension(std::sync::Arc::new(
+            tinycongress_api::identity::http::nonce::NonceStore::new(),
+        )))
         .layer(Extension(build_info))
         .layer(
             CorsLayer::new()

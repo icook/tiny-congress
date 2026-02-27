@@ -290,6 +290,10 @@ impl TestAppBuilder {
             app = app.layer(Extension(pool));
         }
 
+        app = app.layer(Extension(std::sync::Arc::new(
+            tinycongress_api::identity::http::nonce::NonceStore::new(),
+        )));
+
         // Add CORS layer if configured
         if let Some(origins) = self.cors_origins {
             let allow_origin: AllowOrigin = if origins.iter().any(|o| o == "*") {

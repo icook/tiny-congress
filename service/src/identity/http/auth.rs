@@ -5,13 +5,14 @@
 //!
 //! Canonical message format:
 //! ```text
-//! {METHOD}\n{PATH}\n{TIMESTAMP}\n{BODY_SHA256_HEX}
+//! {METHOD}\n{PATH_AND_QUERY}\n{TIMESTAMP}\n{NONCE}\n{BODY_SHA256_HEX}
 //! ```
 //!
 //! Required headers:
 //! - `X-Device-Kid`: 22-char base64url key identifier
 //! - `X-Signature`: base64url Ed25519 signature of the canonical message
 //! - `X-Timestamp`: Unix seconds
+//! - `X-Nonce`: unique per-request nonce (max 64 chars)
 
 use axum::{
     body::Bytes,
@@ -24,6 +25,7 @@ use sha2::{Digest, Sha256};
 use sqlx::PgPool;
 use uuid::Uuid;
 
+use super::nonce::NonceStore;
 use super::ErrorResponse;
 use crate::identity::repo::{DeviceKeyRepo, DeviceKeyRepoError, PgDeviceKeyRepo};
 use tc_crypto::{decode_base64url_native as decode_base64url, verify_ed25519, Kid};
@@ -77,11 +79,18 @@ fn forbidden_error(msg: &str) -> Response {
 impl<S: Send + Sync> FromRequest<S> for AuthenticatedDevice {
     type Rejection = Response;
 
+    #[allow(clippy::too_many_lines)]
     async fn from_request(req: Request, _state: &S) -> Result<Self, Self::Rejection> {
         // Extract pool from extensions before consuming the request
         let pool = req
             .extensions()
             .get::<PgPool>()
+            .ok_or_else(|| auth_error("Server misconfiguration"))?
+            .clone();
+
+        let nonce_store = req
+            .extensions()
+            .get::<std::sync::Arc<NonceStore>>()
             .ok_or_else(|| auth_error("Server misconfiguration"))?
             .clone();
 
@@ -107,6 +116,13 @@ impl<S: Send + Sync> FromRequest<S> for AuthenticatedDevice {
             .ok_or_else(|| auth_error("Missing X-Timestamp header"))?
             .to_string();
 
+        let nonce = req
+            .headers()
+            .get("X-Nonce")
+            .and_then(|v| v.to_str().ok())
+            .ok_or_else(|| auth_error("Missing X-Nonce header"))?
+            .to_string();
+
         // Parse KID
         let kid: Kid = kid_str
             .parse()
@@ -121,6 +137,10 @@ impl<S: Send + Sync> FromRequest<S> for AuthenticatedDevice {
         let skew = (now - timestamp).abs();
         if skew > MAX_TIMESTAMP_SKEW {
             return Err(auth_error("Timestamp out of range"));
+        }
+
+        if !nonce_store.check_and_insert(&nonce) {
+            return Err(auth_error("Duplicate nonce (possible replay)"));
         }
 
         // Decode signature
@@ -150,7 +170,7 @@ impl<S: Send + Sync> FromRequest<S> for AuthenticatedDevice {
         let body_hash_hex = format!("{body_hash:x}");
 
         // Build canonical message
-        let canonical = format!("{method}\n{path}\n{timestamp}\n{body_hash_hex}");
+        let canonical = format!("{method}\n{path}\n{timestamp}\n{nonce}\n{body_hash_hex}");
 
         // Look up device
         let device_repo = PgDeviceKeyRepo::new(pool.clone());
@@ -243,11 +263,12 @@ mod tests {
         let method = "GET";
         let path = "/auth/devices";
         let timestamp = 1700000000_i64;
+        let nonce = "test-nonce-abc";
         let body_hash_hex = format!("{:x}", Sha256::digest(b""));
 
-        let canonical = format!("{method}\n{path}\n{timestamp}\n{body_hash_hex}");
+        let canonical = format!("{method}\n{path}\n{timestamp}\n{nonce}\n{body_hash_hex}");
 
-        assert!(canonical.starts_with("GET\n/auth/devices\n1700000000\n"));
+        assert!(canonical.starts_with("GET\n/auth/devices\n1700000000\ntest-nonce-abc\n"));
         // SHA-256 of empty body is well-known
         assert!(
             canonical.ends_with("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855")

@@ -28,15 +28,17 @@ fn sign_request(
     kid: &Kid,
 ) -> Vec<(&'static str, String)> {
     let timestamp = chrono::Utc::now().timestamp();
+    let nonce = uuid::Uuid::new_v4().to_string();
     let body_hash = Sha256::digest(body);
     let body_hash_hex = format!("{body_hash:x}");
-    let canonical = format!("{method}\n{path}\n{timestamp}\n{body_hash_hex}");
+    let canonical = format!("{method}\n{path}\n{timestamp}\n{nonce}\n{body_hash_hex}");
     let signature = signing_key.sign(canonical.as_bytes());
 
     vec![
         ("X-Device-Kid", kid.to_string()),
         ("X-Signature", encode_base64url(&signature.to_bytes())),
         ("X-Timestamp", timestamp.to_string()),
+        ("X-Nonce", nonce),
     ]
 }
 
@@ -160,9 +162,10 @@ async fn test_list_devices_expired_timestamp() {
         .build();
 
     let old_timestamp = chrono::Utc::now().timestamp() - 600; // 10 min ago
+    let nonce = uuid::Uuid::new_v4().to_string();
     let body_hash = Sha256::digest(b"");
     let body_hash_hex = format!("{body_hash:x}");
-    let canonical = format!("GET\n/auth/devices\n{old_timestamp}\n{body_hash_hex}");
+    let canonical = format!("GET\n/auth/devices\n{old_timestamp}\n{nonce}\n{body_hash_hex}");
     let signature = keys.device_signing_key.sign(canonical.as_bytes());
 
     let req = Request::builder()
@@ -171,6 +174,7 @@ async fn test_list_devices_expired_timestamp() {
         .header("X-Device-Kid", keys.device_kid.to_string())
         .header("X-Signature", encode_base64url(&signature.to_bytes()))
         .header("X-Timestamp", old_timestamp.to_string())
+        .header("X-Nonce", &nonce)
         .body(Body::empty())
         .expect("request");
 
