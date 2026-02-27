@@ -1,6 +1,7 @@
 //! HTTP handlers for identity system
 
 pub mod auth;
+pub mod backup;
 pub mod devices;
 
 use axum::{
@@ -107,6 +108,7 @@ fn validate_username(username: &str) -> Result<(), &'static str> {
 pub fn router() -> Router {
     Router::new()
         .route("/auth/signup", post(signup))
+        .route("/auth/backup/{username}", get(backup::get_backup))
         .route(
             "/auth/devices",
             get(devices::list_devices).post(devices::add_device),
