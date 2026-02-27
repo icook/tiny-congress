@@ -256,19 +256,19 @@ _build-images-artifacts:
     @echo "Building container images and writing artifacts..."
     skaffold build --file-output artifacts.json
 
-# Deploy dev images to KinD cluster via Skaffold
-deploy:
-    @echo "Deploying to Kubernetes cluster..."
+# Deploy dev images to local KinD cluster
+kind-deploy:
+    @echo "Deploying to KinD cluster (dev profile)..."
     skaffold run -p dev
 
-# Deploy release images to KinD cluster via Skaffold
-deploy-release:
-    @echo "Deploying release images to cluster..."
+# Deploy release images to local KinD cluster
+kind-deploy-release:
+    @echo "Deploying to KinD cluster (release profile)..."
     skaffold run -p release
 
-# Remove all Skaffold-deployed resources from cluster
-deploy-delete:
-    @echo "Cleaning up Kubernetes resources..."
+# Remove all deployed resources from local KinD cluster
+kind-undeploy:
+    @echo "Cleaning up KinD resources..."
     skaffold delete
 
 # =============================================================================
