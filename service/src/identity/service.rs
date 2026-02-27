@@ -14,6 +14,10 @@ use super::repo::{
     ValidatedSignup,
 };
 
+// Re-export repo's SignupResult — the service adds no extra fields today.
+// If the service later needs its own fields (e.g., session tokens), fork it then.
+pub use super::repo::SignupResult;
+
 // ─── Domain request types ────────────────────────────────────────────────────
 
 /// Backup data included in signup request
@@ -43,15 +47,7 @@ pub struct SignupRequest {
     pub device: SignupDevice,
 }
 
-// ─── Domain result / error types ─────────────────────────────────────────────
-
-/// Successful signup result
-#[derive(Debug)]
-pub struct SignupResult {
-    pub account_id: uuid::Uuid,
-    pub root_kid: Kid,
-    pub device_kid: Kid,
-}
+// ─── Domain error type ──────────────────────────────────────────────────────
 
 /// Error from signup, with variants that map cleanly to HTTP status codes.
 #[derive(Debug, thiserror::Error)]
@@ -293,11 +289,6 @@ impl IdentityService for DefaultIdentityService {
             .create_signup(&validated)
             .await
             .map_err(map_signup_error)
-            .map(|r| SignupResult {
-                account_id: r.account_id,
-                root_kid: r.root_kid,
-                device_kid: r.device_kid,
-            })
     }
 }
 

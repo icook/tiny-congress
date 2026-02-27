@@ -25,16 +25,16 @@ use super::device_keys::{
 /// All fields have been decoded, validated, and verified by the service layer.
 /// The repo trusts this data and only handles persistence.
 pub struct ValidatedSignup {
-    pub username: String,
-    pub root_pubkey: String,
-    pub root_kid: Kid,
-    pub backup_bytes: Vec<u8>,
-    pub backup_salt: Vec<u8>,
-    pub backup_version: i32,
-    pub device_pubkey: String,
-    pub device_kid: Kid,
-    pub device_name: String,
-    pub certificate: Vec<u8>,
+    pub(crate) username: String,
+    pub(crate) root_pubkey: String,
+    pub(crate) root_kid: Kid,
+    pub(crate) backup_bytes: Vec<u8>,
+    pub(crate) backup_salt: Vec<u8>,
+    pub(crate) backup_version: i32,
+    pub(crate) device_pubkey: String,
+    pub(crate) device_kid: Kid,
+    pub(crate) device_name: String,
+    pub(crate) certificate: Vec<u8>,
 }
 
 /// Successful signup result.
