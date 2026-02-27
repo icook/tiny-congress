@@ -5,16 +5,13 @@
 //!
 //! Canonical message format:
 //! ```text
-//! {METHOD}\n{PATH_AND_QUERY}\n{TIMESTAMP}\n{NONCE}\n{BODY_SHA256_HEX}
+//! {METHOD}\n{PATH}\n{TIMESTAMP}\n{BODY_SHA256_HEX}
 //! ```
 //!
 //! Required headers:
 //! - `X-Device-Kid`: 22-char base64url key identifier
 //! - `X-Signature`: base64url Ed25519 signature of the canonical message
 //! - `X-Timestamp`: Unix seconds
-//! - `X-Nonce`: unique per-request nonce (max 64 chars)
-
-use std::sync::Arc;
 
 use axum::{
     body::Bytes,
@@ -24,24 +21,15 @@ use axum::{
     Json,
 };
 use sha2::{Digest, Sha256};
+use sqlx::PgPool;
 use uuid::Uuid;
 
 use super::ErrorResponse;
-use crate::identity::repo::{DeviceKeyRepoError, IdentityRepo, NonceRepoError};
-use tc_crypto::{decode_base64url, verify_ed25519, Kid};
+use crate::identity::repo::{DeviceKeyRepo, DeviceKeyRepoError, PgDeviceKeyRepo};
+use tc_crypto::{decode_base64url_native as decode_base64url, verify_ed25519, Kid};
 
-/// Maximum clock skew allowed for timestamps (seconds).
-///
-/// Also used as the TTL for nonce cleanup — nonces older than this are
-/// safe to delete because the timestamp check would reject them anyway.
-pub const MAX_TIMESTAMP_SKEW: i64 = 300;
-
-/// Maximum request body size for authenticated device endpoints (64 KiB).
-///
-/// Device management payloads (JSON with keys, names, certificates) are small;
-/// 64 KiB is generous. A tighter limit prevents abuse of the body-read step
-/// before signature verification.
-const MAX_BODY_SIZE: usize = 64 * 1024;
+/// Maximum clock skew allowed for timestamps (seconds)
+const MAX_TIMESTAMP_SKEW: i64 = 300;
 
 /// Authenticated device extracted from signed request headers.
 ///
@@ -61,8 +49,15 @@ impl AuthenticatedDevice {
     /// Returns a 400 response if the body is not valid JSON for `T`.
     #[allow(clippy::result_large_err)]
     pub fn json<T: serde::de::DeserializeOwned>(&self) -> Result<T, Response> {
-        serde_json::from_slice(&self.body_bytes)
-            .map_err(|e| super::bad_request(&format!("Invalid JSON body: {e}")))
+        serde_json::from_slice(&self.body_bytes).map_err(|e| {
+            (
+                StatusCode::BAD_REQUEST,
+                Json(ErrorResponse {
+                    error: format!("Invalid JSON body: {e}"),
+                }),
+            )
+                .into_response()
+        })
     }
 }
 
@@ -89,12 +84,11 @@ fn forbidden_error(msg: &str) -> Response {
 impl<S: Send + Sync> FromRequest<S> for AuthenticatedDevice {
     type Rejection = Response;
 
-    #[allow(clippy::too_many_lines)]
     async fn from_request(req: Request, _state: &S) -> Result<Self, Self::Rejection> {
-        // Extract repo from extensions before consuming the request
-        let repo = req
+        // Extract pool from extensions before consuming the request
+        let pool = req
             .extensions()
-            .get::<Arc<dyn IdentityRepo>>()
+            .get::<PgPool>()
             .ok_or_else(|| auth_error("Server misconfiguration"))?
             .clone();
 
@@ -118,13 +112,6 @@ impl<S: Send + Sync> FromRequest<S> for AuthenticatedDevice {
             .get("X-Timestamp")
             .and_then(|v| v.to_str().ok())
             .ok_or_else(|| auth_error("Missing X-Timestamp header"))?
-            .to_string();
-
-        let nonce = req
-            .headers()
-            .get("X-Nonce")
-            .and_then(|v| v.to_str().ok())
-            .ok_or_else(|| auth_error("Missing X-Nonce header"))?
             .to_string();
 
         // Parse KID
@@ -151,17 +138,12 @@ impl<S: Send + Sync> FromRequest<S> for AuthenticatedDevice {
             .try_into()
             .map_err(|_| auth_error("Signature must be 64 bytes"))?;
 
-        // Capture method and path+query before consuming the request.
-        // Include query string in the signed payload so future endpoints
-        // with query parameters are protected against parameter injection.
+        // Capture method and path before consuming the request
         let method = req.method().to_string();
-        let path = req.uri().path_and_query().map_or_else(
-            || req.uri().path().to_string(),
-            |pq| pq.as_str().to_string(),
-        );
+        let path = req.uri().path().to_string();
 
         // Read the body
-        let body_bytes = axum::body::to_bytes(req.into_body(), MAX_BODY_SIZE)
+        let body_bytes = axum::body::to_bytes(req.into_body(), 1024 * 1024)
             .await
             .map_err(|_| auth_error("Failed to read request body"))?;
 
@@ -170,25 +152,23 @@ impl<S: Send + Sync> FromRequest<S> for AuthenticatedDevice {
         let body_hash_hex = format!("{body_hash:x}");
 
         // Build canonical message
-        let canonical = format!("{method}\n{path}\n{timestamp}\n{nonce}\n{body_hash_hex}");
+        let canonical = format!("{method}\n{path}\n{timestamp}\n{body_hash_hex}");
 
         // Look up device
-        let device = repo
-            .get_device_key_by_kid(&kid)
-            .await
-            .map_err(|e| match e {
-                DeviceKeyRepoError::NotFound => auth_error("Device not found"),
-                DeviceKeyRepoError::Database(db_err) => {
-                    tracing::error!("Auth device lookup failed: {db_err}");
-                    auth_error("Authentication failed")
-                }
-                DeviceKeyRepoError::DuplicateKid
-                | DeviceKeyRepoError::AlreadyRevoked
-                | DeviceKeyRepoError::MaxDevicesReached => {
-                    tracing::error!("Unexpected repo error during auth lookup: {e}");
-                    auth_error("Authentication failed")
-                }
-            })?;
+        let device_repo = PgDeviceKeyRepo::new(pool.clone());
+        let device = device_repo.get_by_kid(&kid).await.map_err(|e| match e {
+            DeviceKeyRepoError::NotFound => auth_error("Device not found"),
+            DeviceKeyRepoError::Database(db_err) => {
+                tracing::error!("Auth device lookup failed: {db_err}");
+                auth_error("Authentication failed")
+            }
+            _ => auth_error("Authentication failed"),
+        })?;
+
+        // Check if revoked
+        if device.revoked_at.is_some() {
+            return Err(forbidden_error("Device has been revoked"));
+        }
 
         // Decode stored public key
         let pubkey_bytes = decode_base64url(&device.device_pubkey)
@@ -198,38 +178,16 @@ impl<S: Send + Sync> FromRequest<S> for AuthenticatedDevice {
             .try_into()
             .map_err(|_| auth_error("Corrupted device key"))?;
 
-        // Verify signature BEFORE checking revocation status.
-        // If we checked revocation first, an unauthenticated caller who knows
-        // a valid KID could distinguish revoked (403) from active (401) devices
-        // without possessing the private key.
+        // Verify signature
         verify_ed25519(&pubkey_arr, canonical.as_bytes(), &sig_arr)
             .map_err(|_| auth_error("Invalid signature"))?;
 
-        // Record nonce AFTER signature verification to prevent unauthenticated
-        // callers from exhausting nonces for valid requests.
-        let nonce_hash = Sha256::digest(nonce.as_bytes());
-        repo.check_and_record_nonce(&nonce_hash)
-            .await
-            .map_err(|e| match e {
-                NonceRepoError::Replay => auth_error("Duplicate nonce (possible replay)"),
-                NonceRepoError::Database(db_err) => {
-                    tracing::error!("Nonce check failed: {db_err}");
-                    auth_error("Authentication failed")
-                }
-            })?;
-
-        // Check if revoked (after signature verification to avoid status oracle).
-        // Must happen after nonce recording so a revoked device's valid request
-        // doesn't allow the same nonce to be reused by another caller.
-        if device.revoked_at.is_some() {
-            return Err(forbidden_error("Device has been revoked"));
-        }
-
         // Touch last_used_at (fire-and-forget, don't fail the request)
         let touch_kid = kid.clone();
-        let touch_repo = repo;
+        let touch_pool = pool;
         tokio::spawn(async move {
-            if let Err(e) = touch_repo.touch_device_key(&touch_kid).await {
+            let repo = PgDeviceKeyRepo::new(touch_pool);
+            if let Err(e) = repo.touch(&touch_kid).await {
                 tracing::warn!("Failed to touch device {touch_kid}: {e}");
             }
         });
@@ -279,12 +237,11 @@ mod tests {
         let method = "GET";
         let path = "/auth/devices";
         let timestamp = 1700000000_i64;
-        let nonce = "test-nonce-abc";
         let body_hash_hex = format!("{:x}", Sha256::digest(b""));
 
-        let canonical = format!("{method}\n{path}\n{timestamp}\n{nonce}\n{body_hash_hex}");
+        let canonical = format!("{method}\n{path}\n{timestamp}\n{body_hash_hex}");
 
-        assert!(canonical.starts_with("GET\n/auth/devices\n1700000000\ntest-nonce-abc\n"));
+        assert!(canonical.starts_with("GET\n/auth/devices\n1700000000\n"));
         // SHA-256 of empty body is well-known
         assert!(
             canonical.ends_with("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855")

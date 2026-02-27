@@ -16,7 +16,6 @@ test('signup flow creates account with device key @smoke', async ({ page }) => {
 
   // Fill and submit
   await page.getByLabel(/username/i).fill(username);
-  await page.getByLabel(/backup password/i).fill('test-password-123');
   await page.getByRole('button', { name: /sign up/i }).click();
 
   // Wait for success — timeout accounts for WASM loading + key generation + API call
@@ -47,7 +46,6 @@ test('signup shows error for duplicate username @smoke', async ({ page }) => {
 
   // First signup should succeed
   await page.getByLabel(/username/i).fill(username);
-  await page.getByLabel(/backup password/i).fill('test-password-123');
   await page.getByRole('button', { name: /sign up/i }).click();
   await expect(page.getByText(/Account Created/i)).toBeVisible({ timeout: 15_000 });
 
@@ -56,7 +54,6 @@ test('signup shows error for duplicate username @smoke', async ({ page }) => {
   await expect(page.getByLabel(/username/i)).toBeVisible();
 
   await page.getByLabel(/username/i).fill(username);
-  await page.getByLabel(/backup password/i).fill('test-password-123');
   await page.getByRole('button', { name: /sign up/i }).click();
 
   // Should show an error (duplicate username)

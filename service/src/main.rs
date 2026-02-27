@@ -16,19 +16,13 @@ use axum::{
     Extension, Router,
 };
 use std::net::SocketAddr;
-use std::sync::Arc;
-use std::time::Duration;
 use tinycongress_api::{
-    build_info::BuildInfo,
+    build_info::BuildInfoProvider,
     config::Config,
     db::setup_database,
     graphql::{graphql_handler, graphql_playground, MutationRoot, QueryRoot},
     http::{build_security_headers, security_headers_middleware},
-    identity::{
-        self,
-        repo::{IdentityRepo, PgIdentityRepo},
-        service::{DefaultIdentityService, IdentityService},
-    },
+    identity,
     rest::{self, ApiDoc},
 };
 use tower_http::cors::{AllowOrigin, Any, CorsLayer};
@@ -64,25 +58,6 @@ fn build_cors_origin(origins: &[String]) -> AllowOrigin {
     }
 }
 
-/// Spawn a background task that periodically deletes expired nonces.
-///
-/// TTL matches [`identity::http::auth::MAX_TIMESTAMP_SKEW`] so nonces
-/// outlive the timestamp validation window.
-fn spawn_nonce_cleanup(pool: sqlx::PgPool) {
-    tokio::spawn(async move {
-        let ttl = identity::http::auth::MAX_TIMESTAMP_SKEW;
-        let mut interval = tokio::time::interval(Duration::from_secs(60));
-        loop {
-            interval.tick().await;
-            match identity::repo::cleanup_expired_nonces(&pool, ttl).await {
-                Ok(0) => {}
-                Ok(n) => tracing::debug!(count = n, "Cleaned up expired nonces"),
-                Err(e) => tracing::warn!("Nonce cleanup failed: {e}"),
-            }
-        }
-    });
-}
-
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
     // Load and validate configuration first (fail-fast)
@@ -107,11 +82,12 @@ async fn main() -> Result<(), anyhow::Error> {
     tracing::info!("Connecting to database...");
     let pool = setup_database(&config.database).await?;
 
-    let build_info = BuildInfo::from_env();
+    let build_info = BuildInfoProvider::from_env();
+    let build_info_snapshot = build_info.build_info();
     tracing::info!(
-        version = %build_info.version,
-        git_sha = %build_info.git_sha,
-        build_time = %build_info.build_time,
+        version = %build_info_snapshot.version,
+        git_sha = %build_info_snapshot.git_sha,
+        build_time = %build_info_snapshot.build_time,
         "resolved build metadata"
     );
 
@@ -134,13 +110,6 @@ async fn main() -> Result<(), anyhow::Error> {
 
     // REST API v1 routes
     let rest_v1 = Router::new().route("/build-info", get(rest::get_build_info));
-
-    // Identity wiring
-    let repo = Arc::new(PgIdentityRepo::new(pool.clone()));
-    let service = Arc::new(DefaultIdentityService::new(repo.clone())) as Arc<dyn IdentityService>;
-    let repo_ext = repo as Arc<dyn IdentityRepo>;
-
-    spawn_nonce_cleanup(pool.clone());
 
     // Build the API
     let mut app = Router::new()
@@ -165,19 +134,11 @@ async fn main() -> Result<(), anyhow::Error> {
         .route("/health", get(health_check))
         // Add the schema to the extension
         .layer(Extension(schema))
-        .layer(Extension(service))
-        .layer(Extension(repo_ext))
+        .layer(Extension(pool.clone()))
         .layer(Extension(build_info))
         .layer(
             CorsLayer::new()
-                .allow_methods([
-                    Method::GET,
-                    Method::POST,
-                    Method::PUT,
-                    Method::DELETE,
-                    Method::PATCH,
-                    Method::OPTIONS,
-                ])
+                .allow_methods([Method::GET, Method::POST, Method::DELETE, Method::PATCH, Method::OPTIONS])
                 .allow_headers(Any)
                 .allow_origin(allow_origin),
         );

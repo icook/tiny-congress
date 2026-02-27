@@ -51,6 +51,7 @@ sha2 = "0.10"
 
 [dev-dependencies]
 ed25519-dalek = { version = "2", features = ["rand_core"] }
+sha2 = "0.10"
 rand = "0.8"
 hyper = "1.6"
 insta = { version = "1.41", features = ["json"] }

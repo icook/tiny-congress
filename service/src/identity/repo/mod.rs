@@ -3,23 +3,24 @@
 pub mod accounts;
 pub mod backups;
 pub mod device_keys;
-pub mod identity;
-pub mod nonces;
 
 pub use accounts::{
-    create_account_with_executor, get_account_by_id, get_account_by_username, AccountRecord,
-    AccountRepoError, CreatedAccount,
+    create_account_with_executor, get_account_by_id, AccountRecord, AccountRepo, AccountRepoError,
+    CreatedAccount, PgAccountRepo,
 };
-pub use backups::{create_backup_with_executor, BackupRecord, BackupRepoError, CreatedBackup};
+pub use backups::{
+    create_backup_with_executor, BackupRecord, BackupRepo, BackupRepoError, CreatedBackup,
+    PgBackupRepo,
+};
 pub use device_keys::{
-    create_device_key_with_executor, CreatedDeviceKey, DeviceKeyRecord, DeviceKeyRepoError,
+    create_device_key_with_executor, CreatedDeviceKey, DeviceKeyRecord, DeviceKeyRepo,
+    DeviceKeyRepoError, PgDeviceKeyRepo,
 };
-pub use identity::{
-    CreateSignupError, IdentityRepo, PgIdentityRepo, SignupResult, ValidatedSignup,
-};
-pub use nonces::{check_and_record_nonce, cleanup_expired_nonces, NonceRepoError};
 
+// Re-export mock for use in tests across the crate and integration tests
 #[cfg(any(test, feature = "test-utils"))]
 pub mod mock {
-    pub use super::identity::mock::MockIdentityRepo;
+    pub use super::accounts::mock::MockAccountRepo;
+    pub use super::backups::mock::MockBackupRepo;
+    pub use super::device_keys::mock::MockDeviceKeyRepo;
 }

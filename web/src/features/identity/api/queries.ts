@@ -6,13 +6,10 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { CryptoModule } from '@/providers/CryptoProvider';
 import {
   listDevices,
-  login,
   renameDevice,
   revokeDevice,
   signup,
   type DeviceListResponse,
-  type LoginRequest,
-  type LoginResponse,
   type SignupRequest,
   type SignupResponse,
 } from './client';
@@ -56,25 +53,16 @@ export function useRevokeDevice(
 ) {
   const queryClient = useQueryClient();
 
-  return useMutation({
-    mutationFn: async (targetKid: string) => {
+  return useMutation<undefined, Error, string>({
+    mutationFn: (targetKid: string) => {
       if (!deviceKid || !privateKey || !wasmCrypto) {
         throw new Error('Not authenticated');
       }
-      await revokeDevice(targetKid, deviceKid, privateKey, wasmCrypto);
+      return revokeDevice(targetKid, deviceKid, privateKey, wasmCrypto);
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['devices'] });
     },
-  });
-}
-
-/**
- * Mutation hook for login
- */
-export function useLogin() {
-  return useMutation<LoginResponse, Error, LoginRequest>({
-    mutationFn: login,
   });
 }
 
@@ -88,12 +76,12 @@ export function useRenameDevice(
 ) {
   const queryClient = useQueryClient();
 
-  return useMutation({
-    mutationFn: async ({ targetKid, name }: { targetKid: string; name: string }) => {
+  return useMutation<undefined, Error, { targetKid: string; name: string }>({
+    mutationFn: ({ targetKid, name }) => {
       if (!deviceKid || !privateKey || !wasmCrypto) {
         throw new Error('Not authenticated');
       }
-      await renameDevice(targetKid, name, deviceKid, privateKey, wasmCrypto);
+      return renameDevice(targetKid, name, deviceKid, privateKey, wasmCrypto);
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['devices'] });

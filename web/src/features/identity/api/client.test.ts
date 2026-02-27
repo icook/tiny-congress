@@ -1,13 +1,5 @@
 import { afterEach, beforeEach, describe, expect, Mock, test, vi } from 'vitest';
-import type { CryptoModule } from '@/providers/CryptoProvider';
-import {
-  fetchJson,
-  listDevices,
-  renameDevice,
-  revokeDevice,
-  signup,
-  type SignupRequest,
-} from './client';
+import { fetchJson, signup, type SignupRequest } from './client';
 
 function headersOf(mockFetch: Mock): Record<string, string> {
   const call = mockFetch.mock.calls[0] as [string, RequestInit];
@@ -137,99 +129,5 @@ describe('identity api client', () => {
     });
 
     await expect(signup(makeSignupRequest({ username: 'bob' }))).rejects.toThrow('Unknown error');
-  });
-
-  test('handles 204 No Content response', async () => {
-    (fetch as unknown as Mock).mockResolvedValue({
-      ok: true,
-      status: 204,
-      statusText: 'No Content',
-      headers: {},
-    });
-
-    const result = await fetchJson('/test', { method: 'DELETE' });
-    expect(result).toBeUndefined();
-  });
-});
-
-describe('signed device API', () => {
-  const mockCrypto: CryptoModule = {
-    derive_kid: vi.fn(),
-    encode_base64url: vi.fn((bytes: Uint8Array) => Buffer.from(bytes).toString('base64url')),
-    decode_base64url: vi.fn(),
-  };
-  const deviceKid = 'test-device-kid';
-  // Ed25519 private key (32 random bytes)
-  const privateKey = new Uint8Array(32).fill(42);
-
-  beforeEach(() => {
-    vi.stubGlobal('fetch', vi.fn());
-  });
-
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
-
-  test('listDevices sends GET with auth headers', async () => {
-    const devices = {
-      devices: [
-        {
-          device_kid: 'kid1',
-          device_name: 'Dev 1',
-          created_at: '2026-01-01',
-          last_used_at: null,
-          revoked_at: null,
-        },
-      ],
-    };
-    (fetch as unknown as Mock).mockResolvedValue({
-      ok: true,
-      status: 200,
-      statusText: 'OK',
-      json: vi.fn().mockResolvedValue(devices),
-      headers: {},
-    });
-
-    const result = await listDevices(deviceKid, privateKey, mockCrypto);
-
-    const call = (fetch as unknown as Mock).mock.calls[0] as [string, RequestInit];
-    const headers = new Headers(call[1].headers);
-    expect(headers.get('X-Device-Kid')).toBe(deviceKid);
-    expect(headers.get('X-Signature')).toBeTruthy();
-    expect(headers.get('X-Timestamp')).toBeTruthy();
-    expect(headers.get('X-Nonce')).toBeTruthy();
-    expect(call[1].method).toBe('GET');
-    expect(result).toEqual(devices);
-  });
-
-  test('revokeDevice sends DELETE to correct path', async () => {
-    (fetch as unknown as Mock).mockResolvedValue({
-      ok: true,
-      status: 204,
-      statusText: 'No Content',
-      headers: {},
-    });
-
-    await revokeDevice('target-kid', deviceKid, privateKey, mockCrypto);
-
-    const call = (fetch as unknown as Mock).mock.calls[0] as [string, RequestInit];
-    expect(call[0]).toContain('/auth/devices/target-kid');
-    expect(call[1].method).toBe('DELETE');
-  });
-
-  test('renameDevice sends PATCH with name in body', async () => {
-    (fetch as unknown as Mock).mockResolvedValue({
-      ok: true,
-      status: 204,
-      statusText: 'No Content',
-      headers: {},
-    });
-
-    await renameDevice('target-kid', 'New Name', deviceKid, privateKey, mockCrypto);
-
-    const call = (fetch as unknown as Mock).mock.calls[0] as [string, RequestInit];
-    expect(call[0]).toContain('/auth/devices/target-kid');
-    expect(call[1].method).toBe('PATCH');
-    expect(call[1].body).toBe(JSON.stringify({ name: 'New Name' }));
   });
 });

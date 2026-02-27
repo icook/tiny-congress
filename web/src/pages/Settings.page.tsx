@@ -10,21 +10,12 @@ import { useCrypto } from '@/providers/CryptoProvider';
 import { useDevice } from '@/providers/DeviceProvider';
 
 export function SettingsPage() {
-  const { deviceKid, privateKey, isLoading: deviceLoading } = useDevice();
+  const { deviceKid, privateKey } = useDevice();
   const { crypto } = useCrypto();
 
   const devicesQuery = useListDevices(deviceKid, privateKey, crypto);
   const revokeMutation = useRevokeDevice(deviceKid, privateKey, crypto);
   const renameMutation = useRenameDevice(deviceKid, privateKey, crypto);
-
-  if (deviceLoading) {
-    return (
-      <Stack gap="md" maw={800} mx="auto" mt="xl">
-        <Title order={2}>Settings</Title>
-        <Loader size="sm" />
-      </Stack>
-    );
-  }
 
   if (!deviceKid) {
     return (
@@ -80,8 +71,8 @@ export function SettingsPage() {
               onRename={(kid, name) => {
                 renameMutation.mutate({ targetKid: kid, name });
               }}
-              revokingKid={revokeMutation.isPending ? revokeMutation.variables : null}
-              renamingKid={renameMutation.isPending ? renameMutation.variables.targetKid : null}
+              isRevoking={revokeMutation.isPending}
+              isRenaming={renameMutation.isPending}
             />
           ) : null}
         </Stack>
