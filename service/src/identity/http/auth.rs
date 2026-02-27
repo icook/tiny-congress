@@ -167,7 +167,12 @@ impl<S: Send + Sync> FromRequest<S> for AuthenticatedDevice {
                 tracing::error!("Auth device lookup failed: {db_err}");
                 auth_error("Authentication failed")
             }
-            _ => auth_error("Authentication failed"),
+            DeviceKeyRepoError::DuplicateKid
+            | DeviceKeyRepoError::AlreadyRevoked
+            | DeviceKeyRepoError::MaxDevicesReached => {
+                tracing::error!("Unexpected repo error during auth lookup: {e}");
+                auth_error("Authentication failed")
+            }
         })?;
 
         // Check if revoked

@@ -143,6 +143,16 @@ where
     create_account(executor, username, root_pubkey, root_kid).await
 }
 
+/// Row shape for `get_account_by_id` — mirrors the SELECT columns.
+/// Uses `String` for `root_kid` because [`Kid`] doesn't implement `sqlx::Decode`.
+#[derive(sqlx::FromRow)]
+struct AccountRow {
+    id: Uuid,
+    username: String,
+    root_pubkey: String,
+    root_kid: String,
+}
+
 /// Look up an account by its ID.
 ///
 /// # Errors
@@ -155,7 +165,7 @@ pub async fn get_account_by_id<'e, E>(
 where
     E: sqlx::Executor<'e, Database = sqlx::Postgres>,
 {
-    let row = sqlx::query_as::<_, (Uuid, String, String, String)>(
+    let row = sqlx::query_as::<_, AccountRow>(
         r"
         SELECT id, username, root_pubkey, root_kid
         FROM accounts
@@ -167,14 +177,15 @@ where
     .await?;
 
     match row {
-        Some((id, username, root_pubkey, root_kid_str)) => {
-            let root_kid: Kid = root_kid_str
+        Some(r) => {
+            let root_kid: Kid = r
+                .root_kid
                 .parse()
                 .map_err(|e| sqlx::Error::Decode(Box::new(e)))?;
             Ok(AccountRecord {
-                id,
-                username,
-                root_pubkey,
+                id: r.id,
+                username: r.username,
+                root_pubkey: r.root_pubkey,
                 root_kid,
             })
         }
