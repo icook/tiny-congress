@@ -39,6 +39,21 @@ async fn health_check() -> impl IntoResponse {
     StatusCode::OK
 }
 
+/// Spawn a background task that cleans up expired request nonces.
+fn spawn_nonce_cleanup(repo: Arc<dyn crate::identity::repo::IdentityRepo>) {
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(60));
+        loop {
+            interval.tick().await;
+            match repo.cleanup_expired_nonces(300).await {
+                Ok(0) => {}
+                Ok(n) => tracing::debug!(count = n, "cleaned up expired nonces"),
+                Err(e) => tracing::warn!("nonce cleanup failed: {e}"),
+            }
+        }
+    });
+}
+
 fn build_cors_origin(origins: &[String]) -> AllowOrigin {
     if origins.iter().any(|o| o == "*") {
         tracing::warn!("CORS configured to allow any origin - not recommended for production");
@@ -144,6 +159,9 @@ async fn main() -> Result<(), anyhow::Error> {
         Arc::new(PgIdentityRepo::new(pool.clone()));
     let identity_service: Arc<dyn IdentityService> =
         Arc::new(DefaultIdentityService::new(identity_repo.clone()));
+    // Background task: clean up expired request nonces every 60 seconds
+    spawn_nonce_cleanup(identity_repo.clone());
+
     app = app
         .layer(Extension(identity_repo))
         .layer(Extension(identity_service))

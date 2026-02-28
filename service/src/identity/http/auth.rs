@@ -26,7 +26,7 @@ use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
 use super::ErrorResponse;
-use crate::identity::repo::{DeviceKeyRepoError, IdentityRepo};
+use crate::identity::repo::{DeviceKeyRepoError, IdentityRepo, NonceError};
 use tc_crypto::{decode_base64url, verify_ed25519, Kid};
 
 /// Maximum clock skew allowed for timestamps (seconds)
@@ -186,6 +186,10 @@ impl<S: Send + Sync> FromRequest<S> for AuthenticatedDevice {
         verify_ed25519(&pubkey_arr, canonical.as_bytes(), &sig_arr)
             .map_err(|_| auth_error("Invalid signature"))?;
 
+        // Replay protection: record a hash of the signature to prevent reuse
+        // within the timestamp window.
+        check_nonce(&*repo, &sig_arr).await?;
+
         // Check if revoked (after signature verification to avoid status oracle)
         if device.revoked_at.is_some() {
             return Err(forbidden_error("Device has been revoked"));
@@ -206,6 +210,20 @@ impl<S: Send + Sync> FromRequest<S> for AuthenticatedDevice {
             body_bytes,
         })
     }
+}
+
+/// Record a signature nonce to prevent replay attacks.
+async fn check_nonce(repo: &dyn IdentityRepo, sig_bytes: &[u8; 64]) -> Result<(), Response> {
+    let nonce_hash = Sha256::digest(sig_bytes);
+    repo.check_and_record_nonce(&nonce_hash)
+        .await
+        .map_err(|e| match e {
+            NonceError::Replay => auth_error("Request replay detected"),
+            NonceError::Database(db_err) => {
+                tracing::error!("Nonce check failed: {db_err}");
+                auth_error("Authentication failed")
+            }
+        })
 }
 
 #[cfg(test)]

@@ -14,7 +14,7 @@ pub use device_keys::{
     create_device_key_with_executor, CreatedDeviceKey, DeviceKeyRecord, DeviceKeyRepoError,
 };
 pub use identity::{
-    CreateSignupError, IdentityRepo, PgIdentityRepo, SignupResult, ValidatedSignup,
+    CreateSignupError, IdentityRepo, NonceError, PgIdentityRepo, SignupResult, ValidatedSignup,
 };
 
 #[cfg(any(test, feature = "test-utils"))]

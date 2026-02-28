@@ -23,6 +23,15 @@ use super::device_keys::{
     DeviceKeyRepoError,
 };
 
+/// Error from nonce replay checking.
+#[derive(Debug, thiserror::Error)]
+pub enum NonceError {
+    #[error("request replay detected")]
+    Replay,
+    #[error("database error: {0}")]
+    Database(sqlx::Error),
+}
+
 /// Validated signup data ready for persistence.
 ///
 /// All fields have been decoded, validated, and verified by the service layer.
@@ -167,6 +176,14 @@ pub trait IdentityRepo: Send + Sync {
         &self,
         data: &ValidatedSignup,
     ) -> Result<SignupResult, CreateSignupError>;
+
+    // Nonce / replay protection
+
+    /// Record a request signature hash. Returns `NonceError::Replay` if already seen.
+    async fn check_and_record_nonce(&self, signature_hash: &[u8]) -> Result<(), NonceError>;
+
+    /// Delete nonces older than `max_age_secs`. Returns count of deleted rows.
+    async fn cleanup_expired_nonces(&self, max_age_secs: i64) -> Result<u64, NonceError>;
 }
 
 /// `PostgreSQL` implementation of [`IdentityRepo`].
@@ -321,6 +338,33 @@ impl IdentityRepo for PgIdentityRepo {
             device_kid: device.device_kid,
         })
     }
+
+    async fn check_and_record_nonce(&self, signature_hash: &[u8]) -> Result<(), NonceError> {
+        let result = sqlx::query(
+            "INSERT INTO request_nonces (signature_hash) VALUES ($1) ON CONFLICT DO NOTHING",
+        )
+        .bind(signature_hash)
+        .execute(&self.pool)
+        .await
+        .map_err(NonceError::Database)?;
+
+        if result.rows_affected() == 0 {
+            return Err(NonceError::Replay);
+        }
+        Ok(())
+    }
+
+    async fn cleanup_expired_nonces(&self, max_age_secs: i64) -> Result<u64, NonceError> {
+        let result = sqlx::query(
+            "DELETE FROM request_nonces WHERE created_at < now() - make_interval(secs => $1::float8)",
+        )
+        .bind(max_age_secs)
+        .execute(&self.pool)
+        .await
+        .map_err(NonceError::Database)?;
+
+        Ok(result.rows_affected())
+    }
 }
 
 #[cfg(any(test, feature = "test-utils"))]
@@ -334,7 +378,7 @@ pub mod mock {
     use super::{
         async_trait, AccountRecord, AccountRepoError, BackupRecord, BackupRepoError,
         CreateSignupError, CreatedAccount, CreatedBackup, CreatedDeviceKey, DeviceKeyRecord,
-        DeviceKeyRepoError, IdentityRepo, Kid, SignupResult, Uuid, ValidatedSignup,
+        DeviceKeyRepoError, IdentityRepo, Kid, NonceError, SignupResult, Uuid, ValidatedSignup,
     };
     use std::sync::Mutex;
 
@@ -471,6 +515,14 @@ pub mod mock {
                         device_kid: Kid::derive(&[1u8; 32]),
                     })
                 })
+        }
+
+        async fn check_and_record_nonce(&self, _signature_hash: &[u8]) -> Result<(), NonceError> {
+            Ok(())
+        }
+
+        async fn cleanup_expired_nonces(&self, _max_age_secs: i64) -> Result<u64, NonceError> {
+            Ok(0)
         }
     }
 }

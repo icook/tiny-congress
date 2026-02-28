@@ -18,6 +18,7 @@ use uuid::Uuid;
 use super::auth::AuthenticatedDevice;
 use super::ErrorResponse;
 use crate::identity::repo::{AccountRepoError, DeviceKeyRecord, DeviceKeyRepoError, IdentityRepo};
+use crate::identity::service::DeviceName;
 use tc_crypto::{decode_base64url, verify_ed25519, Kid};
 
 /// Device info returned in API responses (omits certificate and raw pubkey)
@@ -157,13 +158,7 @@ async fn validate_add_device_request(
         return Err(bad_request("pubkey must be 32 bytes (Ed25519)"));
     }
 
-    let device_name = req.name.trim();
-    if device_name.is_empty() {
-        return Err(bad_request("Device name cannot be empty"));
-    }
-    if device_name.chars().count() > 128 {
-        return Err(bad_request("Device name too long"));
-    }
+    let device_name = DeviceName::parse(&req.name).map_err(|e| bad_request(&e.to_string()))?;
 
     let Ok(cert_bytes) = decode_base64url(&req.certificate) else {
         return Err(bad_request("Invalid base64url encoding for certificate"));
@@ -204,7 +199,7 @@ async fn validate_add_device_request(
 
     Ok(ValidatedAddDevice {
         device_kid,
-        device_name: device_name.to_string(),
+        device_name: device_name.as_str().to_string(),
         cert_bytes,
     })
 }
@@ -269,20 +264,17 @@ pub async fn rename_device(
         Err(_) => return bad_request("Invalid KID format"),
     };
 
-    let new_name = req.name.trim();
-    if new_name.is_empty() {
-        return bad_request("Device name cannot be empty");
-    }
-    if new_name.chars().count() > 128 {
-        return bad_request("Device name too long");
-    }
+    let new_name = match DeviceName::parse(&req.name) {
+        Ok(n) => n,
+        Err(e) => return bad_request(&e.to_string()),
+    };
 
     match get_owned_device(&*repo, &kid, auth.account_id).await {
         Ok(_) => {}
         Err(resp) => return resp,
     }
 
-    match repo.rename_device_key(&kid, new_name).await {
+    match repo.rename_device_key(&kid, new_name.as_str()).await {
         Ok(()) => StatusCode::NO_CONTENT.into_response(),
         Err(DeviceKeyRepoError::AlreadyRevoked) => (
             StatusCode::CONFLICT,
