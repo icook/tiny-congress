@@ -138,57 +138,6 @@ pub fn validate_username(username: &str) -> Result<(), UsernameError> {
     Ok(())
 }
 
-// ─── DeviceName type ─────────────────────────────────────────────────────────
-
-/// A validated, trimmed device name (1–128 Unicode scalars).
-///
-/// Can only be constructed through [`DeviceName::parse`], which trims
-/// whitespace and enforces length constraints.
-#[derive(Debug, Clone)]
-pub struct DeviceName(String);
-
-/// Error type for device name validation failures.
-#[derive(Debug, PartialEq, Eq)]
-pub enum DeviceNameError {
-    Empty,
-    TooLong,
-}
-
-impl std::fmt::Display for DeviceNameError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Empty => write!(f, "Device name cannot be empty"),
-            Self::TooLong => write!(f, "Device name too long"),
-        }
-    }
-}
-
-impl DeviceName {
-    /// Parse and validate a device name.
-    ///
-    /// Trims whitespace and enforces: non-empty, at most 128 Unicode scalars.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`DeviceNameError`] if the trimmed name is empty or too long.
-    pub fn parse(raw: &str) -> Result<Self, DeviceNameError> {
-        let trimmed = raw.trim();
-        if trimmed.is_empty() {
-            return Err(DeviceNameError::Empty);
-        }
-        if trimmed.chars().count() > 128 {
-            return Err(DeviceNameError::TooLong);
-        }
-        Ok(Self(trimmed.to_string()))
-    }
-
-    /// Return the validated name as a string slice.
-    #[must_use]
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
 // ─── Service trait and implementation ────────────────────────────────────────
 
 /// Orchestrates the multi-step signup operation: validation + atomic persistence.
@@ -219,13 +168,12 @@ fn map_signup_error(e: CreateSignupError) -> SignupError {
         | CreateSignupError::DeviceKey(DeviceKeyRepoError::DuplicateKid) => {
             SignupError::DuplicateKey
         }
-        CreateSignupError::DeviceKey(DeviceKeyRepoError::MaxDevicesReached) => {
-            SignupError::MaxDevicesReached
-        }
         CreateSignupError::Account(AccountRepoError::NotFound) => {
-            // Unreachable from create path — indicates a programming error
             tracing::error!("Unexpected NotFound from account create during signup");
             SignupError::Internal("Internal server error".to_string())
+        }
+        CreateSignupError::DeviceKey(DeviceKeyRepoError::MaxDevicesReached) => {
+            SignupError::MaxDevicesReached
         }
         CreateSignupError::Account(AccountRepoError::Database(e)) => {
             tracing::error!("Signup failed (account): {e}");
@@ -302,8 +250,15 @@ impl IdentityService for DefaultIdentityService {
         let device_kid = Kid::derive(&device_pubkey_bytes);
 
         // Validate device name
-        let device_name = DeviceName::parse(&req.device.name)
-            .map_err(|e| SignupError::Validation(e.to_string()))?;
+        let device_name = req.device.name.trim().to_string();
+        if device_name.is_empty() {
+            return Err(SignupError::Validation(
+                "Device name cannot be empty".to_string(),
+            ));
+        }
+        if device_name.len() > 128 {
+            return Err(SignupError::Validation("Device name too long".to_string()));
+        }
 
         // Decode and verify certificate
         let certificate_bytes = decode_base64url(&req.device.certificate).map_err(|_| {
@@ -334,7 +289,7 @@ impl IdentityService for DefaultIdentityService {
             backup_version: envelope.version(),
             device_pubkey: req.device.pubkey.clone(),
             device_kid,
-            device_name: device_name.as_str().to_string(),
+            device_name,
             certificate: certificate_bytes,
         };
 
