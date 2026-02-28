@@ -321,3 +321,90 @@ async fn test_rename_device_empty_name_fails() {
     let response = app.oneshot(req).await.expect("response");
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 }
+
+// =========================================================================
+// Replay protection
+// =========================================================================
+
+#[shared_runtime_test]
+async fn test_replay_is_blocked() {
+    let (app, keys, _db) = signup_user("replaytest").await;
+
+    // Build headers once — both requests will share the exact same signature
+    let headers = sign_request(
+        "GET",
+        "/auth/devices",
+        b"",
+        &keys.device_signing_key,
+        &keys.device_kid,
+    );
+
+    let build_req = |hdrs: &[(&'static str, String)]| {
+        let mut builder = Request::builder().method(Method::GET).uri("/auth/devices");
+        for (name, value) in hdrs {
+            builder = builder.header(*name, value);
+        }
+        builder.body(Body::empty()).expect("request")
+    };
+
+    // First request succeeds
+    let response = app
+        .clone()
+        .oneshot(build_req(&headers))
+        .await
+        .expect("response");
+    assert_eq!(response.status(), StatusCode::OK);
+
+    // Exact same signed request is rejected as a replay
+    let response = app.oneshot(build_req(&headers)).await.expect("response");
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+// =========================================================================
+// Cross-account authorization
+// =========================================================================
+
+/// Sign up a second user into an existing DB pool.
+async fn signup_user_in_pool(username: &str, pool: &sqlx::PgPool) -> (axum::Router, SignupKeys) {
+    let app = TestAppBuilder::new()
+        .with_identity_pool(pool.clone())
+        .build();
+
+    let (json, keys) = valid_signup_with_keys(username);
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/auth/signup")
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(json))
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+
+    assert_eq!(response.status(), StatusCode::CREATED);
+
+    (app, keys)
+}
+
+#[shared_runtime_test]
+async fn test_cannot_revoke_other_accounts_device() {
+    let (app, _keys_a, db) = signup_user("ownerA").await;
+    let (_app_b, keys_b) = signup_user_in_pool("ownerB", db.pool()).await;
+
+    // Account A tries to revoke account B's device
+    let path = format!("/auth/devices/{}", keys_b.device_kid);
+    let req = build_authed_request(
+        Method::DELETE,
+        &path,
+        "",
+        &_keys_a.device_signing_key,
+        &_keys_a.device_kid,
+    );
+
+    let response = app.oneshot(req).await.expect("response");
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+}
