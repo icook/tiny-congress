@@ -142,7 +142,10 @@ just test            # Both
 Backend tests that need a database use [testcontainers](https://testcontainers.com/) to automatically
 spin up an isolated PostgreSQL container. No manual database setup required.
 
-The custom postgres image (`tc-postgres:local`) with pgmq extension is built automatically on first test run.
+**First-time setup:** Build the custom postgres image with pgmq extension:
+```bash
+just build-test-postgres
+```
 
 ### Watch Mode (Automatic Re-run on File Changes)
 

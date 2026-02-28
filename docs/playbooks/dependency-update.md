@@ -47,7 +47,7 @@ yarn up '*'                     # Update all packages
 ### After any change
 ```bash
 just lint-frontend     # Prettier + ESLint + Stylelint
-just lint-typecheck     # TypeScript checking
+just typecheck         # TypeScript checking
 just test-frontend     # Run tests
 ```
 
