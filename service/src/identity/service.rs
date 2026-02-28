@@ -256,7 +256,7 @@ impl IdentityService for DefaultIdentityService {
                 "Device name cannot be empty".to_string(),
             ));
         }
-        if device_name.len() > 128 {
+        if device_name.chars().count() > 128 {
             return Err(SignupError::Validation("Device name too long".to_string()));
         }
 

@@ -34,6 +34,13 @@ use tc_crypto::{decode_base64url, verify_ed25519, Kid};
 /// Maximum clock skew allowed for timestamps (seconds)
 const MAX_TIMESTAMP_SKEW: i64 = 300;
 
+/// Maximum request body size for authenticated device endpoints (64 KiB).
+///
+/// Device management payloads (JSON with keys, names, certificates) are small;
+/// 64 KiB is generous. A tighter limit prevents abuse of the body-read step
+/// before signature verification.
+const MAX_BODY_SIZE: usize = 64 * 1024;
+
 /// Authenticated device extracted from signed request headers.
 ///
 /// Implements `FromRequest` — reads the full body, verifies the signature,
@@ -140,10 +147,6 @@ impl<S: Send + Sync> FromRequest<S> for AuthenticatedDevice {
             return Err(auth_error("Timestamp out of range"));
         }
 
-        if !nonce_store.check_and_insert(&nonce) {
-            return Err(auth_error("Duplicate nonce (possible replay)"));
-        }
-
         // Decode signature
         let sig_bytes = decode_base64url(&signature_str)
             .map_err(|_| auth_error("Invalid signature encoding"))?;
@@ -162,7 +165,7 @@ impl<S: Send + Sync> FromRequest<S> for AuthenticatedDevice {
         );
 
         // Read the body
-        let body_bytes = axum::body::to_bytes(req.into_body(), 1024 * 1024)
+        let body_bytes = axum::body::to_bytes(req.into_body(), MAX_BODY_SIZE)
             .await
             .map_err(|_| auth_error("Failed to read request body"))?;
 
@@ -206,7 +209,15 @@ impl<S: Send + Sync> FromRequest<S> for AuthenticatedDevice {
         verify_ed25519(&pubkey_arr, canonical.as_bytes(), &sig_arr)
             .map_err(|_| auth_error("Invalid signature"))?;
 
-        // Check if revoked (after signature verification to avoid status oracle)
+        // Record nonce AFTER signature verification to prevent unauthenticated
+        // callers from exhausting nonces for valid requests.
+        if !nonce_store.check_and_insert(&nonce) {
+            return Err(auth_error("Duplicate nonce (possible replay)"));
+        }
+
+        // Check if revoked (after signature verification to avoid status oracle).
+        // Must happen after nonce recording so a revoked device's valid request
+        // doesn't allow the same nonce to be reused by another caller.
         if device.revoked_at.is_some() {
             return Err(forbidden_error("Device has been revoked"));
         }
