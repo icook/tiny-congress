@@ -35,16 +35,16 @@ Read the full PR diff using `gh pr diff`. Fix issues that are **unambiguously wr
 
 - **Formatting:** Run `just fmt` to apply rustfmt + prettier + stylelint fixes
 - **Unused imports:** Remove `use` statements or `import` lines that are not referenced
-- **Obvious typos:** In comments, variable names, string literals, and doc comments
+- **Obvious typos:** Clear misspellings in English prose in comments, doc comments, and string literals. Do NOT rename identifiers even if they appear misspelled — they may be deliberate.
 - **Naming violations:** Variables/functions that violate the naming conventions above (e.g., `camelCase` in Rust, `snake_case` in React components)
 - **Trailing whitespace, missing newlines at EOF**
-- **Dead code introduced by this PR:** Unreachable branches, commented-out code, `todo!()` or `unimplemented!()` macros left in non-test code
+- **Dead code introduced by this PR:** New `todo!()`, new unreachable branches, new commented-out code. Do not remove pre-existing dead code.
 - **Lint violations** that have a single correct fix (e.g., `clippy::needless_return`, `clippy::redundant_clone`, unused variables with `_` prefix missing)
 
 ### How to Fix
 
-1. Make all fixes in a single pass
-2. Run `just fmt` to normalize formatting
+1. Run `just fmt` FIRST to auto-normalize formatting
+2. Manually fix remaining issues (unused imports, typos, naming, dead code) in a second pass
 3. If any fixes were made, stage, commit, and push in one sequence:
    ```
    git add -A && git commit -m "chore: auto-polish [auto-polish]" && git push
@@ -127,6 +127,8 @@ Post exactly **one** top-level PR comment summarizing your work. Use `gh pr comm
 - Fixes applied: <N>
 - Issues flagged: <N>
 ```
+
+If the PR requires no fixes and no flags, post a single summary comment: "Auto-polish: no issues detected." Do not post empty sections.
 
 ---
 
