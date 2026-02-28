@@ -1,0 +1,88 @@
+name: Claude Adversarial Testing
+
+on:
+  workflow_dispatch:
+    inputs:
+      focus:
+        description: "Focus area for adversarial testing"
+        type: choice
+        options:
+          - trust-boundary
+          - api-robustness
+          - domain-logic
+          - all
+
+  schedule:
+    # Weekly: Sunday at 3am UTC
+    - cron: "0 3 * * 0"
+
+concurrency:
+  group: adversarial
+  cancel-in-progress: true
+
+jobs:
+  adversarial-test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      id-token: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine focus area
+        id: focus
+        run: |
+          set -e
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            FOCUS="${{ github.event.inputs.focus }}"
+          else
+            WEEK_NUM=$(date +%U)
+            ROTATION=$(( WEEK_NUM % 3 ))
+            case $ROTATION in
+              0) FOCUS="trust-boundary" ;;
+              1) FOCUS="api-robustness" ;;
+              2) FOCUS="domain-logic" ;;
+            esac
+          fi
+          echo "area=$FOCUS" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Read prompt file
+        id: prompt
+        run: |
+          set -e
+          {
+            echo 'PROMPT<<EOF_ADVERSARIAL_PROMPT_7b3e1a'
+            echo "REPO: ${{ github.repository }}"
+            echo "FOCUS AREA: ${{ steps.focus.outputs.area }}"
+            echo "DATE: $(date -u +%Y-%m-%d)"
+            echo "TRIGGER: ${{ github.event_name }}"
+            echo ""
+            cat .github/prompts/adversarial.md
+            echo ""
+            echo "---"
+            echo ""
+            echo "## Active Focus"
+            echo ""
+            echo "Focus on the **${{ steps.focus.outputs.area }}** area as described in the Focus Areas section above."
+            if [ "${{ steps.focus.outputs.area }}" = "all" ]; then
+              echo "Since the focus is 'all', cover tests from every focus area: trust-boundary, api-robustness, and domain-logic."
+            fi
+            echo 'EOF_ADVERSARIAL_PROMPT_7b3e1a'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Run Claude Adversarial Testing
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: ${{ steps.prompt.outputs.PROMPT }}
+          claude_args: |
+            --allowedTools "Read,Glob,Grep,Edit,Write,Bash(cargo:*),Bash(just:*),Bash(git:*),Bash(gh:*),Bash(date:*),Bash(cat:*)"
