@@ -1,6 +1,6 @@
 # Repository Guidelines
 
-This file is a concise index of rules and pointers—not detailed documentation. Target: ~100-150 lines. Move verbose explanations to `docs/` or directory READMEs.
+This file is a concise index of rules and pointers—not detailed documentation. Keep it scannable; every section should earn its place. Move detailed reference material to `docs/` or directory READMEs.
 
 ## Default Delivery Flow
 - Always sync with `master` before starting work: `git checkout master && git pull --rebase`. When picking up a PR or ticket, rebase your working branch onto the refreshed `master` before any edits.
@@ -18,11 +18,27 @@ This file is a concise index of rules and pointers—not detailed documentation.
 - `web/`: React/Mantine client on Vite. Source under `web/src/`, shared mocks in `web/test-utils/`.
 - `dockerfiles/`, `skaffold.yaml`, `kube/`: Container and Kubernetes assets for CI, integration, and demo environments.
 
+## Domain Model
+
+TinyCongress is a community governance platform built around cryptographic identity. Users generate Ed25519 key pairs client-side; the server never sees private key material. The trust model is: **the server is a dumb witness, not a trusted authority.**
+
+**Core abstractions:**
+
+- **Account** — identified by username + root public key. The root key is the highest-privilege credential (meant for cold storage). All authority traces back to it.
+- **Device Key** — a delegated Ed25519 key for daily use. Root key signs a certificate over the device key to prove authorization. Max 10 per account. Revocable but not rotatable (revoke and re-delegate instead).
+- **Backup Envelope** — password-encrypted root private key stored on server. Binary format with Argon2id KDF (OWASP 2024 minimums enforced). Server stores ciphertext; decryption happens client-side only.
+- **KID (Key Identifier)** — `base64url(SHA-256(pubkey)[0:16])`, always exactly 22 characters. Deterministic, stable reference to any public key.
+
+**Trust boundary:** Crypto operations (key generation, signing, envelope encryption/decryption) happen in the browser via `tc-crypto` WASM. The backend validates signatures and envelope structure but never handles plaintext key material. Code that blurs this boundary is a security bug. The server is still responsible for platform-level availability and compliance (rate limiting, abuse detection, GDPR deletion) — orthogonal to the crypto trust model.
+
+For detailed entity schemas, binary formats, validation rules, and invariant tables, see [`docs/domain-model.md`](docs/domain-model.md).
+
 ## Documentation
 
 See [docs/README.md](docs/README.md) for the full index of playbooks, interfaces, ADRs, checklists, and document placement rules.
 
 Key references:
+- `docs/domain-model.md` - Core entities, trust boundaries, and data invariants
 - `docs/playbooks/` - How-to guides (local-dev-setup, adding-migration, new-graphql-endpoint)
 - `docs/interfaces/` - Contracts and naming conventions
 - `docs/interfaces/ticket-management.md` - Labeling taxonomy for GitHub issues (follow when creating tickets)
