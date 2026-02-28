@@ -8,6 +8,7 @@ use uuid::Uuid;
 
 use super::ErrorResponse;
 use crate::identity::repo::{AccountRepoError, DeviceKeyRepoError, IdentityRepo};
+use crate::identity::service::DeviceName;
 use tc_crypto::{decode_base64url, verify_ed25519, Kid};
 
 #[derive(Debug, Deserialize)]
@@ -49,13 +50,10 @@ pub async fn login(
     }
 
     // Validate device name
-    let device_name = req.device.name.trim();
-    if device_name.is_empty() {
-        return super::bad_request("Device name cannot be empty");
-    }
-    if device_name.chars().count() > 128 {
-        return super::bad_request("Device name too long");
-    }
+    let device_name = match DeviceName::parse(&req.device.name) {
+        Ok(n) => n,
+        Err(e) => return super::bad_request(&e.to_string()),
+    };
 
     // Validate certificate
     let Ok(cert_bytes) = decode_base64url(&req.device.certificate) else {
@@ -97,7 +95,7 @@ pub async fn login(
             account.id,
             &device_kid,
             &req.device.pubkey,
-            device_name,
+            device_name.as_str(),
             &cert_bytes,
         )
         .await
