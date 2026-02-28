@@ -53,6 +53,8 @@ For detailed entity schemas, binary formats, validation rules, and invariant tab
 - Assuming error mappings without checking the service layer. The HTTP status for a repo error depends on context (e.g., `DuplicateAccount` on backup is 500 during signup because the account was just created in the same transaction).
 - Confabulating API names. Verify method signatures against actual code before documenting or calling them (e.g., `Kid::from_str()` exists; `Kid::parse()` does not).
 - "Improving" code adjacent to the task — don't refactor, add docstrings, or clean up surrounding code unless asked.
+- Adding safety theater: `unwrap_or_default()`, redundant `Option` wrapping, or defensive clones that hide bugs instead of surfacing them. If something shouldn't be None, let it fail visibly.
+- Inventing new patterns instead of matching existing ones. Before writing a new handler, repo method, or test, find the closest existing example and follow its structure.
 
 ## Documentation
 
@@ -110,11 +112,28 @@ TinyCongress handles cryptographic identity and delegation. The bar is: code tha
 - **One correct path, not two.** When the same operation exists in multiple code paths, invariants drift — one gets the lock, the other doesn't; one validates, the other assumes. Consolidate to a single implementation and have callers delegate to it. Two paths that do the same thing aren't redundancy, they're a bug that hasn't diverged yet.
 - **Don't ship dead code paths:** If only one variant exists (one KDF algorithm, one envelope version), don't add dispatch logic or database columns for hypothetical future variants. Add them when the second variant arrives. Unused branches are untested branches.
 
+## Verification Requirements
+Before claiming work is complete:
+- **Any code change**: `just lint` and `just test` pass
+- **Rust type changes**: Check if the type is used in GraphQL (`SimpleObject`) AND REST (`ToSchema`) — update both derives
+- **`tc-crypto` changes**: Run both `just test-backend` and `just test-frontend` — the crate compiles to native and WASM
+- **Error handling changes**: Trace the error from repo → service (`map_signup_error`) → HTTP handler to confirm the correct status code reaches the client
+- **New endpoints**: Add tests, update `docs/interfaces/api-contracts.md`, and run `just codegen` if types changed
+- **Migration changes**: Verify `cargo sqlx prepare` succeeds and the `.sqlx/` query cache is updated
+
 ## Testing Guidelines
 - Keep specs near code (`*_tests.rs`, `*.test.tsx`). Reuse fixtures before adding mocks.
 - Cover ranking, pairing, and voting flows when rules shift; add regression tests for reported bugs.
 - Run `just lint` and `just test` for quick local validation; run `just test-ci` for full CI suite before PRs.
 - Treat the `testing local dev` LLM skill (`docs/skills/testing-local-dev.md`) as a pre-merge requirement for any MR that changes Skaffold configuration; document the results in the PR.
+
+## High-Risk Areas
+Extra scrutiny required for changes to:
+- `crates/tc-crypto/` — shared crypto; changes affect both platforms silently
+- `service/src/identity/service.rs` — signup validation and transaction orchestration
+- `service/migrations/` — irreversible schema changes
+- `kube/` and `skaffold.yaml` — production infrastructure
+- Any file handling keys, signatures, or envelope parsing
 
 ## Commit & Pull Request Guidelines
 - Match the concise, imperative commit log (e.g., `Migrate CI build to docker build-push`). Avoid bundling unrelated work.
