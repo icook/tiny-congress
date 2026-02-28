@@ -219,12 +219,13 @@ fn map_signup_error(e: CreateSignupError) -> SignupError {
         | CreateSignupError::DeviceKey(DeviceKeyRepoError::DuplicateKid) => {
             SignupError::DuplicateKey
         }
-        CreateSignupError::Account(AccountRepoError::NotFound) => {
-            tracing::error!("Unexpected NotFound from account create during signup");
-            SignupError::Internal("Internal server error".to_string())
-        }
         CreateSignupError::DeviceKey(DeviceKeyRepoError::MaxDevicesReached) => {
             SignupError::MaxDevicesReached
+        }
+        CreateSignupError::Account(AccountRepoError::NotFound) => {
+            // Unreachable from create path — indicates a programming error
+            tracing::error!("Unexpected NotFound from account create during signup");
+            SignupError::Internal("Internal server error".to_string())
         }
         CreateSignupError::Account(AccountRepoError::Database(e)) => {
             tracing::error!("Signup failed (account): {e}");

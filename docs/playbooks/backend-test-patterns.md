@@ -47,17 +47,16 @@ cargo test --test db_tests test_crud_operations
 Use `#[test]` or `#[tokio::test]` for tests without database dependencies:
 
 ```rust
-use tinycongress_api::build_info::BuildInfoProvider;
+use tinycongress_api::build_info::BuildInfo;
 
 #[test]
 fn uses_env_values_when_provided() {
-    let provider = BuildInfoProvider::from_lookup(|key| match key {
+    let info = BuildInfo::from_lookup(|key| match key {
         "APP_VERSION" => Some("1.2.3".to_string()),
         "GIT_SHA" => Some("abc123".to_string()),
         _ => None,
     });
 
-    let info = provider.build_info();
     assert_eq!(info.version, "1.2.3");
 }
 ```
@@ -156,7 +155,7 @@ proptest! {
     #[test]
     fn roundtrip_encode_decode(bytes: Vec<u8>) {
         let encoded = encode_base64url(&bytes);
-        let decoded = decode_base64url_native(&encoded).unwrap();
+        let decoded = decode_base64url(&encoded).unwrap();
         prop_assert_eq!(decoded, bytes);
     }
 }
@@ -239,7 +238,7 @@ use tinycongress_api::graphql::{MutationRoot, QueryRoot};
 
 async fn execute_query(query: &str) -> Value {
     let schema = Schema::build(QueryRoot, MutationRoot, EmptySubscription)
-        .data(BuildInfoProvider::from_env())
+        .data(BuildInfo::from_env())
         .finish();
     let response = schema.execute(query).await;
     serde_json::to_value(response).unwrap()
@@ -268,13 +267,7 @@ async fn test_build_info_query() {
 
 ### First-Time Setup
 
-Build the custom Postgres image with pgmq extension:
-
-```bash
-just build-test-postgres
-```
-
-This creates `tc-postgres:local` which tests use by default. The image is built automatically when running `just test-backend` if it doesn't exist.
+The custom Postgres image (`tc-postgres:local`) with the pgmq extension is built automatically on first test run. No manual step needed.
 
 ### How It Works
 
@@ -345,7 +338,7 @@ Use constructor injection for testable code:
 
 ```rust
 // Production code
-impl BuildInfoProvider {
+impl BuildInfo {
     pub fn from_env() -> Self {
         Self::from_lookup(std::env::var)
     }
@@ -361,7 +354,7 @@ impl BuildInfoProvider {
 // Test code
 #[test]
 fn test_with_custom_values() {
-    let provider = BuildInfoProvider::from_lookup(|key| match key {
+    let provider = BuildInfo::from_lookup(|key| match key {
         "APP_VERSION" => Some("test".to_string()),
         _ => None,
     });
@@ -399,8 +392,8 @@ async fn test_pgmq_extension_available() {
 ### "Failed to start postgres container"
 
 1. Ensure Docker is running
-2. Build the test image: `just build-test-postgres`
-3. Check image exists: `docker images | grep tc-postgres`
+2. Check image exists: `docker images | grep tc-postgres`
+3. If missing, it will be built automatically on next `just test-backend` run
 
 ### "zombie connection" warnings
 

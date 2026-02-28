@@ -154,6 +154,7 @@ async fn main() -> Result<(), anyhow::Error> {
                 .allow_methods([
                     Method::GET,
                     Method::POST,
+                    Method::PUT,
                     Method::DELETE,
                     Method::PATCH,
                     Method::OPTIONS,
