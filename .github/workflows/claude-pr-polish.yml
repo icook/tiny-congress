@@ -23,6 +23,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          set -e
           MESSAGE=$(gh api repos/${{ github.repository }}/commits/${{ github.event.pull_request.head.sha }} --jq '.commit.message')
           if echo "$MESSAGE" | grep -q '\[auto-polish\]'; then
             echo "skip=true" >> "$GITHUB_OUTPUT"
@@ -42,14 +43,14 @@ jobs:
         id: prompt
         run: |
           {
-            echo 'PROMPT<<PROMPT_EOF'
+            echo 'PROMPT<<EOF_POLISH_PROMPT_39f7a2'
             echo "REPO: ${{ github.repository }}"
             echo "PR NUMBER: ${{ github.event.pull_request.number }}"
             echo "PR BRANCH: ${{ github.event.pull_request.head.ref }}"
             echo "BASE BRANCH: ${{ github.event.pull_request.base.ref }}"
             echo ""
             cat .github/prompts/pr-polish.md
-            echo 'PROMPT_EOF'
+            echo 'EOF_POLISH_PROMPT_39f7a2'
           } >> "$GITHUB_OUTPUT"
 
       - name: Run Claude PR Polish
