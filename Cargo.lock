@@ -3301,6 +3301,7 @@ dependencies = [
  "serde",
  "serde-aux",
  "serde_json",
+ "sha2",
  "sqlx",
  "sqlx-core",
  "sqlx-postgres",

@@ -5,7 +5,10 @@ pub mod backups;
 pub mod device_keys;
 pub mod identity;
 
-pub use accounts::{create_account_with_executor, AccountRepoError, CreatedAccount};
+pub use accounts::{
+    create_account_with_executor, get_account_by_id, AccountRecord, AccountRepoError,
+    CreatedAccount,
+};
 pub use backups::{create_backup_with_executor, BackupRecord, BackupRepoError, CreatedBackup};
 pub use device_keys::{
     create_device_key_with_executor, CreatedDeviceKey, DeviceKeyRecord, DeviceKeyRepoError,

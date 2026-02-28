@@ -9,7 +9,10 @@ use sqlx::PgPool;
 use tc_crypto::Kid;
 use uuid::Uuid;
 
-use super::accounts::{create_account_with_executor, AccountRepoError, CreatedAccount};
+use super::accounts::{
+    create_account_with_executor, get_account_by_id, AccountRecord, AccountRepoError,
+    CreatedAccount,
+};
 use super::backups::{
     create_backup_with_executor, delete_backup_by_kid, get_backup_by_kid, BackupRecord,
     BackupRepoError, CreatedBackup,
@@ -110,6 +113,8 @@ pub trait IdentityRepo: Send + Sync {
         root_kid: &Kid,
     ) -> Result<CreatedAccount, AccountRepoError>;
 
+    async fn get_account_by_id(&self, account_id: Uuid) -> Result<AccountRecord, AccountRepoError>;
+
     // Backup operations
 
     async fn create_backup(
@@ -185,6 +190,10 @@ impl IdentityRepo for PgIdentityRepo {
         root_kid: &Kid,
     ) -> Result<CreatedAccount, AccountRepoError> {
         create_account_with_executor(&self.pool, username, root_pubkey, root_kid).await
+    }
+
+    async fn get_account_by_id(&self, account_id: Uuid) -> Result<AccountRecord, AccountRepoError> {
+        get_account_by_id(&self.pool, account_id).await
     }
 
     async fn create_backup(
@@ -323,9 +332,9 @@ pub mod mock {
     //! generic errors since they are not exercised in service-layer tests.
 
     use super::{
-        async_trait, AccountRepoError, BackupRecord, BackupRepoError, CreateSignupError,
-        CreatedAccount, CreatedBackup, CreatedDeviceKey, DeviceKeyRecord, DeviceKeyRepoError,
-        IdentityRepo, Kid, SignupResult, Uuid, ValidatedSignup,
+        async_trait, AccountRecord, AccountRepoError, BackupRecord, BackupRepoError,
+        CreateSignupError, CreatedAccount, CreatedBackup, CreatedDeviceKey, DeviceKeyRecord,
+        DeviceKeyRepoError, IdentityRepo, Kid, SignupResult, Uuid, ValidatedSignup,
     };
     use std::sync::Mutex;
 
@@ -370,6 +379,13 @@ pub mod mock {
                 id: Uuid::new_v4(),
                 root_kid: root_kid.clone(),
             })
+        }
+
+        async fn get_account_by_id(
+            &self,
+            _account_id: Uuid,
+        ) -> Result<AccountRecord, AccountRepoError> {
+            Err(AccountRepoError::NotFound)
         }
 
         async fn create_backup(

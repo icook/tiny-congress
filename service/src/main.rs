@@ -137,15 +137,27 @@ async fn main() -> Result<(), anyhow::Error> {
         // Health check route
         .route("/health", get(health_check))
         // Add the schema to the extension
-        .layer(Extension(schema))
-        .layer(Extension({
-            let repo = Arc::new(PgIdentityRepo::new(pool.clone()));
-            Arc::new(DefaultIdentityService::new(repo)) as Arc<dyn IdentityService>
-        }))
+        .layer(Extension(schema));
+
+    // Wire identity layers: repo for AuthenticatedDevice, service for signup
+    let identity_repo: Arc<dyn crate::identity::repo::IdentityRepo> =
+        Arc::new(PgIdentityRepo::new(pool.clone()));
+    let identity_service: Arc<dyn IdentityService> =
+        Arc::new(DefaultIdentityService::new(identity_repo.clone()));
+    app = app
+        .layer(Extension(identity_repo))
+        .layer(Extension(identity_service))
         .layer(Extension(build_info))
         .layer(
             CorsLayer::new()
-                .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
+                .allow_methods([
+                    Method::GET,
+                    Method::POST,
+                    Method::PUT,
+                    Method::DELETE,
+                    Method::PATCH,
+                    Method::OPTIONS,
+                ])
                 .allow_headers(Any)
                 .allow_origin(allow_origin),
         );

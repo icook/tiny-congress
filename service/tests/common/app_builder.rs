@@ -45,7 +45,7 @@ use tinycongress_api::{
     http::{build_security_headers, security_headers_middleware},
     identity::{
         self,
-        repo::PgIdentityRepo,
+        repo::{IdentityRepo, PgIdentityRepo},
         service::{DefaultIdentityService, IdentityService},
     },
     rest::{self, ApiDoc},
@@ -80,6 +80,8 @@ pub struct TestAppBuilder {
     /// Database pool — only set by `with_identity_pool()` for integration tests
     /// that need the pool injected into the GraphQL schema.
     pool: Option<PgPool>,
+    /// Identity repo (for AuthenticatedDevice extractor)
+    identity_repo: Option<Arc<dyn IdentityRepo>>,
     /// Identity service for identity routes
     identity_service: Option<Arc<dyn IdentityService>>,
     /// CORS allowed origins (None means no CORS layer)
@@ -106,6 +108,7 @@ impl TestAppBuilder {
             include_swagger: false,
             build_info: None,
             pool: None,
+            identity_repo: None,
             identity_service: None,
             cors_origins: None,
             security_headers: None,
@@ -180,9 +183,10 @@ impl TestAppBuilder {
     pub fn with_identity_lazy(mut self) -> Self {
         use tinycongress_api::identity::repo::mock::MockIdentityRepo;
         self.include_identity = true;
-        let repo = Arc::new(MockIdentityRepo::default());
+        let repo: Arc<dyn IdentityRepo> = Arc::new(MockIdentityRepo::default());
         self.identity_service =
-            Some(Arc::new(DefaultIdentityService::new(repo)) as Arc<dyn IdentityService>);
+            Some(Arc::new(DefaultIdentityService::new(repo.clone())) as Arc<dyn IdentityService>);
+        self.identity_repo = Some(repo);
         self
     }
 
@@ -190,9 +194,10 @@ impl TestAppBuilder {
     #[must_use]
     pub fn with_identity_pool(mut self, pool: PgPool) -> Self {
         self.include_identity = true;
-        let repo = Arc::new(PgIdentityRepo::new(pool.clone()));
+        let repo: Arc<dyn IdentityRepo> = Arc::new(PgIdentityRepo::new(pool.clone()));
         self.identity_service =
-            Some(Arc::new(DefaultIdentityService::new(repo)) as Arc<dyn IdentityService>);
+            Some(Arc::new(DefaultIdentityService::new(repo.clone())) as Arc<dyn IdentityService>);
+        self.identity_repo = Some(repo);
         self.pool = Some(pool);
         self
     }
@@ -303,6 +308,10 @@ impl TestAppBuilder {
             app = app.layer(Extension(pool));
         }
 
+        if let Some(repo) = self.identity_repo {
+            app = app.layer(Extension(repo));
+        }
+
         if let Some(service) = self.identity_service {
             app = app.layer(Extension(service));
         }
@@ -323,7 +332,14 @@ impl TestAppBuilder {
 
             app = app.layer(
                 CorsLayer::new()
-                    .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
+                    .allow_methods([
+                        Method::GET,
+                        Method::POST,
+                        Method::PUT,
+                        Method::DELETE,
+                        Method::PATCH,
+                        Method::OPTIONS,
+                    ])
                     .allow_headers(Any)
                     .allow_origin(allow_origin),
             );
