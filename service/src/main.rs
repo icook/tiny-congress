@@ -17,6 +17,7 @@ use axum::{
 };
 use std::net::SocketAddr;
 use std::sync::Arc;
+use std::time::Duration;
 use tinycongress_api::{
     build_info::BuildInfo,
     config::Config,
@@ -25,7 +26,6 @@ use tinycongress_api::{
     http::{build_security_headers, security_headers_middleware},
     identity::{
         self,
-        http::nonce::NonceStore,
         repo::{IdentityRepo, PgIdentityRepo},
         service::{DefaultIdentityService, IdentityService},
     },
@@ -62,6 +62,25 @@ fn build_cors_origin(origins: &[String]) -> AllowOrigin {
         tracing::info!(origins = ?origins, "CORS allowed origins configured");
         AllowOrigin::list(header_values)
     }
+}
+
+/// Spawn a background task that periodically deletes expired nonces.
+///
+/// TTL matches [`identity::http::auth::MAX_TIMESTAMP_SKEW`] so nonces
+/// outlive the timestamp validation window.
+fn spawn_nonce_cleanup(pool: sqlx::PgPool) {
+    tokio::spawn(async move {
+        let ttl = identity::http::auth::MAX_TIMESTAMP_SKEW;
+        let mut interval = tokio::time::interval(Duration::from_secs(60));
+        loop {
+            interval.tick().await;
+            match identity::repo::cleanup_expired_nonces(&pool, ttl).await {
+                Ok(0) => {}
+                Ok(n) => tracing::debug!(count = n, "Cleaned up expired nonces"),
+                Err(e) => tracing::warn!("Nonce cleanup failed: {e}"),
+            }
+        }
+    });
 }
 
 #[tokio::main]
@@ -120,7 +139,8 @@ async fn main() -> Result<(), anyhow::Error> {
     let repo = Arc::new(PgIdentityRepo::new(pool.clone()));
     let service = Arc::new(DefaultIdentityService::new(repo.clone())) as Arc<dyn IdentityService>;
     let repo_ext = repo as Arc<dyn IdentityRepo>;
-    let nonce_store = Arc::new(NonceStore::new());
+
+    spawn_nonce_cleanup(pool.clone());
 
     // Build the API
     let mut app = Router::new()
@@ -147,7 +167,6 @@ async fn main() -> Result<(), anyhow::Error> {
         .layer(Extension(schema))
         .layer(Extension(service))
         .layer(Extension(repo_ext))
-        .layer(Extension(nonce_store))
         .layer(Extension(build_info))
         .layer(
             CorsLayer::new()

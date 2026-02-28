@@ -26,13 +26,15 @@ use axum::{
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
-use super::nonce::NonceStore;
 use super::ErrorResponse;
-use crate::identity::repo::{DeviceKeyRepoError, IdentityRepo};
+use crate::identity::repo::{DeviceKeyRepoError, IdentityRepo, NonceRepoError};
 use tc_crypto::{decode_base64url, verify_ed25519, Kid};
 
-/// Maximum clock skew allowed for timestamps (seconds)
-const MAX_TIMESTAMP_SKEW: i64 = 300;
+/// Maximum clock skew allowed for timestamps (seconds).
+///
+/// Also used as the TTL for nonce cleanup — nonces older than this are
+/// safe to delete because the timestamp check would reject them anyway.
+pub const MAX_TIMESTAMP_SKEW: i64 = 300;
 
 /// Maximum request body size for authenticated device endpoints (64 KiB).
 ///
@@ -93,12 +95,6 @@ impl<S: Send + Sync> FromRequest<S> for AuthenticatedDevice {
         let repo = req
             .extensions()
             .get::<Arc<dyn IdentityRepo>>()
-            .ok_or_else(|| auth_error("Server misconfiguration"))?
-            .clone();
-
-        let nonce_store = req
-            .extensions()
-            .get::<Arc<NonceStore>>()
             .ok_or_else(|| auth_error("Server misconfiguration"))?
             .clone();
 
@@ -211,9 +207,16 @@ impl<S: Send + Sync> FromRequest<S> for AuthenticatedDevice {
 
         // Record nonce AFTER signature verification to prevent unauthenticated
         // callers from exhausting nonces for valid requests.
-        if !nonce_store.check_and_insert(&nonce) {
-            return Err(auth_error("Duplicate nonce (possible replay)"));
-        }
+        let nonce_hash = Sha256::digest(nonce.as_bytes());
+        repo.check_and_record_nonce(&nonce_hash)
+            .await
+            .map_err(|e| match e {
+                NonceRepoError::Replay => auth_error("Duplicate nonce (possible replay)"),
+                NonceRepoError::Database(db_err) => {
+                    tracing::error!("Nonce check failed: {db_err}");
+                    auth_error("Authentication failed")
+                }
+            })?;
 
         // Check if revoked (after signature verification to avoid status oracle).
         // Must happen after nonce recording so a revoked device's valid request

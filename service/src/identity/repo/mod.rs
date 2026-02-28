@@ -4,6 +4,7 @@ pub mod accounts;
 pub mod backups;
 pub mod device_keys;
 pub mod identity;
+pub mod nonces;
 
 pub use accounts::{
     create_account_with_executor, get_account_by_id, get_account_by_username, AccountRecord,
@@ -16,6 +17,7 @@ pub use device_keys::{
 pub use identity::{
     CreateSignupError, IdentityRepo, PgIdentityRepo, SignupResult, ValidatedSignup,
 };
+pub use nonces::{check_and_record_nonce, cleanup_expired_nonces, NonceRepoError};
 
 #[cfg(any(test, feature = "test-utils"))]
 pub mod mock {

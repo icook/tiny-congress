@@ -4,7 +4,6 @@ pub mod auth;
 pub mod backup;
 pub mod devices;
 pub mod login;
-pub mod nonce;
 
 use std::sync::Arc;
 

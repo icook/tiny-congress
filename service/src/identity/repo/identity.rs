@@ -22,6 +22,7 @@ use super::device_keys::{
     rename_device_key, revoke_device_key, touch_device_key, CreatedDeviceKey, DeviceKeyRecord,
     DeviceKeyRepoError,
 };
+use super::nonces::{check_and_record_nonce, cleanup_expired_nonces, NonceRepoError};
 
 /// Validated signup data ready for persistence.
 ///
@@ -166,6 +167,14 @@ pub trait IdentityRepo: Send + Sync {
 
     async fn touch_device_key(&self, device_kid: &Kid) -> Result<(), DeviceKeyRepoError>;
 
+    // Nonce operations (replay prevention)
+
+    /// Record a nonce hash. Returns `NonceRepoError::Replay` if already seen.
+    async fn check_and_record_nonce(&self, nonce_hash: &[u8]) -> Result<(), NonceRepoError>;
+
+    /// Delete nonces older than `max_age_secs`. Returns count of deleted rows.
+    async fn cleanup_expired_nonces(&self, max_age_secs: i64) -> Result<u64, NonceRepoError>;
+
     // Compound: atomic signup (account + backup + device key in one transaction)
 
     async fn create_signup(
@@ -284,6 +293,14 @@ impl IdentityRepo for PgIdentityRepo {
         touch_device_key(&self.pool, device_kid).await
     }
 
+    async fn check_and_record_nonce(&self, nonce_hash: &[u8]) -> Result<(), NonceRepoError> {
+        check_and_record_nonce(&self.pool, nonce_hash).await
+    }
+
+    async fn cleanup_expired_nonces(&self, max_age_secs: i64) -> Result<u64, NonceRepoError> {
+        cleanup_expired_nonces(&self.pool, max_age_secs).await
+    }
+
     async fn create_signup(
         &self,
         data: &ValidatedSignup,
@@ -346,7 +363,7 @@ pub mod mock {
     use super::{
         async_trait, AccountRecord, AccountRepoError, BackupRecord, BackupRepoError,
         CreateSignupError, CreatedAccount, CreatedBackup, CreatedDeviceKey, DeviceKeyRecord,
-        DeviceKeyRepoError, IdentityRepo, Kid, SignupResult, Uuid, ValidatedSignup,
+        DeviceKeyRepoError, IdentityRepo, Kid, NonceRepoError, SignupResult, Uuid, ValidatedSignup,
     };
     use std::sync::Mutex;
 
@@ -473,6 +490,14 @@ pub mod mock {
 
         async fn touch_device_key(&self, _device_kid: &Kid) -> Result<(), DeviceKeyRepoError> {
             Ok(())
+        }
+
+        async fn check_and_record_nonce(&self, _nonce_hash: &[u8]) -> Result<(), NonceRepoError> {
+            Ok(())
+        }
+
+        async fn cleanup_expired_nonces(&self, _max_age_secs: i64) -> Result<u64, NonceRepoError> {
+            Ok(0)
         }
 
         async fn create_signup(

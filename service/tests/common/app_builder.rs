@@ -45,7 +45,6 @@ use tinycongress_api::{
     http::{build_security_headers, security_headers_middleware},
     identity::{
         self,
-        http::nonce::NonceStore,
         repo::{IdentityRepo, PgIdentityRepo},
         service::{DefaultIdentityService, IdentityService},
     },
@@ -316,9 +315,6 @@ impl TestAppBuilder {
         if let Some(repo) = self.identity_repo {
             app = app.layer(Extension(repo));
         }
-
-        // Always inject a NonceStore for device auth
-        app = app.layer(Extension(Arc::new(NonceStore::new())));
 
         // Add CORS layer if configured
         if let Some(origins) = self.cors_origins {
