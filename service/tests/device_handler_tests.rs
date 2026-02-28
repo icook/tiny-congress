@@ -246,6 +246,53 @@ async fn test_add_device_invalid_certificate() {
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 }
 
+#[shared_runtime_test]
+async fn test_add_device_duplicate_returns_conflict() {
+    let (app, keys, _db) = signup_user("dupdev").await;
+
+    // Generate a new device and add it
+    let new_device_key = SigningKey::generate(&mut OsRng);
+    let new_device_pubkey = new_device_key.verifying_key().to_bytes();
+    let cert = keys.root_signing_key.sign(&new_device_pubkey);
+
+    let body = serde_json::json!({
+        "pubkey": encode_base64url(&new_device_pubkey),
+        "name": "Duplicate Device",
+        "certificate": encode_base64url(&cert.to_bytes()),
+    })
+    .to_string();
+
+    let req = build_authed_request(
+        Method::POST,
+        "/auth/devices",
+        &body,
+        &keys.device_signing_key,
+        &keys.device_kid,
+    );
+    let response = app.clone().oneshot(req).await.expect("response");
+    assert_eq!(response.status(), StatusCode::CREATED);
+
+    // Same pubkey again with a different name so the body hash (and thus the
+    // signature) differs — otherwise replay protection rejects the request
+    // before the repo layer can detect the duplicate KID.
+    let body2 = serde_json::json!({
+        "pubkey": encode_base64url(&new_device_pubkey),
+        "name": "Duplicate Device 2",
+        "certificate": encode_base64url(&cert.to_bytes()),
+    })
+    .to_string();
+
+    let req2 = build_authed_request(
+        Method::POST,
+        "/auth/devices",
+        &body2,
+        &keys.device_signing_key,
+        &keys.device_kid,
+    );
+    let response2 = app.oneshot(req2).await.expect("response");
+    assert_eq!(response2.status(), StatusCode::CONFLICT);
+}
+
 // =========================================================================
 // DELETE /auth/devices/:kid
 // =========================================================================
@@ -430,6 +477,26 @@ async fn test_cannot_revoke_other_accounts_device() {
         Method::DELETE,
         &path,
         "",
+        &_keys_a.device_signing_key,
+        &_keys_a.device_kid,
+    );
+
+    let response = app.oneshot(req).await.expect("response");
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+}
+
+#[shared_runtime_test]
+async fn test_cannot_rename_other_accounts_device() {
+    let (app, _keys_a, db) = signup_user("renameOwnerA").await;
+    let (_app_b, keys_b) = signup_user_in_pool("renameOwnerB", db.pool()).await;
+
+    // Account A tries to rename account B's device
+    let path = format!("/auth/devices/{}", keys_b.device_kid);
+    let body = serde_json::json!({ "name": "Hijacked" }).to_string();
+    let req = build_authed_request(
+        Method::PATCH,
+        &path,
+        &body,
         &_keys_a.device_signing_key,
         &_keys_a.device_kid,
     );

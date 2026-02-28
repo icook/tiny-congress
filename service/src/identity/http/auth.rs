@@ -12,6 +12,12 @@
 //! - `X-Device-Kid`: 22-char base64url key identifier
 //! - `X-Signature`: base64url Ed25519 signature of the canonical message
 //! - `X-Timestamp`: Unix seconds
+//!
+//! Replay protection records each signature's hash in the database, so requests
+//! are **non-idempotent under network retries**. If the server records the nonce
+//! but the response is lost, a client retry with the same signed payload will be
+//! rejected. Clients must generate a fresh signature (with a current timestamp)
+//! for every retry attempt.
 
 use std::sync::Arc;
 
