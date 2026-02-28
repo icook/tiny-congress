@@ -33,6 +33,27 @@ TinyCongress is a community governance platform built around cryptographic ident
 
 For detailed entity schemas, binary formats, validation rules, and invariant tables, see [`docs/domain-model.md`](docs/domain-model.md).
 
+## Trust Boundary Rules
+- DO NOT write server code that accepts, logs, stores, or processes plaintext private keys
+- DO NOT add server-side signing, encryption, or key generation — these happen in the browser only
+- DO NOT log request bodies on auth/signup endpoints (contain key material in transit)
+- DO NOT add endpoints that return decrypted backup material
+- Changes to `crates/tc-crypto/` affect both backend (native) and frontend (WASM) — test both sides
+
+## Decision Authority
+**Proceed without asking:** Bug fixes with clear reproduction, test additions, lint/formatting fixes, doc updates that match current code.
+
+**Ask before proceeding:** New dependencies, API surface changes (new endpoints, changed response shapes), anything touching crypto/auth/the trust boundary, changes to shared types used by both GraphQL and REST, changes to `tc-crypto` public API.
+
+**Never without explicit approval:** Database migrations, changing KDF parameters or envelope format, deleting or renaming public API endpoints.
+
+## Common Mistakes
+- Using `String` where a newtype exists (`Kid`, `BackupEnvelope`). If a domain type exists, use it — the type system is the guardrail.
+- Adding `match` arms, database columns, or dispatch logic for variants that don't exist yet (second KDF algorithm, second envelope version). Wait until the second variant arrives.
+- Assuming error mappings without checking the service layer. The HTTP status for a repo error depends on context (e.g., `DuplicateAccount` on backup is 500 during signup because the account was just created in the same transaction).
+- Confabulating API names. Verify method signatures against actual code before documenting or calling them (e.g., `Kid::from_str()` exists; `Kid::parse()` does not).
+- "Improving" code adjacent to the task — don't refactor, add docstrings, or clean up surrounding code unless asked.
+
 ## Documentation
 
 See [docs/README.md](docs/README.md) for the full index of playbooks, interfaces, ADRs, checklists, and document placement rules.
@@ -108,12 +129,10 @@ TinyCongress handles cryptographic identity and delegation. The bar is: code tha
 
 ## Prohibited Actions (Hard Constraints)
 - DO NOT modify files outside `service/`, `web/`, `kube/`, `dockerfiles/`, `docs/`, or repo root configs
-- DO NOT add new database tables or migrations without explicit approval
 - DO NOT add dependencies without updating the appropriate lockfile (`Cargo.lock`, `yarn.lock`)
 - DO NOT push directly to `master`; all changes go through PRs
 - DO NOT skip CI checks or use `--no-verify` flags
 - DO NOT commit secrets, credentials, or `.env` files
-- DO NOT delete or rename existing public API endpoints without deprecation
 - DO NOT modify `skaffold.yaml` profiles without running the testing-local-dev skill
 - DO NOT run bare `git push`; ALWAYS specify the remote and branch explicitly: `git push origin <branch-name>` (see ADR-004)
 - DO NOT use `--force` or `--force-with-lease` without explicit branch: `git push --force-with-lease origin <branch-name>`
