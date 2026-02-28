@@ -39,7 +39,7 @@ Use `utoipa` with code-first OpenAPI generation. Rust types are the single sourc
 - Risk of API surface fragmentation if not carefully managed
 
 ## Alternatives Considered
-- **aide** (Axum-native OpenAPI) — smaller ecosystem, less documentation
-- **progenitor** (spec-first) — violates single-source-of-truth; separate type hierarchies
-- **REST facade over GraphQL** — performance overhead, leaky abstraction
-- **API gateway** — overkill for current scale
+- **aide** (Axum-native OpenAPI) — tighter Axum integration but smaller ecosystem; utoipa's derive-macro approach aligns better with async-graphql patterns
+- **progenitor** (spec-first) — spec-first doesn't share types with GraphQL, requiring separate type hierarchies that violate single-source-of-truth
+- **REST facade over GraphQL** — proxying REST to GraphQL resolvers adds latency and leaks GraphQL abstractions through REST semantics
+- **API gateway** (Kong, AWS) — separation of concerns but adds operational complexity disproportionate to current scale

@@ -105,7 +105,7 @@ A stable, short identifier derived from a public key.
 - Encoding: Base64url (RFC 4648 §5), no padding
 - Output: **always exactly 22 characters**, alphabet `[A-Za-z0-9_-]`
 
-The `Kid` type is a newtype in `tc-crypto` — it can only be constructed via `Kid::derive()` (from a public key) or `Kid::parse()` (from a validated string). Bare strings cannot become KIDs without validation.
+The `Kid` type is a newtype in `tc-crypto` — it can only be constructed via `Kid::derive()` (from a public key) or `Kid::from_str()` / `s.parse::<Kid>()` (from a validated string). Bare strings cannot become KIDs without validation.
 
 **Test vector:** `[1u8; 32]` → `"cs1uhCLEB_ttCYaQ8RMLfQ"`
 
@@ -168,7 +168,7 @@ Pack request ──────────────────────�
 
 **Error responses:**
 - **400** — validation failures: bad username, wrong key length, malformed envelope, bad device name, invalid certificate
-- **409** — conflicts: username taken, key already registered, backup already exists
+- **409** — conflicts: username taken, key already registered (root key or device key already in use)
 - **422** — max device limit reached
 - **500** — database errors (details logged server-side, not exposed to client)
 
