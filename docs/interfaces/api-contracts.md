@@ -42,11 +42,15 @@ Authorization: Bearer <token>  # When authenticated
 
 | Code | HTTP Status | Meaning |
 |------|-------------|---------|
+| `VALIDATION_ERROR` | 400 | Input validation failed |
 | `UNAUTHENTICATED` | 401 | Missing or invalid token |
 | `FORBIDDEN` | 403 | Valid token, insufficient permissions |
 | `NOT_FOUND` | 404 | Resource doesn't exist |
-| `VALIDATION_ERROR` | 400 | Input validation failed |
+| `CONFLICT` | 409 | Duplicate resource (e.g., username, key already registered) |
+| `RATE_LIMITED` | 429 | Too many requests |
 | `INTERNAL_ERROR` | 500 | Unexpected server error |
+
+Use `SCREAMING_SNAKE_CASE` for error codes. Domain-specific codes (e.g., `DUPLICATE_USERNAME`, `INVALID_SIGNATURE`) extend these base codes.
 
 ## Pagination
 
