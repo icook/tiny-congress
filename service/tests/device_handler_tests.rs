@@ -217,6 +217,35 @@ async fn test_add_device_success() {
     assert!(json["created_at"].is_string());
 }
 
+#[shared_runtime_test]
+async fn test_add_device_invalid_certificate() {
+    let (app, keys, _db) = signup_user("badcert").await;
+
+    // Generate a new device key but sign its pubkey with a random key (not the root)
+    let new_device_key = SigningKey::generate(&mut OsRng);
+    let new_device_pubkey = new_device_key.verifying_key().to_bytes();
+    let wrong_root = SigningKey::generate(&mut OsRng);
+    let bad_cert = wrong_root.sign(&new_device_pubkey);
+
+    let body = serde_json::json!({
+        "pubkey": encode_base64url(&new_device_pubkey),
+        "name": "Bad Cert Device",
+        "certificate": encode_base64url(&bad_cert.to_bytes()),
+    })
+    .to_string();
+
+    let req = build_authed_request(
+        Method::POST,
+        "/auth/devices",
+        &body,
+        &keys.device_signing_key,
+        &keys.device_kid,
+    );
+
+    let response = app.oneshot(req).await.expect("response");
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}
+
 // =========================================================================
 // DELETE /auth/devices/:kid
 // =========================================================================

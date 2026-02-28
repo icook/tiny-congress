@@ -180,7 +180,7 @@ pub trait IdentityRepo: Send + Sync {
     // Nonce / replay protection
 
     /// Record a request signature hash. Returns `NonceError::Replay` if already seen.
-    async fn check_and_record_nonce(&self, signature_hash: &[u8]) -> Result<(), NonceError>;
+    async fn check_and_record_nonce(&self, signature_hash: &[u8; 32]) -> Result<(), NonceError>;
 
     /// Delete nonces older than `max_age_secs`. Returns count of deleted rows.
     async fn cleanup_expired_nonces(&self, max_age_secs: i64) -> Result<u64, NonceError>;
@@ -339,11 +339,11 @@ impl IdentityRepo for PgIdentityRepo {
         })
     }
 
-    async fn check_and_record_nonce(&self, signature_hash: &[u8]) -> Result<(), NonceError> {
+    async fn check_and_record_nonce(&self, signature_hash: &[u8; 32]) -> Result<(), NonceError> {
         let result = sqlx::query(
             "INSERT INTO request_nonces (signature_hash) VALUES ($1) ON CONFLICT DO NOTHING",
         )
-        .bind(signature_hash)
+        .bind(signature_hash.as_slice())
         .execute(&self.pool)
         .await
         .map_err(NonceError::Database)?;
@@ -356,7 +356,7 @@ impl IdentityRepo for PgIdentityRepo {
 
     async fn cleanup_expired_nonces(&self, max_age_secs: i64) -> Result<u64, NonceError> {
         let result = sqlx::query(
-            "DELETE FROM request_nonces WHERE created_at < now() - make_interval(secs => $1::float8)",
+            "DELETE FROM request_nonces WHERE created_at < now() - $1::bigint * INTERVAL '1 second'",
         )
         .bind(max_age_secs)
         .execute(&self.pool)
@@ -517,7 +517,10 @@ pub mod mock {
                 })
         }
 
-        async fn check_and_record_nonce(&self, _signature_hash: &[u8]) -> Result<(), NonceError> {
+        async fn check_and_record_nonce(
+            &self,
+            _signature_hash: &[u8; 32],
+        ) -> Result<(), NonceError> {
             Ok(())
         }
 

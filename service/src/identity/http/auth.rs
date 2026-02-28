@@ -34,6 +34,13 @@ use tc_crypto::{decode_base64url, verify_ed25519, Kid};
 /// Also used as the nonce TTL — expired nonces are cleaned up after this window.
 pub const MAX_TIMESTAMP_SKEW: i64 = 300;
 
+/// Maximum request body size for authenticated device endpoints (64 KiB).
+///
+/// Device management payloads (JSON with keys, names, certificates) are small;
+/// 64 KiB is generous. A tighter limit prevents abuse of the body-read step
+/// before signature verification.
+const MAX_BODY_SIZE: usize = 64 * 1024;
+
 /// Authenticated device extracted from signed request headers.
 ///
 /// Implements `FromRequest` — reads the full body, verifies the signature,
@@ -144,7 +151,7 @@ impl<S: Send + Sync> FromRequest<S> for AuthenticatedDevice {
         );
 
         // Read the body
-        let body_bytes = axum::body::to_bytes(req.into_body(), 1024 * 1024)
+        let body_bytes = axum::body::to_bytes(req.into_body(), MAX_BODY_SIZE)
             .await
             .map_err(|_| auth_error("Failed to read request body"))?;
 
@@ -219,7 +226,7 @@ impl<S: Send + Sync> FromRequest<S> for AuthenticatedDevice {
 
 /// Record a signature nonce to prevent replay attacks.
 async fn check_nonce(repo: &dyn IdentityRepo, sig_bytes: &[u8; 64]) -> Result<(), Response> {
-    let nonce_hash = Sha256::digest(sig_bytes);
+    let nonce_hash: [u8; 32] = Sha256::digest(sig_bytes).into();
     repo.check_and_record_nonce(&nonce_hash)
         .await
         .map_err(|e| match e {
