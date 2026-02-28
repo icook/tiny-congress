@@ -2,6 +2,10 @@
 
 This directory contains permanent, accepted documentation for TinyCongress.
 
+## Domain Model
+
+Start here: [domain-model.md](domain-model.md) — core entities, data invariants, trust boundaries, and the signup flow. Read this before writing code that touches identity, cryptography, or account management.
+
 ## Directory Structure
 
 | Directory | Purpose | Audience |
@@ -92,6 +96,7 @@ LLM-specific task guides for AI assistants:
 
 ## Related Documentation
 
+- [domain-model.md](domain-model.md) - Core domain entities, trust boundaries, and invariants
 - [.plan/](../.plan/) - Ephemeral feature specs and tickets (removed on merge)
 - [.scratch/](../.scratch/) - Temporary working notes (deleted after task)
 - [CLAUDE.md](../CLAUDE.md) - AI assistant instructions and project rules
