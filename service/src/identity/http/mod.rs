@@ -1,9 +1,16 @@
 //! HTTP handlers for identity system
 
+pub mod auth;
+pub mod devices;
+
 use std::sync::Arc;
 
 use axum::{
-    extract::Extension, http::StatusCode, response::IntoResponse, routing::post, Json, Router,
+    extract::Extension,
+    http::StatusCode,
+    response::IntoResponse,
+    routing::{get, post},
+    Json, Router,
 };
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -27,7 +34,16 @@ pub struct ErrorResponse {
 
 /// Create identity router
 pub fn router() -> Router {
-    Router::new().route("/auth/signup", post(signup))
+    Router::new()
+        .route("/auth/signup", post(signup))
+        .route(
+            "/auth/devices",
+            get(devices::list_devices).post(devices::add_device),
+        )
+        .route(
+            "/auth/devices/{kid}",
+            axum::routing::delete(devices::revoke_device).patch(devices::rename_device),
+        )
 }
 
 /// Handle signup request — delegates validation and persistence to [`IdentityService`].
@@ -86,6 +102,16 @@ fn signup_error_response(e: SignupError) -> axum::response::Response {
                 .into_response()
         }
     }
+}
+
+pub(super) fn bad_request(msg: &str) -> axum::response::Response {
+    (
+        StatusCode::BAD_REQUEST,
+        Json(ErrorResponse {
+            error: msg.to_string(),
+        }),
+    )
+        .into_response()
 }
 
 #[cfg(test)]

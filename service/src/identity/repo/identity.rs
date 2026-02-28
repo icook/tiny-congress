@@ -9,7 +9,10 @@ use sqlx::PgPool;
 use tc_crypto::Kid;
 use uuid::Uuid;
 
-use super::accounts::{create_account_with_executor, AccountRepoError, CreatedAccount};
+use super::accounts::{
+    create_account_with_executor, get_account_by_id, AccountRecord, AccountRepoError,
+    CreatedAccount,
+};
 use super::backups::{
     create_backup_with_executor, delete_backup_by_kid, get_backup_by_kid, BackupRecord,
     BackupRepoError, CreatedBackup,
@@ -19,6 +22,15 @@ use super::device_keys::{
     rename_device_key, revoke_device_key, touch_device_key, CreatedDeviceKey, DeviceKeyRecord,
     DeviceKeyRepoError,
 };
+
+/// Error from nonce replay checking.
+#[derive(Debug, thiserror::Error)]
+pub enum NonceError {
+    #[error("request replay detected")]
+    Replay,
+    #[error("database error: {0}")]
+    Database(sqlx::Error),
+}
 
 /// Validated signup data ready for persistence.
 ///
@@ -110,6 +122,8 @@ pub trait IdentityRepo: Send + Sync {
         root_kid: &Kid,
     ) -> Result<CreatedAccount, AccountRepoError>;
 
+    async fn get_account_by_id(&self, account_id: Uuid) -> Result<AccountRecord, AccountRepoError>;
+
     // Backup operations
 
     async fn create_backup(
@@ -162,6 +176,14 @@ pub trait IdentityRepo: Send + Sync {
         &self,
         data: &ValidatedSignup,
     ) -> Result<SignupResult, CreateSignupError>;
+
+    // Nonce / replay protection
+
+    /// Record a request signature hash. Returns `NonceError::Replay` if already seen.
+    async fn check_and_record_nonce(&self, signature_hash: &[u8; 32]) -> Result<(), NonceError>;
+
+    /// Delete nonces older than `max_age_secs`. Returns count of deleted rows.
+    async fn cleanup_expired_nonces(&self, max_age_secs: i64) -> Result<u64, NonceError>;
 }
 
 /// `PostgreSQL` implementation of [`IdentityRepo`].
@@ -185,6 +207,10 @@ impl IdentityRepo for PgIdentityRepo {
         root_kid: &Kid,
     ) -> Result<CreatedAccount, AccountRepoError> {
         create_account_with_executor(&self.pool, username, root_pubkey, root_kid).await
+    }
+
+    async fn get_account_by_id(&self, account_id: Uuid) -> Result<AccountRecord, AccountRepoError> {
+        get_account_by_id(&self.pool, account_id).await
     }
 
     async fn create_backup(
@@ -312,6 +338,33 @@ impl IdentityRepo for PgIdentityRepo {
             device_kid: device.device_kid,
         })
     }
+
+    async fn check_and_record_nonce(&self, signature_hash: &[u8; 32]) -> Result<(), NonceError> {
+        let result = sqlx::query(
+            "INSERT INTO request_nonces (signature_hash) VALUES ($1) ON CONFLICT DO NOTHING",
+        )
+        .bind(signature_hash.as_slice())
+        .execute(&self.pool)
+        .await
+        .map_err(NonceError::Database)?;
+
+        if result.rows_affected() == 0 {
+            return Err(NonceError::Replay);
+        }
+        Ok(())
+    }
+
+    async fn cleanup_expired_nonces(&self, max_age_secs: i64) -> Result<u64, NonceError> {
+        let result = sqlx::query(
+            "DELETE FROM request_nonces WHERE created_at < now() - $1::bigint * INTERVAL '1 second'",
+        )
+        .bind(max_age_secs)
+        .execute(&self.pool)
+        .await
+        .map_err(NonceError::Database)?;
+
+        Ok(result.rows_affected())
+    }
 }
 
 #[cfg(any(test, feature = "test-utils"))]
@@ -323,9 +376,9 @@ pub mod mock {
     //! generic errors since they are not exercised in service-layer tests.
 
     use super::{
-        async_trait, AccountRepoError, BackupRecord, BackupRepoError, CreateSignupError,
-        CreatedAccount, CreatedBackup, CreatedDeviceKey, DeviceKeyRecord, DeviceKeyRepoError,
-        IdentityRepo, Kid, SignupResult, Uuid, ValidatedSignup,
+        async_trait, AccountRecord, AccountRepoError, BackupRecord, BackupRepoError,
+        CreateSignupError, CreatedAccount, CreatedBackup, CreatedDeviceKey, DeviceKeyRecord,
+        DeviceKeyRepoError, IdentityRepo, Kid, NonceError, SignupResult, Uuid, ValidatedSignup,
     };
     use std::sync::Mutex;
 
@@ -370,6 +423,13 @@ pub mod mock {
                 id: Uuid::new_v4(),
                 root_kid: root_kid.clone(),
             })
+        }
+
+        async fn get_account_by_id(
+            &self,
+            _account_id: Uuid,
+        ) -> Result<AccountRecord, AccountRepoError> {
+            Err(AccountRepoError::NotFound)
         }
 
         async fn create_backup(
@@ -455,6 +515,17 @@ pub mod mock {
                         device_kid: Kid::derive(&[1u8; 32]),
                     })
                 })
+        }
+
+        async fn check_and_record_nonce(
+            &self,
+            _signature_hash: &[u8; 32],
+        ) -> Result<(), NonceError> {
+            Ok(())
+        }
+
+        async fn cleanup_expired_nonces(&self, _max_age_secs: i64) -> Result<u64, NonceError> {
+            Ok(0)
         }
     }
 }
