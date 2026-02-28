@@ -29,7 +29,7 @@ The server is a dumb witness, not a trusted authority. All cryptographic operati
 
 ## Phase 1: Fix
 
-Read the full PR diff. Fix issues that are **unambiguously wrong** — things where there is exactly one correct resolution and no reasonable person would disagree.
+Read the full PR diff using `gh pr diff`. Fix issues that are **unambiguously wrong** — things where there is exactly one correct resolution and no reasonable person would disagree.
 
 ### What to Fix
 
@@ -45,9 +45,9 @@ Read the full PR diff. Fix issues that are **unambiguously wrong** — things wh
 
 1. Make all fixes in a single pass
 2. Run `just fmt` to normalize formatting
-3. If any fixes were made, create exactly **one** commit:
+3. If any fixes were made, stage, commit, and push in one sequence:
    ```
-   chore: auto-polish [auto-polish]
+   git add -A && git commit -m "chore: auto-polish [auto-polish]" && git push
    ```
 4. If nothing needs fixing, do **not** create a commit
 
@@ -66,7 +66,7 @@ Even if you see these issues, do **not** change them in Phase 1. They go to Phas
 
 ## Phase 2: Flag
 
-Leave **inline review comments** on specific lines of the PR diff for issues that require human judgment. Use `gh api` to post review comments on the PR.
+Leave **inline review comments** on specific lines of the PR diff for issues that require human judgment. Use `mcp__github_inline_comment__create_inline_comment` to post review comments on the PR.
 
 ### What to Flag
 
@@ -108,8 +108,12 @@ Post exactly **one** top-level PR comment summarizing your work. Use `gh pr comm
 ```markdown
 ## Auto-Polish Summary
 
+**Fixed:** <N> issues in `<commit SHA>`
+<!-- If no fixes were needed, write: "**Fixed:** No fixes needed." -->
+
+**Skipped:** Nothing outside the PR diff was touched.
+
 ### Fixes Applied
-<!-- If no fixes were needed, write: "No fixes needed." -->
 - <one-line description of each fix>
 
 ### Flagged for Review
