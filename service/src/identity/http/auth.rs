@@ -5,19 +5,14 @@
 //!
 //! Canonical message format:
 //! ```text
-//! {METHOD}\n{PATH}\n{TIMESTAMP}\n{BODY_SHA256_HEX}
+//! {METHOD}\n{PATH_AND_QUERY}\n{TIMESTAMP}\n{NONCE}\n{BODY_SHA256_HEX}
 //! ```
 //!
 //! Required headers:
 //! - `X-Device-Kid`: 22-char base64url key identifier
 //! - `X-Signature`: base64url Ed25519 signature of the canonical message
 //! - `X-Timestamp`: Unix seconds
-//!
-//! Replay protection records each signature's hash in the database, so requests
-//! are **non-idempotent under network retries**. If the server records the nonce
-//! but the response is lost, a client retry with the same signed payload will be
-//! rejected. Clients must generate a fresh signature (with a current timestamp)
-//! for every retry attempt.
+//! - `X-Nonce`: unique per-request nonce (max 64 chars)
 
 use std::sync::Arc;
 
@@ -31,21 +26,13 @@ use axum::{
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
+use super::nonce::NonceStore;
 use super::ErrorResponse;
-use crate::identity::repo::{DeviceKeyRepoError, IdentityRepo, NonceError};
+use crate::identity::repo::{DeviceKeyRepoError, IdentityRepo};
 use tc_crypto::{decode_base64url, verify_ed25519, Kid};
 
-/// Maximum clock skew allowed for timestamps (seconds).
-///
-/// Also used as the nonce TTL — expired nonces are cleaned up after this window.
-pub const MAX_TIMESTAMP_SKEW: i64 = 300;
-
-/// Maximum request body size for authenticated device endpoints (64 KiB).
-///
-/// Device management payloads (JSON with keys, names, certificates) are small;
-/// 64 KiB is generous. A tighter limit prevents abuse of the body-read step
-/// before signature verification.
-const MAX_BODY_SIZE: usize = 64 * 1024;
+/// Maximum clock skew allowed for timestamps (seconds)
+const MAX_TIMESTAMP_SKEW: i64 = 300;
 
 /// Authenticated device extracted from signed request headers.
 ///
@@ -93,11 +80,18 @@ fn forbidden_error(msg: &str) -> Response {
 impl<S: Send + Sync> FromRequest<S> for AuthenticatedDevice {
     type Rejection = Response;
 
+    #[allow(clippy::too_many_lines)]
     async fn from_request(req: Request, _state: &S) -> Result<Self, Self::Rejection> {
         // Extract repo from extensions before consuming the request
         let repo = req
             .extensions()
             .get::<Arc<dyn IdentityRepo>>()
+            .ok_or_else(|| auth_error("Server misconfiguration"))?
+            .clone();
+
+        let nonce_store = req
+            .extensions()
+            .get::<Arc<NonceStore>>()
             .ok_or_else(|| auth_error("Server misconfiguration"))?
             .clone();
 
@@ -123,6 +117,13 @@ impl<S: Send + Sync> FromRequest<S> for AuthenticatedDevice {
             .ok_or_else(|| auth_error("Missing X-Timestamp header"))?
             .to_string();
 
+        let nonce = req
+            .headers()
+            .get("X-Nonce")
+            .and_then(|v| v.to_str().ok())
+            .ok_or_else(|| auth_error("Missing X-Nonce header"))?
+            .to_string();
+
         // Parse KID
         let kid: Kid = kid_str
             .parse()
@@ -137,6 +138,10 @@ impl<S: Send + Sync> FromRequest<S> for AuthenticatedDevice {
         let skew = (now - timestamp).abs();
         if skew > MAX_TIMESTAMP_SKEW {
             return Err(auth_error("Timestamp out of range"));
+        }
+
+        if !nonce_store.check_and_insert(&nonce) {
+            return Err(auth_error("Duplicate nonce (possible replay)"));
         }
 
         // Decode signature
@@ -157,7 +162,7 @@ impl<S: Send + Sync> FromRequest<S> for AuthenticatedDevice {
         );
 
         // Read the body
-        let body_bytes = axum::body::to_bytes(req.into_body(), MAX_BODY_SIZE)
+        let body_bytes = axum::body::to_bytes(req.into_body(), 1024 * 1024)
             .await
             .map_err(|_| auth_error("Failed to read request body"))?;
 
@@ -166,7 +171,7 @@ impl<S: Send + Sync> FromRequest<S> for AuthenticatedDevice {
         let body_hash_hex = format!("{body_hash:x}");
 
         // Build canonical message
-        let canonical = format!("{method}\n{path}\n{timestamp}\n{body_hash_hex}");
+        let canonical = format!("{method}\n{path}\n{timestamp}\n{nonce}\n{body_hash_hex}");
 
         // Look up device
         let device = repo
@@ -201,17 +206,10 @@ impl<S: Send + Sync> FromRequest<S> for AuthenticatedDevice {
         verify_ed25519(&pubkey_arr, canonical.as_bytes(), &sig_arr)
             .map_err(|_| auth_error("Invalid signature"))?;
 
-        // Check if revoked (after signature verification to avoid status oracle).
-        // Must happen before nonce recording so a revoked device's valid request
-        // doesn't consume a nonce slot (which would leak "request was seen" via
-        // a replay returning 401 instead of 403).
+        // Check if revoked (after signature verification to avoid status oracle)
         if device.revoked_at.is_some() {
             return Err(forbidden_error("Device has been revoked"));
         }
-
-        // Replay protection: record a hash of the signature to prevent reuse
-        // within the timestamp window.
-        check_nonce(&*repo, &sig_arr).await?;
 
         // Touch last_used_at (fire-and-forget, don't fail the request)
         let touch_kid = kid.clone();
@@ -228,20 +226,6 @@ impl<S: Send + Sync> FromRequest<S> for AuthenticatedDevice {
             body_bytes,
         })
     }
-}
-
-/// Record a signature nonce to prevent replay attacks.
-async fn check_nonce(repo: &dyn IdentityRepo, sig_bytes: &[u8; 64]) -> Result<(), Response> {
-    let nonce_hash: [u8; 32] = Sha256::digest(sig_bytes).into();
-    repo.check_and_record_nonce(&nonce_hash)
-        .await
-        .map_err(|e| match e {
-            NonceError::Replay => auth_error("Request replay detected"),
-            NonceError::Database(db_err) => {
-                tracing::error!("Nonce check failed: {db_err}");
-                auth_error("Authentication failed")
-            }
-        })
 }
 
 #[cfg(test)]
@@ -280,12 +264,13 @@ mod tests {
     fn test_canonical_message_format() {
         let method = "GET";
         let path = "/auth/devices";
-        let timestamp = 1_700_000_000_i64;
+        let timestamp = 1700000000_i64;
+        let nonce = "test-nonce-abc";
         let body_hash_hex = format!("{:x}", Sha256::digest(b""));
 
-        let canonical = format!("{method}\n{path}\n{timestamp}\n{body_hash_hex}");
+        let canonical = format!("{method}\n{path}\n{timestamp}\n{nonce}\n{body_hash_hex}");
 
-        assert!(canonical.starts_with("GET\n/auth/devices\n1700000000\n"));
+        assert!(canonical.starts_with("GET\n/auth/devices\n1700000000\ntest-nonce-abc\n"));
         // SHA-256 of empty body is well-known
         assert!(
             canonical.ends_with("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855")

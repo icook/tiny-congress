@@ -18,7 +18,6 @@ use uuid::Uuid;
 use super::auth::AuthenticatedDevice;
 use super::ErrorResponse;
 use crate::identity::repo::{AccountRepoError, DeviceKeyRecord, DeviceKeyRepoError, IdentityRepo};
-use crate::identity::service::DeviceName;
 use tc_crypto::{decode_base64url, verify_ed25519, Kid};
 
 /// Device info returned in API responses (omits certificate and raw pubkey)
@@ -78,7 +77,7 @@ pub async fn list_devices(
         }
         Err(e) => {
             tracing::error!("Failed to list devices: {e}");
-            internal_error()
+            super::internal_error()
         }
     }
 }
@@ -103,7 +102,7 @@ pub async fn add_device(
             auth.account_id,
             &validated.device_kid,
             &req.pubkey,
-            &validated.device_name,
+            validated.device_name.as_ref(),
             &validated.cert_bytes,
         )
         .await
@@ -132,7 +131,7 @@ pub async fn add_device(
             .into_response(),
         Err(e) => {
             tracing::error!("Failed to create device key: {e}");
-            internal_error()
+            super::internal_error()
         }
     }
 }
@@ -152,19 +151,27 @@ async fn validate_add_device_request(
     req: &AddDeviceRequest,
 ) -> Result<ValidatedAddDevice, axum::response::Response> {
     let Ok(device_pubkey_bytes) = decode_base64url(&req.pubkey) else {
-        return Err(bad_request("Invalid base64url encoding for pubkey"));
+        return Err(super::bad_request("Invalid base64url encoding for pubkey"));
     };
     if device_pubkey_bytes.len() != 32 {
-        return Err(bad_request("pubkey must be 32 bytes (Ed25519)"));
+        return Err(super::bad_request("pubkey must be 32 bytes (Ed25519)"));
     }
 
-    let device_name = DeviceName::parse(&req.name).map_err(|e| bad_request(&e.to_string()))?;
+    let device_name = req.name.trim();
+    if device_name.is_empty() {
+        return Err(super::bad_request("Device name cannot be empty"));
+    }
+    if device_name.chars().count() > 128 {
+        return Err(super::bad_request("Device name too long"));
+    }
 
     let Ok(cert_bytes) = decode_base64url(&req.certificate) else {
-        return Err(bad_request("Invalid base64url encoding for certificate"));
+        return Err(super::bad_request(
+            "Invalid base64url encoding for certificate",
+        ));
     };
     let Ok(cert_arr): Result<[u8; 64], _> = cert_bytes.as_slice().try_into() else {
-        return Err(bad_request(
+        return Err(super::bad_request(
             "certificate must be 64 bytes (Ed25519 signature)",
         ));
     };
@@ -174,32 +181,32 @@ async fn validate_add_device_request(
         Ok(a) => a,
         Err(AccountRepoError::NotFound) => {
             tracing::error!("Authenticated device's account not found: {account_id}");
-            return Err(internal_error());
+            return Err(super::internal_error());
         }
         Err(e) => {
             tracing::error!("Failed to look up account: {e}");
-            return Err(internal_error());
+            return Err(super::internal_error());
         }
     };
 
     let Ok(root_pubkey_bytes) = decode_base64url(&account.root_pubkey) else {
         tracing::error!("Corrupted root pubkey for account {account_id}");
-        return Err(internal_error());
+        return Err(super::internal_error());
     };
     let Ok(root_pubkey_arr): Result<[u8; 32], _> = root_pubkey_bytes.as_slice().try_into() else {
         tracing::error!("Corrupted root pubkey length for account {account_id}");
-        return Err(internal_error());
+        return Err(super::internal_error());
     };
 
     if verify_ed25519(&root_pubkey_arr, &device_pubkey_bytes, &cert_arr).is_err() {
-        return Err(bad_request("Invalid device certificate"));
+        return Err(super::bad_request("Invalid device certificate"));
     }
 
     let device_kid = Kid::derive(&device_pubkey_bytes);
 
     Ok(ValidatedAddDevice {
         device_kid,
-        device_name: device_name.as_str().to_string(),
+        device_name: device_name.to_string(),
         cert_bytes,
     })
 }
@@ -212,7 +219,7 @@ pub async fn revoke_device(
 ) -> impl IntoResponse {
     let kid: Kid = match kid_str.parse() {
         Ok(k) => k,
-        Err(_) => return bad_request("Invalid KID format"),
+        Err(_) => return super::bad_request("Invalid KID format"),
     };
 
     // Prevent revoking the currently authenticated device
@@ -243,7 +250,7 @@ pub async fn revoke_device(
             .into_response(),
         Err(e) => {
             tracing::error!("Failed to revoke device: {e}");
-            internal_error()
+            super::internal_error()
         }
     }
 }
@@ -261,20 +268,23 @@ pub async fn rename_device(
 
     let kid: Kid = match kid_str.parse() {
         Ok(k) => k,
-        Err(_) => return bad_request("Invalid KID format"),
+        Err(_) => return super::bad_request("Invalid KID format"),
     };
 
-    let new_name = match DeviceName::parse(&req.name) {
-        Ok(n) => n,
-        Err(e) => return bad_request(&e.to_string()),
-    };
+    let new_name = req.name.trim();
+    if new_name.is_empty() {
+        return super::bad_request("Device name cannot be empty");
+    }
+    if new_name.chars().count() > 128 {
+        return super::bad_request("Device name too long");
+    }
 
     match get_owned_device(&*repo, &kid, auth.account_id).await {
         Ok(_) => {}
         Err(resp) => return resp,
     }
 
-    match repo.rename_device_key(&kid, new_name.as_str()).await {
+    match repo.rename_device_key(&kid, new_name).await {
         Ok(()) => StatusCode::NO_CONTENT.into_response(),
         Err(DeviceKeyRepoError::AlreadyRevoked) => (
             StatusCode::CONFLICT,
@@ -285,7 +295,7 @@ pub async fn rename_device(
             .into_response(),
         Err(e) => {
             tracing::error!("Failed to rename device: {e}");
-            internal_error()
+            super::internal_error()
         }
     }
 }
@@ -300,41 +310,17 @@ async fn get_owned_device(
     let device = match repo.get_device_key_by_kid(kid).await {
         Ok(d) => d,
         Err(DeviceKeyRepoError::NotFound) => {
-            return Err(not_found("Device not found"));
+            return Err(super::not_found("Device not found"));
         }
         Err(e) => {
             tracing::error!("Failed to look up device: {e}");
-            return Err(internal_error());
+            return Err(super::internal_error());
         }
     };
 
     if device.account_id != account_id {
-        return Err(not_found("Device not found"));
+        return Err(super::not_found("Device not found"));
     }
 
     Ok(device)
-}
-
-fn bad_request(msg: &str) -> axum::response::Response {
-    super::bad_request(msg)
-}
-
-fn not_found(msg: &str) -> axum::response::Response {
-    (
-        StatusCode::NOT_FOUND,
-        Json(ErrorResponse {
-            error: msg.to_string(),
-        }),
-    )
-        .into_response()
-}
-
-fn internal_error() -> axum::response::Response {
-    (
-        StatusCode::INTERNAL_SERVER_ERROR,
-        Json(ErrorResponse {
-            error: "Internal server error".to_string(),
-        }),
-    )
-        .into_response()
 }
