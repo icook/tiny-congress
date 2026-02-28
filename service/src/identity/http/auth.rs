@@ -29,8 +29,10 @@ use super::ErrorResponse;
 use crate::identity::repo::{DeviceKeyRepoError, IdentityRepo, NonceError};
 use tc_crypto::{decode_base64url, verify_ed25519, Kid};
 
-/// Maximum clock skew allowed for timestamps (seconds)
-const MAX_TIMESTAMP_SKEW: i64 = 300;
+/// Maximum clock skew allowed for timestamps (seconds).
+///
+/// Also used as the nonce TTL — expired nonces are cleaned up after this window.
+pub const MAX_TIMESTAMP_SKEW: i64 = 300;
 
 /// Authenticated device extracted from signed request headers.
 ///
@@ -186,14 +188,17 @@ impl<S: Send + Sync> FromRequest<S> for AuthenticatedDevice {
         verify_ed25519(&pubkey_arr, canonical.as_bytes(), &sig_arr)
             .map_err(|_| auth_error("Invalid signature"))?;
 
-        // Replay protection: record a hash of the signature to prevent reuse
-        // within the timestamp window.
-        check_nonce(&*repo, &sig_arr).await?;
-
-        // Check if revoked (after signature verification to avoid status oracle)
+        // Check if revoked (after signature verification to avoid status oracle).
+        // Must happen before nonce recording so a revoked device's valid request
+        // doesn't consume a nonce slot (which would leak "request was seen" via
+        // a replay returning 401 instead of 403).
         if device.revoked_at.is_some() {
             return Err(forbidden_error("Device has been revoked"));
         }
+
+        // Replay protection: record a hash of the signature to prevent reuse
+        // within the timestamp window.
+        check_nonce(&*repo, &sig_arr).await?;
 
         // Touch last_used_at (fire-and-forget, don't fail the request)
         let touch_kid = kid.clone();

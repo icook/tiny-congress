@@ -45,7 +45,10 @@ fn spawn_nonce_cleanup(repo: Arc<dyn crate::identity::repo::IdentityRepo>) {
         let mut interval = tokio::time::interval(std::time::Duration::from_secs(60));
         loop {
             interval.tick().await;
-            match repo.cleanup_expired_nonces(300).await {
+            match repo
+                .cleanup_expired_nonces(crate::identity::http::auth::MAX_TIMESTAMP_SKEW)
+                .await
+            {
                 Ok(0) => {}
                 Ok(n) => tracing::debug!(count = n, "cleaned up expired nonces"),
                 Err(e) => tracing::warn!("nonce cleanup failed: {e}"),
