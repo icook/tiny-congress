@@ -101,4 +101,57 @@ describe('backup envelope encryption', () => {
 
     await expect(decryptBackupEnvelope(envelope, 'wrong-password')).rejects.toThrow();
   });
+
+  test('decrypt rejects envelope that is too small', async () => {
+    const tooSmall = new Uint8Array(89);
+    await expect(decryptBackupEnvelope(tooSmall, 'pw')).rejects.toThrow('too small');
+  });
+
+  test('decrypt rejects unsupported envelope version', async () => {
+    const rootPrivateKey = globalThis.crypto.getRandomValues(new Uint8Array(32));
+    const envelope = await buildBackupEnvelope(rootPrivateKey, 'pw');
+    envelope[0] = 0x02; // wrong version
+
+    await expect(decryptBackupEnvelope(envelope, 'pw')).rejects.toThrow(
+      'Unsupported envelope version'
+    );
+  });
+
+  test('decrypt rejects unsupported KDF', async () => {
+    const rootPrivateKey = globalThis.crypto.getRandomValues(new Uint8Array(32));
+    const envelope = await buildBackupEnvelope(rootPrivateKey, 'pw');
+    envelope[1] = 0x02; // wrong KDF ID
+
+    await expect(decryptBackupEnvelope(envelope, 'pw')).rejects.toThrow('Unsupported KDF');
+  });
+
+  test('decrypt rejects envelope with m_cost below minimum', async () => {
+    const rootPrivateKey = globalThis.crypto.getRandomValues(new Uint8Array(32));
+    const envelope = await buildBackupEnvelope(rootPrivateKey, 'pw');
+    // Set m_cost to 1 (below minimum of 65536)
+    const view = new DataView(envelope.buffer, envelope.byteOffset, envelope.byteLength);
+    view.setUint32(2, 1, true);
+
+    await expect(decryptBackupEnvelope(envelope, 'pw')).rejects.toThrow('m_cost 1 below minimum');
+  });
+
+  test('decrypt rejects envelope with t_cost below minimum', async () => {
+    const rootPrivateKey = globalThis.crypto.getRandomValues(new Uint8Array(32));
+    const envelope = await buildBackupEnvelope(rootPrivateKey, 'pw');
+    // Set t_cost to 1 (below minimum of 3)
+    const view = new DataView(envelope.buffer, envelope.byteOffset, envelope.byteLength);
+    view.setUint32(6, 1, true);
+
+    await expect(decryptBackupEnvelope(envelope, 'pw')).rejects.toThrow('t_cost 1 below minimum');
+  });
+
+  test('decrypt rejects envelope with p_cost below minimum', async () => {
+    const rootPrivateKey = globalThis.crypto.getRandomValues(new Uint8Array(32));
+    const envelope = await buildBackupEnvelope(rootPrivateKey, 'pw');
+    // Set p_cost to 0 (below minimum of 1)
+    const view = new DataView(envelope.buffer, envelope.byteOffset, envelope.byteLength);
+    view.setUint32(10, 0, true);
+
+    await expect(decryptBackupEnvelope(envelope, 'pw')).rejects.toThrow('p_cost 0 below minimum');
+  });
 });

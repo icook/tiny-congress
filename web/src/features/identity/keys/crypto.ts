@@ -117,6 +117,19 @@ export async function decryptBackupEnvelope(
   const mCost = view.getUint32(2, true);
   const tCost = view.getUint32(6, true);
   const pCost = view.getUint32(10, true);
+
+  // Enforce same KDF minimums as the Rust backend (BackupEnvelope::parse).
+  // A malicious server could send a weak-KDF envelope to make brute-forcing trivial.
+  if (mCost < KDF_M_COST) {
+    throw new Error(`KDF m_cost ${String(mCost)} below minimum ${String(KDF_M_COST)}`);
+  }
+  if (tCost < KDF_T_COST) {
+    throw new Error(`KDF t_cost ${String(tCost)} below minimum ${String(KDF_T_COST)}`);
+  }
+  if (pCost < KDF_P_COST) {
+    throw new Error(`KDF p_cost ${String(pCost)} below minimum ${String(KDF_P_COST)}`);
+  }
+
   const salt = envelope.slice(14, 30);
   const nonce = envelope.slice(30, 42);
   const ciphertext = envelope.slice(42);
