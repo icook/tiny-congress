@@ -1,5 +1,6 @@
 import { render, screen, userEvent } from '@test-utils';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
+import { DecryptionError } from '@/features/identity';
 import { LoginPage } from './Login.page';
 
 // Mock router
@@ -147,7 +148,9 @@ describe('LoginPage', () => {
       encrypted_backup: 'encoded-backup',
       root_kid: 'root-kid-123',
     });
-    mockDecryptBackupEnvelope.mockRejectedValue(new Error('Failed to decrypt: invalid tag'));
+    mockDecryptBackupEnvelope.mockRejectedValue(
+      new DecryptionError('Wrong password or corrupted backup')
+    );
 
     const user = userEvent.setup();
     render(<LoginPage />);

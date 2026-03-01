@@ -13,6 +13,16 @@ import type { CryptoModule } from '@/providers/CryptoProvider';
 import type { KeyPair } from './types';
 
 /**
+ * Thrown when backup envelope decryption fails (wrong password or corrupted data).
+ */
+export class DecryptionError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'DecryptionError';
+  }
+}
+
+/**
  * Generate a new Ed25519 key pair
  *
  * @param crypto - The WASM crypto module from useCryptoRequired()
@@ -147,10 +157,15 @@ export async function decryptBackupEnvelope(
 
   // Decrypt with ChaCha20-Poly1305
   const cipher = chacha20poly1305(keyBytes, nonce);
-  const plaintext = cipher.decrypt(ciphertext);
+  let plaintext: Uint8Array;
+  try {
+    plaintext = cipher.decrypt(ciphertext);
+  } catch {
+    throw new DecryptionError('Wrong password or corrupted backup');
+  }
 
   if (plaintext.length !== 32) {
-    throw new Error('Decrypted key has unexpected length');
+    throw new DecryptionError('Decrypted key has unexpected length');
   }
 
   return plaintext;

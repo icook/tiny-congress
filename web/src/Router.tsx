@@ -49,6 +49,12 @@ const loginRoute = createRoute({
   component: LoginPage,
 });
 
+const settingsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: 'settings',
+  component: SettingsPage,
+});
+
 const routeTree = rootRoute.addChildren([
   homeRoute,
   dashboardRoute,
@@ -56,15 +62,11 @@ const routeTree = rootRoute.addChildren([
   aboutRoute,
   signupRoute,
   loginRoute,
+  settingsRoute,
   createPlaceholderRoute('analytics', 'Analytics', 'Analytics page content'),
   createPlaceholderRoute('releases', 'Releases', 'Releases page content'),
   createPlaceholderRoute('account', 'Account', 'Account page content'),
   createPlaceholderRoute('security', 'Security', 'Security page content'),
-  createRoute({
-    getParentRoute: () => rootRoute,
-    path: 'settings',
-    component: SettingsPage,
-  }),
 ]);
 
 const router = createRouter({ routeTree });

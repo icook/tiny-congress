@@ -20,6 +20,7 @@ import {
 } from '@mantine/core';
 import {
   decryptBackupEnvelope,
+  DecryptionError,
   fetchBackup,
   generateKeyPair,
   getDeviceName,
@@ -91,13 +92,10 @@ export function LoginPage() {
       void navigate({ to: '/settings' });
     } catch (err) {
       setIsDecrypting(false);
-      if (err instanceof Error) {
-        // Distinguish decryption failure from API errors
-        if (err.message.includes('decrypt') || err.message.includes('tag')) {
-          setError('Wrong password or corrupted backup');
-        } else {
-          setError(err.message);
-        }
+      if (err instanceof DecryptionError) {
+        setError(err.message);
+      } else if (err instanceof Error) {
+        setError(err.message);
       } else {
         setError('Login failed');
       }

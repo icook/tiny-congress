@@ -1,7 +1,13 @@
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { describe, expect, test, vi } from 'vitest';
 import type { CryptoModule } from '@/providers/CryptoProvider';
-import { buildBackupEnvelope, decryptBackupEnvelope, generateKeyPair, signMessage } from './crypto';
+import {
+  buildBackupEnvelope,
+  decryptBackupEnvelope,
+  DecryptionError,
+  generateKeyPair,
+  signMessage,
+} from './crypto';
 
 function mockCryptoModule(): CryptoModule {
   return {
@@ -95,11 +101,13 @@ describe('backup envelope encryption', () => {
     expect(recovered).toEqual(rootPrivateKey);
   });
 
-  test('decrypt with wrong password throws', async () => {
+  test('decrypt with wrong password throws DecryptionError', async () => {
     const rootPrivateKey = globalThis.crypto.getRandomValues(new Uint8Array(32));
     const envelope = await buildBackupEnvelope(rootPrivateKey, 'correct-password');
 
-    await expect(decryptBackupEnvelope(envelope, 'wrong-password')).rejects.toThrow();
+    await expect(decryptBackupEnvelope(envelope, 'wrong-password')).rejects.toThrow(
+      DecryptionError
+    );
   });
 
   test('decrypt rejects envelope that is too small', async () => {
