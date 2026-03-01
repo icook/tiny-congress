@@ -14,7 +14,7 @@
 mod common;
 
 use axum::{
-    body::{to_bytes, Body},
+    body::Body,
     http::{header::CONTENT_TYPE, Method, Request, StatusCode},
 };
 use common::app_builder::TestAppBuilder;
