@@ -1,4 +1,6 @@
 //! Login endpoint -- authorize a new device using root-key-signed certificate.
+//!
+//! Delegates all validation and persistence to [`IdentityService::login`].
 
 use std::sync::Arc;
 
@@ -7,18 +9,17 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use super::ErrorResponse;
-use crate::identity::repo::{AccountRepoError, DeviceKeyRepoError, IdentityRepo};
-use crate::identity::service::DeviceName;
-use tc_crypto::{decode_base64url, verify_ed25519, Kid};
+use crate::identity::service::{IdentityService, LoginError, LoginRequest};
+use tc_crypto::Kid;
 
 #[derive(Debug, Deserialize)]
-pub struct LoginRequest {
+pub struct LoginHttpRequest {
     pub username: String,
-    pub device: LoginDevice,
+    pub device: LoginHttpDevice,
 }
 
 #[derive(Debug, Deserialize)]
-pub struct LoginDevice {
+pub struct LoginHttpDevice {
     pub pubkey: String,
     pub name: String,
     pub certificate: String,
@@ -33,99 +34,75 @@ pub struct LoginResponse {
 
 /// POST /auth/login -- authorize new device via root key certificate
 pub async fn login(
-    Extension(repo): Extension<Arc<dyn IdentityRepo>>,
-    Json(req): Json<LoginRequest>,
+    Extension(service): Extension<Arc<dyn IdentityService>>,
+    Json(req): Json<LoginHttpRequest>,
 ) -> impl IntoResponse {
-    let username = req.username.trim();
-    if username.is_empty() {
-        return super::bad_request("Username cannot be empty");
-    }
-
-    // Validate device pubkey
-    let Ok(device_pubkey_bytes) = decode_base64url(&req.device.pubkey) else {
-        return super::bad_request("Invalid base64url encoding for pubkey");
-    };
-    if device_pubkey_bytes.len() != 32 {
-        return super::bad_request("pubkey must be 32 bytes (Ed25519)");
-    }
-
-    // Validate device name
-    let device_name = match DeviceName::parse(&req.device.name) {
-        Ok(n) => n,
-        Err(e) => return super::bad_request(&e.to_string()),
+    let login_req = LoginRequest {
+        username: req.username,
+        device_pubkey: req.device.pubkey,
+        device_name: req.device.name,
+        certificate: req.device.certificate,
     };
 
-    // Validate certificate
-    let Ok(cert_bytes) = decode_base64url(&req.device.certificate) else {
-        return super::bad_request("Invalid base64url encoding for certificate");
-    };
-    let Ok(cert_arr): Result<[u8; 64], _> = cert_bytes.as_slice().try_into() else {
-        return super::bad_request("certificate must be 64 bytes (Ed25519 signature)");
-    };
-
-    // Look up account
-    let account = match repo.get_account_by_username(username).await {
-        Ok(a) => a,
-        Err(AccountRepoError::NotFound) => return super::not_found("Account not found"),
-        Err(e) => {
-            tracing::error!("Failed to look up account: {e}");
-            return super::internal_error();
-        }
-    };
-
-    // Verify certificate against root pubkey
-    let Ok(root_pubkey_bytes) = decode_base64url(&account.root_pubkey) else {
-        tracing::error!("Corrupted root pubkey for account {}", account.id);
-        return super::internal_error();
-    };
-    let Ok(root_pubkey_arr): Result<[u8; 32], _> = root_pubkey_bytes.as_slice().try_into() else {
-        tracing::error!("Corrupted root pubkey length for account {}", account.id);
-        return super::internal_error();
-    };
-
-    if verify_ed25519(&root_pubkey_arr, &device_pubkey_bytes, &cert_arr).is_err() {
-        return super::bad_request("Invalid device certificate");
-    }
-
-    let device_kid = Kid::derive(&device_pubkey_bytes);
-
-    // Create device key via repo trait
-    match repo
-        .create_device_key(
-            account.id,
-            &device_kid,
-            &req.device.pubkey,
-            device_name.as_str(),
-            &cert_bytes,
-        )
-        .await
-    {
-        Ok(created) => (
+    match service.login(login_req).await {
+        Ok(result) => (
             StatusCode::CREATED,
             Json(LoginResponse {
-                account_id: account.id,
-                root_kid: account.root_kid,
-                device_kid: created.device_kid,
+                account_id: result.account_id,
+                root_kid: result.root_kid,
+                device_kid: result.device_kid,
             }),
         )
             .into_response(),
-        Err(DeviceKeyRepoError::DuplicateKid) => (
+        Err(e) => map_login_error(&e),
+    }
+}
+
+fn map_login_error(e: &LoginError) -> axum::response::Response {
+    match e {
+        LoginError::EmptyUsername
+        | LoginError::InvalidDeviceName(_)
+        | LoginError::InvalidPubkeyEncoding
+        | LoginError::InvalidPubkeyLength
+        | LoginError::InvalidCertEncoding
+        | LoginError::InvalidCertLength
+        | LoginError::InvalidCertificate => (
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: e.to_string(),
+            }),
+        )
+            .into_response(),
+        LoginError::AccountNotFound => (
+            StatusCode::NOT_FOUND,
+            Json(ErrorResponse {
+                error: "Account not found".to_string(),
+            }),
+        )
+            .into_response(),
+        LoginError::DuplicateDevice => (
             StatusCode::CONFLICT,
             Json(ErrorResponse {
                 error: "Device key already registered".to_string(),
             }),
         )
             .into_response(),
-        Err(DeviceKeyRepoError::MaxDevicesReached) => (
+        LoginError::MaxDevicesReached => (
             StatusCode::UNPROCESSABLE_ENTITY,
             Json(ErrorResponse {
                 error: "Maximum device limit reached".to_string(),
             }),
         )
             .into_response(),
-        Err(e) => {
-            tracing::error!("Failed to create device key: {e}");
-            super::internal_error()
+        LoginError::Internal(msg) => {
+            tracing::error!("Login returned internal error: {msg}");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse {
+                    error: "Internal server error".to_string(),
+                }),
+            )
+                .into_response()
         }
     }
 }
