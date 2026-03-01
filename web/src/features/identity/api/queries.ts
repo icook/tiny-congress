@@ -6,10 +6,13 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { CryptoModule } from '@/providers/CryptoProvider';
 import {
   listDevices,
+  login,
   renameDevice,
   revokeDevice,
   signup,
   type DeviceListResponse,
+  type LoginRequest,
+  type LoginResponse,
   type SignupRequest,
   type SignupResponse,
 } from './client';
@@ -63,6 +66,15 @@ export function useRevokeDevice(
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['devices'] });
     },
+  });
+}
+
+/**
+ * Mutation hook for login
+ */
+export function useLogin() {
+  return useMutation<LoginResponse, Error, LoginRequest>({
+    mutationFn: login,
   });
 }
 

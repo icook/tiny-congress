@@ -4,7 +4,13 @@
  */
 
 import { useState } from 'react';
-import { buildBackupEnvelope, generateKeyPair, signMessage, useSignup } from '@/features/identity';
+import {
+  buildBackupEnvelope,
+  generateKeyPair,
+  getDeviceName,
+  signMessage,
+  useSignup,
+} from '@/features/identity';
 import { SignupForm } from '@/features/identity/components';
 import { useCryptoRequired } from '@/providers/CryptoProvider';
 import { useDevice } from '@/providers/DeviceProvider';
@@ -15,6 +21,7 @@ export function SignupPage() {
   const { setDevice } = useDevice();
 
   const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
   const [isGeneratingKeys, setIsGeneratingKeys] = useState(false);
   const [createdAccount, setCreatedAccount] = useState<{
     account_id: string;
@@ -25,7 +32,7 @@ export function SignupPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!username.trim()) {
+    if (!username.trim() || !password) {
       return;
     }
 
@@ -41,8 +48,8 @@ export function SignupPage() {
       // Sign the device pubkey with the root key (certificate)
       const certificate = signMessage(deviceKeyPair.publicKey, rootKeyPair.privateKey);
 
-      // Build backup envelope
-      const envelope = buildBackupEnvelope();
+      // Build encrypted backup envelope
+      const envelope = await buildBackupEnvelope(rootKeyPair.privateKey, password);
 
       // Call signup API with full payload
       const response = await signup.mutateAsync({
@@ -72,37 +79,16 @@ export function SignupPage() {
   return (
     <SignupForm
       username={username}
+      password={password}
       onUsernameChange={setUsername}
+      onPasswordChange={setPassword}
       onSubmit={(e) => {
         void handleSubmit(e);
       }}
       isLoading={signup.isPending || isGeneratingKeys}
-      loadingText={isGeneratingKeys ? 'Generating keys...' : undefined}
+      loadingText={isGeneratingKeys ? 'Generating keys and encrypting backup...' : undefined}
       error={signup.isError ? signup.error.message : null}
       successData={createdAccount}
     />
   );
-}
-
-/**
- * Attempt to derive a reasonable device name from the browser.
- */
-function getDeviceName(): string {
-  const ua = navigator.userAgent;
-  if (ua.includes('iPhone') || ua.includes('iPad') || ua.includes('iPod')) {
-    return 'iOS Device';
-  }
-  if (ua.includes('Android')) {
-    return 'Android Device';
-  }
-  if (ua.includes('Mac')) {
-    return 'Mac';
-  }
-  if (ua.includes('Windows')) {
-    return 'Windows PC';
-  }
-  if (ua.includes('Linux')) {
-    return 'Linux';
-  }
-  return 'Browser';
 }

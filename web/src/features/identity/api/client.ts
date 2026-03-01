@@ -49,6 +49,28 @@ export interface AddDeviceResponse {
   created_at: string;
 }
 
+export interface BackupResponse {
+  encrypted_backup: string; // base64url
+  root_kid: string;
+}
+
+export interface LoginDevice {
+  pubkey: string; // base64url
+  name: string;
+  certificate: string; // base64url
+}
+
+export interface LoginRequest {
+  username: string;
+  device: LoginDevice;
+}
+
+export interface LoginResponse {
+  account_id: string; // UUID
+  root_kid: string;
+  device_kid: string;
+}
+
 interface ApiErrorResponse {
   error?: string;
 }
@@ -104,6 +126,7 @@ async function sha256Hex(data: Uint8Array): Promise<string> {
 
 /**
  * Build auth headers for signed device requests.
+ * Includes X-Nonce for replay prevention.
  */
 async function buildAuthHeaders(
   method: string,
@@ -114,14 +137,16 @@ async function buildAuthHeaders(
   wasmCrypto: CryptoModule
 ): Promise<Record<string, string>> {
   const timestamp = Math.floor(Date.now() / 1000).toString();
+  const nonce = globalThis.crypto.randomUUID();
   const bodyHash = await sha256Hex(bodyBytes);
-  const canonical = `${method}\n${path}\n${timestamp}\n${bodyHash}`;
+  const canonical = `${method}\n${path}\n${timestamp}\n${nonce}\n${bodyHash}`;
   const signature = ed25519.sign(new TextEncoder().encode(canonical), privateKey);
 
   return {
     'X-Device-Kid': deviceKid,
     'X-Signature': wasmCrypto.encode_base64url(signature),
     'X-Timestamp': timestamp,
+    'X-Nonce': nonce,
   };
 }
 
@@ -196,5 +221,20 @@ export async function renameDevice(
 ): Promise<void> {
   return signedFetchJson(`/auth/devices/${targetKid}`, 'PATCH', deviceKid, privateKey, wasmCrypto, {
     name,
+  });
+}
+
+// === Login / Backup ===
+
+export async function fetchBackup(username: string): Promise<BackupResponse> {
+  return fetchJson(`/auth/backup/${encodeURIComponent(username)}`, {
+    method: 'GET',
+  });
+}
+
+export async function login(request: LoginRequest): Promise<LoginResponse> {
+  return fetchJson('/auth/login', {
+    method: 'POST',
+    body: JSON.stringify(request),
   });
 }

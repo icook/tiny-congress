@@ -2,6 +2,16 @@ import { render, screen, userEvent } from '@test-utils';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { SignupPage } from './Signup.page';
 
+// Mock router Link to avoid needing RouterProvider in tests
+vi.mock('@tanstack/react-router', () => ({
+  Link: ({ children, to, ...props }: { children: React.ReactNode; to: string }) => (
+    <a href={to} {...props}>
+      {children}
+    </a>
+  ),
+  useNavigate: vi.fn(() => vi.fn()),
+}));
+
 // Mock the crypto provider
 const mockCrypto = {
   derive_kid: vi.fn(() => 'kid-123'),
@@ -19,6 +29,7 @@ vi.mock('@/providers/DeviceProvider', () => ({
   useDevice: vi.fn(() => ({
     deviceKid: null,
     privateKey: null,
+    isLoading: false,
     setDevice: mockSetDevice,
     clearDevice: vi.fn(),
   })),
@@ -42,7 +53,7 @@ vi.mock('@/features/identity', async (importOriginal) => {
       kid: 'kid-123',
     })),
     signMessage: vi.fn(() => new Uint8Array(64)),
-    buildBackupEnvelope: vi.fn(() => new Uint8Array(90)),
+    buildBackupEnvelope: vi.fn().mockResolvedValue(new Uint8Array(90)),
   };
 });
 
@@ -65,6 +76,7 @@ describe('SignupPage', () => {
     render(<SignupPage />);
 
     await user.type(screen.getByLabelText(/username/i), ' alice ');
+    await user.type(screen.getByLabelText(/backup password/i), 'test-password');
     await user.click(screen.getByRole('button', { name: /sign up/i }));
 
     expect(mockMutateAsync).toHaveBeenCalledWith(
@@ -106,6 +118,7 @@ describe('SignupPage', () => {
     render(<SignupPage />);
 
     await user.type(screen.getByLabelText(/username/i), 'alice');
+    await user.type(screen.getByLabelText(/backup password/i), 'test-password');
     await user.click(screen.getByRole('button', { name: /sign up/i }));
 
     expect(await screen.findByText(/boom/)).toBeInTheDocument();
