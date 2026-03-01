@@ -3,9 +3,9 @@
  * Type-safe REST client for identity endpoints
  */
 
-import { ed25519 } from '@noble/curves/ed25519.js';
 import { getApiBaseUrl } from '@/config';
 import type { CryptoModule } from '@/providers/CryptoProvider';
+import { signWithDeviceKey } from '../keys';
 
 // === Types ===
 
@@ -126,6 +126,7 @@ async function sha256Hex(data: Uint8Array): Promise<string> {
 
 /**
  * Build auth headers for signed device requests.
+ * Uses the non-extractable CryptoKey via Web Crypto for signing.
  * Includes X-Nonce for replay prevention.
  */
 async function buildAuthHeaders(
@@ -133,14 +134,14 @@ async function buildAuthHeaders(
   path: string,
   bodyBytes: Uint8Array,
   deviceKid: string,
-  privateKey: Uint8Array,
+  privateKey: CryptoKey,
   wasmCrypto: CryptoModule
 ): Promise<Record<string, string>> {
   const timestamp = Math.floor(Date.now() / 1000).toString();
   const nonce = globalThis.crypto.randomUUID();
   const bodyHash = await sha256Hex(bodyBytes);
   const canonical = `${method}\n${path}\n${timestamp}\n${nonce}\n${bodyHash}`;
-  const signature = ed25519.sign(new TextEncoder().encode(canonical), privateKey);
+  const signature = await signWithDeviceKey(new TextEncoder().encode(canonical), privateKey);
 
   return {
     'X-Device-Kid': deviceKid,
@@ -157,7 +158,7 @@ export async function signedFetchJson<T>(
   path: string,
   method: string,
   deviceKid: string,
-  privateKey: Uint8Array,
+  privateKey: CryptoKey,
   wasmCrypto: CryptoModule,
   body?: unknown
 ): Promise<T> {
@@ -197,7 +198,7 @@ export async function signup(request: SignupRequest): Promise<SignupResponse> {
 
 export async function listDevices(
   deviceKid: string,
-  privateKey: Uint8Array,
+  privateKey: CryptoKey,
   wasmCrypto: CryptoModule
 ): Promise<DeviceListResponse> {
   return signedFetchJson('/auth/devices', 'GET', deviceKid, privateKey, wasmCrypto);
@@ -206,7 +207,7 @@ export async function listDevices(
 export async function revokeDevice(
   targetKid: string,
   deviceKid: string,
-  privateKey: Uint8Array,
+  privateKey: CryptoKey,
   wasmCrypto: CryptoModule
 ): Promise<void> {
   return signedFetchJson(`/auth/devices/${targetKid}`, 'DELETE', deviceKid, privateKey, wasmCrypto);
@@ -216,7 +217,7 @@ export async function renameDevice(
   targetKid: string,
   name: string,
   deviceKid: string,
-  privateKey: Uint8Array,
+  privateKey: CryptoKey,
   wasmCrypto: CryptoModule
 ): Promise<void> {
   return signedFetchJson(`/auth/devices/${targetKid}`, 'PATCH', deviceKid, privateKey, wasmCrypto, {
