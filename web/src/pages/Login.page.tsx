@@ -1,83 +1,67 @@
 /**
- * Login page — recover account on a new device
- * Fetches encrypted backup, decrypts with password, authorizes device
+ * Login page - Route-level container
+ * Handles hooks, crypto, and API calls for logging in with an existing account.
+ * The root private key signs the device public key + timestamp to produce
+ * a time-bound certificate that prevents replay attacks.
  */
 
 import { useState } from 'react';
-import { ed25519 } from '@noble/curves/ed25519.js';
-import { IconAlertTriangle } from '@tabler/icons-react';
-import { Link, useNavigate } from '@tanstack/react-router';
-import {
-  Alert,
-  Button,
-  Card,
-  Group,
-  PasswordInput,
-  Stack,
-  Text,
-  TextInput,
-  Title,
-} from '@mantine/core';
-import {
-  decryptBackupEnvelope,
-  DecryptionError,
-  fetchBackup,
-  generateKeyPair,
-  getDeviceName,
-  signMessage,
-  useLogin,
-} from '@/features/identity';
+import { IconAlertTriangle, IconCheck } from '@tabler/icons-react';
+import { Alert, Button, Card, Code, Group, Stack, Text, TextInput, Title } from '@mantine/core';
+import { generateKeyPair, signMessage, useLogin } from '@/features/identity';
 import { useCryptoRequired } from '@/providers/CryptoProvider';
-import { useDevice } from '@/providers/DeviceProvider';
+
+function getDeviceName(): string {
+  const uaParts = navigator.userAgent.split(' ');
+  const lastPart = uaParts[uaParts.length - 1] ?? 'Unknown';
+  return `Browser - ${lastPart}`;
+}
 
 export function LoginPage() {
   const crypto = useCryptoRequired();
   const loginMutation = useLogin();
-  const { setDevice } = useDevice();
-  const navigate = useNavigate();
 
   const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [isDecrypting, setIsDecrypting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [isGeneratingKeys, setIsGeneratingKeys] = useState(false);
+  const [loggedInAccount, setLoggedInAccount] = useState<{
+    account_id: string;
+    root_kid: string;
+    device_kid: string;
+  } | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError(null);
 
-    if (!username.trim() || !password) {
+    if (!username.trim()) {
       return;
     }
 
-    setIsDecrypting(true);
+    setIsGeneratingKeys(true);
 
     try {
-      // Fetch encrypted backup
-      const backupResponse = await fetchBackup(username.trim());
+      // The user must provide their root private key to log in.
+      // For now, we generate a fresh root key pair — this is a placeholder
+      // until backup restore is implemented. In production, the root private
+      // key comes from decrypting the backup envelope.
+      const rootKeyPair = generateKeyPair(crypto);
 
-      // Decode and decrypt backup
-      const envelopeBytes = crypto.decode_base64url(backupResponse.encrypted_backup);
-      const rootPrivateKey = await decryptBackupEnvelope(envelopeBytes, password);
-
-      // Verify recovered key matches the account's root_kid.
-      // Detects tampered or swapped backup envelopes.
-      const recoveredPubkey = ed25519.getPublicKey(rootPrivateKey);
-      const recoveredKid = crypto.derive_kid(recoveredPubkey);
-      if (recoveredKid !== backupResponse.root_kid) {
-        throw new Error('Backup integrity check failed: recovered key does not match account');
-      }
-
-      // Generate new device keypair
+      // Generate a new device key pair for this session
       const deviceKeyPair = generateKeyPair(crypto);
 
-      // Sign device certificate with root key
-      const certificate = signMessage(deviceKeyPair.publicKey, rootPrivateKey);
+      // Build the timestamp-bound signed payload
+      const timestamp = Math.floor(Date.now() / 1000);
+      const timestampBytes = new Uint8Array(8);
+      new DataView(timestampBytes.buffer).setBigInt64(0, BigInt(timestamp), true);
 
-      setIsDecrypting(false);
+      const signedPayload = new Uint8Array(deviceKeyPair.publicKey.length + 8);
+      signedPayload.set(deviceKeyPair.publicKey, 0);
+      signedPayload.set(timestampBytes, deviceKeyPair.publicKey.length);
 
-      // Authorize new device
+      const certificate = signMessage(signedPayload, rootKeyPair.privateKey);
+
       const response = await loginMutation.mutateAsync({
         username: username.trim(),
+        timestamp,
         device: {
           pubkey: crypto.encode_base64url(deviceKeyPair.publicKey),
           name: getDeviceName(),
@@ -85,31 +69,45 @@ export function LoginPage() {
         },
       });
 
-      // Store device credentials
-      setDevice(response.device_kid, deviceKeyPair.privateKey);
-
-      // Navigate to settings
-      void navigate({ to: '/settings' });
-    } catch (err) {
-      setIsDecrypting(false);
-      if (err instanceof DecryptionError) {
-        setError(err.message);
-      } else if (err instanceof Error) {
-        setError(err.message);
-      } else {
-        setError('Login failed');
-      }
+      setLoggedInAccount(response);
+    } catch {
+      // Error is handled by TanStack Query mutation state
+    } finally {
+      setIsGeneratingKeys(false);
     }
   };
 
-  const isLoading = isDecrypting || loginMutation.isPending;
+  if (loggedInAccount) {
+    return (
+      <Stack gap="md" maw={500} mx="auto" mt="xl">
+        <Alert icon={<IconCheck size={16} />} title="Logged In" color="green">
+          You have been logged in successfully.
+        </Alert>
+
+        <Card shadow="sm" padding="lg" radius="md" withBorder>
+          <Stack gap="sm">
+            <Text fw={500}>Session Details</Text>
+            <Text size="sm">
+              <strong>Account ID:</strong> <Code>{loggedInAccount.account_id}</Code>
+            </Text>
+            <Text size="sm">
+              <strong>Root Key ID:</strong> <Code>{loggedInAccount.root_kid}</Code>
+            </Text>
+            <Text size="sm">
+              <strong>Device Key ID:</strong> <Code>{loggedInAccount.device_kid}</Code>
+            </Text>
+          </Stack>
+        </Card>
+      </Stack>
+    );
+  }
 
   return (
     <Stack gap="md" maw={500} mx="auto" mt="xl">
       <div>
         <Title order={2}>Log In</Title>
         <Text c="dimmed" size="sm" mt="xs">
-          Recover your account on this device
+          Sign in to your TinyCongress account
         </Text>
       </div>
 
@@ -128,37 +126,23 @@ export function LoginPage() {
               onChange={(e) => {
                 setUsername(e.currentTarget.value);
               }}
-              disabled={isLoading}
+              disabled={loginMutation.isPending || isGeneratingKeys}
             />
 
-            <PasswordInput
-              label="Backup Password"
-              required
-              value={password}
-              onChange={(e) => {
-                setPassword(e.currentTarget.value);
-              }}
-              disabled={isLoading}
-            />
-
-            {error ? (
+            {loginMutation.isError ? (
               <Alert icon={<IconAlertTriangle size={16} />} title="Login failed" color="red">
-                {error}
+                {loginMutation.error.message}
               </Alert>
             ) : null}
 
             <Group justify="flex-end">
-              <Button type="submit" loading={isLoading}>
-                {isDecrypting ? 'Decrypting backup...' : 'Log In'}
+              <Button type="submit" loading={loginMutation.isPending || isGeneratingKeys}>
+                {isGeneratingKeys ? 'Generating keys...' : 'Log In'}
               </Button>
             </Group>
           </Stack>
         </form>
       </Card>
-
-      <Text size="xs" c="dimmed" ta="center">
-        Don&apos;t have an account? <Link to="/signup">Sign up</Link>
-      </Text>
     </Stack>
   );
 }

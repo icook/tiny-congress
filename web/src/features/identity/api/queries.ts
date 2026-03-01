@@ -70,7 +70,7 @@ export function useRevokeDevice(
 }
 
 /**
- * Mutation hook for login
+ * Mutation hook for user login
  */
 export function useLogin() {
   return useMutation<LoginResponse, Error, LoginRequest>({
