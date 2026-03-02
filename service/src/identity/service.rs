@@ -893,7 +893,7 @@ mod tests {
         let account = AccountRecord {
             id: Uuid::new_v4(),
             username: "alice".to_string(),
-            root_pubkey: root_pubkey.clone(),
+            root_pubkey,
             root_kid: Kid::derive(&root_pubkey_bytes),
         };
 
