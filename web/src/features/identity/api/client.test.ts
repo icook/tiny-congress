@@ -3,6 +3,7 @@ import type { CryptoModule } from '@/providers/CryptoProvider';
 import {
   fetchJson,
   listDevices,
+  login,
   renameDevice,
   revokeDevice,
   signup,
@@ -231,5 +232,43 @@ describe('signed device API', () => {
     expect(call[0]).toContain('/auth/devices/target-kid');
     expect(call[1].method).toBe('PATCH');
     expect(call[1].body).toBe(JSON.stringify({ name: 'New Name' }));
+  });
+
+  test('posts login request with timestamp and device payload', async () => {
+    const responseBody = { account_id: 'abc', root_kid: 'kid-1', device_kid: 'kid-2' };
+    (fetch as unknown as Mock).mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: vi.fn().mockResolvedValue(responseBody),
+      headers: {},
+    });
+
+    const result = await login({
+      username: 'alice',
+      timestamp: 1700000000,
+      device: {
+        pubkey: 'mock-pubkey',
+        name: 'Test Device',
+        certificate: 'mock-cert',
+      },
+    });
+
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/auth/login'),
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({
+          username: 'alice',
+          timestamp: 1700000000,
+          device: {
+            pubkey: 'mock-pubkey',
+            name: 'Test Device',
+            certificate: 'mock-cert',
+          },
+        }),
+      })
+    );
+    expect(result).toEqual(responseBody);
   });
 });

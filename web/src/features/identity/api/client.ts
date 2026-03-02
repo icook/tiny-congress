@@ -54,15 +54,14 @@ export interface BackupResponse {
   root_kid: string;
 }
 
-export interface LoginDevice {
-  pubkey: string; // base64url
-  name: string;
-  certificate: string; // base64url
-}
-
 export interface LoginRequest {
   username: string;
-  device: LoginDevice;
+  timestamp: number; // Unix seconds
+  device: {
+    pubkey: string; // base64url
+    name: string;
+    certificate: string; // base64url
+  };
 }
 
 export interface LoginResponse {
