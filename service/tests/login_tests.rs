@@ -352,7 +352,7 @@ async fn test_backup_existing_user_no_backup_returns_synthetic() {
 }
 
 // =========================================================================
-// POST /auth/login — Success path
+// Success path
 // =========================================================================
 
 #[shared_runtime_test]
@@ -380,7 +380,11 @@ async fn test_login_success() {
     let json: serde_json::Value = serde_json::from_slice(&body_bytes).expect("json");
     assert!(json["account_id"].is_string());
     assert!(json["root_kid"].is_string());
-    assert!(json["device_kid"].is_string());
+    assert_eq!(
+        json["device_kid"].as_str().unwrap(),
+        tc_crypto::Kid::derive(&new_device_pubkey).to_string(),
+        "device_kid should be derived from the submitted pubkey"
+    );
 }
 
 // =========================================================================
@@ -482,6 +486,49 @@ async fn test_login_replay_detected() {
         body_str.contains("replay"),
         "Expected replay error, got: {body_str}"
     );
+}
+
+// =========================================================================
+// Duplicate device
+// =========================================================================
+
+#[shared_runtime_test]
+async fn test_login_duplicate_device_returns_conflict() {
+    let (app, keys, _db) = signup_user("duplogin").await;
+
+    // Use the SAME device key for two logins, but different timestamps
+    let device_key = SigningKey::generate(&mut OsRng);
+    let device_pubkey = device_key.verifying_key().to_bytes();
+
+    let timestamp1 = chrono::Utc::now().timestamp();
+    let body1 = login_json(
+        "duplogin",
+        &keys.root_signing_key,
+        &device_pubkey,
+        "Device A",
+        timestamp1,
+    );
+
+    // First login succeeds
+    let response = app
+        .clone()
+        .oneshot(login_request(&body1))
+        .await
+        .expect("response");
+    assert_eq!(response.status(), StatusCode::CREATED);
+
+    // Second login with same pubkey but different timestamp returns 409
+    let timestamp2 = timestamp1 + 1;
+    let body2 = login_json(
+        "duplogin",
+        &keys.root_signing_key,
+        &device_pubkey,
+        "Device A",
+        timestamp2,
+    );
+
+    let response = app.oneshot(login_request(&body2)).await.expect("response");
+    assert_eq!(response.status(), StatusCode::CONFLICT);
 }
 
 // =========================================================================

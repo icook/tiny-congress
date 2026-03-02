@@ -236,6 +236,58 @@ impl DeviceName {
     }
 }
 
+// ─── DevicePubkey type ──────────────────────────────────────────────────────
+
+/// A validated Ed25519 device public key (exactly 32 bytes).
+///
+/// Can only be constructed through [`DevicePubkey::from_base64url`], which
+/// decodes and validates the byte length.
+#[derive(Debug, Clone)]
+pub struct DevicePubkey([u8; 32]);
+
+/// Error type for device public key validation failures.
+#[derive(Debug, PartialEq, Eq)]
+pub enum DevicePubkeyError {
+    InvalidEncoding,
+    InvalidLength,
+}
+
+impl std::fmt::Display for DevicePubkeyError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::InvalidEncoding => write!(f, "Invalid base64url encoding for device pubkey"),
+            Self::InvalidLength => write!(f, "Device pubkey must be 32 bytes (Ed25519)"),
+        }
+    }
+}
+
+impl DevicePubkey {
+    /// Decode and validate a base64url-encoded Ed25519 public key.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`DevicePubkeyError`] if decoding fails or length is not 32.
+    pub fn from_base64url(encoded: &str) -> Result<Self, DevicePubkeyError> {
+        let bytes = decode_base64url(encoded).map_err(|_| DevicePubkeyError::InvalidEncoding)?;
+        let arr: [u8; 32] = bytes
+            .try_into()
+            .map_err(|_| DevicePubkeyError::InvalidLength)?;
+        Ok(Self(arr))
+    }
+
+    /// Return the raw 32-byte public key.
+    #[must_use]
+    pub const fn as_bytes(&self) -> &[u8; 32] {
+        &self.0
+    }
+
+    /// Derive the KID for this public key.
+    #[must_use]
+    pub fn kid(&self) -> Kid {
+        Kid::derive(&self.0)
+    }
+}
+
 // ─── Service trait and implementation ────────────────────────────────────────
 
 /// Orchestrates identity operations: validation + atomic persistence.

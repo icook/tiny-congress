@@ -28,6 +28,7 @@ use uuid::Uuid;
 
 use super::ErrorResponse;
 use crate::identity::repo::{DeviceKeyRepoError, IdentityRepo, NonceRepoError};
+use crate::identity::service::DevicePubkey;
 use tc_crypto::{decode_base64url, verify_ed25519, Kid};
 
 /// Maximum clock skew allowed for timestamps (seconds).
@@ -212,18 +213,14 @@ impl<S: Send + Sync> FromRequest<S> for AuthenticatedDevice {
             })?;
 
         // Decode stored public key
-        let pubkey_bytes = decode_base64url(&device.device_pubkey)
-            .map_err(|_| auth_error("Corrupted device key"))?;
-        let pubkey_arr: [u8; 32] = pubkey_bytes
-            .as_slice()
-            .try_into()
+        let device_pubkey = DevicePubkey::from_base64url(&device.device_pubkey)
             .map_err(|_| auth_error("Corrupted device key"))?;
 
         // Verify signature BEFORE checking revocation status.
         // If we checked revocation first, an unauthenticated caller who knows
         // a valid KID could distinguish revoked (403) from active (401) devices
         // without possessing the private key.
-        verify_ed25519(&pubkey_arr, canonical.as_bytes(), &sig_arr)
+        verify_ed25519(device_pubkey.as_bytes(), canonical.as_bytes(), &sig_arr)
             .map_err(|_| auth_error("Invalid signature"))?;
 
         // Record nonce AFTER signature verification to prevent unauthenticated

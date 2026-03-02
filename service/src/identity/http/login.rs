@@ -22,7 +22,7 @@ use uuid::Uuid;
 use super::auth::MAX_TIMESTAMP_SKEW;
 use super::ErrorResponse;
 use crate::identity::repo::{AccountRepoError, DeviceKeyRepoError, IdentityRepo, NonceRepoError};
-use crate::identity::service::DeviceName;
+use crate::identity::service::{DeviceName, DevicePubkey};
 use tc_crypto::{decode_base64url, verify_ed25519, Kid};
 
 /// Login request payload
@@ -68,12 +68,8 @@ fn validate_login_device(
     req: &LoginRequest,
     root_pubkey_arr: &[u8; 32],
 ) -> Result<ValidatedLogin, axum::response::Response> {
-    let Ok(device_pubkey_bytes) = decode_base64url(&req.device.pubkey) else {
-        return Err(bad_request("Invalid base64url encoding for device.pubkey"));
-    };
-    if device_pubkey_bytes.len() != 32 {
-        return Err(bad_request("device.pubkey must be 32 bytes (Ed25519)"));
-    }
+    let device_pubkey = DevicePubkey::from_base64url(&req.device.pubkey)
+        .map_err(|e| bad_request(&e.to_string()))?;
 
     let device_name =
         DeviceName::parse(&req.device.name).map_err(|e| bad_request(&e.to_string()))?;
@@ -91,14 +87,14 @@ fn validate_login_device(
 
     // The certificate must sign device_pubkey || timestamp (LE i64 bytes)
     let mut signed_payload = Vec::with_capacity(40);
-    signed_payload.extend_from_slice(&device_pubkey_bytes);
+    signed_payload.extend_from_slice(device_pubkey.as_bytes());
     signed_payload.extend_from_slice(&req.timestamp.to_le_bytes());
 
     if verify_ed25519(root_pubkey_arr, &signed_payload, &cert_arr).is_err() {
         return Err(bad_request("Invalid device certificate"));
     }
 
-    let device_kid = Kid::derive(&device_pubkey_bytes);
+    let device_kid = device_pubkey.kid();
 
     Ok(ValidatedLogin {
         device_kid,

@@ -8,13 +8,12 @@
 
 import { useState } from 'react';
 import { ed25519 } from '@noble/curves/ed25519.js';
-import { IconAlertTriangle, IconCheck } from '@tabler/icons-react';
+import { IconAlertTriangle } from '@tabler/icons-react';
 import { useNavigate } from '@tanstack/react-router';
 import {
   Alert,
   Button,
   Card,
-  Code,
   Group,
   PasswordInput,
   Stack,
@@ -43,11 +42,6 @@ export function LoginPage() {
   const [password, setPassword] = useState('');
   const [isGeneratingKeys, setIsGeneratingKeys] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
-  const [loggedInAccount, setLoggedInAccount] = useState<{
-    account_id: string;
-    root_kid: string;
-    device_kid: string;
-  } | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -102,8 +96,6 @@ export function LoginPage() {
       // Store device credentials in session context
       setDevice(response.device_kid, deviceKeyPair.privateKey);
 
-      setLoggedInAccount(response);
-
       // Navigate to settings page to show device list
       void navigate({ to: '/settings' });
     } catch (err) {
@@ -115,31 +107,6 @@ export function LoginPage() {
       setIsGeneratingKeys(false);
     }
   };
-
-  if (loggedInAccount) {
-    return (
-      <Stack gap="md" maw={500} mx="auto" mt="xl">
-        <Alert icon={<IconCheck size={16} />} title="Logged In" color="green">
-          You have been logged in successfully.
-        </Alert>
-
-        <Card shadow="sm" padding="lg" radius="md" withBorder>
-          <Stack gap="sm">
-            <Text fw={500}>Session Details</Text>
-            <Text size="sm">
-              <strong>Account ID:</strong> <Code>{loggedInAccount.account_id}</Code>
-            </Text>
-            <Text size="sm">
-              <strong>Root Key ID:</strong> <Code>{loggedInAccount.root_kid}</Code>
-            </Text>
-            <Text size="sm">
-              <strong>Device Key ID:</strong> <Code>{loggedInAccount.device_kid}</Code>
-            </Text>
-          </Stack>
-        </Card>
-      </Stack>
-    );
-  }
 
   const displayError = localError ?? (loginMutation.isError ? loginMutation.error.message : null);
 
