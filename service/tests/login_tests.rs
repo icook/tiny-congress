@@ -372,7 +372,7 @@ async fn test_login_success() {
     );
 
     let response = app.oneshot(login_request(&body)).await.expect("response");
-    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(response.status(), StatusCode::CREATED);
 
     let body_bytes = to_bytes(response.into_body(), 1024 * 1024)
         .await
@@ -465,27 +465,22 @@ async fn test_login_replay_detected() {
         .oneshot(login_request(&body))
         .await
         .expect("response");
-    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(response.status(), StatusCode::CREATED);
 
     // Second request with exact same body is a replay
     let response = app.oneshot(login_request(&body)).await.expect("response");
 
-    // Could be either replay detection (nonce) or duplicate device key (DuplicateKid).
-    // Both are valid rejection reasons. The nonce fires first because it's checked
-    // before the create_device_key call.
-    assert!(
-        response.status() == StatusCode::BAD_REQUEST || response.status() == StatusCode::CONFLICT,
-        "Expected 400 (replay) or 409 (duplicate), got {}",
-        response.status()
-    );
+    // The nonce check fires before create_device_key, so a replayed request
+    // must deterministically return BAD_REQUEST for the duplicate nonce.
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 
     let body_bytes = to_bytes(response.into_body(), 1024 * 1024)
         .await
         .expect("body");
     let body_str = String::from_utf8(body_bytes.to_vec()).expect("utf8");
     assert!(
-        body_str.contains("replay") || body_str.contains("already registered"),
-        "Expected replay or duplicate error, got: {body_str}"
+        body_str.contains("replay"),
+        "Expected replay error, got: {body_str}"
     );
 }
 
@@ -576,4 +571,79 @@ async fn test_login_handler_account_not_found() {
         .expect("body");
     let body_str = String::from_utf8(body_bytes.to_vec()).expect("utf8");
     assert!(body_str.contains("Invalid credentials"));
+}
+
+#[shared_runtime_test]
+async fn test_login_empty_username() {
+    let db = isolated_db().await;
+    let app = TestAppBuilder::new()
+        .with_identity_pool(db.pool().clone())
+        .build();
+
+    let root = SigningKey::generate(&mut OsRng);
+    let device = SigningKey::generate(&mut OsRng);
+    let device_pubkey = device.verifying_key().to_bytes();
+    let timestamp = chrono::Utc::now().timestamp();
+
+    // Blank username (whitespace only)
+    let body = login_json("   ", &root, &device_pubkey, "Device", timestamp);
+    let response = app.oneshot(login_request(&body)).await.expect("response");
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+    let body_bytes = to_bytes(response.into_body(), 1024 * 1024)
+        .await
+        .expect("body");
+    let body_str = String::from_utf8(body_bytes.to_vec()).expect("utf8");
+    assert!(
+        body_str.contains("Username is required"),
+        "Expected username required error, got: {body_str}"
+    );
+}
+
+#[shared_runtime_test]
+async fn test_login_empty_device_name() {
+    let db = isolated_db().await;
+    let app = TestAppBuilder::new()
+        .with_identity_pool(db.pool().clone())
+        .build();
+
+    // Sign up a user first
+    let (signup_json, keys) = valid_signup_with_keys("emptydevname");
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/auth/signup")
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(signup_json))
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+    assert_eq!(response.status(), StatusCode::CREATED);
+
+    // Login with empty device name
+    let new_device_key = SigningKey::generate(&mut OsRng);
+    let new_device_pubkey = new_device_key.verifying_key().to_bytes();
+    let timestamp = chrono::Utc::now().timestamp();
+    let body = login_json(
+        "emptydevname",
+        &keys.root_signing_key,
+        &new_device_pubkey,
+        "   ",
+        timestamp,
+    );
+
+    let response = app.oneshot(login_request(&body)).await.expect("response");
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+    let body_bytes = to_bytes(response.into_body(), 1024 * 1024)
+        .await
+        .expect("body");
+    let body_str = String::from_utf8(body_bytes.to_vec()).expect("utf8");
+    assert!(
+        body_str.contains("empty"),
+        "Expected empty device name error, got: {body_str}"
+    );
 }

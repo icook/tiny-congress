@@ -17,6 +17,7 @@ use std::sync::Arc;
 use axum::{extract::Extension, http::StatusCode, response::IntoResponse, Json};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use uuid::Uuid;
 
 use super::auth::MAX_TIMESTAMP_SKEW;
 use super::ErrorResponse;
@@ -46,7 +47,7 @@ pub struct LoginDevice {
 /// Login response
 #[derive(Debug, Serialize)]
 pub struct LoginResponse {
-    pub account_id: String,
+    pub account_id: Uuid,
     pub root_kid: Kid,
     pub device_kid: Kid,
 }
@@ -173,9 +174,9 @@ pub async fn login(
         .await
     {
         Ok(_created) => (
-            StatusCode::OK,
+            StatusCode::CREATED,
             Json(LoginResponse {
-                account_id: account.id.to_string(),
+                account_id: account.id,
                 root_kid: account.root_kid,
                 device_kid: validated.device_kid,
             }),

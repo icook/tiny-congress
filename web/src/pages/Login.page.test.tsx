@@ -4,7 +4,7 @@ import { LoginPage } from './Login.page';
 
 // Mock the crypto provider
 const mockCrypto = {
-  derive_kid: vi.fn(() => 'kid-123'),
+  derive_kid: vi.fn(() => 'kid-root'),
   encode_base64url: vi.fn(() => 'mock-encoded'),
   decode_base64url: vi.fn(() => new Uint8Array(90)),
 };
@@ -23,6 +23,13 @@ vi.mock('@/providers/DeviceProvider', () => ({
     setDevice: mockSetDevice,
     clearDevice: vi.fn(),
   })),
+}));
+
+// Mock ed25519 for getPublicKey (backup integrity check)
+vi.mock('@noble/curves/ed25519.js', () => ({
+  ed25519: {
+    getPublicKey: vi.fn(() => new Uint8Array(32)),
+  },
 }));
 
 // Mock router navigation
@@ -147,6 +154,23 @@ describe('LoginPage', () => {
     await user.click(screen.getByRole('button', { name: /log in/i }));
 
     expect(await screen.findByText(/Invalid credentials/)).toBeInTheDocument();
+  });
+
+  test('shows error when root_kid integrity check fails', async () => {
+    // derive_kid returns a KID that does NOT match root_kid in the backup response
+    mockCrypto.derive_kid.mockReturnValue('kid-WRONG');
+
+    const user = userEvent.setup();
+
+    render(<LoginPage />);
+
+    await user.type(screen.getByLabelText(/username/i), 'alice');
+    await user.type(screen.getByLabelText(/backup password/i), 'my-password');
+    await user.click(screen.getByRole('button', { name: /log in/i }));
+
+    expect(await screen.findByText(/Backup integrity check failed/)).toBeInTheDocument();
+    // Login API should NOT have been called
+    expect(mockMutateAsync).not.toHaveBeenCalled();
   });
 
   test('does not submit when username is blank', async () => {

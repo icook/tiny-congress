@@ -7,6 +7,7 @@
  */
 
 import { useState } from 'react';
+import { ed25519 } from '@noble/curves/ed25519.js';
 import { IconAlertTriangle, IconCheck } from '@tabler/icons-react';
 import { useNavigate } from '@tanstack/react-router';
 import {
@@ -65,6 +66,14 @@ export function LoginPage() {
 
       // 2. Decrypt the envelope with the user's password to recover the root private key
       const rootPrivateKey = await decryptBackupEnvelope(envelopeBytes, password);
+
+      // 2b. Defense-in-depth: verify the recovered key matches the account's root_kid.
+      // Catches tampered or swapped backup envelopes client-side.
+      const recoveredPubkey = ed25519.getPublicKey(rootPrivateKey);
+      const recoveredKid = crypto.derive_kid(recoveredPubkey);
+      if (recoveredKid !== backupResponse.root_kid) {
+        throw new Error('Backup integrity check failed: recovered key does not match account');
+      }
 
       // 3. Generate a new device key pair for this session
       const deviceKeyPair = generateKeyPair(crypto);
