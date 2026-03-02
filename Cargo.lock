@@ -3298,6 +3298,7 @@ dependencies = [
  "hmac",
  "hyper",
  "insta",
+ "proptest",
  "rand 0.8.5",
  "serde",
  "serde-aux",

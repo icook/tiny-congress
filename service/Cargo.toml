@@ -55,6 +55,7 @@ rand = "0.8"
 ed25519-dalek = { version = "2", features = ["rand_core"] }
 hyper = "1.6"
 insta = { version = "1.41", features = ["json"] }
+proptest = "1"
 tower = { version = "0.5", features = ["util"] }
 testcontainers = "0.26"
 tokio = { version = "1", features = ["sync", "rt-multi-thread"] }
