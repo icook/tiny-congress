@@ -18,7 +18,7 @@ use axum::{
 };
 use common::app_builder::TestAppBuilder;
 use common::factories::{
-    build_authed_request, sign_request, signup_user, signup_user_in_pool, valid_signup_with_keys,
+    build_authed_request, sign_request, signup_user, signup_user_in_pool,
 };
 use ed25519_dalek::{Signer, SigningKey};
 use rand::rngs::OsRng;
