@@ -20,7 +20,15 @@ export interface WebCryptoKeyPair {
  * cannot be read by JavaScript.
  */
 export async function generateDeviceKeyPair(): Promise<WebCryptoKeyPair> {
-  const keyPair = await globalThis.crypto.subtle.generateKey('Ed25519', false, ['sign']);
+  let keyPair: CryptoKeyPair;
+  try {
+    keyPair = await globalThis.crypto.subtle.generateKey('Ed25519', false, ['sign']);
+  } catch (error) {
+    throw new Error(
+      'Your browser does not support Ed25519 key generation. Please use a modern browser (Chrome 113+, Firefox 130+, Safari 17+).',
+      { cause: error }
+    );
+  }
 
   // Export just the public key as raw bytes
   const publicKeyBuffer = await globalThis.crypto.subtle.exportKey('raw', keyPair.publicKey);
