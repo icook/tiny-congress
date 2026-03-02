@@ -2,42 +2,34 @@ use crate::config::DatabaseConfig;
 use sqlx_core::migrate::Migrator;
 use sqlx_postgres::{PgPool, PgPoolOptions};
 use std::path::{Path, PathBuf};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use tokio::time::sleep;
 use tracing::{info, warn};
 
 /// Connect to the database and run migrations.
 ///
-/// This function implements exponential backoff retry logic to handle
-/// startup race conditions when the database container is still initializing.
+/// Retries the connection indefinitely with exponential backoff (500ms to 5s).
+/// In Kubernetes, the startup probe acts as the effective timeout — if postgres
+/// never becomes available, the probe fails and the pod is restarted.
 ///
 /// # Errors
-/// Returns an error if the database connection cannot be established or
-/// migrations fail to run after exhausting retries.
+/// Returns an error if migrations fail after a successful connection.
 pub async fn setup_database(config: &DatabaseConfig) -> Result<PgPool, anyhow::Error> {
-    let retry_deadline = Duration::from_secs(60); // overall retry budget
-    let max_interval = Duration::from_secs(30); // cap single waits
+    let max_interval = Duration::from_secs(5);
     let mut delay = Duration::from_millis(500);
-    let start = Instant::now();
 
     let pool = loop {
         info!("Attempting to connect to Postgres...");
 
         match PgPoolOptions::new()
             .max_connections(config.max_connections)
-            // Allow extra time to acquire a connection during startup bursts
             .acquire_timeout(Duration::from_secs(30))
             .connect_with(config.connect_options())
             .await
         {
             Ok(pool) => break pool,
             Err(err) => {
-                if start.elapsed() >= retry_deadline {
-                    warn!(error = %err, "Postgres not ready; retries exhausted");
-                    return Err(err.into());
-                }
-
-                warn!(error = %err, "Postgres not ready yet; retrying");
+                warn!(error = %err, "Postgres not ready yet; retrying in {:?}", delay);
                 sleep(delay).await;
                 delay = (delay.saturating_mul(2)).min(max_interval);
             }

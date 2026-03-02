@@ -15,6 +15,7 @@ use axum::{
     routing::get,
     Extension, Router,
 };
+use sqlx::PgPool;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
@@ -35,9 +36,18 @@ use tower_http::cors::{AllowOrigin, Any, CorsLayer};
 use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
 
-// Health check handler
-async fn health_check() -> impl IntoResponse {
-    StatusCode::OK
+/// Health check — verifies the API can reach postgres.
+///
+/// Returns 200 if a pooled connection can be acquired within 2 seconds,
+/// 503 otherwise. Kubernetes readiness/liveness probes use this endpoint.
+async fn health_check(pool: Option<Extension<PgPool>>) -> impl IntoResponse {
+    let Some(Extension(pool)) = pool else {
+        return StatusCode::OK;
+    };
+    match tokio::time::timeout(Duration::from_secs(2), pool.acquire()).await {
+        Ok(Ok(_)) => StatusCode::OK,
+        _ => StatusCode::SERVICE_UNAVAILABLE,
+    }
 }
 
 fn build_cors_origin(origins: &[String]) -> AllowOrigin {
@@ -168,6 +178,7 @@ async fn main() -> Result<(), anyhow::Error> {
         .layer(Extension(service))
         .layer(Extension(repo_ext))
         .layer(Extension(build_info))
+        .layer(Extension(pool.clone()))
         .layer(
             CorsLayer::new()
                 .allow_methods([
