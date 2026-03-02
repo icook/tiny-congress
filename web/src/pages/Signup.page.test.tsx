@@ -12,19 +12,23 @@ vi.mock('@tanstack/react-router', () => ({
   useNavigate: vi.fn(() => vi.fn()),
 }));
 
-// Mock the crypto provider
-const mockCrypto = {
-  derive_kid: vi.fn(() => 'kid-123'),
-  encode_base64url: vi.fn(() => 'mock-encoded'),
-  decode_base64url: vi.fn(() => new Uint8Array(32)),
-};
+// Hoist shared mocks so vi.mock factories (which are also hoisted) can reference them
+const { mockCrypto, mockSetDevice, mockMutateAsync, mockCryptoKey } = vi.hoisted(() => ({
+  mockCrypto: {
+    derive_kid: vi.fn(() => 'kid-123'),
+    encode_base64url: vi.fn(() => 'mock-encoded'),
+    decode_base64url: vi.fn(() => new Uint8Array(32)),
+  },
+  mockSetDevice: vi.fn(),
+  mockMutateAsync: vi.fn(),
+  // Mock CryptoKey (non-extractable device key)
+  mockCryptoKey: { type: 'private', algorithm: { name: 'Ed25519' } } as CryptoKey,
+}));
 
 vi.mock('@/providers/CryptoProvider', () => ({
   useCryptoRequired: vi.fn(() => mockCrypto),
 }));
 
-// Mock the device provider
-const mockSetDevice = vi.fn();
 vi.mock('@/providers/DeviceProvider', () => ({
   useDevice: vi.fn(() => ({
     deviceKid: null,
@@ -35,8 +39,6 @@ vi.mock('@/providers/DeviceProvider', () => ({
   })),
 }));
 
-// Mock the signup mutation and crypto functions
-const mockMutateAsync = vi.fn();
 vi.mock('@/features/identity', async (importOriginal) => {
   const original = await importOriginal<typeof import('@/features/identity')>();
   return {
@@ -52,6 +54,10 @@ vi.mock('@/features/identity', async (importOriginal) => {
       privateKey: new Uint8Array(32),
       kid: 'kid-123',
     })),
+    generateDeviceKeyPair: vi.fn().mockResolvedValue({
+      publicKey: new Uint8Array(32),
+      privateKey: mockCryptoKey,
+    }),
     signMessage: vi.fn(() => new Uint8Array(64)),
     buildBackupEnvelope: vi.fn().mockResolvedValue(new Uint8Array(90)),
   };
@@ -93,8 +99,8 @@ describe('SignupPage', () => {
       })
     );
 
-    // Should store device credentials
-    expect(mockSetDevice).toHaveBeenCalledWith('dev-456', expect.any(Uint8Array));
+    // Should store device credentials (non-extractable CryptoKey)
+    expect(mockSetDevice).toHaveBeenCalledWith('dev-456', mockCryptoKey);
 
     expect(await screen.findByText(/Account ID:/i)).toBeInTheDocument();
     expect(screen.getByText(/abc/)).toBeInTheDocument();

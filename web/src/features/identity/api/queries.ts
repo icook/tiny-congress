@@ -31,7 +31,7 @@ export function useSignup() {
  */
 export function useListDevices(
   deviceKid: string | null,
-  privateKey: Uint8Array | null,
+  privateKey: CryptoKey | null,
   wasmCrypto: CryptoModule | null
 ) {
   return useQuery<DeviceListResponse>({
@@ -51,7 +51,7 @@ export function useListDevices(
  */
 export function useRevokeDevice(
   deviceKid: string | null,
-  privateKey: Uint8Array | null,
+  privateKey: CryptoKey | null,
   wasmCrypto: CryptoModule | null
 ) {
   const queryClient = useQueryClient();
@@ -83,7 +83,7 @@ export function useLogin() {
  */
 export function useRenameDevice(
   deviceKid: string | null,
-  privateKey: Uint8Array | null,
+  privateKey: CryptoKey | null,
   wasmCrypto: CryptoModule | null
 ) {
   const queryClient = useQueryClient();

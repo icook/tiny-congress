@@ -9,6 +9,15 @@ import {
   type SignupRequest,
 } from './client';
 
+// Mock signWithDeviceKey so tests don't need real Web Crypto Ed25519
+vi.mock('../keys', async (importOriginal) => {
+  const original = await importOriginal<typeof import('../keys')>();
+  return {
+    ...original,
+    signWithDeviceKey: vi.fn().mockResolvedValue(new Uint8Array(64)),
+  };
+});
+
 function headersOf(mockFetch: Mock): Record<string, string> {
   const call = mockFetch.mock.calls[0] as [string, RequestInit];
   const h = new Headers(call[1].headers);
@@ -159,8 +168,8 @@ describe('signed device API', () => {
     decode_base64url: vi.fn(),
   };
   const deviceKid = 'test-device-kid';
-  // Ed25519 private key (32 random bytes)
-  const privateKey = new Uint8Array(32).fill(42);
+  // Mock non-extractable CryptoKey (signing happens via mocked signWithDeviceKey)
+  const privateKey = { type: 'private', algorithm: { name: 'Ed25519' } } as CryptoKey;
 
   beforeEach(() => {
     vi.stubGlobal('fetch', vi.fn());

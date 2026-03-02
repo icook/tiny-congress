@@ -13,19 +13,22 @@ vi.mock('@tanstack/react-router', () => ({
   useNavigate: vi.fn(() => vi.fn()),
 }));
 
-// Mock the crypto provider
-const mockCrypto = {
-  derive_kid: vi.fn(() => 'root-kid-123'),
-  encode_base64url: vi.fn(() => 'mock-encoded'),
-  decode_base64url: vi.fn(() => new Uint8Array(90)),
-};
+// Hoist shared mocks so vi.mock factories (which are also hoisted) can reference them
+const { mockCrypto, mockSetDevice, mockCryptoKey } = vi.hoisted(() => ({
+  mockCrypto: {
+    derive_kid: vi.fn(() => 'root-kid-123'),
+    encode_base64url: vi.fn(() => 'mock-encoded'),
+    decode_base64url: vi.fn(() => new Uint8Array(90)),
+  },
+  mockSetDevice: vi.fn(),
+  // Mock CryptoKey (non-extractable device key)
+  mockCryptoKey: { type: 'private', algorithm: { name: 'Ed25519' } } as CryptoKey,
+}));
 
 vi.mock('@/providers/CryptoProvider', () => ({
   useCryptoRequired: vi.fn(() => mockCrypto),
 }));
 
-// Mock the device provider
-const mockSetDevice = vi.fn();
 vi.mock('@/providers/DeviceProvider', () => ({
   useDevice: vi.fn(() => ({
     deviceKid: null,
@@ -58,6 +61,10 @@ vi.mock('@/features/identity', async (importOriginal) => {
       privateKey: new Uint8Array(32),
       kid: 'device-kid-456',
     })),
+    generateDeviceKeyPair: vi.fn().mockResolvedValue({
+      publicKey: new Uint8Array(32),
+      privateKey: mockCryptoKey,
+    }),
     signMessage: vi.fn(() => new Uint8Array(64)),
     getDeviceName: vi.fn(() => 'Mac'),
   };
@@ -118,8 +125,8 @@ describe('LoginPage', () => {
       })
     );
 
-    // Should store device credentials
-    expect(mockSetDevice).toHaveBeenCalledWith('dev-789', expect.any(Uint8Array));
+    // Should store device credentials (non-extractable CryptoKey)
+    expect(mockSetDevice).toHaveBeenCalledWith('dev-789', mockCryptoKey);
   });
 
   test('does not submit when username is blank', async () => {

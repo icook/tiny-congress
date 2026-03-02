@@ -6,3 +6,4 @@ export * from './types';
 export * from './crypto';
 export * from './backup-decrypt';
 export * from './device';
+export * from './webcrypto';
