@@ -24,7 +24,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
 
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
@@ -33,7 +33,15 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Install cargo-mutants
-        run: cargo install cargo-mutants
+        run: cargo install cargo-mutants --version 26.2.0 --locked
+
+      - name: Validate scope input
+        run: |
+          set -e
+          if ! echo "${{ github.event.inputs.scope }}" | grep -qE '^[a-zA-Z0-9_./-]+$'; then
+            echo "::error::Invalid scope: must match [a-zA-Z0-9_./-]+"
+            exit 1
+          fi
 
       - name: Run mutation testing
         run: |
@@ -86,7 +94,9 @@ jobs:
             echo "These mutations were not caught by the test suite:" >> "${GITHUB_STEP_SUMMARY}"
             echo "" >> "${GITHUB_STEP_SUMMARY}"
             echo '```' >> "${GITHUB_STEP_SUMMARY}"
-            jq -r '.outcomes[] | select(.summary == "MissedMutant") | "\(.scenario.function // .scenario.Mutant.function) in \(.scenario.source_file // .scenario.Mutant.source_file)"' "${OUTCOMES_FILE}" >> "${GITHUB_STEP_SUMMARY}"
+            # cargo-mutants v26 schema: .scenario.Mutant.name contains "file:line: description",
+            # .scenario.Mutant.file has the relative path, .scenario.Mutant.function is an object or null.
+            jq -r '.outcomes[] | select(.summary == "MissedMutant") | .scenario.Mutant.name' "${OUTCOMES_FILE}" >> "${GITHUB_STEP_SUMMARY}"
             echo '```' >> "${GITHUB_STEP_SUMMARY}"
             echo "" >> "${GITHUB_STEP_SUMMARY}"
             echo "::warning::${SURVIVED} mutant(s) survived — review the mutation report artifact for details"
@@ -94,7 +104,7 @@ jobs:
             echo "All mutants were caught by the test suite." >> "${GITHUB_STEP_SUMMARY}"
           fi
 
-      - name: Create issue for surviving mutants
+      - name: Report surviving mutants
         if: always()
         env:
           GH_TOKEN: ${{ github.token }}
@@ -115,7 +125,7 @@ jobs:
           SCOPE="${{ github.event.inputs.scope }}"
           RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
 
-          SURVIVOR_LIST=$(jq -r '.outcomes[] | select(.summary == "MissedMutant") | "- `\(.scenario.function // .scenario.Mutant.function)` in `\(.scenario.source_file // .scenario.Mutant.source_file)`"' "${OUTCOMES_FILE}" | head -50)
+          SURVIVOR_LIST=$(jq -r '.outcomes[] | select(.summary == "MissedMutant") | "- `\(.scenario.Mutant.name)`"' "${OUTCOMES_FILE}" | head -50)
 
           {
             echo "## Mutation Testing: ${SURVIVED} surviving mutant(s)"
@@ -134,9 +144,12 @@ jobs:
             echo "1. Download the \`mutation-report\` artifact from the workflow run"
             echo "2. Review each surviving mutant in \`mutants.out/outcomes.json\`"
             echo "3. Add tests that would catch the mutation"
-          } > /tmp/issue-body.md
+          } > /tmp/mutants-body.md
 
-          gh issue create \
-            --title "Mutation testing: ${SURVIVED} surviving mutant(s) in '${SCOPE}'" \
-            --body-file /tmp/issue-body.md \
-            --label "testing"
+          TITLE="[Mutation Testing] Surviving mutants in ${{ github.event.inputs.scope || 'identity' }}"
+          EXISTING=$(gh issue list --search "$TITLE" --state open --json number --jq '.[0].number // empty')
+          if [ -n "$EXISTING" ]; then
+            gh issue comment "$EXISTING" --body-file /tmp/mutants-body.md
+          else
+            gh issue create --title "$TITLE" --label testing --body-file /tmp/mutants-body.md
+          fi
