@@ -1,0 +1,8 @@
+---
+source: service/tests/snapshot_adversarial_tests.rs
+expression: json
+---
+{
+  "_status": 401,
+  "error": "Signature must be 64 bytes"
+}

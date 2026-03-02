@@ -1,0 +1,6 @@
+---
+source: service/tests/snapshot_adversarial_tests.rs
+expression: combined
+---
+status: 422
+body: Failed to deserialize the JSON body into the target type: missing field `root_pubkey` at line 1 column 30

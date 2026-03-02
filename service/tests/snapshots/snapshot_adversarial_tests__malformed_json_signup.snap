@@ -1,0 +1,6 @@
+---
+source: service/tests/snapshot_adversarial_tests.rs
+expression: combined
+---
+status: 400
+body: Failed to parse the request body as JSON: key must be a string at line 1 column 2
