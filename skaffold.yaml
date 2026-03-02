@@ -76,6 +76,7 @@ deploy:
             create: false
           cargoCache:
             enabled: true
+          syntheticBackupKey: "dev-local-synthetic-backup-key-0123456789abcdef"
           # Enable dev tools in local development (disabled by default for security)
           graphql:
             playgroundEnabled: true
@@ -194,6 +195,7 @@ profiles:
             setValues:
               serviceAccount:
                 create: false
+              syntheticBackupKey: "ci-test-synthetic-backup-key-0123456789abcdef"
               frontend.service.port: 80
               frontend.service.targetPort: 80
             # CORS origins use overrides (not setValues) because Helm --set

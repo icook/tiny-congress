@@ -25,6 +25,12 @@ pub struct Config {
     pub graphql: GraphQLConfig,
     #[serde(default)]
     pub swagger: SwaggerConfig,
+    /// HMAC key for generating synthetic backup envelopes.
+    /// Required — prevents username enumeration by making synthetic backups
+    /// unpredictable to external observers.
+    /// Set via `TC_SYNTHETIC_BACKUP_KEY` environment variable.
+    #[serde(default)]
+    pub synthetic_backup_key: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -268,6 +274,7 @@ impl Default for Config {
             security_headers: SecurityHeadersConfig::default(),
             graphql: GraphQLConfig::default(),
             swagger: SwaggerConfig::default(),
+            synthetic_backup_key: String::new(),
         }
     }
 }
@@ -384,6 +391,18 @@ impl Config {
             )));
         }
 
+        // Synthetic backup HMAC key is required and must be at least 32 bytes
+        if self.synthetic_backup_key.is_empty() {
+            return Err(ConfigError::Validation(
+                "synthetic_backup_key is required. Set TC_SYNTHETIC_BACKUP_KEY environment variable or configure in config.yaml.".into(),
+            ));
+        }
+        if self.synthetic_backup_key.len() < 32 {
+            return Err(ConfigError::Validation(
+                "TC_SYNTHETIC_BACKUP_KEY must be at least 32 bytes".into(),
+            ));
+        }
+
         Ok(())
     }
 }
@@ -396,6 +415,7 @@ mod tests {
         let mut config = Config::default();
         config.database.user = "postgres".into();
         config.database.password = "postgres".into();
+        config.synthetic_backup_key = "test-hmac-key-for-unit-tests-32+b".into();
         config
     }
 

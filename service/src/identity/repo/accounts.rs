@@ -130,21 +130,7 @@ where
     .fetch_optional(executor)
     .await?;
 
-    match row {
-        Some(r) => {
-            let root_kid: Kid = r
-                .root_kid
-                .parse()
-                .map_err(|e| sqlx::Error::Decode(Box::new(e)))?;
-            Ok(AccountRecord {
-                id: r.id,
-                username: r.username,
-                root_pubkey: r.root_pubkey,
-                root_kid,
-            })
-        }
-        None => Err(AccountRepoError::NotFound),
-    }
+    account_row_to_record(row)
 }
 
 /// Look up an account by its username.
@@ -170,6 +156,11 @@ where
     .fetch_optional(executor)
     .await?;
 
+    account_row_to_record(row)
+}
+
+/// Convert an optional `AccountRow` to an `AccountRecord`, returning `NotFound` if absent.
+fn account_row_to_record(row: Option<AccountRow>) -> Result<AccountRecord, AccountRepoError> {
     match row {
         Some(r) => {
             let root_kid: Kid = r

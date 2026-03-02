@@ -3295,6 +3295,7 @@ dependencies = [
  "chrono",
  "ed25519-dalek",
  "figment",
+ "hmac",
  "hyper",
  "insta",
  "rand 0.8.5",

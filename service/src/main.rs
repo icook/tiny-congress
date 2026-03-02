@@ -158,6 +158,11 @@ async fn main() -> Result<(), anyhow::Error> {
     let service = Arc::new(DefaultIdentityService::new(repo.clone())) as Arc<dyn IdentityService>;
     let repo_ext = repo as Arc<dyn IdentityRepo>;
 
+    // HMAC key for synthetic backup generation (anti-enumeration)
+    let synthetic_backup_key = identity::http::backup::SyntheticBackupKey::new(
+        config.synthetic_backup_key.as_bytes().to_vec(),
+    );
+
     spawn_nonce_cleanup(pool.clone());
 
     // Build the API
@@ -186,6 +191,7 @@ async fn main() -> Result<(), anyhow::Error> {
         .layer(Extension(schema))
         .layer(Extension(service))
         .layer(Extension(repo_ext))
+        .layer(Extension(synthetic_backup_key))
         .layer(Extension(build_info))
         .layer(Extension(pool.clone()))
         .layer(
