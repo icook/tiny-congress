@@ -51,7 +51,7 @@ pub struct SignupRequest {
 // ─── Login request types ────────────────────────────────────────────────────
 
 /// Validated login request ready for processing.
-#[derive(Debug, Deserialize)]
+#[derive(Debug)]
 pub struct LoginRequest {
     pub username: String,
     pub device_pubkey: String,
@@ -425,11 +425,14 @@ impl IdentityService for DefaultIdentityService {
             .await
             .map_err(|e| match e {
                 AccountRepoError::NotFound => LoginError::AccountNotFound,
+                // DuplicateUsername and DuplicateKey are structurally unreachable from
+                // get_account_by_username (only returned by create_account), but we must
+                // handle them exhaustively. Treat as internal errors like Database.
                 AccountRepoError::Database(db_err) => {
                     tracing::error!("Login account lookup failed: {db_err}");
                     LoginError::Internal("Internal server error".to_string())
                 }
-                _ => {
+                AccountRepoError::DuplicateUsername | AccountRepoError::DuplicateKey => {
                     tracing::error!("Unexpected repo error during login account lookup: {e}");
                     LoginError::Internal("Internal server error".to_string())
                 }
