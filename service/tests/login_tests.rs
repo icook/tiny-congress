@@ -54,7 +54,6 @@ async fn signup_user(username: &str) -> (axum::Router, SignupKeys, common::test_
     (app, keys, db)
 }
 
-<<<<<<< HEAD
 fn backup_request(username: &str) -> Request<Body> {
     Request::builder()
         .method(Method::GET)
@@ -360,10 +359,10 @@ async fn test_login_handler_success() {
     let resp_body = to_bytes(response.into_body(), 1024 * 1024)
         .await
         .expect("body");
-    let body_str = String::from_utf8(resp_body.to_vec()).expect("utf8");
-    assert!(body_str.contains("account_id"));
-    assert!(body_str.contains("root_kid"));
-    assert!(body_str.contains("device_kid"));
+    let json: serde_json::Value = serde_json::from_slice(&resp_body).expect("json");
+    assert!(json["account_id"].is_string());
+    assert!(json["root_kid"].is_string());
+    assert!(json["device_kid"].is_string());
 }
 
 #[shared_runtime_test]

@@ -50,7 +50,7 @@ pub struct SignupRequest {
 
 // ─── Login request types ────────────────────────────────────────────────────
 
-/// Validated login request ready for processing.
+/// Login request payload passed from the HTTP layer to the service for validation and processing.
 #[derive(Debug)]
 pub struct LoginRequest {
     pub username: String,
@@ -468,8 +468,15 @@ impl IdentityService for DefaultIdentityService {
             .map_err(|e| match e {
                 DeviceKeyRepoError::DuplicateKid => LoginError::DuplicateDevice,
                 DeviceKeyRepoError::MaxDevicesReached => LoginError::MaxDevicesReached,
-                _ => {
-                    tracing::error!("Login device key creation failed: {e}");
+                // NotFound and AlreadyRevoked are structurally unreachable from
+                // create_device_key (only returned by get/revoke/rename/touch),
+                // but we must handle them exhaustively.
+                DeviceKeyRepoError::NotFound | DeviceKeyRepoError::AlreadyRevoked => {
+                    tracing::error!("Unexpected repo error during login device key creation: {e}");
+                    LoginError::Internal("Internal server error".to_string())
+                }
+                DeviceKeyRepoError::Database(db_err) => {
+                    tracing::error!("Login device key creation failed: {db_err}");
                     LoginError::Internal("Internal server error".to_string())
                 }
             })?;
