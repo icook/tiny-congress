@@ -19,7 +19,7 @@ import {
   Title,
 } from '@mantine/core';
 import {
-  decryptBackupEnvelope,
+  decryptBackupInWorker,
   DecryptionError,
   fetchBackup,
   generateKeyPair,
@@ -57,7 +57,7 @@ export function LoginPage() {
 
       // Decode and decrypt backup
       const envelopeBytes = crypto.decode_base64url(backupResponse.encrypted_backup);
-      const rootPrivateKey = await decryptBackupEnvelope(envelopeBytes, password);
+      const rootPrivateKey = await decryptBackupInWorker(envelopeBytes, password);
 
       // Verify recovered key matches the account's root_kid.
       // Detects tampered or swapped backup envelopes.
