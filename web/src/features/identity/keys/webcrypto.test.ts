@@ -23,12 +23,28 @@ describe('Web Crypto Ed25519', () => {
     expect(keyPair1.publicKey).not.toEqual(keyPair2.publicKey);
   });
 
-  test('signWithDeviceKey produces 64-byte signature', async () => {
+  test('signWithDeviceKey produces valid 64-byte signature', async () => {
     const keyPair = await generateDeviceKeyPair();
     const message = new TextEncoder().encode('test message');
     const signature = await signWithDeviceKey(message, keyPair.privateKey);
     expect(signature).toBeInstanceOf(Uint8Array);
     expect(signature.length).toBe(64);
+
+    // Round-trip: import the raw public key and verify the signature
+    const publicCryptoKey = await globalThis.crypto.subtle.importKey(
+      'raw',
+      keyPair.publicKey,
+      'Ed25519',
+      true,
+      ['verify']
+    );
+    const valid = await globalThis.crypto.subtle.verify(
+      'Ed25519',
+      publicCryptoKey,
+      signature,
+      message
+    );
+    expect(valid).toBe(true);
   });
 
   test('signWithDeviceKey produces deterministic signatures for same key and message', async () => {

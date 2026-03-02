@@ -21,7 +21,7 @@ import {
 import { openDB, type IDBPDatabase } from 'idb';
 
 const DB_NAME = 'tc-device-store';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const STORE_NAME = 'device';
 const CURRENT_KEY = 'current';
 
@@ -57,9 +57,12 @@ const DeviceContext = createContext<DeviceContextValue>({
 async function getDb(): Promise<IDBPDatabase> {
   return openDB(DB_NAME, DB_VERSION, {
     upgrade(db) {
-      if (!db.objectStoreNames.contains(STORE_NAME)) {
-        db.createObjectStore(STORE_NAME);
+      // Drop the old store on upgrade so stale v1 entries (Uint8Array private
+      // keys) are cleared — the new schema stores non-extractable CryptoKeys.
+      if (db.objectStoreNames.contains(STORE_NAME)) {
+        db.deleteObjectStore(STORE_NAME);
       }
+      db.createObjectStore(STORE_NAME);
     },
   });
 }

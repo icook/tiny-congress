@@ -20,10 +20,10 @@ export interface WebCryptoKeyPair {
  * cannot be read by JavaScript.
  */
 export async function generateDeviceKeyPair(): Promise<WebCryptoKeyPair> {
-  const keyPair = await crypto.subtle.generateKey('Ed25519', false, ['sign']);
+  const keyPair = await globalThis.crypto.subtle.generateKey('Ed25519', false, ['sign']);
 
   // Export just the public key as raw bytes
-  const publicKeyBuffer = await crypto.subtle.exportKey('raw', keyPair.publicKey);
+  const publicKeyBuffer = await globalThis.crypto.subtle.exportKey('raw', keyPair.publicKey);
 
   return {
     publicKey: new Uint8Array(publicKeyBuffer),
@@ -39,7 +39,7 @@ export async function signWithDeviceKey(
   message: Uint8Array,
   privateKey: CryptoKey
 ): Promise<Uint8Array> {
-  const signature = await crypto.subtle.sign(
+  const signature = await globalThis.crypto.subtle.sign(
     'Ed25519',
     privateKey,
     message as ArrayBufferView<ArrayBuffer>
