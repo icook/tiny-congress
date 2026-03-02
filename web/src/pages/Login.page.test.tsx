@@ -32,15 +32,16 @@ vi.mock('@noble/curves/ed25519.js', () => ({
   },
 }));
 
-// Mock router navigation
+// Mock router navigation and Link to avoid needing RouterProvider in tests
 const mockNavigate = vi.fn();
-vi.mock('@tanstack/react-router', async (importOriginal) => {
-  const original = await importOriginal<typeof import('@tanstack/react-router')>();
-  return {
-    ...original,
-    useNavigate: vi.fn(() => mockNavigate),
-  };
-});
+vi.mock('@tanstack/react-router', () => ({
+  Link: ({ children, to, ...props }: { children: React.ReactNode; to: string }) => (
+    <a href={to} {...props}>
+      {children}
+    </a>
+  ),
+  useNavigate: vi.fn(() => mockNavigate),
+}));
 
 // Mock the login mutation and crypto functions
 const mockMutateAsync = vi.fn();
@@ -75,9 +76,14 @@ describe('LoginPage', () => {
     mockDecryptBackupEnvelope.mockReset();
     mockSetDevice.mockReset();
     mockNavigate.mockReset();
-    mockCrypto.encode_base64url.mockClear();
-    mockCrypto.decode_base64url.mockClear();
-    mockCrypto.derive_kid.mockClear();
+    mockCrypto.encode_base64url.mockReset();
+    mockCrypto.decode_base64url.mockReset();
+    mockCrypto.derive_kid.mockReset();
+
+    // Restore default implementations after reset
+    mockCrypto.derive_kid.mockReturnValue('kid-root');
+    mockCrypto.encode_base64url.mockReturnValue('mock-encoded');
+    mockCrypto.decode_base64url.mockReturnValue(new Uint8Array(90));
 
     // Default happy path mocks
     mockFetchBackup.mockResolvedValue({

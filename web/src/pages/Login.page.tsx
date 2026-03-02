@@ -9,7 +9,7 @@
 import { useState } from 'react';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { IconAlertTriangle } from '@tabler/icons-react';
-import { useNavigate } from '@tanstack/react-router';
+import { Link, useNavigate } from '@tanstack/react-router';
 import {
   Alert,
   Button,
@@ -102,13 +102,12 @@ export function LoginPage() {
       if (err instanceof Error) {
         setLocalError(err.message);
       }
-      // Also let TanStack Query mutation state handle API errors
     } finally {
       setIsGeneratingKeys(false);
     }
   };
 
-  const displayError = localError ?? (loginMutation.isError ? loginMutation.error.message : null);
+  const displayError = localError;
 
   return (
     <Stack gap="md" maw={500} mx="auto" mt="xl">
@@ -162,6 +161,10 @@ export function LoginPage() {
           </Stack>
         </form>
       </Card>
+
+      <Text size="xs" c="dimmed" ta="center">
+        Don&apos;t have an account? <Link to="/signup">Sign up</Link>
+      </Text>
     </Stack>
   );
 }

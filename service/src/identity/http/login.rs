@@ -69,18 +69,18 @@ fn validate_login_device(
     root_pubkey_arr: &[u8; 32],
 ) -> Result<ValidatedLogin, axum::response::Response> {
     let device_pubkey = DevicePubkey::from_base64url(&req.device.pubkey)
-        .map_err(|e| bad_request(&e.to_string()))?;
+        .map_err(|e| super::bad_request(&e.to_string()))?;
 
     let device_name =
-        DeviceName::parse(&req.device.name).map_err(|e| bad_request(&e.to_string()))?;
+        DeviceName::parse(&req.device.name).map_err(|e| super::bad_request(&e.to_string()))?;
 
     let Ok(cert_bytes) = decode_base64url(&req.device.certificate) else {
-        return Err(bad_request(
+        return Err(super::bad_request(
             "Invalid base64url encoding for device.certificate",
         ));
     };
     let Ok(cert_arr): Result<[u8; 64], _> = cert_bytes.as_slice().try_into() else {
-        return Err(bad_request(
+        return Err(super::bad_request(
             "device.certificate must be 64 bytes (Ed25519 signature)",
         ));
     };
@@ -91,7 +91,7 @@ fn validate_login_device(
     signed_payload.extend_from_slice(&req.timestamp.to_le_bytes());
 
     if verify_ed25519(root_pubkey_arr, &signed_payload, &cert_arr).is_err() {
-        return Err(bad_request("Invalid device certificate"));
+        return Err(super::bad_request("Invalid device certificate"));
     }
 
     let device_kid = device_pubkey.kid();
@@ -111,33 +111,33 @@ pub async fn login(
     // Validate timestamp — use abs_diff to avoid overflow on extreme values
     let now = chrono::Utc::now().timestamp();
     if now.abs_diff(req.timestamp) > MAX_TIMESTAMP_SKEW as u64 {
-        return bad_request("Timestamp out of range");
+        return super::bad_request("Timestamp out of range");
     }
 
     // Validate username
     let username = req.username.trim();
     if username.is_empty() {
-        return bad_request("Username is required");
+        return super::bad_request("Username is required");
     }
 
     // Look up the account by username
     let account = match repo.get_account_by_username(username).await {
         Ok(a) => a,
-        Err(AccountRepoError::NotFound) => return bad_request("Invalid credentials"),
+        Err(AccountRepoError::NotFound) => return super::bad_request("Invalid credentials"),
         Err(e) => {
             tracing::error!("Login account lookup failed: {e}");
-            return internal_error();
+            return super::internal_error();
         }
     };
 
     // Decode root public key from the stored account
     let Ok(root_pubkey_bytes) = decode_base64url(&account.root_pubkey) else {
         tracing::error!("Corrupted root pubkey for account {}", account.id);
-        return internal_error();
+        return super::internal_error();
     };
     let Ok(root_pubkey_arr): Result<[u8; 32], _> = root_pubkey_bytes.as_slice().try_into() else {
         tracing::error!("Corrupted root pubkey length for account {}", account.id);
-        return internal_error();
+        return super::internal_error();
     };
 
     // Validate device fields and verify the timestamp-bound certificate
@@ -146,18 +146,23 @@ pub async fn login(
         Err(resp) => return resp,
     };
 
-    // Record nonce to prevent replay within the timestamp window
+    // Record nonce to prevent replay within the timestamp window.
+    // Nonce cleanup is handled by the background sweep in main.rs
+    // (spawn_nonce_cleanup), using MAX_TIMESTAMP_SKEW as the TTL.
     let nonce_hash: [u8; 32] = Sha256::digest(&validated.cert_bytes).into();
     if let Err(e) = repo.check_and_record_nonce(&nonce_hash).await {
         return match e {
-            NonceRepoError::Replay => bad_request("Request replay detected"),
+            NonceRepoError::Replay => super::bad_request("Request replay detected"),
             NonceRepoError::Database(db_err) => {
                 tracing::error!("Nonce check failed: {db_err}");
-                internal_error()
+                super::internal_error()
             }
         };
     }
 
+    // Nonce is intentionally recorded before create_device_key: if device
+    // creation fails transiently, the user must generate a fresh
+    // timestamp-bound certificate rather than retry. This is fail-closed.
     // Create device key
     match repo
         .create_device_key(
@@ -187,15 +192,7 @@ pub async fn login(
             .into_response(),
         Err(e) => {
             tracing::error!("Login device creation failed: {e}");
-            internal_error()
+            super::internal_error()
         }
     }
-}
-
-fn bad_request(msg: &str) -> axum::response::Response {
-    super::bad_request(msg)
-}
-
-fn internal_error() -> axum::response::Response {
-    super::internal_error()
 }
