@@ -94,7 +94,7 @@ fn map_login_error(e: &LoginError) -> axum::response::Response {
             }),
         )
             .into_response(),
-        LoginError::Internal(_) => (
+        LoginError::Internal => (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(ErrorResponse {
                 error: "Internal server error".to_string(),

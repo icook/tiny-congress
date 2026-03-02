@@ -435,6 +435,18 @@ async fn test_login_handler_invalid_certificate() {
         .expect("response");
 
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+    let body = to_bytes(response.into_body(), 1024 * 1024)
+        .await
+        .expect("body");
+    let json: serde_json::Value = serde_json::from_slice(&body).expect("json");
+    assert!(
+        json["error"]
+            .as_str()
+            .unwrap()
+            .contains("Invalid device certificate"),
+        "error body should mention invalid certificate, got: {json:?}"
+    );
 }
 
 #[shared_runtime_test]

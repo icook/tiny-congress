@@ -91,7 +91,7 @@ pub enum LoginError {
     #[error("Maximum device limit reached")]
     MaxDevicesReached,
     #[error("Internal error")]
-    Internal(String),
+    Internal,
 }
 
 // ─── Domain error type ──────────────────────────────────────────────────────
@@ -393,7 +393,9 @@ impl IdentityService for DefaultIdentityService {
     }
 
     async fn login(&self, req: LoginRequest) -> Result<LoginResult, LoginError> {
-        // Validate username (trim, empty check)
+        // Login only checks for empty (not the full validate_username() like signup):
+        // returning a uniform "account not found" for any invalid format avoids
+        // leaking which username formats exist in the system.
         let username = req.username.trim();
         if username.is_empty() {
             return Err(LoginError::EmptyUsername);
@@ -430,22 +432,22 @@ impl IdentityService for DefaultIdentityService {
                 // handle them exhaustively. Treat as internal errors like Database.
                 AccountRepoError::Database(db_err) => {
                     tracing::error!("Login account lookup failed: {db_err}");
-                    LoginError::Internal("Internal server error".to_string())
+                    LoginError::Internal
                 }
                 AccountRepoError::DuplicateUsername | AccountRepoError::DuplicateKey => {
                     tracing::error!("Unexpected repo error during login account lookup: {e}");
-                    LoginError::Internal("Internal server error".to_string())
+                    LoginError::Internal
                 }
             })?;
 
         // Decode root pubkey from stored account
         let root_pubkey_bytes = decode_base64url(&account.root_pubkey).map_err(|_| {
             tracing::error!("Corrupted root pubkey for account {}", account.id);
-            LoginError::Internal("Internal server error".to_string())
+            LoginError::Internal
         })?;
         let root_pubkey_arr: [u8; 32] = root_pubkey_bytes.as_slice().try_into().map_err(|_| {
             tracing::error!("Corrupted root pubkey length for account {}", account.id);
-            LoginError::Internal("Internal server error".to_string())
+            LoginError::Internal
         })?;
 
         // Verify the certificate: root key must have signed the device public key.
@@ -473,11 +475,11 @@ impl IdentityService for DefaultIdentityService {
                 // but we must handle them exhaustively.
                 DeviceKeyRepoError::NotFound | DeviceKeyRepoError::AlreadyRevoked => {
                     tracing::error!("Unexpected repo error during login device key creation: {e}");
-                    LoginError::Internal("Internal server error".to_string())
+                    LoginError::Internal
                 }
                 DeviceKeyRepoError::Database(db_err) => {
                     tracing::error!("Login device key creation failed: {db_err}");
-                    LoginError::Internal("Internal server error".to_string())
+                    LoginError::Internal
                 }
             })?;
 
