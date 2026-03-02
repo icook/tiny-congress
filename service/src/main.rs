@@ -138,7 +138,14 @@ async fn main() -> Result<(), anyhow::Error> {
         .layer(Extension(build_info))
         .layer(
             CorsLayer::new()
-                .allow_methods([Method::GET, Method::POST, Method::PUT, Method::DELETE, Method::PATCH, Method::OPTIONS])
+                .allow_methods([
+                    Method::GET,
+                    Method::POST,
+                    Method::PUT,
+                    Method::DELETE,
+                    Method::PATCH,
+                    Method::OPTIONS,
+                ])
                 .allow_headers(Any)
                 .allow_origin(allow_origin),
         );

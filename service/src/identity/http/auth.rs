@@ -5,7 +5,7 @@
 //!
 //! Canonical message format:
 //! ```text
-//! {METHOD}\n{PATH}\n{TIMESTAMP}\n{BODY_SHA256_HEX}
+//! {METHOD}\n{PATH_AND_QUERY}\n{TIMESTAMP}\n{BODY_SHA256_HEX}
 //! ```
 //!
 //! Required headers:
