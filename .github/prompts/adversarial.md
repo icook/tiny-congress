@@ -100,22 +100,61 @@ let app = TestAppBuilder::new()
 let app = TestAppBuilder::with_mocks().build();
 ```
 
-### Factories
+### Factories and Shared Helpers
 
-Use `common::factories::valid_signup_with_keys(username)` to generate valid signup payloads with real Ed25519 keys:
+**IMPORTANT: Check `common/factories/` for existing helpers before writing your own. DO NOT duplicate functions that already exist in common/.**
+
+All helpers below are in `common::factories`. Import them:
 
 ```rust
-use common::factories::{valid_signup_with_keys, SignupKeys};
+use common::factories::{
+    build_authed_request, sign_request, signup_user, signup_user_in_pool,
+    valid_signup_with_keys, SignupKeys,
+};
+```
 
+**Signup payload factory** — generates valid JSON body with real Ed25519 keys:
+```rust
 let (json_body, keys) = valid_signup_with_keys("testuser");
 // keys.root_signing_key: ed25519_dalek::SigningKey
 // keys.device_signing_key: ed25519_dalek::SigningKey
 // keys.device_kid: tc_crypto::Kid
 ```
 
-### Sending Requests
+**Full signup with isolated DB** — signs up a user and returns app + keys + db handle:
+```rust
+let (app, keys, db) = signup_user("testuser").await;
+```
 
-Use `tower::ServiceExt::oneshot()` with `axum::http::Request`:
+**Signup into existing pool** — for cross-account tests needing multiple users in one DB:
+```rust
+let (app, keys, db) = signup_user("user_a").await;
+let (app_b, keys_b) = signup_user_in_pool("user_b", db.pool()).await;
+```
+
+### Authenticated Requests
+
+Use the shared helpers for device-authenticated endpoints. DO NOT redefine these locally:
+
+```rust
+// Build a complete authenticated request (handles signing + headers):
+let req = build_authed_request(
+    Method::GET,
+    "/auth/devices",
+    "",  // empty body for GET
+    &keys.device_signing_key,
+    &keys.device_kid,
+);
+let response = app.oneshot(req).await.expect("response");
+
+// For tests that need to tamper with individual headers, use sign_request
+// to get raw header values, then build the request manually:
+let headers = sign_request("POST", "/auth/devices", body.as_bytes(), &signing_key, &kid);
+```
+
+### Sending Unauthenticated Requests
+
+For signup and other unauthenticated endpoints, build requests directly:
 
 ```rust
 use axum::{body::Body, http::{header::CONTENT_TYPE, Method, Request, StatusCode}};
@@ -132,38 +171,6 @@ let response = app
     )
     .await
     .expect("response");
-
-assert_eq!(response.status(), StatusCode::CREATED);
-```
-
-### Authenticated Requests
-
-For endpoints requiring device key authentication, build signed requests following the canonical message format:
-
-```rust
-use ed25519_dalek::{Signer, SigningKey};
-use sha2::{Digest, Sha256};
-use tc_crypto::encode_base64url;
-
-fn sign_request(
-    method: &str,
-    path: &str,
-    body: &[u8],
-    signing_key: &SigningKey,
-    kid: &tc_crypto::Kid,
-) -> Vec<(&'static str, String)> {
-    let timestamp = chrono::Utc::now().timestamp();
-    let body_hash = Sha256::digest(body);
-    let body_hash_hex = format!("{body_hash:x}");
-    let canonical = format!("{method}\n{path}\n{timestamp}\n{body_hash_hex}");
-    let signature = signing_key.sign(canonical.as_bytes());
-
-    vec![
-        ("X-Device-Kid", kid.to_string()),
-        ("X-Signature", encode_base64url(&signature.to_bytes())),
-        ("X-Timestamp", timestamp.to_string()),
-    ]
-}
 ```
 
 ### Available Dependencies
@@ -350,7 +357,8 @@ You MUST follow these constraints:
    // When implemented, test that the response never contains decrypted key material.
    ```
 5. **Do not refactor or "improve" adjacent test code.** Your test file is additive only.
-6. **Do not touch `common/` modules** -- use them as-is.
-7. **Do not create database migrations.**
-8. **Each test must be independently runnable** -- no ordering dependencies between tests.
-9. **Use unique usernames per test** to avoid collisions (e.g., `"adv_forged_cert"`, `"adv_11th_device"`).
+6. **Do not duplicate helpers that exist in `common/factories/`.** Import `sign_request`, `build_authed_request`, `signup_user`, `signup_user_in_pool`, `valid_signup_with_keys` from there. Do not redefine them locally.
+7. **Do not touch `common/` modules** -- use them as-is.
+8. **Do not create database migrations.**
+9. **Each test must be independently runnable** -- no ordering dependencies between tests.
+10. **Use unique usernames per test** to avoid collisions (e.g., `"adv_forged_cert"`, `"adv_11th_device"`).

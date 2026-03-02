@@ -11,11 +11,15 @@
 //! ```
 
 mod account;
+mod device_auth;
 mod signup;
+mod signup_fixture;
 mod test_item;
 
 pub use account::{generate_test_keys, AccountFactory};
+pub use device_auth::{build_authed_request, sign_request};
 pub use signup::{valid_signup_json, valid_signup_with_keys, SignupKeys};
+pub use signup_fixture::{signup_user, signup_user_in_pool};
 pub use test_item::TestItemFactory;
 
 use std::sync::atomic::{AtomicU64, Ordering};

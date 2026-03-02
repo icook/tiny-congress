@@ -10,7 +10,9 @@ use axum::{
     http::{header::CONTENT_TYPE, Method, Request, StatusCode},
 };
 use common::app_builder::TestAppBuilder;
-use common::factories::{valid_signup_with_keys, SignupKeys};
+use common::factories::{
+    build_authed_request, signup_user, signup_user_in_pool, valid_signup_with_keys,
+};
 use common::test_db::isolated_db;
 use ed25519_dalek::{Signer, SigningKey};
 use rand::rngs::OsRng;
@@ -18,78 +20,6 @@ use sha2::{Digest, Sha256};
 use tc_crypto::{encode_base64url, Kid};
 use tc_test_macros::shared_runtime_test;
 use tower::ServiceExt;
-
-/// Build authenticated request headers for device endpoints.
-fn sign_request(
-    method: &str,
-    path: &str,
-    body: &[u8],
-    signing_key: &SigningKey,
-    kid: &Kid,
-) -> Vec<(&'static str, String)> {
-    let timestamp = chrono::Utc::now().timestamp();
-    let nonce = uuid::Uuid::new_v4().to_string();
-    let body_hash = Sha256::digest(body);
-    let body_hash_hex = format!("{body_hash:x}");
-    let canonical = format!("{method}\n{path}\n{timestamp}\n{nonce}\n{body_hash_hex}");
-    let signature = signing_key.sign(canonical.as_bytes());
-
-    vec![
-        ("X-Device-Kid", kid.to_string()),
-        ("X-Signature", encode_base64url(&signature.to_bytes())),
-        ("X-Timestamp", timestamp.to_string()),
-        ("X-Nonce", nonce),
-    ]
-}
-
-/// Sign up a user and return the app + keys for subsequent requests.
-async fn signup_user(username: &str) -> (axum::Router, SignupKeys, common::test_db::IsolatedDb) {
-    let db = isolated_db().await;
-    let app = TestAppBuilder::new()
-        .with_identity_pool(db.pool().clone())
-        .build();
-
-    let (json, keys) = valid_signup_with_keys(username);
-
-    let response = app
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method(Method::POST)
-                .uri("/auth/signup")
-                .header(CONTENT_TYPE, "application/json")
-                .body(Body::from(json))
-                .expect("request"),
-        )
-        .await
-        .expect("response");
-
-    assert_eq!(response.status(), StatusCode::CREATED);
-
-    (app, keys, db)
-}
-
-fn build_authed_request(
-    method: Method,
-    path: &str,
-    body: &str,
-    signing_key: &SigningKey,
-    kid: &Kid,
-) -> Request<Body> {
-    let headers = sign_request(method.as_str(), path, body.as_bytes(), signing_key, kid);
-
-    let mut builder = Request::builder().method(method).uri(path);
-
-    for (name, value) in &headers {
-        builder = builder.header(*name, value);
-    }
-
-    if !body.is_empty() {
-        builder = builder.header(CONTENT_TYPE, "application/json");
-    }
-
-    builder.body(Body::from(body.to_string())).expect("request")
-}
 
 // =========================================================================
 // GET /auth/devices
@@ -564,32 +494,6 @@ async fn test_auth_with_revoked_device() {
 // =========================================================================
 // Cross-account authorization
 // =========================================================================
-
-/// Sign up a second user in an existing pool (for cross-account tests).
-async fn signup_user_in_pool(username: &str, pool: &sqlx::PgPool) -> (axum::Router, SignupKeys) {
-    let app = TestAppBuilder::new()
-        .with_identity_pool(pool.clone())
-        .build();
-
-    let (json, keys) = valid_signup_with_keys(username);
-
-    let response = app
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method(Method::POST)
-                .uri("/auth/signup")
-                .header(CONTENT_TYPE, "application/json")
-                .body(Body::from(json))
-                .expect("request"),
-        )
-        .await
-        .expect("response");
-
-    assert_eq!(response.status(), StatusCode::CREATED);
-
-    (app, keys)
-}
 
 #[shared_runtime_test]
 async fn test_cannot_rename_other_accounts_device() {
