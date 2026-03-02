@@ -16,6 +16,8 @@
 
 mod common;
 
+use std::sync::OnceLock;
+
 use axum::{
     body::Body,
     http::{header::CONTENT_TYPE, Method, Request, StatusCode},
@@ -26,6 +28,11 @@ use proptest::prelude::*;
 use rand::rngs::OsRng;
 use tc_crypto::{encode_base64url, BackupEnvelope};
 use tower::ServiceExt;
+
+fn shared_runtime() -> &'static tokio::runtime::Runtime {
+    static RT: OnceLock<tokio::runtime::Runtime> = OnceLock::new();
+    RT.get_or_init(|| tokio::runtime::Runtime::new().expect("tokio runtime"))
+}
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -82,45 +89,41 @@ impl ValidSignupParts {
 
 /// Submit a JSON body to POST /auth/signup and return the status code.
 fn submit_signup(json: &str) -> StatusCode {
-    tokio::runtime::Runtime::new()
-        .expect("tokio runtime")
-        .block_on(async {
-            let app = TestAppBuilder::with_mocks().build();
-            let response = app
-                .oneshot(
-                    Request::builder()
-                        .method(Method::POST)
-                        .uri("/auth/signup")
-                        .header(CONTENT_TYPE, "application/json")
-                        .body(Body::from(json.to_string()))
-                        .expect("request"),
-                )
-                .await
-                .expect("response");
-            response.status()
-        })
+    shared_runtime().block_on(async {
+        let app = TestAppBuilder::with_mocks().build();
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri("/auth/signup")
+                    .header(CONTENT_TYPE, "application/json")
+                    .body(Body::from(json.to_string()))
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+        response.status()
+    })
 }
 
 /// Submit a raw body (not necessarily valid JSON) to POST /auth/signup.
 fn submit_signup_raw(body: &[u8]) -> StatusCode {
     let body_vec = body.to_vec();
-    tokio::runtime::Runtime::new()
-        .expect("tokio runtime")
-        .block_on(async {
-            let app = TestAppBuilder::with_mocks().build();
-            let response = app
-                .oneshot(
-                    Request::builder()
-                        .method(Method::POST)
-                        .uri("/auth/signup")
-                        .header(CONTENT_TYPE, "application/json")
-                        .body(Body::from(body_vec))
-                        .expect("request"),
-                )
-                .await
-                .expect("response");
-            response.status()
-        })
+    shared_runtime().block_on(async {
+        let app = TestAppBuilder::with_mocks().build();
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri("/auth/signup")
+                    .header(CONTENT_TYPE, "application/json")
+                    .body(Body::from(body_vec))
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+        response.status()
+    })
 }
 
 /// Assert that a status code is not 500 (Internal Server Error).
@@ -234,8 +237,13 @@ proptest! {
         let status = submit_signup(&parts.to_json());
         assert_no_server_error(status);
 
-        // Non-32-byte keys must be rejected
-        if bytes.len() != 32 {
+        if bytes.len() == 32 {
+            // Random 32 bytes are almost certainly not a valid Ed25519 curve point
+            prop_assert!(
+                status != StatusCode::INTERNAL_SERVER_ERROR,
+                "server panicked on 32-byte non-curve-point root pubkey"
+            );
+        } else {
             prop_assert!(
                 status == StatusCode::BAD_REQUEST,
                 "root_pubkey of {} bytes should be rejected, got {status}",
@@ -269,7 +277,13 @@ proptest! {
         let status = submit_signup(&parts.to_json());
         assert_no_server_error(status);
 
-        if bytes.len() != 32 {
+        if bytes.len() == 32 {
+            // Random 32 bytes are almost certainly not a valid Ed25519 curve point
+            prop_assert!(
+                status != StatusCode::INTERNAL_SERVER_ERROR,
+                "server panicked on 32-byte non-curve-point device pubkey"
+            );
+        } else {
             prop_assert!(
                 status == StatusCode::BAD_REQUEST,
                 "device pubkey of {} bytes should be rejected, got {status}",
