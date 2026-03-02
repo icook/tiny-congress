@@ -3,6 +3,8 @@
 //! Endpoints for listing, adding, revoking, and renaming device keys.
 //! All endpoints require authentication via signed headers.
 
+use std::sync::Arc;
+
 use axum::{
     extract::{Extension, Path},
     http::StatusCode,
@@ -11,16 +13,13 @@ use axum::{
 };
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use sqlx::PgPool;
 use uuid::Uuid;
 
 use super::auth::AuthenticatedDevice;
 use super::ErrorResponse;
-use crate::identity::repo::{
-    create_device_key_with_executor, get_account_by_id, AccountRepoError, DeviceKeyRecord,
-    DeviceKeyRepo, DeviceKeyRepoError, PgDeviceKeyRepo,
-};
-use tc_crypto::{decode_base64url_native as decode_base64url, verify_ed25519, Kid};
+use crate::identity::repo::{AccountRepoError, DeviceKeyRecord, DeviceKeyRepoError, IdentityRepo};
+use crate::identity::service::DeviceName;
+use tc_crypto::{decode_base64url, verify_ed25519, Kid};
 
 /// Device info returned in API responses (omits certificate and raw pubkey)
 #[derive(Debug, Serialize)]
@@ -69,11 +68,10 @@ pub struct RenameDeviceRequest {
 
 /// GET /auth/devices — list all devices for the authenticated account
 pub async fn list_devices(
-    Extension(pool): Extension<PgPool>,
+    Extension(repo): Extension<Arc<dyn IdentityRepo>>,
     auth: AuthenticatedDevice,
 ) -> impl IntoResponse {
-    let repo = PgDeviceKeyRepo::new(pool);
-    match repo.list_by_account(auth.account_id).await {
+    match repo.list_device_keys_by_account(auth.account_id).await {
         Ok(records) => {
             let devices: Vec<DeviceInfo> = records.into_iter().map(DeviceInfo::from).collect();
             (StatusCode::OK, Json(DeviceListResponse { devices })).into_response()
@@ -87,7 +85,7 @@ pub async fn list_devices(
 
 /// POST /auth/devices — add a new device key
 pub async fn add_device(
-    Extension(pool): Extension<PgPool>,
+    Extension(repo): Extension<Arc<dyn IdentityRepo>>,
     auth: AuthenticatedDevice,
 ) -> impl IntoResponse {
     let req: AddDeviceRequest = match auth.json() {
@@ -95,68 +93,48 @@ pub async fn add_device(
         Err(resp) => return resp,
     };
 
-    let validated = match validate_add_device_request(&pool, auth.account_id, &req).await {
+    let validated = match validate_add_device_request(&*repo, auth.account_id, &req).await {
         Ok(v) => v,
         Err(resp) => return resp,
     };
 
-    // Create the device key in a transaction
-    let mut tx = match pool.begin().await {
-        Ok(tx) => tx,
-        Err(e) => {
-            tracing::error!("Failed to begin transaction: {e}");
-            return internal_error();
-        }
-    };
-
-    let created = match create_device_key_with_executor(
-        &mut tx,
-        auth.account_id,
-        &validated.device_kid,
-        &req.pubkey,
-        validated.device_name.as_ref(),
-        &validated.cert_bytes,
-    )
-    .await
+    match repo
+        .create_device_key(
+            auth.account_id,
+            &validated.device_kid,
+            &req.pubkey,
+            &validated.device_name,
+            &validated.cert_bytes,
+        )
+        .await
     {
-        Ok(c) => c,
-        Err(DeviceKeyRepoError::DuplicateKid) => {
-            return (
-                StatusCode::CONFLICT,
-                Json(ErrorResponse {
-                    error: "Device key already registered".to_string(),
-                }),
-            )
-                .into_response();
-        }
-        Err(DeviceKeyRepoError::MaxDevicesReached) => {
-            return (
-                StatusCode::UNPROCESSABLE_ENTITY,
-                Json(ErrorResponse {
-                    error: "Maximum device limit reached".to_string(),
-                }),
-            )
-                .into_response();
-        }
+        Ok(created) => (
+            StatusCode::CREATED,
+            Json(AddDeviceResponse {
+                device_kid: created.device_kid,
+                created_at: created.created_at,
+            }),
+        )
+            .into_response(),
+        Err(DeviceKeyRepoError::DuplicateKid) => (
+            StatusCode::CONFLICT,
+            Json(ErrorResponse {
+                error: "Device key already registered".to_string(),
+            }),
+        )
+            .into_response(),
+        Err(DeviceKeyRepoError::MaxDevicesReached) => (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            Json(ErrorResponse {
+                error: "Maximum device limit reached".to_string(),
+            }),
+        )
+            .into_response(),
         Err(e) => {
             tracing::error!("Failed to create device key: {e}");
-            return internal_error();
+            internal_error()
         }
-    };
-
-    if let Err(e) = tx.commit().await {
-        tracing::error!("Failed to commit device creation: {e}");
-        return internal_error();
     }
-
-    (
-        StatusCode::CREATED,
-        Json(AddDeviceResponse {
-            device_kid: created.device_kid,
-            created_at: created.created_at,
-        }),
-    )
-        .into_response()
 }
 
 /// Validated fields for adding a device, after input validation and certificate check.
@@ -169,7 +147,7 @@ struct ValidatedAddDevice {
 /// Validate and verify the add-device request inputs.
 #[allow(clippy::result_large_err)]
 async fn validate_add_device_request(
-    pool: &PgPool,
+    repo: &dyn IdentityRepo,
     account_id: Uuid,
     req: &AddDeviceRequest,
 ) -> Result<ValidatedAddDevice, axum::response::Response> {
@@ -180,13 +158,7 @@ async fn validate_add_device_request(
         return Err(bad_request("pubkey must be 32 bytes (Ed25519)"));
     }
 
-    let device_name = req.name.trim();
-    if device_name.is_empty() {
-        return Err(bad_request("Device name cannot be empty"));
-    }
-    if device_name.chars().count() > 128 {
-        return Err(bad_request("Device name too long"));
-    }
+    let device_name = DeviceName::parse(&req.name).map_err(|e| bad_request(&e.to_string()))?;
 
     let Ok(cert_bytes) = decode_base64url(&req.certificate) else {
         return Err(bad_request("Invalid base64url encoding for certificate"));
@@ -198,7 +170,7 @@ async fn validate_add_device_request(
     };
 
     // Look up the account to get the root pubkey for certificate verification
-    let account = match get_account_by_id(pool, account_id).await {
+    let account = match repo.get_account_by_id(account_id).await {
         Ok(a) => a,
         Err(AccountRepoError::NotFound) => {
             tracing::error!("Authenticated device's account not found: {account_id}");
@@ -227,14 +199,14 @@ async fn validate_add_device_request(
 
     Ok(ValidatedAddDevice {
         device_kid,
-        device_name: device_name.to_string(),
+        device_name: device_name.as_str().to_string(),
         cert_bytes,
     })
 }
 
 /// DELETE /auth/devices/:kid — revoke a device key
 pub async fn revoke_device(
-    Extension(pool): Extension<PgPool>,
+    Extension(repo): Extension<Arc<dyn IdentityRepo>>,
     Path(kid_str): Path<String>,
     auth: AuthenticatedDevice,
 ) -> impl IntoResponse {
@@ -255,13 +227,12 @@ pub async fn revoke_device(
     }
 
     // Verify the target device belongs to this account
-    let repo = PgDeviceKeyRepo::new(pool);
-    match get_owned_device(&repo, &kid, auth.account_id).await {
+    match get_owned_device(&*repo, &kid, auth.account_id).await {
         Ok(_) => {}
         Err(resp) => return resp,
     }
 
-    match repo.revoke(&kid).await {
+    match repo.revoke_device_key(&kid).await {
         Ok(()) => StatusCode::NO_CONTENT.into_response(),
         Err(DeviceKeyRepoError::AlreadyRevoked) => (
             StatusCode::CONFLICT,
@@ -279,7 +250,7 @@ pub async fn revoke_device(
 
 /// PATCH /auth/devices/:kid — rename a device
 pub async fn rename_device(
-    Extension(pool): Extension<PgPool>,
+    Extension(repo): Extension<Arc<dyn IdentityRepo>>,
     Path(kid_str): Path<String>,
     auth: AuthenticatedDevice,
 ) -> impl IntoResponse {
@@ -293,21 +264,17 @@ pub async fn rename_device(
         Err(_) => return bad_request("Invalid KID format"),
     };
 
-    let new_name = req.name.trim();
-    if new_name.is_empty() {
-        return bad_request("Device name cannot be empty");
-    }
-    if new_name.chars().count() > 128 {
-        return bad_request("Device name too long");
-    }
+    let new_name = match DeviceName::parse(&req.name) {
+        Ok(n) => n,
+        Err(e) => return bad_request(&e.to_string()),
+    };
 
-    let repo = PgDeviceKeyRepo::new(pool);
-    match get_owned_device(&repo, &kid, auth.account_id).await {
+    match get_owned_device(&*repo, &kid, auth.account_id).await {
         Ok(_) => {}
         Err(resp) => return resp,
     }
 
-    match repo.rename(&kid, new_name).await {
+    match repo.rename_device_key(&kid, new_name.as_str()).await {
         Ok(()) => StatusCode::NO_CONTENT.into_response(),
         Err(DeviceKeyRepoError::AlreadyRevoked) => (
             StatusCode::CONFLICT,
@@ -326,11 +293,11 @@ pub async fn rename_device(
 /// Verify a device exists and belongs to the given account.
 #[allow(clippy::result_large_err)]
 async fn get_owned_device(
-    repo: &PgDeviceKeyRepo,
+    repo: &dyn IdentityRepo,
     kid: &Kid,
     account_id: Uuid,
 ) -> Result<DeviceKeyRecord, axum::response::Response> {
-    let device = match repo.get_by_kid(kid).await {
+    let device = match repo.get_device_key_by_kid(kid).await {
         Ok(d) => d,
         Err(DeviceKeyRepoError::NotFound) => {
             return Err(not_found("Device not found"));

@@ -16,13 +16,18 @@ use axum::{
     Extension, Router,
 };
 use std::net::SocketAddr;
+use std::sync::Arc;
 use tinycongress_api::{
-    build_info::BuildInfoProvider,
+    build_info::BuildInfo,
     config::Config,
     db::setup_database,
     graphql::{graphql_handler, graphql_playground, MutationRoot, QueryRoot},
     http::{build_security_headers, security_headers_middleware},
-    identity,
+    identity::{
+        self,
+        repo::PgIdentityRepo,
+        service::{DefaultIdentityService, IdentityService},
+    },
     rest::{self, ApiDoc},
 };
 use tower_http::cors::{AllowOrigin, Any, CorsLayer};
@@ -32,6 +37,24 @@ use utoipa_swagger_ui::SwaggerUi;
 // Health check handler
 async fn health_check() -> impl IntoResponse {
     StatusCode::OK
+}
+
+/// Spawn a background task that cleans up expired request nonces.
+fn spawn_nonce_cleanup(repo: Arc<dyn crate::identity::repo::IdentityRepo>) {
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(60));
+        loop {
+            interval.tick().await;
+            match repo
+                .cleanup_expired_nonces(crate::identity::http::auth::MAX_TIMESTAMP_SKEW)
+                .await
+            {
+                Ok(0) => {}
+                Ok(n) => tracing::debug!(count = n, "cleaned up expired nonces"),
+                Err(e) => tracing::warn!("nonce cleanup failed: {e}"),
+            }
+        }
+    });
 }
 
 fn build_cors_origin(origins: &[String]) -> AllowOrigin {
@@ -82,12 +105,11 @@ async fn main() -> Result<(), anyhow::Error> {
     tracing::info!("Connecting to database...");
     let pool = setup_database(&config.database).await?;
 
-    let build_info = BuildInfoProvider::from_env();
-    let build_info_snapshot = build_info.build_info();
+    let build_info = BuildInfo::from_env();
     tracing::info!(
-        version = %build_info_snapshot.version,
-        git_sha = %build_info_snapshot.git_sha,
-        build_time = %build_info_snapshot.build_time,
+        version = %build_info.version,
+        git_sha = %build_info.git_sha,
+        build_time = %build_info.build_time,
         "resolved build metadata"
     );
 
@@ -133,8 +155,19 @@ async fn main() -> Result<(), anyhow::Error> {
         // Health check route
         .route("/health", get(health_check))
         // Add the schema to the extension
-        .layer(Extension(schema))
-        .layer(Extension(pool.clone()))
+        .layer(Extension(schema));
+
+    // Wire identity layers: repo for AuthenticatedDevice, service for signup
+    let identity_repo: Arc<dyn crate::identity::repo::IdentityRepo> =
+        Arc::new(PgIdentityRepo::new(pool.clone()));
+    let identity_service: Arc<dyn IdentityService> =
+        Arc::new(DefaultIdentityService::new(identity_repo.clone()));
+    // Background task: clean up expired request nonces every 60 seconds
+    spawn_nonce_cleanup(identity_repo.clone());
+
+    app = app
+        .layer(Extension(identity_repo))
+        .layer(Extension(identity_service))
         .layer(Extension(build_info))
         .layer(
             CorsLayer::new()
