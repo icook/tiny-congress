@@ -8,7 +8,6 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use serde::Deserialize;
 use tc_crypto::{decode_base64url, verify_ed25519, BackupEnvelope, Kid};
-
 use uuid::Uuid;
 
 use super::repo::{
