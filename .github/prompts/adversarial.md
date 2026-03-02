@@ -54,11 +54,23 @@ Replay protection: SHA-256 of the signature bytes is recorded as a nonce. Duplic
 
 ---
 
+## Before You Start
+
+**Read the existing test file first.** `service/tests/adversarial_tests.rs` is a maintained artifact on `master` — do NOT overwrite it. Your job is to ADD tests for uncovered vectors, not regenerate from scratch.
+
+1. Read `service/tests/adversarial_tests.rs` to understand what's already covered
+2. Cross-reference against the test vectors in this prompt's Focus Areas section
+3. Identify gaps — vectors that have no corresponding test (marked "Not covered" in the Status column)
+4. Write tests ONLY for the gaps
+5. If all vectors in your focus area are already covered, report that in the PR and suggest new vectors to add to this prompt
+
+---
+
 ## Test Infrastructure
 
 ### File Setup
 
-Create `service/tests/adversarial_tests.rs` with `mod common;` at the top.
+The test file is `service/tests/adversarial_tests.rs` — it already exists with `mod common;` at the top. Read it before making changes (see "Before You Start" above).
 
 ### Test Macro
 
@@ -197,19 +209,19 @@ Attack the cryptographic trust boundary between client and server. Every test in
 
 **Test vectors:**
 
-| Test | Attack Vector | Expected |
-|------|--------------|----------|
-| Signup with forged device certificate | Sign device pubkey with a random key (not the account root key) | 400 with validation error |
-| Cross-account device certificate | Sign device pubkey with Account B's root key, submit to Account A | 400 -- certificate verification fails against Account A's root key |
-| Bit-flipped certificate | Take a valid certificate and flip one bit | 400 -- signature verification fails |
-| Replay a revoked device's signature | Revoke device, then send a request signed by that device's key | 403 Forbidden ("Device has been revoked") |
-| Request signed by unknown key | Sign with a key not registered as any device | 401 -- device not found |
-| Tampered body after signing | Sign a request, then modify the body before sending | 401 -- signature does not match canonical message |
-| Tampered path after signing | Sign for `/auth/devices` but send to `/auth/devices?admin=true` | 401 -- path mismatch in canonical message |
-| Future timestamp | Timestamp > now + 300s | 401 -- timestamp out of range |
-| Far-past timestamp | Timestamp < now - 300s | 401 -- timestamp out of range |
-| Missing auth headers | Send device endpoint request with no X-Device-Kid, X-Signature, or X-Timestamp | 401 |
-| Empty signature | X-Signature header present but empty | 401 |
+| Test | Attack Vector | Expected | Status |
+|------|--------------|----------|--------|
+| Signup with forged device certificate | Sign device pubkey with a random key (not the account root key) | 400 with validation error | Covered |
+| Cross-account device certificate | Sign device pubkey with Account B's root key, submit to Account A | 400 -- certificate verification fails against Account A's root key | Covered |
+| Bit-flipped certificate | Take a valid certificate and flip one bit | 400 -- signature verification fails | Covered |
+| Replay a revoked device's signature | Revoke device, then send a request signed by that device's key | 403 Forbidden ("Device has been revoked") | Not covered |
+| Request signed by unknown key | Sign with a key not registered as any device | 401 -- device not found | Covered |
+| Tampered body after signing | Sign a request, then modify the body before sending | 401 -- signature does not match canonical message | Covered |
+| Tampered path after signing | Sign for `/auth/devices` but send to `/auth/devices?admin=true` | 401 -- path mismatch in canonical message | Covered |
+| Future timestamp | Timestamp > now + 300s | 401 -- timestamp out of range | Covered |
+| Far-past timestamp | Timestamp < now - 300s | 401 -- timestamp out of range | Not covered |
+| Missing auth headers | Send device endpoint request with no X-Device-Kid, X-Signature, or X-Timestamp | 401 | Not covered |
+| Empty signature | X-Signature header present but empty | 401 | Covered |
 
 ### 2. API Robustness
 
@@ -217,31 +229,31 @@ Probe input validation and error handling for malformed, oversized, or unexpecte
 
 **Test vectors:**
 
-| Test | Attack Vector | Expected |
-|------|--------------|----------|
-| Malformed JSON body | Send `{invalid json` to signup | 400 or 422 |
-| Empty body to signup | POST /auth/signup with empty body | 400 or 422 |
-| Oversized username | Username with 65+ characters | 400 with validation error |
-| Empty username | `""` or whitespace-only username | 400 with validation error |
-| Unicode username | Non-ASCII characters (e.g., `"\u00e1lice"`) | 400 -- only ASCII alphanumeric, hyphens, underscores allowed |
-| Reserved username | `"admin"`, `"root"`, `"Admin"` (case variants) | 400 -- reserved |
-| KID with wrong length | 21-char or 23-char KID in path | 400 or 401 -- invalid KID format |
-| KID with invalid characters | KID containing `!`, `@`, `#`, spaces | 400 or 401 -- invalid KID format |
-| Root pubkey wrong size | 31 or 33 bytes (not 32) base64url-encoded | 400 -- must be 32 bytes |
-| Root pubkey bad encoding | String that is not valid base64url | 400 |
-| Device pubkey wrong size | 16 bytes instead of 32 | 400 |
-| Certificate wrong size | 32 bytes instead of 64 | 400 |
-| Backup envelope too small | Less than 90 bytes | 400 -- envelope too small |
-| Backup envelope too large | More than 4096 bytes | 400 -- envelope too large |
-| Backup envelope wrong version | version byte = 0x02 | 400 -- unsupported version |
-| Backup envelope wrong KDF | kdf byte = 0x02 | 400 -- unsupported KDF |
-| KDF params below OWASP minimums | m_cost=1024, t_cost=1, p_cost=1 | 400 -- weak KDF params |
-| KDF m_cost at boundary | m_cost=65535 (one below minimum 65536) | 400 -- weak KDF params |
-| Duplicate signup (same username) | Sign up twice with same username, different keys | 409 Conflict |
-| Device name whitespace-only | `"   "` as device name | 400 |
-| Device name too long | 129+ Unicode characters | 400 |
-| Null fields in JSON | `{"username": null, ...}` | 400 or 422 |
-| Extra unknown fields | Valid signup JSON plus extra fields | Should succeed (serde default ignores unknown fields) or 400 |
+| Test | Attack Vector | Expected | Status |
+|------|--------------|----------|--------|
+| Malformed JSON body | Send `{invalid json` to signup | 400 or 422 | Not covered |
+| Empty body to signup | POST /auth/signup with empty body | 400 or 422 | Not covered |
+| Oversized username | Username with 65+ characters | 400 with validation error | Not covered |
+| Empty username | `""` or whitespace-only username | 400 with validation error | Not covered |
+| Unicode username | Non-ASCII characters (e.g., `"\u00e1lice"`) | 400 -- only ASCII alphanumeric, hyphens, underscores allowed | Not covered |
+| Reserved username | `"admin"`, `"root"`, `"Admin"` (case variants) | 400 -- reserved | Not covered |
+| KID with wrong length | 21-char or 23-char KID in path | 400 or 401 -- invalid KID format | Not covered |
+| KID with invalid characters | KID containing `!`, `@`, `#`, spaces | 400 or 401 -- invalid KID format | Not covered |
+| Root pubkey wrong size | 31 or 33 bytes (not 32) base64url-encoded | 400 -- must be 32 bytes | Not covered |
+| Root pubkey bad encoding | String that is not valid base64url | 400 | Not covered |
+| Device pubkey wrong size | 16 bytes instead of 32 | 400 | Not covered |
+| Certificate wrong size | 32 bytes instead of 64 | 400 | Not covered |
+| Backup envelope too small | Less than 90 bytes | 400 -- envelope too small | Not covered |
+| Backup envelope too large | More than 4096 bytes | 400 -- envelope too large | Not covered |
+| Backup envelope wrong version | version byte = 0x02 | 400 -- unsupported version | Not covered |
+| Backup envelope wrong KDF | kdf byte = 0x02 | 400 -- unsupported KDF | Not covered |
+| KDF params below OWASP minimums | m_cost=1024, t_cost=1, p_cost=1 | 400 -- weak KDF params | Not covered |
+| KDF m_cost at boundary | m_cost=65535 (one below minimum 65536) | 400 -- weak KDF params | Not covered |
+| Duplicate signup (same username) | Sign up twice with same username, different keys | 409 Conflict | Not covered |
+| Device name whitespace-only | `"   "` as device name | 400 | Not covered |
+| Device name too long | 129+ Unicode characters | 400 | Not covered |
+| Null fields in JSON | `{"username": null, ...}` | 400 or 422 | Not covered |
+| Extra unknown fields | Valid signup JSON plus extra fields | Should succeed (serde default ignores unknown fields) or 400 | Not covered |
 
 ### 3. Domain Logic Edge Cases
 
@@ -249,20 +261,20 @@ Test invariants at the boundaries of business rules and entity lifecycles.
 
 **Test vectors:**
 
-| Test | Attack Vector | Expected |
-|------|--------------|----------|
-| 11th device key | Add 10 devices (max), then attempt 11th | 422 -- maximum device limit reached |
-| Cross-account certificate on add-device | Account A authenticates, tries to add device with cert signed by Account B's root key | 400 -- invalid device certificate |
-| Revoke then re-use device | Revoke device, then try to authenticate with it | 403 Forbidden |
-| Double revoke | Revoke same device twice | 409 Conflict (already revoked) |
-| Revoke self | Try to revoke the device making the request | 422 Unprocessable Entity |
-| Revoke nonexistent device | DELETE /auth/devices/{random_kid} | 404 Not Found |
-| Rename revoked device | Revoke device, then try to rename it | 409 Conflict |
-| Rename nonexistent device | PATCH /auth/devices/{random_kid} | 404 Not Found |
-| Cross-account revoke | Account A tries to revoke Account B's device | 404 (not found, not 403, to avoid information leakage) |
-| Cross-account rename | Account A tries to rename Account B's device | 404 |
-| Replay detection | Send the exact same signed request twice | First succeeds (200), second returns 401 (replay detected) |
-| Duplicate device pubkey | Add a device, then add another with the same pubkey | 409 Conflict |
+| Test | Attack Vector | Expected | Status |
+|------|--------------|----------|--------|
+| 11th device key | Add 10 devices (max), then attempt 11th | 422 -- maximum device limit reached | Not covered |
+| Cross-account certificate on add-device | Account A authenticates, tries to add device with cert signed by Account B's root key | 400 -- invalid device certificate | Not covered |
+| Revoke then re-use device | Revoke device, then try to authenticate with it | 403 Forbidden | Not covered |
+| Double revoke | Revoke same device twice | 409 Conflict (already revoked) | Not covered |
+| Revoke self | Try to revoke the device making the request | 422 Unprocessable Entity | Not covered |
+| Revoke nonexistent device | DELETE /auth/devices/{random_kid} | 404 Not Found | Not covered |
+| Rename revoked device | Revoke device, then try to rename it | 409 Conflict | Not covered |
+| Rename nonexistent device | PATCH /auth/devices/{random_kid} | 404 Not Found | Not covered |
+| Cross-account revoke | Account A tries to revoke Account B's device | 404 (not found, not 403, to avoid information leakage) | Not covered |
+| Cross-account rename | Account A tries to rename Account B's device | 404 | Not covered |
+| Replay detection | Send the exact same signed request twice | First succeeds (200), second returns 401 (replay detected) | Not covered |
+| Duplicate device pubkey | Add a device, then add another with the same pubkey | 409 Conflict | Not covered |
 
 ---
 
@@ -270,10 +282,12 @@ Test invariants at the boundaries of business rules and entity lifecycles.
 
 ### File Creation
 
-Create `service/tests/adversarial_tests.rs` with:
-- `mod common;` at the top
-- Imports from existing test infrastructure
-- Helper functions following patterns from `device_handler_tests.rs`
+**Append to** the existing `service/tests/adversarial_tests.rs` — do NOT recreate it from scratch. The file already has `mod common;` and imports at the top.
+
+When adding new tests:
+- Add any new `use` imports alongside the existing ones at the top of the file (do not duplicate imports that are already present)
+- Follow the existing section comment style (`// =========================================================================`)
+- Place new tests after the last existing test, grouped by focus area
 
 ### Documentation
 
@@ -306,7 +320,7 @@ Use `--test-threads=1` because tests share a database container and some tests m
 
 ### Branch and PR
 
-1. Create branch: `adversarial/$(date +%Y-%m-%d)-{focus}` where `{focus}` is one of `trust-boundary`, `api-robustness`, or `domain-logic`
+1. Create branch: `adversarial/$(date +%Y-%m-%d)-{focus}-{specific}` where `{focus}` is one of `trust-boundary`, `api-robustness`, or `domain-logic` and `{specific}` is a short slug describing what NEW tests were added (e.g., `adversarial/2026-03-02-trust-boundary-replay-detection`)
 2. Open a **draft** PR
 3. Include a findings table in the PR body:
 
@@ -362,3 +376,4 @@ You MUST follow these constraints:
 8. **Do not create database migrations.**
 9. **Each test must be independently runnable** -- no ordering dependencies between tests.
 10. **Use unique usernames per test** to avoid collisions (e.g., `"adv_forged_cert"`, `"adv_11th_device"`).
+11. **Read `adversarial_tests.rs` before writing.** Cross-reference existing tests against the focus area vectors. Only write tests for uncovered vectors. If everything is covered, say so in the PR body and suggest new vectors to add to this prompt.
