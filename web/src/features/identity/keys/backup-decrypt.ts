@@ -7,6 +7,8 @@
 import type { DecryptRequest, WorkerResponse } from './backup-worker';
 import { DecryptionError } from './crypto';
 
+const WORKER_TIMEOUT_MS = 30_000;
+
 /**
  * Decrypt a backup envelope using a web worker for KDF computation.
  *
@@ -16,8 +18,6 @@ import { DecryptionError } from './crypto';
  * @throws DecryptionError if password is wrong or envelope is corrupt
  * @throws Error for other failures
  */
-const WORKER_TIMEOUT_MS = 30_000;
-
 export function decryptBackupInWorker(envelope: Uint8Array, password: string): Promise<Uint8Array> {
   return new Promise((resolve, reject) => {
     const worker = new Worker(new URL('./backup-worker.ts', import.meta.url), { type: 'module' });
