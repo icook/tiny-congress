@@ -382,6 +382,55 @@ async fn test_tb_future_timestamp_rejected() {
 }
 
 // =========================================================================
+// Trust Boundary: Request — past timestamp outside the allowed skew window
+// =========================================================================
+
+/// Attack: A request is submitted with a timestamp 10 minutes in the past,
+/// well outside the ±300-second allowed clock skew.
+///
+/// Expected: 401 Unauthorized — the server must enforce the timestamp skew limit
+/// in both directions (past and future). If the past direction is not checked,
+/// an attacker could replay captured requests indefinitely, regardless of how
+/// old the original signature is.
+///
+/// Uses `with_mocks()` because the timestamp check fires at step 6 of auth,
+/// before the DB device lookup at step 12 — no real database is required.
+#[shared_runtime_test]
+async fn test_tb_past_timestamp_rejected() {
+    // Timestamp rejection fires before the DB lookup, so no real DB is needed.
+    let app = TestAppBuilder::with_mocks().build();
+
+    let signing_key = SigningKey::generate(&mut OsRng);
+    let kid = Kid::derive(&signing_key.verifying_key().to_bytes());
+
+    let past_timestamp = chrono::Utc::now().timestamp() - 600; // 10 minutes in the past
+    let nonce = uuid::Uuid::new_v4().to_string();
+    let auth_headers = sign_request_at_timestamp(
+        "GET",
+        "/auth/devices",
+        b"",
+        &signing_key,
+        &kid,
+        past_timestamp,
+        &nonce,
+    );
+
+    let mut builder = Request::builder().method(Method::GET).uri("/auth/devices");
+    for (name, value) in &auth_headers {
+        builder = builder.header(*name, value.as_str());
+    }
+    let req = builder.body(Body::empty()).expect("request");
+
+    let response = app.oneshot(req).await.expect("response");
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    let error = error_body(response).await;
+    assert_eq!(
+        error, "Timestamp out of range",
+        "past timestamp must be rejected with timestamp-specific error"
+    );
+}
+
+// =========================================================================
 // Trust Boundary: Request — empty X-Signature header
 // =========================================================================
 
