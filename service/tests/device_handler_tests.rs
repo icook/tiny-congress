@@ -468,7 +468,7 @@ async fn signup_user_in_pool(username: &str, pool: &sqlx::PgPool) -> (axum::Rout
 
 #[shared_runtime_test]
 async fn test_cannot_revoke_other_accounts_device() {
-    let (app, _keys_a, db) = signup_user("ownerA").await;
+    let (app, keys_a, db) = signup_user("ownerA").await;
     let (_app_b, keys_b) = signup_user_in_pool("ownerB", db.pool()).await;
 
     // Account A tries to revoke account B's device
@@ -477,8 +477,8 @@ async fn test_cannot_revoke_other_accounts_device() {
         Method::DELETE,
         &path,
         "",
-        &_keys_a.device_signing_key,
-        &_keys_a.device_kid,
+        &keys_a.device_signing_key,
+        &keys_a.device_kid,
     );
 
     let response = app.oneshot(req).await.expect("response");
@@ -487,7 +487,7 @@ async fn test_cannot_revoke_other_accounts_device() {
 
 #[shared_runtime_test]
 async fn test_cannot_rename_other_accounts_device() {
-    let (app, _keys_a, db) = signup_user("renameOwnerA").await;
+    let (app, keys_a, db) = signup_user("renameOwnerA").await;
     let (_app_b, keys_b) = signup_user_in_pool("renameOwnerB", db.pool()).await;
 
     // Account A tries to rename account B's device
@@ -497,8 +497,8 @@ async fn test_cannot_rename_other_accounts_device() {
         Method::PATCH,
         &path,
         &body,
-        &_keys_a.device_signing_key,
-        &_keys_a.device_kid,
+        &keys_a.device_signing_key,
+        &keys_a.device_kid,
     );
 
     let response = app.oneshot(req).await.expect("response");
