@@ -33,7 +33,7 @@ describe('Web Crypto Ed25519', () => {
     // Round-trip: import the raw public key and verify the signature
     const publicCryptoKey = await globalThis.crypto.subtle.importKey(
       'raw',
-      keyPair.publicKey,
+      keyPair.publicKey as BufferSource,
       'Ed25519',
       true,
       ['verify']
@@ -41,8 +41,8 @@ describe('Web Crypto Ed25519', () => {
     const valid = await globalThis.crypto.subtle.verify(
       'Ed25519',
       publicCryptoKey,
-      signature,
-      message
+      signature as BufferSource,
+      message as BufferSource
     );
     expect(valid).toBe(true);
   });
