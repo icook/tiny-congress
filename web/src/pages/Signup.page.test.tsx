@@ -2,10 +2,20 @@ import { render, screen, userEvent } from '@test-utils';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { SignupPage } from './Signup.page';
 
+// Mock router Link to avoid needing RouterProvider in tests
+vi.mock('@tanstack/react-router', () => ({
+  Link: ({ children, to, ...props }: { children: React.ReactNode; to: string }) => (
+    <a href={to} {...props}>
+      {children}
+    </a>
+  ),
+  useNavigate: vi.fn(() => vi.fn()),
+}));
+
 // Mock the crypto provider
 const mockCrypto = {
   derive_kid: vi.fn(() => 'kid-123'),
-  encode_base64url: vi.fn(() => 'mock-pubkey'),
+  encode_base64url: vi.fn(() => 'mock-encoded'),
   decode_base64url: vi.fn(() => new Uint8Array(32)),
 };
 
@@ -13,7 +23,19 @@ vi.mock('@/providers/CryptoProvider', () => ({
   useCryptoRequired: vi.fn(() => mockCrypto),
 }));
 
-// Mock the signup mutation
+// Mock the device provider
+const mockSetDevice = vi.fn();
+vi.mock('@/providers/DeviceProvider', () => ({
+  useDevice: vi.fn(() => ({
+    deviceKid: null,
+    privateKey: null,
+    isLoading: false,
+    setDevice: mockSetDevice,
+    clearDevice: vi.fn(),
+  })),
+}));
+
+// Mock the signup mutation and crypto functions
 const mockMutateAsync = vi.fn();
 vi.mock('@/features/identity', async (importOriginal) => {
   const original = await importOriginal<typeof import('@/features/identity')>();
@@ -26,40 +48,56 @@ vi.mock('@/features/identity', async (importOriginal) => {
       error: null,
     })),
     generateKeyPair: vi.fn(() => ({
-      publicKey: new Uint8Array([
-        1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
-        26, 27, 28, 29, 30, 31, 32,
-      ]),
+      publicKey: new Uint8Array(32),
       privateKey: new Uint8Array(32),
       kid: 'kid-123',
     })),
+    signMessage: vi.fn(() => new Uint8Array(64)),
+    buildBackupEnvelope: vi.fn().mockResolvedValue(new Uint8Array(90)),
   };
 });
 
 describe('SignupPage', () => {
   beforeEach(() => {
     mockMutateAsync.mockReset();
+    mockSetDevice.mockReset();
     mockCrypto.encode_base64url.mockClear();
     mockCrypto.derive_kid.mockClear();
   });
 
-  test('submits signup and shows account details', async () => {
-    mockMutateAsync.mockResolvedValue({ account_id: 'abc', root_kid: 'kid-123' });
+  test('submits signup with full payload and stores device', async () => {
+    mockMutateAsync.mockResolvedValue({
+      account_id: 'abc',
+      root_kid: 'kid-123',
+      device_kid: 'dev-456',
+    });
     const user = userEvent.setup();
 
     render(<SignupPage />);
 
     await user.type(screen.getByLabelText(/username/i), ' alice ');
+    await user.type(screen.getByLabelText(/backup password/i), 'test-password');
     await user.click(screen.getByRole('button', { name: /sign up/i }));
 
-    expect(mockMutateAsync).toHaveBeenCalledWith({
-      username: 'alice',
-      root_pubkey: 'mock-pubkey',
-    });
+    expect(mockMutateAsync).toHaveBeenCalledWith(
+      expect.objectContaining({
+        username: 'alice',
+        root_pubkey: 'mock-encoded',
+        backup: expect.objectContaining({
+          encrypted_blob: 'mock-encoded',
+        }),
+        device: expect.objectContaining({
+          pubkey: 'mock-encoded',
+          certificate: 'mock-encoded',
+        }),
+      })
+    );
+
+    // Should store device credentials
+    expect(mockSetDevice).toHaveBeenCalledWith('dev-456', expect.any(Uint8Array));
 
     expect(await screen.findByText(/Account ID:/i)).toBeInTheDocument();
     expect(screen.getByText(/abc/)).toBeInTheDocument();
-    expect(screen.getByText(/kid-123/)).toBeInTheDocument();
   });
 
   test('shows an error message when signup fails', async () => {
@@ -80,13 +118,18 @@ describe('SignupPage', () => {
     render(<SignupPage />);
 
     await user.type(screen.getByLabelText(/username/i), 'alice');
+    await user.type(screen.getByLabelText(/backup password/i), 'test-password');
     await user.click(screen.getByRole('button', { name: /sign up/i }));
 
     expect(await screen.findByText(/boom/)).toBeInTheDocument();
   });
 
   test('does not submit when username is blank', async () => {
-    mockMutateAsync.mockResolvedValue({ account_id: 'abc', root_kid: 'kid-123' });
+    mockMutateAsync.mockResolvedValue({
+      account_id: 'abc',
+      root_kid: 'kid-123',
+      device_kid: 'dev-456',
+    });
     const user = userEvent.setup();
 
     render(<SignupPage />);

@@ -1,10 +1,10 @@
--- Replay protection: track recently seen request signatures.
+-- Replay protection: track recently-seen request nonces.
 -- Rows are ephemeral — a background task deletes entries older than
 -- the timestamp skew window (currently 300 seconds).
 
 CREATE TABLE IF NOT EXISTS request_nonces (
-    signature_hash BYTEA PRIMARY KEY,
-    created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+    nonce_hash  BYTEA PRIMARY KEY,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 -- Index for efficient cleanup of expired nonces.

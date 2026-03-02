@@ -4,12 +4,26 @@
  */
 
 import { IconAlertTriangle, IconCheck } from '@tabler/icons-react';
-import { Alert, Button, Card, Code, Group, Stack, Text, TextInput, Title } from '@mantine/core';
+import { Link } from '@tanstack/react-router';
+import {
+  Alert,
+  Button,
+  Card,
+  Code,
+  Group,
+  PasswordInput,
+  Stack,
+  Text,
+  TextInput,
+  Title,
+} from '@mantine/core';
 
 export interface SignupFormProps {
   // Form state
   username: string;
+  password: string;
   onUsernameChange: (value: string) => void;
+  onPasswordChange: (value: string) => void;
   onSubmit: (e: React.FormEvent) => void;
 
   // Loading states
@@ -23,12 +37,15 @@ export interface SignupFormProps {
   successData?: {
     account_id: string;
     root_kid: string;
+    device_kid: string;
   } | null;
 }
 
 export function SignupForm({
   username,
+  password,
   onUsernameChange,
+  onPasswordChange,
   onSubmit,
   isLoading,
   loadingText,
@@ -51,13 +68,14 @@ export function SignupForm({
             <Text size="sm">
               <strong>Root Key ID:</strong> <Code>{successData.root_kid}</Code>
             </Text>
+            <Text size="sm">
+              <strong>Device Key ID:</strong> <Code>{successData.device_kid}</Code>
+            </Text>
           </Stack>
         </Card>
 
         <Text size="xs" c="dimmed" ta="center">
-          Your keys were generated locally.
-          <br />
-          (Key persistence will be added in a future update)
+          Your keys were generated locally and stored in this browser session.
         </Text>
       </Stack>
     );
@@ -86,6 +104,17 @@ export function SignupForm({
               disabled={isLoading}
             />
 
+            <PasswordInput
+              label="Backup Password"
+              description="Used to encrypt your root key backup. You'll need this to log in on new devices."
+              required
+              value={password}
+              onChange={(e) => {
+                onPasswordChange(e.currentTarget.value);
+              }}
+              disabled={isLoading}
+            />
+
             {error ? (
               <Alert icon={<IconAlertTriangle size={16} />} title="Signup failed" color="red">
                 {error}
@@ -103,6 +132,10 @@ export function SignupForm({
 
       <Text size="xs" c="dimmed" ta="center">
         Your keys are generated locally and never leave your device.
+      </Text>
+
+      <Text size="xs" c="dimmed" ta="center">
+        Already have an account? <Link to="/login">Log in</Link>
       </Text>
     </Stack>
   );

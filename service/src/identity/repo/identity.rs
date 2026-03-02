@@ -10,8 +10,8 @@ use tc_crypto::Kid;
 use uuid::Uuid;
 
 use super::accounts::{
-    create_account_with_executor, get_account_by_id, AccountRecord, AccountRepoError,
-    CreatedAccount,
+    create_account_with_executor, get_account_by_id, get_account_by_username, AccountRecord,
+    AccountRepoError, CreatedAccount,
 };
 use super::backups::{
     create_backup_with_executor, delete_backup_by_kid, get_backup_by_kid, BackupRecord,
@@ -22,15 +22,7 @@ use super::device_keys::{
     rename_device_key, revoke_device_key, touch_device_key, CreatedDeviceKey, DeviceKeyRecord,
     DeviceKeyRepoError,
 };
-
-/// Error from nonce replay checking.
-#[derive(Debug, thiserror::Error)]
-pub enum NonceError {
-    #[error("request replay detected")]
-    Replay,
-    #[error("database error: {0}")]
-    Database(sqlx::Error),
-}
+use super::nonces::{check_and_record_nonce, cleanup_expired_nonces, NonceRepoError};
 
 /// Validated signup data ready for persistence.
 ///
@@ -124,6 +116,11 @@ pub trait IdentityRepo: Send + Sync {
 
     async fn get_account_by_id(&self, account_id: Uuid) -> Result<AccountRecord, AccountRepoError>;
 
+    async fn get_account_by_username(
+        &self,
+        username: &str,
+    ) -> Result<AccountRecord, AccountRepoError>;
+
     // Backup operations
 
     async fn create_backup(
@@ -170,20 +167,20 @@ pub trait IdentityRepo: Send + Sync {
 
     async fn touch_device_key(&self, device_kid: &Kid) -> Result<(), DeviceKeyRepoError>;
 
+    // Nonce operations (replay prevention)
+
+    /// Record a nonce hash. Returns `NonceRepoError::Replay` if already seen.
+    async fn check_and_record_nonce(&self, nonce_hash: &[u8]) -> Result<(), NonceRepoError>;
+
+    /// Delete nonces older than `max_age_secs`. Returns count of deleted rows.
+    async fn cleanup_expired_nonces(&self, max_age_secs: i64) -> Result<u64, NonceRepoError>;
+
     // Compound: atomic signup (account + backup + device key in one transaction)
 
     async fn create_signup(
         &self,
         data: &ValidatedSignup,
     ) -> Result<SignupResult, CreateSignupError>;
-
-    // Nonce / replay protection
-
-    /// Record a request signature hash. Returns `NonceError::Replay` if already seen.
-    async fn check_and_record_nonce(&self, signature_hash: &[u8; 32]) -> Result<(), NonceError>;
-
-    /// Delete nonces older than `max_age_secs`. Returns count of deleted rows.
-    async fn cleanup_expired_nonces(&self, max_age_secs: i64) -> Result<u64, NonceError>;
 }
 
 /// `PostgreSQL` implementation of [`IdentityRepo`].
@@ -211,6 +208,13 @@ impl IdentityRepo for PgIdentityRepo {
 
     async fn get_account_by_id(&self, account_id: Uuid) -> Result<AccountRecord, AccountRepoError> {
         get_account_by_id(&self.pool, account_id).await
+    }
+
+    async fn get_account_by_username(
+        &self,
+        username: &str,
+    ) -> Result<AccountRecord, AccountRepoError> {
+        get_account_by_username(&self.pool, username).await
     }
 
     async fn create_backup(
@@ -289,6 +293,14 @@ impl IdentityRepo for PgIdentityRepo {
         touch_device_key(&self.pool, device_kid).await
     }
 
+    async fn check_and_record_nonce(&self, nonce_hash: &[u8]) -> Result<(), NonceRepoError> {
+        check_and_record_nonce(&self.pool, nonce_hash).await
+    }
+
+    async fn cleanup_expired_nonces(&self, max_age_secs: i64) -> Result<u64, NonceRepoError> {
+        cleanup_expired_nonces(&self.pool, max_age_secs).await
+    }
+
     async fn create_signup(
         &self,
         data: &ValidatedSignup,
@@ -338,33 +350,6 @@ impl IdentityRepo for PgIdentityRepo {
             device_kid: device.device_kid,
         })
     }
-
-    async fn check_and_record_nonce(&self, signature_hash: &[u8; 32]) -> Result<(), NonceError> {
-        let result = sqlx::query(
-            "INSERT INTO request_nonces (signature_hash) VALUES ($1) ON CONFLICT DO NOTHING",
-        )
-        .bind(signature_hash.as_slice())
-        .execute(&self.pool)
-        .await
-        .map_err(NonceError::Database)?;
-
-        if result.rows_affected() == 0 {
-            return Err(NonceError::Replay);
-        }
-        Ok(())
-    }
-
-    async fn cleanup_expired_nonces(&self, max_age_secs: i64) -> Result<u64, NonceError> {
-        let result = sqlx::query(
-            "DELETE FROM request_nonces WHERE created_at < now() - $1::bigint * INTERVAL '1 second'",
-        )
-        .bind(max_age_secs)
-        .execute(&self.pool)
-        .await
-        .map_err(NonceError::Database)?;
-
-        Ok(result.rows_affected())
-    }
 }
 
 #[cfg(any(test, feature = "test-utils"))]
@@ -378,7 +363,7 @@ pub mod mock {
     use super::{
         async_trait, AccountRecord, AccountRepoError, BackupRecord, BackupRepoError,
         CreateSignupError, CreatedAccount, CreatedBackup, CreatedDeviceKey, DeviceKeyRecord,
-        DeviceKeyRepoError, IdentityRepo, Kid, NonceError, SignupResult, Uuid, ValidatedSignup,
+        DeviceKeyRepoError, IdentityRepo, Kid, NonceRepoError, SignupResult, Uuid, ValidatedSignup,
     };
     use std::sync::Mutex;
 
@@ -428,6 +413,13 @@ pub mod mock {
         async fn get_account_by_id(
             &self,
             _account_id: Uuid,
+        ) -> Result<AccountRecord, AccountRepoError> {
+            Err(AccountRepoError::NotFound)
+        }
+
+        async fn get_account_by_username(
+            &self,
+            _username: &str,
         ) -> Result<AccountRecord, AccountRepoError> {
             Err(AccountRepoError::NotFound)
         }
@@ -500,6 +492,14 @@ pub mod mock {
             Ok(())
         }
 
+        async fn check_and_record_nonce(&self, _nonce_hash: &[u8]) -> Result<(), NonceRepoError> {
+            Ok(())
+        }
+
+        async fn cleanup_expired_nonces(&self, _max_age_secs: i64) -> Result<u64, NonceRepoError> {
+            Ok(0)
+        }
+
         async fn create_signup(
             &self,
             _data: &ValidatedSignup,
@@ -515,17 +515,6 @@ pub mod mock {
                         device_kid: Kid::derive(&[1u8; 32]),
                     })
                 })
-        }
-
-        async fn check_and_record_nonce(
-            &self,
-            _signature_hash: &[u8; 32],
-        ) -> Result<(), NonceError> {
-            Ok(())
-        }
-
-        async fn cleanup_expired_nonces(&self, _max_age_secs: i64) -> Result<u64, NonceError> {
-            Ok(0)
         }
     }
 }

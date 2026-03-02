@@ -35,7 +35,7 @@ CREATE TABLE device_keys (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now());
 
 CREATE TABLE request_nonces (
-    signature_hash BYTEA NOT NULL,
+    nonce_hash BYTEA NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -71,7 +71,7 @@ CREATE UNIQUE INDEX uq_device_keys_kid ON public.device_keys USING btree (device
 CREATE INDEX idx_request_nonces_created_at ON public.request_nonces USING btree (created_at)
 
 -- request_nonces.request_nonces_pkey
-CREATE UNIQUE INDEX request_nonces_pkey ON public.request_nonces USING btree (signature_hash)
+CREATE UNIQUE INDEX request_nonces_pkey ON public.request_nonces USING btree (nonce_hash)
 
 -- Foreign Keys
 -- account_backups.account_id -> accounts.id (ON UPDATE NO ACTION, ON DELETE CASCADE)
@@ -106,5 +106,5 @@ CREATE UNIQUE INDEX request_nonces_pkey ON public.request_nonces USING btree (si
 -- device_keys: device_keys_pkey (PRIMARY KEY)
 -- device_keys: uq_device_keys_kid (UNIQUE)
 -- request_nonces: request_nonces_created_at_not_null (CHECK)
+-- request_nonces: request_nonces_nonce_hash_not_null (CHECK)
 -- request_nonces: request_nonces_pkey (PRIMARY KEY)
--- request_nonces: request_nonces_signature_hash_not_null (CHECK)
