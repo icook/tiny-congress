@@ -1,7 +1,8 @@
 //! Login and backup retrieval integration tests.
 //!
 //! Tests the unauthenticated login flow:
-//! - `GET /auth/backup/{username}` — fetch encrypted backup for a known user
+//! - `GET /auth/backup/{username}` — fetch encrypted backup (returns 200 for both
+//!   existing and non-existent users to prevent username enumeration)
 //! - `POST /auth/login` — authorize a new device via root-key certificate
 
 mod common;
@@ -11,13 +12,20 @@ use axum::{
     http::{header::CONTENT_TYPE, Method, Request, StatusCode},
 };
 use common::app_builder::TestAppBuilder;
-use common::factories::{valid_signup_with_keys, SignupKeys};
+use common::factories::{valid_signup_json, valid_signup_with_keys, SignupKeys};
 use common::test_db::isolated_db;
 use ed25519_dalek::{Signer, SigningKey};
 use rand::rngs::OsRng;
+use serde::Deserialize;
 use tc_crypto::encode_base64url;
 use tc_test_macros::shared_runtime_test;
 use tower::ServiceExt;
+
+#[derive(Debug, Deserialize)]
+struct BackupResponse {
+    encrypted_backup: String,
+    root_kid: String,
+}
 
 /// Sign up a user and return the app + keys for subsequent requests.
 async fn signup_user(username: &str) -> (axum::Router, SignupKeys, common::test_db::IsolatedDb) {
@@ -43,6 +51,14 @@ async fn signup_user(username: &str) -> (axum::Router, SignupKeys, common::test_
     assert_eq!(response.status(), StatusCode::CREATED);
 
     (app, keys, db)
+}
+
+fn backup_request(username: &str) -> Request<Body> {
+    Request::builder()
+        .method(Method::GET)
+        .uri(format!("/auth/backup/{username}"))
+        .body(Body::empty())
+        .expect("request")
 }
 
 // =========================================================================
@@ -82,24 +98,133 @@ async fn test_get_backup_success() {
 }
 
 #[shared_runtime_test]
-async fn test_get_backup_not_found() {
+async fn test_backup_unknown_user_returns_synthetic() {
     let db = isolated_db().await;
     let app = TestAppBuilder::new()
         .with_identity_pool(db.pool().clone())
         .build();
 
     let response = app
+        .oneshot(backup_request("nonexistentuser"))
+        .await
+        .expect("response");
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body = to_bytes(response.into_body(), 1024 * 1024)
+        .await
+        .expect("body");
+    let payload: BackupResponse = serde_json::from_slice(&body).expect("json");
+    assert!(!payload.encrypted_backup.is_empty());
+    assert!(!payload.root_kid.is_empty());
+}
+
+#[shared_runtime_test]
+async fn test_backup_synthetic_is_deterministic() {
+    let db = isolated_db().await;
+
+    // First request
+    let app = TestAppBuilder::new()
+        .with_identity_pool(db.pool().clone())
+        .build();
+    let response = app
+        .oneshot(backup_request("deterministicuser"))
+        .await
+        .expect("response");
+    assert_eq!(response.status(), StatusCode::OK);
+    let body1 = to_bytes(response.into_body(), 1024 * 1024)
+        .await
+        .expect("body");
+    let payload1: BackupResponse = serde_json::from_slice(&body1).expect("json");
+
+    // Second request — same username should produce same response
+    let app = TestAppBuilder::new()
+        .with_identity_pool(db.pool().clone())
+        .build();
+    let response = app
+        .oneshot(backup_request("deterministicuser"))
+        .await
+        .expect("response");
+    assert_eq!(response.status(), StatusCode::OK);
+    let body2 = to_bytes(response.into_body(), 1024 * 1024)
+        .await
+        .expect("body");
+    let payload2: BackupResponse = serde_json::from_slice(&body2).expect("json");
+
+    assert_eq!(payload1.encrypted_backup, payload2.encrypted_backup);
+    assert_eq!(payload1.root_kid, payload2.root_kid);
+}
+
+#[shared_runtime_test]
+async fn test_backup_synthetic_differs_by_username() {
+    let db = isolated_db().await;
+
+    let app = TestAppBuilder::new()
+        .with_identity_pool(db.pool().clone())
+        .build();
+    let response = app
+        .oneshot(backup_request("usernamealpha"))
+        .await
+        .expect("response");
+    let body1 = to_bytes(response.into_body(), 1024 * 1024)
+        .await
+        .expect("body");
+    let payload1: BackupResponse = serde_json::from_slice(&body1).expect("json");
+
+    let app = TestAppBuilder::new()
+        .with_identity_pool(db.pool().clone())
+        .build();
+    let response = app
+        .oneshot(backup_request("usernamebeta"))
+        .await
+        .expect("response");
+    let body2 = to_bytes(response.into_body(), 1024 * 1024)
+        .await
+        .expect("body");
+    let payload2: BackupResponse = serde_json::from_slice(&body2).expect("json");
+
+    assert_ne!(payload1.encrypted_backup, payload2.encrypted_backup);
+    assert_ne!(payload1.root_kid, payload2.root_kid);
+}
+
+#[shared_runtime_test]
+async fn test_backup_existing_user_returns_real_backup() {
+    let db = isolated_db().await;
+
+    // Create an account via signup
+    let app = TestAppBuilder::new()
+        .with_identity_pool(db.pool().clone())
+        .build();
+    let signup_response = app
         .oneshot(
             Request::builder()
-                .method(Method::GET)
-                .uri("/auth/backup/nonexistent")
-                .body(Body::empty())
+                .method(Method::POST)
+                .uri("/auth/signup")
+                .header("content-type", "application/json")
+                .body(Body::from(valid_signup_json("backupuser")))
                 .expect("request"),
         )
         .await
         .expect("response");
+    assert_eq!(signup_response.status(), StatusCode::CREATED);
 
-    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    // Fetch the backup
+    let app = TestAppBuilder::new()
+        .with_identity_pool(db.pool().clone())
+        .build();
+    let response = app
+        .oneshot(backup_request("backupuser"))
+        .await
+        .expect("response");
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body = to_bytes(response.into_body(), 1024 * 1024)
+        .await
+        .expect("body");
+    let payload: BackupResponse = serde_json::from_slice(&body).expect("json");
+    assert!(!payload.encrypted_backup.is_empty());
+    assert!(!payload.root_kid.is_empty());
 }
 
 // =========================================================================
