@@ -46,6 +46,7 @@ export function LoginPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLocalError(null);
+    loginMutation.reset();
 
     if (!username.trim() || !password) {
       return;

@@ -57,6 +57,7 @@ vi.mock('@/features/identity', async (importOriginal) => {
       isPending: false,
       isError: false,
       error: null,
+      reset: vi.fn(),
     })),
     generateKeyPair: vi.fn(() => ({
       publicKey: new Uint8Array(32),

@@ -56,7 +56,7 @@ pub struct LoginResponse {
 struct ValidatedLogin {
     device_kid: Kid,
     device_name: DeviceName,
-    cert_bytes: Vec<u8>,
+    cert_bytes: [u8; 64],
 }
 
 /// Validate and verify the login request inputs.
@@ -99,7 +99,7 @@ fn validate_login_device(
     Ok(ValidatedLogin {
         device_kid,
         device_name,
-        cert_bytes,
+        cert_bytes: cert_arr,
     })
 }
 
@@ -149,7 +149,7 @@ pub async fn login(
     // Record nonce to prevent replay within the timestamp window.
     // Nonce cleanup is handled by the background sweep in main.rs
     // (spawn_nonce_cleanup), using MAX_TIMESTAMP_SKEW as the TTL.
-    let nonce_hash: [u8; 32] = Sha256::digest(&validated.cert_bytes).into();
+    let nonce_hash: [u8; 32] = Sha256::digest(validated.cert_bytes).into();
     if let Err(e) = repo.check_and_record_nonce(&nonce_hash).await {
         return match e {
             NonceRepoError::Replay => super::bad_request("Request replay detected"),
@@ -192,7 +192,13 @@ pub async fn login(
             .into_response(),
         Err(e) => {
             tracing::error!("Login device creation failed: {e}");
-            super::internal_error()
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse {
+                    error: "Internal error — please retry with a new certificate".to_string(),
+                }),
+            )
+                .into_response()
         }
     }
 }
