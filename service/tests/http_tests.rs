@@ -19,6 +19,7 @@ use axum::{
 use common::app_builder::TestAppBuilder;
 use common::factories::valid_signup_json;
 use tc_crypto::{encode_base64url, BackupEnvelope};
+use tc_test_macros::shared_runtime_test;
 use tinycongress_api::config::SecurityHeadersConfig;
 use tower::ServiceExt;
 
@@ -46,6 +47,50 @@ async fn test_health_endpoint_returns_ok() {
 #[tokio::test]
 async fn test_health_endpoint_with_full_app() {
     let app = TestAppBuilder::with_mocks().build();
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/health")
+                .body(Body::empty())
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+
+    assert_eq!(response.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+async fn test_health_returns_503_when_db_unavailable() {
+    use sqlx::postgres::{PgConnectOptions, PgPoolOptions};
+
+    // Create a pool that's immediately closed — acquire() returns Err(PoolClosed)
+    let pool = PgPoolOptions::new().connect_lazy_with(PgConnectOptions::new());
+    pool.close().await;
+
+    let app = TestAppBuilder::minimal().with_pool(pool).build();
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/health")
+                .body(Body::empty())
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+
+    assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+}
+
+#[shared_runtime_test]
+async fn test_health_returns_200_with_live_db() {
+    let db = common::test_db::get_test_db().await;
+
+    let app = TestAppBuilder::minimal()
+        .with_pool(db.pool().clone())
+        .build();
 
     let response = app
         .oneshot(

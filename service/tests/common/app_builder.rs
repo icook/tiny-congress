@@ -54,9 +54,18 @@ use tower_http::cors::{AllowOrigin, Any, CorsLayer};
 use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
 
-/// Health check handler (mirrors main.rs)
-async fn health_check() -> impl IntoResponse {
-    StatusCode::OK
+/// Health check handler (mirrors main.rs).
+///
+/// Returns 200 if the DB pool can acquire a connection, 503 otherwise.
+/// When no pool is registered (e.g. minimal test builder), always returns 200.
+async fn health_check(pool: Option<Extension<PgPool>>) -> impl IntoResponse {
+    let Some(Extension(pool)) = pool else {
+        return StatusCode::OK;
+    };
+    match tokio::time::timeout(std::time::Duration::from_secs(2), pool.acquire()).await {
+        Ok(Ok(_)) => StatusCode::OK,
+        _ => StatusCode::SERVICE_UNAVAILABLE,
+    }
 }
 
 /// Builder for test applications that mirrors main.rs wiring.
@@ -198,6 +207,16 @@ impl TestAppBuilder {
         self.identity_repo = Some(Arc::clone(&repo) as Arc<dyn IdentityRepo>);
         self.identity_service =
             Some(Arc::new(DefaultIdentityService::new(repo)) as Arc<dyn IdentityService>);
+        self.pool = Some(pool);
+        self
+    }
+
+    /// Add a database pool as an Extension (for health check testing).
+    ///
+    /// Unlike [`with_identity_pool()`], this does NOT enable identity routes.
+    /// Use this when you only need the pool available for the health check.
+    #[must_use]
+    pub fn with_pool(mut self, pool: PgPool) -> Self {
         self.pool = Some(pool);
         self
     }
