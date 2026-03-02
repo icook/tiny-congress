@@ -357,8 +357,9 @@ impl IdentityRepo for PgIdentityRepo {
 pub mod mock {
     //! Mock identity repo for unit testing.
     //!
-    //! Only `create_signup` is configurable; individual methods return
-    //! generic errors since they are not exercised in service-layer tests.
+    //! `create_signup` and `get_account_by_username` are configurable;
+    //! other methods return defaults since they are not exercised in
+    //! service-layer tests.
 
     use super::{
         async_trait, AccountRecord, AccountRepoError, BackupRecord, BackupRepoError,
@@ -367,9 +368,11 @@ pub mod mock {
     };
     use std::sync::Mutex;
 
-    /// Mock identity repo with a configurable `create_signup` result.
+    /// Mock identity repo with configurable results.
     pub struct MockIdentityRepo {
         pub signup_result: Mutex<Option<Result<SignupResult, CreateSignupError>>>,
+        pub account_by_username_result: Mutex<Option<Result<AccountRecord, AccountRepoError>>>,
+        pub create_device_key_error: Mutex<Option<DeviceKeyRepoError>>,
     }
 
     impl MockIdentityRepo {
@@ -377,6 +380,8 @@ pub mod mock {
         pub const fn new() -> Self {
             Self {
                 signup_result: Mutex::new(None),
+                account_by_username_result: Mutex::new(None),
+                create_device_key_error: Mutex::new(None),
             }
         }
 
@@ -387,6 +392,30 @@ pub mod mock {
         /// Panics if the internal mutex is poisoned.
         pub fn set_signup_result(&self, result: Result<SignupResult, CreateSignupError>) {
             *self.signup_result.lock().expect("lock poisoned") = Some(result);
+        }
+
+        /// Set the result that [`IdentityRepo::get_account_by_username`] will return.
+        ///
+        /// # Panics
+        ///
+        /// Panics if the internal mutex is poisoned.
+        pub fn set_account_by_username_result(
+            &self,
+            result: Result<AccountRecord, AccountRepoError>,
+        ) {
+            *self
+                .account_by_username_result
+                .lock()
+                .expect("lock poisoned") = Some(result);
+        }
+
+        /// Set an error that [`IdentityRepo::create_device_key`] will return.
+        ///
+        /// # Panics
+        ///
+        /// Panics if the internal mutex is poisoned.
+        pub fn set_create_device_key_error(&self, error: DeviceKeyRepoError) {
+            *self.create_device_key_error.lock().expect("lock poisoned") = Some(error);
         }
     }
 
@@ -421,7 +450,11 @@ pub mod mock {
             &self,
             _username: &str,
         ) -> Result<AccountRecord, AccountRepoError> {
-            Err(AccountRepoError::NotFound)
+            self.account_by_username_result
+                .lock()
+                .expect("lock poisoned")
+                .take()
+                .unwrap_or(Err(AccountRepoError::NotFound))
         }
 
         async fn create_backup(
@@ -455,6 +488,14 @@ pub mod mock {
             _device_name: &str,
             _certificate: &[u8],
         ) -> Result<CreatedDeviceKey, DeviceKeyRepoError> {
+            let maybe_err = self
+                .create_device_key_error
+                .lock()
+                .expect("lock poisoned")
+                .take();
+            if let Some(err) = maybe_err {
+                return Err(err);
+            }
             Ok(CreatedDeviceKey {
                 id: Uuid::new_v4(),
                 device_kid: device_kid.clone(),
