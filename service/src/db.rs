@@ -2,33 +2,41 @@ use crate::config::DatabaseConfig;
 use sqlx_core::migrate::Migrator;
 use sqlx_postgres::{PgPool, PgPoolOptions};
 use std::path::{Path, PathBuf};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tokio::time::sleep;
 use tracing::{info, warn};
 
 /// Connect to the database and run migrations.
 ///
-/// Retries the connection indefinitely with exponential backoff (500ms to 5s).
-/// In Kubernetes, the startup probe acts as the effective timeout — if postgres
-/// never becomes available, the probe fails and the pod is restarted.
+/// Retries the connection with exponential backoff (500ms to 5s) for up to
+/// 120 seconds. The deadline is well within the Kubernetes startup probe
+/// budget (600s), so the process crashes fast enough for K8s to restart the
+/// pod without Helm timing out.
 ///
 /// # Errors
-/// Returns an error if migrations fail after a successful connection.
+/// Returns an error if the connection cannot be established within the retry
+/// deadline, or if migrations fail after a successful connection.
 pub async fn setup_database(config: &DatabaseConfig) -> Result<PgPool, anyhow::Error> {
+    let retry_deadline = Duration::from_secs(120);
     let max_interval = Duration::from_secs(5);
     let mut delay = Duration::from_millis(500);
+    let start = Instant::now();
 
     let pool = loop {
         info!("Attempting to connect to Postgres...");
 
         match PgPoolOptions::new()
             .max_connections(config.max_connections)
-            .acquire_timeout(Duration::from_secs(30))
+            .acquire_timeout(Duration::from_secs(5))
             .connect_with(config.connect_options())
             .await
         {
             Ok(pool) => break pool,
             Err(err) => {
+                if start.elapsed() >= retry_deadline {
+                    warn!(error = %err, "Postgres not ready; retries exhausted after {:?}", retry_deadline);
+                    return Err(err.into());
+                }
                 warn!(error = %err, "Postgres not ready yet; retrying in {:?}", delay);
                 sleep(delay).await;
                 delay = (delay.saturating_mul(2)).min(max_interval);

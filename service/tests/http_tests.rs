@@ -61,8 +61,29 @@ async fn test_health_endpoint_with_full_app() {
     assert_eq!(response.status(), StatusCode::OK);
 }
 
+// =============================================================================
+// Readiness Check Tests (/ready)
+// =============================================================================
+
 #[tokio::test]
-async fn test_health_returns_503_when_db_unavailable() {
+async fn test_ready_returns_503_without_pool() {
+    let app = TestAppBuilder::minimal().build();
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/ready")
+                .body(Body::empty())
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+
+    assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+}
+
+#[tokio::test]
+async fn test_ready_returns_503_when_db_unavailable() {
     use sqlx::postgres::{PgConnectOptions, PgPoolOptions};
 
     // Create a pool that's immediately closed — acquire() returns Err(PoolClosed)
@@ -74,7 +95,7 @@ async fn test_health_returns_503_when_db_unavailable() {
     let response = app
         .oneshot(
             Request::builder()
-                .uri("/health")
+                .uri("/ready")
                 .body(Body::empty())
                 .expect("request"),
         )
@@ -84,8 +105,26 @@ async fn test_health_returns_503_when_db_unavailable() {
     assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
 }
 
+#[tokio::test]
+async fn test_health_returns_200_even_without_pool() {
+    // /health is a liveness check — always 200 if the process is alive
+    let app = TestAppBuilder::minimal().build();
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/health")
+                .body(Body::empty())
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+
+    assert_eq!(response.status(), StatusCode::OK);
+}
+
 #[shared_runtime_test]
-async fn test_health_returns_200_with_live_db() {
+async fn test_ready_returns_200_with_live_db() {
     let db = common::test_db::get_test_db().await;
 
     let app = TestAppBuilder::minimal()
@@ -95,7 +134,7 @@ async fn test_health_returns_200_with_live_db() {
     let response = app
         .oneshot(
             Request::builder()
-                .uri("/health")
+                .uri("/ready")
                 .body(Body::empty())
                 .expect("request"),
         )
