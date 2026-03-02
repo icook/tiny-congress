@@ -49,6 +49,11 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.database.existingSecret | default (printf "%s-database" (include "app.fullname" .)) }}
                   key: password
+            - name: TC_SYNTHETIC_BACKUP_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "app.fullname" . }}-app
+                  key: synthetic-backup-key
           startupProbe:
             {{- toYaml .Values.startupProbe | nindent 12 }}
           livenessProbe:
