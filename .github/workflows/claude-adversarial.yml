@@ -12,10 +12,6 @@ on:
           - domain-logic
           - all
 
-  schedule:
-    # Weekly: Sunday at 3am UTC
-    - cron: "0 3 * * 0"
-
 concurrency:
   group: adversarial
   cancel-in-progress: true
@@ -39,18 +35,7 @@ jobs:
         id: focus
         run: |
           set -e
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            FOCUS="${{ github.event.inputs.focus }}"
-          else
-            WEEK_NUM=$(date +%U)
-            ROTATION=$(( WEEK_NUM % 3 ))
-            case $ROTATION in
-              0) FOCUS="trust-boundary" ;;
-              1) FOCUS="api-robustness" ;;
-              2) FOCUS="domain-logic" ;;
-            esac
-          fi
-          echo "area=$FOCUS" >> "$GITHUB_OUTPUT"
+          echo "area=${{ github.event.inputs.focus }}" >> "$GITHUB_OUTPUT"
 
       - name: Set up Rust toolchain
         uses: dtolnay/rust-toolchain@stable

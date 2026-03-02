@@ -193,13 +193,7 @@ async fn test_tb_request_signed_by_unknown_kid() {
     let unknown_key = SigningKey::generate(&mut OsRng);
     let unknown_kid = Kid::derive(&unknown_key.verifying_key().to_bytes());
 
-    let req = build_authed_request(
-        Method::GET,
-        "/auth/devices",
-        "",
-        &unknown_key,
-        &unknown_kid,
-    );
+    let req = build_authed_request(Method::GET, "/auth/devices", "", &unknown_key, &unknown_kid);
 
     let response = app.oneshot(req).await.expect("response");
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
@@ -241,9 +235,7 @@ async fn test_tb_tampered_body_after_signing() {
     for (name, value) in &auth_headers {
         builder = builder.header(*name, value.as_str());
     }
-    let req = builder
-        .body(Body::from(tampered_body))
-        .expect("request");
+    let req = builder.body(Body::from(tampered_body)).expect("request");
 
     let response = app.oneshot(req).await.expect("response");
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
@@ -319,8 +311,7 @@ async fn test_tb_future_timestamp_rejected() {
     let nonce = uuid::Uuid::new_v4().to_string();
     let body_hash = Sha256::digest(b"");
     let body_hash_hex = format!("{body_hash:x}");
-    let canonical =
-        format!("GET\n/auth/devices\n{future_timestamp}\n{nonce}\n{body_hash_hex}");
+    let canonical = format!("GET\n/auth/devices\n{future_timestamp}\n{nonce}\n{body_hash_hex}");
     let signature = signing_key.sign(canonical.as_bytes());
 
     let req = Request::builder()
