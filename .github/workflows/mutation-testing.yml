@@ -1,0 +1,155 @@
+name: Mutation Testing
+
+on:
+  workflow_dispatch:
+    inputs:
+      scope:
+        description: "Source file filter passed to cargo-mutants -F (regex pattern)"
+        default: "identity"
+        type: string
+
+concurrency:
+  group: mutation-testing
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  mutate:
+    name: Run cargo-mutants
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install cargo-mutants
+        run: cargo install cargo-mutants --version 26.2.0 --locked
+
+      - name: Validate scope input
+        run: |
+          set -e
+          if ! echo "${{ github.event.inputs.scope }}" | grep -qE '^[a-zA-Z0-9_./-]+$'; then
+            echo "::error::Invalid scope: must match [a-zA-Z0-9_./-]+"
+            exit 1
+          fi
+
+      - name: Run mutation testing
+        run: |
+          set -euo pipefail
+          SCOPE="${{ github.event.inputs.scope }}"
+          echo "::group::Mutation testing with scope: ${SCOPE}"
+          cargo mutants --package tinycongress-api -F "${SCOPE}" --timeout 120 --jobs 2 2>&1 | tee mutants-stdout.log
+          echo "::endgroup::"
+
+      - name: Upload mutation report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mutation-report
+          path: mutants.out/
+          retention-days: 30
+
+      - name: Check for surviving mutants
+        if: always()
+        run: |
+          set -euo pipefail
+
+          OUTCOMES_FILE="mutants.out/outcomes.json"
+          if [ ! -f "${OUTCOMES_FILE}" ]; then
+            echo "::warning::No outcomes.json found — mutation run may have failed"
+            exit 0
+          fi
+
+          # Count outcomes by status
+          SURVIVED=$(jq '[.outcomes[] | select(.summary == "MissedMutant")] | length' "${OUTCOMES_FILE}")
+          CAUGHT=$(jq '[.outcomes[] | select(.summary == "CaughtMutant")] | length' "${OUTCOMES_FILE}")
+          TIMEOUT=$(jq '[.outcomes[] | select(.summary == "Timeout")] | length' "${OUTCOMES_FILE}")
+          UNVIABLE=$(jq '[.outcomes[] | select(.summary == "Unviable")] | length' "${OUTCOMES_FILE}")
+          TOTAL=$(jq '.outcomes | length' "${OUTCOMES_FILE}")
+
+          echo "## Mutation Testing Results" >> "${GITHUB_STEP_SUMMARY}"
+          echo "" >> "${GITHUB_STEP_SUMMARY}"
+          echo "| Status | Count |" >> "${GITHUB_STEP_SUMMARY}"
+          echo "|--------|-------|" >> "${GITHUB_STEP_SUMMARY}"
+          echo "| Caught (killed) | ${CAUGHT} |" >> "${GITHUB_STEP_SUMMARY}"
+          echo "| **Survived (missed)** | **${SURVIVED}** |" >> "${GITHUB_STEP_SUMMARY}"
+          echo "| Timeout | ${TIMEOUT} |" >> "${GITHUB_STEP_SUMMARY}"
+          echo "| Unviable | ${UNVIABLE} |" >> "${GITHUB_STEP_SUMMARY}"
+          echo "| Total | ${TOTAL} |" >> "${GITHUB_STEP_SUMMARY}"
+          echo "" >> "${GITHUB_STEP_SUMMARY}"
+
+          if [ "${SURVIVED}" -gt 0 ]; then
+            echo "### Surviving Mutants" >> "${GITHUB_STEP_SUMMARY}"
+            echo "" >> "${GITHUB_STEP_SUMMARY}"
+            echo "These mutations were not caught by the test suite:" >> "${GITHUB_STEP_SUMMARY}"
+            echo "" >> "${GITHUB_STEP_SUMMARY}"
+            echo '```' >> "${GITHUB_STEP_SUMMARY}"
+            # cargo-mutants v26 schema: .scenario.Mutant.name contains "file:line: description",
+            # .scenario.Mutant.file has the relative path, .scenario.Mutant.function is an object or null.
+            jq -r '.outcomes[] | select(.summary == "MissedMutant") | .scenario.Mutant.name' "${OUTCOMES_FILE}" >> "${GITHUB_STEP_SUMMARY}"
+            echo '```' >> "${GITHUB_STEP_SUMMARY}"
+            echo "" >> "${GITHUB_STEP_SUMMARY}"
+            echo "::warning::${SURVIVED} mutant(s) survived — review the mutation report artifact for details"
+          else
+            echo "All mutants were caught by the test suite." >> "${GITHUB_STEP_SUMMARY}"
+          fi
+
+      - name: Report surviving mutants
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          OUTCOMES_FILE="mutants.out/outcomes.json"
+          if [ ! -f "${OUTCOMES_FILE}" ]; then
+            exit 0
+          fi
+
+          SURVIVED=$(jq '[.outcomes[] | select(.summary == "MissedMutant")] | length' "${OUTCOMES_FILE}")
+          if [ "${SURVIVED}" -eq 0 ]; then
+            echo "No surviving mutants — skipping issue creation"
+            exit 0
+          fi
+
+          SCOPE="${{ github.event.inputs.scope }}"
+          RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+          SURVIVOR_LIST=$(jq -r '.outcomes[] | select(.summary == "MissedMutant") | "- `\(.scenario.Mutant.name)`"' "${OUTCOMES_FILE}" | head -50)
+
+          {
+            echo "## Mutation Testing: ${SURVIVED} surviving mutant(s)"
+            echo ""
+            echo "**Scope:** \`${SCOPE}\`"
+            echo "**Run:** ${RUN_URL}"
+            echo ""
+            echo "The following mutations were not caught by the test suite:"
+            echo ""
+            echo "${SURVIVOR_LIST}"
+            echo ""
+            echo "Each surviving mutant represents a code change that the tests did not detect."
+            echo "This may indicate a gap in test coverage for security-critical logic."
+            echo ""
+            echo "**Next steps:**"
+            echo "1. Download the \`mutation-report\` artifact from the workflow run"
+            echo "2. Review each surviving mutant in \`mutants.out/outcomes.json\`"
+            echo "3. Add tests that would catch the mutation"
+          } > /tmp/mutants-body.md
+
+          TITLE="[Mutation Testing] Surviving mutants in ${{ github.event.inputs.scope || 'identity' }}"
+          EXISTING=$(gh issue list --search "$TITLE" --state open --json number --jq '.[0].number // empty')
+          if [ -n "$EXISTING" ]; then
+            gh issue comment "$EXISTING" --body-file /tmp/mutants-body.md
+          else
+            gh issue create --title "$TITLE" --label testing --body-file /tmp/mutants-body.md
+          fi
