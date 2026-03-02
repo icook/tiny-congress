@@ -25,7 +25,7 @@ export async function generateDeviceKeyPair(): Promise<WebCryptoKeyPair> {
     keyPair = await globalThis.crypto.subtle.generateKey('Ed25519', false, ['sign']);
   } catch (error) {
     throw new Error(
-      'Your browser does not support Ed25519 key generation. Please use a modern browser (Chrome 113+, Firefox 130+, Safari 17+).',
+      'Your browser does not support Ed25519 key generation. Please use a modern browser (Chrome 113+, Firefox 128+, Safari 17+).',
       { cause: error }
     );
   }
