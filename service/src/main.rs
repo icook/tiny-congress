@@ -17,7 +17,6 @@ use axum::{
 };
 use std::net::SocketAddr;
 use std::sync::Arc;
-use std::time::Duration;
 use tinycongress_api::{
     build_info::BuildInfo,
     config::Config,
@@ -26,7 +25,7 @@ use tinycongress_api::{
     http::{build_security_headers, security_headers_middleware},
     identity::{
         self,
-        repo::{IdentityRepo, PgIdentityRepo},
+        repo::PgIdentityRepo,
         service::{DefaultIdentityService, IdentityService},
     },
     rest::{self, ApiDoc},
@@ -38,6 +37,24 @@ use utoipa_swagger_ui::SwaggerUi;
 // Health check handler
 async fn health_check() -> impl IntoResponse {
     StatusCode::OK
+}
+
+/// Spawn a background task that cleans up expired request nonces.
+fn spawn_nonce_cleanup(repo: Arc<dyn crate::identity::repo::IdentityRepo>) {
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(60));
+        loop {
+            interval.tick().await;
+            match repo
+                .cleanup_expired_nonces(crate::identity::http::auth::MAX_TIMESTAMP_SKEW)
+                .await
+            {
+                Ok(0) => {}
+                Ok(n) => tracing::debug!(count = n, "cleaned up expired nonces"),
+                Err(e) => tracing::warn!("nonce cleanup failed: {e}"),
+            }
+        }
+    });
 }
 
 fn build_cors_origin(origins: &[String]) -> AllowOrigin {
@@ -62,25 +79,6 @@ fn build_cors_origin(origins: &[String]) -> AllowOrigin {
         tracing::info!(origins = ?origins, "CORS allowed origins configured");
         AllowOrigin::list(header_values)
     }
-}
-
-/// Spawn a background task that periodically deletes expired nonces.
-///
-/// TTL matches [`identity::http::auth::MAX_TIMESTAMP_SKEW`] so nonces
-/// outlive the timestamp validation window.
-fn spawn_nonce_cleanup(pool: sqlx::PgPool) {
-    tokio::spawn(async move {
-        let ttl = identity::http::auth::MAX_TIMESTAMP_SKEW;
-        let mut interval = tokio::time::interval(Duration::from_secs(60));
-        loop {
-            interval.tick().await;
-            match identity::repo::cleanup_expired_nonces(&pool, ttl).await {
-                Ok(0) => {}
-                Ok(n) => tracing::debug!(count = n, "Cleaned up expired nonces"),
-                Err(e) => tracing::warn!("Nonce cleanup failed: {e}"),
-            }
-        }
-    });
 }
 
 #[tokio::main]
@@ -135,13 +133,6 @@ async fn main() -> Result<(), anyhow::Error> {
     // REST API v1 routes
     let rest_v1 = Router::new().route("/build-info", get(rest::get_build_info));
 
-    // Identity wiring
-    let repo = Arc::new(PgIdentityRepo::new(pool.clone()));
-    let service = Arc::new(DefaultIdentityService::new(repo.clone())) as Arc<dyn IdentityService>;
-    let repo_ext = repo as Arc<dyn IdentityRepo>;
-
-    spawn_nonce_cleanup(pool.clone());
-
     // Build the API
     let mut app = Router::new()
         // GraphQL endpoint - POST always enabled, GET (playground) is conditional
@@ -164,9 +155,19 @@ async fn main() -> Result<(), anyhow::Error> {
         // Health check route
         .route("/health", get(health_check))
         // Add the schema to the extension
-        .layer(Extension(schema))
-        .layer(Extension(service))
-        .layer(Extension(repo_ext))
+        .layer(Extension(schema));
+
+    // Wire identity layers: repo for AuthenticatedDevice, service for signup
+    let identity_repo: Arc<dyn crate::identity::repo::IdentityRepo> =
+        Arc::new(PgIdentityRepo::new(pool.clone()));
+    let identity_service: Arc<dyn IdentityService> =
+        Arc::new(DefaultIdentityService::new(identity_repo.clone()));
+    // Background task: clean up expired request nonces every 60 seconds
+    spawn_nonce_cleanup(identity_repo.clone());
+
+    app = app
+        .layer(Extension(identity_repo))
+        .layer(Extension(identity_service))
         .layer(Extension(build_info))
         .layer(
             CorsLayer::new()

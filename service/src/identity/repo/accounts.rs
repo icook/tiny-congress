@@ -97,8 +97,8 @@ where
     create_account(executor, username, root_pubkey, root_kid).await
 }
 
-/// Row shape for account queries — mirrors the SELECT columns.
-/// Uses `String` for `root_kid` because [`Kid`] doesn't implement `sqlx::Decode`.
+/// Row shape for account queries — uses `String` for `root_kid` because
+/// [`Kid`] doesn't implement `sqlx::Decode`.
 #[derive(sqlx::FromRow)]
 struct AccountRow {
     id: Uuid,
@@ -127,46 +127,6 @@ where
         ",
     )
     .bind(account_id)
-    .fetch_optional(executor)
-    .await?;
-
-    match row {
-        Some(r) => {
-            let root_kid: Kid = r
-                .root_kid
-                .parse()
-                .map_err(|e| sqlx::Error::Decode(Box::new(e)))?;
-            Ok(AccountRecord {
-                id: r.id,
-                username: r.username,
-                root_pubkey: r.root_pubkey,
-                root_kid,
-            })
-        }
-        None => Err(AccountRepoError::NotFound),
-    }
-}
-
-/// Look up an account by its username.
-///
-/// # Errors
-///
-/// Returns `AccountRepoError::NotFound` if no account matches.
-pub async fn get_account_by_username<'e, E>(
-    executor: E,
-    username: &str,
-) -> Result<AccountRecord, AccountRepoError>
-where
-    E: sqlx::Executor<'e, Database = sqlx::Postgres>,
-{
-    let row = sqlx::query_as::<_, AccountRow>(
-        r"
-        SELECT id, username, root_pubkey, root_kid
-        FROM accounts
-        WHERE username = $1
-        ",
-    )
-    .bind(username)
     .fetch_optional(executor)
     .await?;
 

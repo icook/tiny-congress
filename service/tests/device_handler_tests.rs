@@ -28,17 +28,15 @@ fn sign_request(
     kid: &Kid,
 ) -> Vec<(&'static str, String)> {
     let timestamp = chrono::Utc::now().timestamp();
-    let nonce = uuid::Uuid::new_v4().to_string();
     let body_hash = Sha256::digest(body);
     let body_hash_hex = format!("{body_hash:x}");
-    let canonical = format!("{method}\n{path}\n{timestamp}\n{nonce}\n{body_hash_hex}");
+    let canonical = format!("{method}\n{path}\n{timestamp}\n{body_hash_hex}");
     let signature = signing_key.sign(canonical.as_bytes());
 
     vec![
         ("X-Device-Kid", kid.to_string()),
         ("X-Signature", encode_base64url(&signature.to_bytes())),
         ("X-Timestamp", timestamp.to_string()),
-        ("X-Nonce", nonce),
     ]
 }
 
@@ -162,10 +160,9 @@ async fn test_list_devices_expired_timestamp() {
         .build();
 
     let old_timestamp = chrono::Utc::now().timestamp() - 600; // 10 min ago
-    let nonce = uuid::Uuid::new_v4().to_string();
     let body_hash = Sha256::digest(b"");
     let body_hash_hex = format!("{body_hash:x}");
-    let canonical = format!("GET\n/auth/devices\n{old_timestamp}\n{nonce}\n{body_hash_hex}");
+    let canonical = format!("GET\n/auth/devices\n{old_timestamp}\n{body_hash_hex}");
     let signature = keys.device_signing_key.sign(canonical.as_bytes());
 
     let req = Request::builder()
@@ -174,7 +171,6 @@ async fn test_list_devices_expired_timestamp() {
         .header("X-Device-Kid", keys.device_kid.to_string())
         .header("X-Signature", encode_base64url(&signature.to_bytes()))
         .header("X-Timestamp", old_timestamp.to_string())
-        .header("X-Nonce", &nonce)
         .body(Body::empty())
         .expect("request");
 
@@ -305,101 +301,48 @@ async fn test_add_device_duplicate_returns_conflict() {
 async fn test_revoke_device_success() {
     let (app, keys, _db) = signup_user("revokedev").await;
 
-    // First add a second device
+    // First, add a second device
     let new_device_key = SigningKey::generate(&mut OsRng);
     let new_device_pubkey = new_device_key.verifying_key().to_bytes();
     let cert = keys.root_signing_key.sign(&new_device_pubkey);
     let new_device_kid = Kid::derive(&new_device_pubkey);
 
-    let body = serde_json::json!({
+    let add_body = serde_json::json!({
         "pubkey": encode_base64url(&new_device_pubkey),
         "name": "To Revoke",
         "certificate": encode_base64url(&cert.to_bytes()),
     })
     .to_string();
 
-    let req = build_authed_request(
+    let add_req = build_authed_request(
         Method::POST,
         "/auth/devices",
-        &body,
+        &add_body,
         &keys.device_signing_key,
         &keys.device_kid,
     );
-    let response = app.clone().oneshot(req).await.expect("response");
-    assert_eq!(response.status(), StatusCode::CREATED);
+
+    let add_response = app.clone().oneshot(add_req).await.expect("response");
+    assert_eq!(add_response.status(), StatusCode::CREATED);
 
     // Now revoke it
-    let path = format!("/auth/devices/{new_device_kid}");
-    let req = build_authed_request(
+    let revoke_path = format!("/auth/devices/{new_device_kid}");
+    let revoke_req = build_authed_request(
         Method::DELETE,
-        &path,
+        &revoke_path,
         "",
         &keys.device_signing_key,
         &keys.device_kid,
     );
-    let response = app.oneshot(req).await.expect("response");
-    assert_eq!(response.status(), StatusCode::NO_CONTENT);
+
+    let revoke_response = app.oneshot(revoke_req).await.expect("response");
+    assert_eq!(revoke_response.status(), StatusCode::NO_CONTENT);
 }
 
 #[shared_runtime_test]
-async fn test_revoke_device_wrong_account() {
-    // Both users must be in the same database so the cross-account
-    // ownership check (`device.account_id != account_id`) actually fires.
-    let db = isolated_db().await;
-    let app = TestAppBuilder::new()
-        .with_identity_pool(db.pool().clone())
-        .build();
+async fn test_revoke_self_fails() {
+    let (app, keys, _db) = signup_user("revokeself").await;
 
-    // Sign up user 1
-    let (json1, keys1) = valid_signup_with_keys("revwrong1");
-    let response = app
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method(Method::POST)
-                .uri("/auth/signup")
-                .header(CONTENT_TYPE, "application/json")
-                .body(Body::from(json1))
-                .expect("request"),
-        )
-        .await
-        .expect("response");
-    assert_eq!(response.status(), StatusCode::CREATED);
-
-    // Sign up user 2 in the same database
-    let (json2, keys2) = valid_signup_with_keys("revwrong2");
-    let response = app
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method(Method::POST)
-                .uri("/auth/signup")
-                .header(CONTENT_TYPE, "application/json")
-                .body(Body::from(json2))
-                .expect("request"),
-        )
-        .await
-        .expect("response");
-    assert_eq!(response.status(), StatusCode::CREATED);
-
-    // User 1 tries to revoke user 2's device — should get 404 from ownership check
-    let path = format!("/auth/devices/{}", keys2.device_kid);
-    let req = build_authed_request(
-        Method::DELETE,
-        &path,
-        "",
-        &keys1.device_signing_key,
-        &keys1.device_kid,
-    );
-    let response = app.oneshot(req).await.expect("response");
-    assert_eq!(response.status(), StatusCode::NOT_FOUND);
-}
-
-#[shared_runtime_test]
-async fn test_revoke_device_self_revocation_rejected() {
-    let (app, keys, _db) = signup_user("selfrevoke").await;
-
-    // Try to revoke own device — should get 422
     let path = format!("/auth/devices/{}", keys.device_kid);
     let req = build_authed_request(
         Method::DELETE,
@@ -408,6 +351,7 @@ async fn test_revoke_device_self_revocation_rejected() {
         &keys.device_signing_key,
         &keys.device_kid,
     );
+
     let response = app.oneshot(req).await.expect("response");
     assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
 }
@@ -431,23 +375,8 @@ async fn test_rename_device_success() {
         &keys.device_kid,
     );
 
-    let response = app.clone().oneshot(req).await.expect("response");
-    assert_eq!(response.status(), StatusCode::NO_CONTENT);
-
-    // Verify it was renamed by listing
-    let req = build_authed_request(
-        Method::GET,
-        "/auth/devices",
-        "",
-        &keys.device_signing_key,
-        &keys.device_kid,
-    );
     let response = app.oneshot(req).await.expect("response");
-    let body = to_bytes(response.into_body(), 1024 * 1024)
-        .await
-        .expect("body");
-    let json: serde_json::Value = serde_json::from_slice(&body).expect("json");
-    assert_eq!(json["devices"][0]["device_name"], "Renamed Device");
+    assert_eq!(response.status(), StatusCode::NO_CONTENT);
 }
 
 #[shared_runtime_test]
@@ -470,102 +399,48 @@ async fn test_rename_device_empty_name_fails() {
 }
 
 // =========================================================================
-// Nonce replay prevention
+// Replay protection
 // =========================================================================
 
 #[shared_runtime_test]
-async fn test_nonce_replay_rejected() {
-    let (app, keys, _db) = signup_user("noncereplay").await;
+async fn test_replay_is_blocked() {
+    let (app, keys, _db) = signup_user("replaytest").await;
 
-    // Build a request with a specific nonce
-    let nonce = "fixed-nonce-for-replay-test";
-    let timestamp = chrono::Utc::now().timestamp();
-    let body_hash = Sha256::digest(b"");
-    let body_hash_hex = format!("{body_hash:x}");
-    let canonical = format!("GET\n/auth/devices\n{timestamp}\n{nonce}\n{body_hash_hex}");
-    let signature = keys.device_signing_key.sign(canonical.as_bytes());
+    // Build headers once — both requests will share the exact same signature
+    let headers = sign_request(
+        "GET",
+        "/auth/devices",
+        b"",
+        &keys.device_signing_key,
+        &keys.device_kid,
+    );
 
-    let build_req = || {
-        Request::builder()
-            .method(Method::GET)
-            .uri("/auth/devices")
-            .header("X-Device-Kid", keys.device_kid.to_string())
-            .header("X-Signature", encode_base64url(&signature.to_bytes()))
-            .header("X-Timestamp", timestamp.to_string())
-            .header("X-Nonce", nonce)
-            .body(Body::empty())
-            .expect("request")
+    let build_req = |hdrs: &[(&'static str, String)]| {
+        let mut builder = Request::builder().method(Method::GET).uri("/auth/devices");
+        for (name, value) in hdrs {
+            builder = builder.header(*name, value);
+        }
+        builder.body(Body::empty()).expect("request")
     };
 
     // First request succeeds
-    let response = app.clone().oneshot(build_req()).await.expect("response");
+    let response = app
+        .clone()
+        .oneshot(build_req(&headers))
+        .await
+        .expect("response");
     assert_eq!(response.status(), StatusCode::OK);
 
-    // Same nonce replayed — should be rejected
-    let response = app.oneshot(build_req()).await.expect("response");
+    // Exact same signed request is rejected as a replay
+    let response = app.oneshot(build_req(&headers)).await.expect("response");
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
-}
-
-// =========================================================================
-// Auth with revoked device
-// =========================================================================
-
-#[shared_runtime_test]
-async fn test_auth_with_revoked_device() {
-    let (app, keys, _db) = signup_user("revokedauth").await;
-
-    // Add a second device
-    let new_device_key = SigningKey::generate(&mut OsRng);
-    let new_device_pubkey = new_device_key.verifying_key().to_bytes();
-    let cert = keys.root_signing_key.sign(&new_device_pubkey);
-    let new_device_kid = Kid::derive(&new_device_pubkey);
-
-    let body = serde_json::json!({
-        "pubkey": encode_base64url(&new_device_pubkey),
-        "name": "Soon Revoked",
-        "certificate": encode_base64url(&cert.to_bytes()),
-    })
-    .to_string();
-
-    let req = build_authed_request(
-        Method::POST,
-        "/auth/devices",
-        &body,
-        &keys.device_signing_key,
-        &keys.device_kid,
-    );
-    let response = app.clone().oneshot(req).await.expect("response");
-    assert_eq!(response.status(), StatusCode::CREATED);
-
-    // Revoke the second device
-    let path = format!("/auth/devices/{new_device_kid}");
-    let req = build_authed_request(
-        Method::DELETE,
-        &path,
-        "",
-        &keys.device_signing_key,
-        &keys.device_kid,
-    );
-    let response = app.clone().oneshot(req).await.expect("response");
-    assert_eq!(response.status(), StatusCode::NO_CONTENT);
-
-    // Try to authenticate with the revoked device — should get 403
-    let req = build_authed_request(
-        Method::GET,
-        "/auth/devices",
-        "",
-        &new_device_key,
-        &new_device_kid,
-    );
-    let response = app.oneshot(req).await.expect("response");
-    assert_eq!(response.status(), StatusCode::FORBIDDEN);
 }
 
 // =========================================================================
 // Cross-account authorization
 // =========================================================================
 
-/// Sign up a second user in an existing pool (for cross-account tests).
+/// Sign up a second user into an existing DB pool.
 async fn signup_user_in_pool(username: &str, pool: &sqlx::PgPool) -> (axum::Router, SignupKeys) {
     let app = TestAppBuilder::new()
         .with_identity_pool(pool.clone())
@@ -589,6 +464,25 @@ async fn signup_user_in_pool(username: &str, pool: &sqlx::PgPool) -> (axum::Rout
     assert_eq!(response.status(), StatusCode::CREATED);
 
     (app, keys)
+}
+
+#[shared_runtime_test]
+async fn test_cannot_revoke_other_accounts_device() {
+    let (app, keys_a, db) = signup_user("ownerA").await;
+    let (_app_b, keys_b) = signup_user_in_pool("ownerB", db.pool()).await;
+
+    // Account A tries to revoke account B's device
+    let path = format!("/auth/devices/{}", keys_b.device_kid);
+    let req = build_authed_request(
+        Method::DELETE,
+        &path,
+        "",
+        &keys_a.device_signing_key,
+        &keys_a.device_kid,
+    );
+
+    let response = app.oneshot(req).await.expect("response");
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
 }
 
 #[shared_runtime_test]

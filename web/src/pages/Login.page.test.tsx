@@ -39,7 +39,7 @@ vi.mock('@/providers/DeviceProvider', () => ({
 // Mock identity feature exports
 const mockMutateAsync = vi.fn();
 const mockFetchBackup = vi.fn();
-const mockDecryptBackupEnvelope = vi.fn();
+const mockDecryptBackupInWorker = vi.fn();
 
 vi.mock('@/features/identity', async (importOriginal) => {
   const original = await importOriginal<typeof import('@/features/identity')>();
@@ -52,7 +52,7 @@ vi.mock('@/features/identity', async (importOriginal) => {
       error: null,
     })),
     fetchBackup: (...args: unknown[]) => mockFetchBackup(...args),
-    decryptBackupEnvelope: (...args: unknown[]) => mockDecryptBackupEnvelope(...args),
+    decryptBackupInWorker: (...args: unknown[]) => mockDecryptBackupInWorker(...args),
     generateKeyPair: vi.fn(() => ({
       publicKey: new Uint8Array(32),
       privateKey: new Uint8Array(32),
@@ -75,7 +75,7 @@ describe('LoginPage', () => {
     mockMutateAsync.mockReset();
     mockSetDevice.mockReset();
     mockFetchBackup.mockReset();
-    mockDecryptBackupEnvelope.mockReset();
+    mockDecryptBackupInWorker.mockReset();
     mockCrypto.derive_kid.mockReturnValue('root-kid-123');
     mockCrypto.encode_base64url.mockClear();
     mockCrypto.decode_base64url.mockReturnValue(new Uint8Array(90));
@@ -86,7 +86,7 @@ describe('LoginPage', () => {
       encrypted_backup: 'encoded-backup',
       root_kid: 'root-kid-123',
     });
-    mockDecryptBackupEnvelope.mockResolvedValue(new Uint8Array(32));
+    mockDecryptBackupInWorker.mockResolvedValue(new Uint8Array(32));
     mockMutateAsync.mockResolvedValue({
       account_id: 'acc-1',
       root_kid: 'root-kid-123',
@@ -104,7 +104,7 @@ describe('LoginPage', () => {
     expect(mockFetchBackup).toHaveBeenCalledWith('alice');
 
     // Should decrypt the envelope
-    expect(mockDecryptBackupEnvelope).toHaveBeenCalledWith(expect.any(Uint8Array), 'my-password');
+    expect(mockDecryptBackupInWorker).toHaveBeenCalledWith(expect.any(Uint8Array), 'my-password');
 
     // Should call login with device info
     expect(mockMutateAsync).toHaveBeenCalledWith(
@@ -148,7 +148,7 @@ describe('LoginPage', () => {
       encrypted_backup: 'encoded-backup',
       root_kid: 'root-kid-123',
     });
-    mockDecryptBackupEnvelope.mockRejectedValue(
+    mockDecryptBackupInWorker.mockRejectedValue(
       new DecryptionError('Wrong password or corrupted backup')
     );
 
@@ -167,7 +167,7 @@ describe('LoginPage', () => {
       encrypted_backup: 'encoded-backup',
       root_kid: 'root-kid-123',
     });
-    mockDecryptBackupEnvelope.mockResolvedValue(new Uint8Array(32));
+    mockDecryptBackupInWorker.mockResolvedValue(new Uint8Array(32));
     mockMutateAsync.mockRejectedValue(new Error('Account not found'));
 
     const user = userEvent.setup();
@@ -185,7 +185,7 @@ describe('LoginPage', () => {
       encrypted_backup: 'encoded-backup',
       root_kid: 'server-root-kid',
     });
-    mockDecryptBackupEnvelope.mockResolvedValue(new Uint8Array(32));
+    mockDecryptBackupInWorker.mockResolvedValue(new Uint8Array(32));
     // derive_kid returns a DIFFERENT kid than the server's root_kid
     mockCrypto.derive_kid.mockReturnValue('different-derived-kid');
 
@@ -207,7 +207,7 @@ describe('LoginPage', () => {
       encrypted_backup: 'encoded-backup',
       root_kid: 'root-kid-123',
     });
-    mockDecryptBackupEnvelope.mockResolvedValue(new Uint8Array(32));
+    mockDecryptBackupInWorker.mockResolvedValue(new Uint8Array(32));
     mockMutateAsync.mockResolvedValue({
       account_id: 'acc-1',
       root_kid: 'root-kid-123',

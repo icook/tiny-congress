@@ -1,9 +1,7 @@
 //! HTTP handlers for identity system
 
 pub mod auth;
-pub mod backup;
 pub mod devices;
-pub mod login;
 
 use std::sync::Arc;
 
@@ -11,7 +9,7 @@ use axum::{
     extract::Extension,
     http::StatusCode,
     response::IntoResponse,
-    routing::{delete, get, post},
+    routing::{get, post},
     Json, Router,
 };
 use serde::{Deserialize, Serialize};
@@ -38,48 +36,14 @@ pub struct ErrorResponse {
 pub fn router() -> Router {
     Router::new()
         .route("/auth/signup", post(signup))
-        .route("/auth/backup/{username}", get(backup::get_backup))
-        .route("/auth/login", post(login::login))
         .route(
             "/auth/devices",
             get(devices::list_devices).post(devices::add_device),
         )
         .route(
             "/auth/devices/{kid}",
-            delete(devices::revoke_device).patch(devices::rename_device),
+            axum::routing::delete(devices::revoke_device).patch(devices::rename_device),
         )
-}
-
-// ── Shared error response helpers ───────────────────────────────────────────
-
-pub(crate) fn bad_request(msg: &str) -> axum::response::Response {
-    (
-        StatusCode::BAD_REQUEST,
-        Json(ErrorResponse {
-            error: msg.to_string(),
-        }),
-    )
-        .into_response()
-}
-
-pub(crate) fn not_found(msg: &str) -> axum::response::Response {
-    (
-        StatusCode::NOT_FOUND,
-        Json(ErrorResponse {
-            error: msg.to_string(),
-        }),
-    )
-        .into_response()
-}
-
-pub(crate) fn internal_error() -> axum::response::Response {
-    (
-        StatusCode::INTERNAL_SERVER_ERROR,
-        Json(ErrorResponse {
-            error: "Internal server error".to_string(),
-        }),
-    )
-        .into_response()
 }
 
 /// Handle signup request — delegates validation and persistence to [`IdentityService`].
@@ -138,6 +102,16 @@ fn signup_error_response(e: SignupError) -> axum::response::Response {
                 .into_response()
         }
     }
+}
+
+pub(super) fn bad_request(msg: &str) -> axum::response::Response {
+    (
+        StatusCode::BAD_REQUEST,
+        Json(ErrorResponse {
+            error: msg.to_string(),
+        }),
+    )
+        .into_response()
 }
 
 #[cfg(test)]
