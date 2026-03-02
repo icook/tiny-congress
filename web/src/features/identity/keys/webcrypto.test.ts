@@ -61,4 +61,26 @@ describe('Web Crypto Ed25519', () => {
     const sig2 = await signWithDeviceKey(new TextEncoder().encode('message B'), keyPair.privateKey);
     expect(sig1).not.toEqual(sig2);
   });
+
+  test('signature from one key pair fails verification with different public key', async () => {
+    const keyPairA = await generateDeviceKeyPair();
+    const keyPairB = await generateDeviceKeyPair();
+    const message = new TextEncoder().encode('cross-key test');
+    const signatureA = await signWithDeviceKey(message, keyPairA.privateKey);
+
+    const publicKeyB = await globalThis.crypto.subtle.importKey(
+      'raw',
+      keyPairB.publicKey as BufferSource,
+      'Ed25519',
+      true,
+      ['verify']
+    );
+    const valid = await globalThis.crypto.subtle.verify(
+      'Ed25519',
+      publicKeyB,
+      signatureA as BufferSource,
+      message as BufferSource
+    );
+    expect(valid).toBe(false);
+  });
 });

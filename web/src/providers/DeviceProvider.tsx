@@ -56,13 +56,13 @@ const DeviceContext = createContext<DeviceContextValue>({
 
 async function getDb(): Promise<IDBPDatabase> {
   return openDB(DB_NAME, DB_VERSION, {
-    upgrade(db) {
-      // Drop the old store on upgrade so stale v1 entries (Uint8Array private
-      // keys) are cleared — the new schema stores non-extractable CryptoKeys.
-      if (db.objectStoreNames.contains(STORE_NAME)) {
-        db.deleteObjectStore(STORE_NAME);
+    upgrade(db, oldVersion) {
+      if (oldVersion < 2) {
+        if (db.objectStoreNames.contains(STORE_NAME)) {
+          db.deleteObjectStore(STORE_NAME);
+        }
+        db.createObjectStore(STORE_NAME);
       }
-      db.createObjectStore(STORE_NAME);
     },
   });
 }
