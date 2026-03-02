@@ -252,6 +252,68 @@ async fn test_backup_existing_user_returns_real_backup() {
     );
 }
 
+#[shared_runtime_test]
+async fn test_backup_existing_user_no_backup_returns_synthetic() {
+    let db = isolated_db().await;
+
+    // Sign up a user (creates account + backup)
+    let app = TestAppBuilder::new()
+        .with_identity_pool(db.pool().clone())
+        .build();
+    let (signup_json, keys) = valid_signup_with_keys("nobackupuser");
+    let signup_response = app
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/auth/signup")
+                .header("content-type", "application/json")
+                .body(Body::from(signup_json))
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+    assert_eq!(signup_response.status(), StatusCode::CREATED);
+
+    let signup_body = to_bytes(signup_response.into_body(), 1024 * 1024)
+        .await
+        .expect("signup body");
+    let signup_payload: serde_json::Value =
+        serde_json::from_slice(&signup_body).expect("signup json");
+    let signup_root_kid = signup_payload["root_kid"]
+        .as_str()
+        .expect("signup root_kid");
+
+    // Delete the backup via the repo so the account exists without one
+    let repo = tinycongress_api::identity::repo::PgIdentityRepo::new(db.pool().clone());
+    let root_kid = tc_crypto::Kid::derive(&keys.root_signing_key.verifying_key().to_bytes());
+    tinycongress_api::identity::repo::IdentityRepo::delete_backup_by_kid(&repo, &root_kid)
+        .await
+        .expect("delete backup");
+
+    // Fetch the backup — should get a synthetic response
+    let app = TestAppBuilder::new()
+        .with_identity_pool(db.pool().clone())
+        .build();
+    let response = app
+        .oneshot(backup_request("nobackupuser"))
+        .await
+        .expect("response");
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body = to_bytes(response.into_body(), 1024 * 1024)
+        .await
+        .expect("body");
+    let payload: BackupResponse = serde_json::from_slice(&body).expect("json");
+    assert!(!payload.encrypted_backup.is_empty());
+
+    // The root_kid should NOT match the signup root_kid because this is synthetic
+    assert_ne!(
+        payload.root_kid, signup_root_kid,
+        "backup root_kid must differ from signup root_kid — synthetic, not real"
+    );
+}
+
 // =========================================================================
 // POST /auth/login
 // =========================================================================

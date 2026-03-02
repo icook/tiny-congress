@@ -25,7 +25,19 @@ type HmacSha256 = Hmac<Sha256>;
 /// Wrapped in a newtype so it can be passed as an axum Extension without
 /// conflicting with other `Vec<u8>` or `String` extensions.
 #[derive(Clone)]
-pub struct SyntheticBackupKey(pub Vec<u8>);
+pub struct SyntheticBackupKey(Vec<u8>);
+
+impl SyntheticBackupKey {
+    #[must_use]
+    pub const fn new(key: Vec<u8>) -> Self {
+        Self(key)
+    }
+
+    #[must_use]
+    pub fn as_bytes(&self) -> &[u8] {
+        &self.0
+    }
+}
 
 #[derive(Debug, Serialize)]
 pub struct BackupResponse {
@@ -39,11 +51,8 @@ pub struct BackupResponse {
 /// `new_from_slice` cannot fail. The `Ok`-only match is a
 /// compile-time-safe alternative to `expect`/`unwrap`.
 fn hmac_sha256(key: &[u8], message: &[u8]) -> [u8; 32] {
-    // HMAC accepts any key length; Err is structurally unreachable.
     let Ok(mut mac) = HmacSha256::new_from_slice(key) else {
-        // Return a zeroed tag rather than panic — satisfies the deny(panic) lint
-        // while remaining unreachable in practice.
-        return [0u8; 32];
+        unreachable!("HMAC-SHA256 accepts any key length per RFC 2104")
     };
     mac.update(message);
     mac.finalize().into_bytes().into()
@@ -110,8 +119,9 @@ pub async fn get_backup(
     let account_result = repo.get_account_by_username(username).await;
 
     // Always perform a backup lookup to keep timing consistent.
-    // For unknown users we use a dummy KID; the result is discarded.
-    let dummy_kid = Kid::derive(b"timing-pad");
+    // For unknown users we use a random ephemeral KID so the DB lookup
+    // timing matches a genuine first-time lookup.
+    let dummy_kid = Kid::derive(&rand::random::<[u8; 32]>());
     let lookup_kid = account_result
         .as_ref()
         .map_or(&dummy_kid, |account| &account.root_kid);
@@ -121,7 +131,7 @@ pub async fn get_backup(
     let account = match account_result {
         Ok(a) => a,
         Err(AccountRepoError::NotFound) => {
-            let (fake_backup, fake_kid) = synthetic_backup(username, &hmac_key.0);
+            let (fake_backup, fake_kid) = synthetic_backup(username, hmac_key.as_bytes());
             return (
                 StatusCode::OK,
                 Json(BackupResponse {
@@ -156,7 +166,7 @@ pub async fn get_backup(
         Err(BackupRepoError::NotFound) => {
             // Account exists but has no backup — return synthetic to avoid
             // leaking that the account exists without a backup.
-            let (fake_backup, fake_kid) = synthetic_backup(username, &hmac_key.0);
+            let (fake_backup, fake_kid) = synthetic_backup(username, hmac_key.as_bytes());
             (
                 StatusCode::OK,
                 Json(BackupResponse {

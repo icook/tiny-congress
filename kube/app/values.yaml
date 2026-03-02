@@ -181,7 +181,7 @@ postgres:
 # Required — the app will refuse to start without it.
 # For production, override with a strong random secret via a sealed-secret or
 # external secret manager.
-syntheticBackupKey: "dev-only-synthetic-backup-key-replace-in-production"
+syntheticBackupKey: ""
 
 # Cargo build cache for dev mode (hostPath volume)
 # Shares build cache with local dev via KinD extraMounts

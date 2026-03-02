@@ -319,7 +319,7 @@ impl TestAppBuilder {
 
         // Always provide a synthetic backup HMAC key when identity routes are active
         if self.include_identity {
-            app = app.layer(Extension(SyntheticBackupKey(
+            app = app.layer(Extension(SyntheticBackupKey::new(
                 b"test-hmac-key-for-integration-tests".to_vec(),
             )));
         }

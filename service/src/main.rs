@@ -141,8 +141,9 @@ async fn main() -> Result<(), anyhow::Error> {
     let repo_ext = repo as Arc<dyn IdentityRepo>;
 
     // HMAC key for synthetic backup generation (anti-enumeration)
-    let synthetic_backup_key =
-        identity::http::backup::SyntheticBackupKey(config.synthetic_backup_key.as_bytes().to_vec());
+    let synthetic_backup_key = identity::http::backup::SyntheticBackupKey::new(
+        config.synthetic_backup_key.as_bytes().to_vec(),
+    );
 
     spawn_nonce_cleanup(pool.clone());
 

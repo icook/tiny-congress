@@ -391,10 +391,15 @@ impl Config {
             )));
         }
 
-        // Synthetic backup HMAC key is required
+        // Synthetic backup HMAC key is required and must be at least 32 bytes
         if self.synthetic_backup_key.is_empty() {
             return Err(ConfigError::Validation(
                 "synthetic_backup_key is required. Set TC_SYNTHETIC_BACKUP_KEY environment variable or configure in config.yaml.".into(),
+            ));
+        }
+        if self.synthetic_backup_key.len() < 32 {
+            return Err(ConfigError::Validation(
+                "TC_SYNTHETIC_BACKUP_KEY must be at least 32 bytes".into(),
             ));
         }
 
@@ -410,7 +415,7 @@ mod tests {
         let mut config = Config::default();
         config.database.user = "postgres".into();
         config.database.password = "postgres".into();
-        config.synthetic_backup_key = "test-hmac-key-for-unit-tests".into();
+        config.synthetic_backup_key = "test-hmac-key-for-unit-tests-32+b".into();
         config
     }
 
