@@ -54,13 +54,18 @@ use tower_http::cors::{AllowOrigin, Any, CorsLayer};
 use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
 
-/// Health check handler (mirrors main.rs).
+/// Liveness check handler (mirrors main.rs). Always returns 200.
+async fn health_check() -> impl IntoResponse {
+    StatusCode::OK
+}
+
+/// Readiness check handler (mirrors main.rs).
 ///
 /// Returns 200 if the DB pool can acquire a connection, 503 otherwise.
-/// When no pool is registered (e.g. minimal test builder), always returns 200.
-async fn health_check(pool: Option<Extension<PgPool>>) -> impl IntoResponse {
+/// When no pool is registered, returns 503.
+async fn readiness_check(pool: Option<Extension<PgPool>>) -> impl IntoResponse {
     let Some(Extension(pool)) = pool else {
-        return StatusCode::OK;
+        return StatusCode::SERVICE_UNAVAILABLE;
     };
     match tokio::time::timeout(std::time::Duration::from_secs(2), pool.acquire()).await {
         Ok(Ok(_)) => StatusCode::OK,
@@ -317,7 +322,9 @@ impl TestAppBuilder {
         }
 
         if self.include_health {
-            app = app.route("/health", get(health_check));
+            app = app
+                .route("/health", get(health_check))
+                .route("/ready", get(readiness_check));
         }
 
         // Add extensions

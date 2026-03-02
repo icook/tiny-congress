@@ -36,13 +36,21 @@ use tower_http::cors::{AllowOrigin, Any, CorsLayer};
 use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
 
-/// Health check — verifies the API can reach postgres.
+/// Liveness check — confirms the process is alive.
+///
+/// Always returns 200. Used by Kubernetes startup and liveness probes.
+async fn health_check() -> impl IntoResponse {
+    StatusCode::OK
+}
+
+/// Readiness check — verifies the API can reach postgres.
 ///
 /// Returns 200 if a pooled connection can be acquired within 2 seconds,
-/// 503 otherwise. Kubernetes readiness/liveness probes use this endpoint.
-async fn health_check(pool: Option<Extension<PgPool>>) -> impl IntoResponse {
+/// 503 otherwise. Used by the Kubernetes readiness probe so traffic is
+/// only routed to pods with a healthy database connection.
+async fn readiness_check(pool: Option<Extension<PgPool>>) -> impl IntoResponse {
     let Some(Extension(pool)) = pool else {
-        return StatusCode::OK;
+        return StatusCode::SERVICE_UNAVAILABLE;
     };
     match tokio::time::timeout(Duration::from_secs(2), pool.acquire()).await {
         Ok(Ok(_)) => StatusCode::OK,
@@ -171,8 +179,9 @@ async fn main() -> Result<(), anyhow::Error> {
         .nest("/api/v1", rest_v1)
         // Identity routes
         .merge(identity::http::router())
-        // Health check route
+        // Probe routes
         .route("/health", get(health_check))
+        .route("/ready", get(readiness_check))
         // Add the schema to the extension
         .layer(Extension(schema))
         .layer(Extension(service))
