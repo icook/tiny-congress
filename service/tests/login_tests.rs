@@ -12,7 +12,7 @@ use axum::{
     http::{header::CONTENT_TYPE, Method, Request, StatusCode},
 };
 use common::app_builder::TestAppBuilder;
-use common::factories::{valid_signup_json, valid_signup_with_keys, SignupKeys};
+use common::factories::{valid_signup_with_keys, SignupKeys};
 use common::test_db::isolated_db;
 use ed25519_dalek::{Signer, SigningKey};
 use rand::rngs::OsRng;
@@ -191,22 +191,41 @@ async fn test_backup_synthetic_differs_by_username() {
 async fn test_backup_existing_user_returns_real_backup() {
     let db = isolated_db().await;
 
-    // Create an account via signup
+    // Create an account via signup and capture the root_kid
     let app = TestAppBuilder::new()
         .with_identity_pool(db.pool().clone())
         .build();
+    let (signup_json, keys) = valid_signup_with_keys("backupuser");
     let signup_response = app
         .oneshot(
             Request::builder()
                 .method(Method::POST)
                 .uri("/auth/signup")
                 .header("content-type", "application/json")
-                .body(Body::from(valid_signup_json("backupuser")))
+                .body(Body::from(signup_json))
                 .expect("request"),
         )
         .await
         .expect("response");
     assert_eq!(signup_response.status(), StatusCode::CREATED);
+
+    let signup_body = to_bytes(signup_response.into_body(), 1024 * 1024)
+        .await
+        .expect("signup body");
+    let signup_payload: serde_json::Value =
+        serde_json::from_slice(&signup_body).expect("signup json");
+    let signup_root_kid = signup_payload["root_kid"]
+        .as_str()
+        .expect("signup root_kid");
+
+    // Verify the signup root_kid matches what we'd derive from the root public key
+    let expected_root_kid =
+        tc_crypto::Kid::derive(&keys.root_signing_key.verifying_key().to_bytes());
+    assert_eq!(
+        signup_root_kid,
+        expected_root_kid.to_string(),
+        "signup root_kid should match derived KID from root pubkey"
+    );
 
     // Fetch the backup
     let app = TestAppBuilder::new()
@@ -224,7 +243,13 @@ async fn test_backup_existing_user_returns_real_backup() {
         .expect("body");
     let payload: BackupResponse = serde_json::from_slice(&body).expect("json");
     assert!(!payload.encrypted_backup.is_empty());
-    assert!(!payload.root_kid.is_empty());
+
+    // Cross-reference: the backup endpoint must return the same root_kid from signup,
+    // confirming this is the real backup (not a synthetic one).
+    assert_eq!(
+        payload.root_kid, signup_root_kid,
+        "backup root_kid must match signup root_kid — real data, not synthetic"
+    );
 }
 
 // =========================================================================

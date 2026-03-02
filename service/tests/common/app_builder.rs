@@ -45,6 +45,7 @@ use tinycongress_api::{
     http::{build_security_headers, security_headers_middleware},
     identity::{
         self,
+        http::backup::SyntheticBackupKey,
         repo::{IdentityRepo, PgIdentityRepo},
         service::{DefaultIdentityService, IdentityService},
     },
@@ -314,6 +315,13 @@ impl TestAppBuilder {
 
         if let Some(repo) = self.identity_repo {
             app = app.layer(Extension(repo));
+        }
+
+        // Always provide a synthetic backup HMAC key when identity routes are active
+        if self.include_identity {
+            app = app.layer(Extension(SyntheticBackupKey(
+                b"test-hmac-key-for-integration-tests".to_vec(),
+            )));
         }
 
         // Add CORS layer if configured
