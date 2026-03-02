@@ -22,7 +22,7 @@ import {
   decryptBackupEnvelope,
   DecryptionError,
   fetchBackup,
-  generateKeyPair,
+  generateDeviceKeyPair,
   getDeviceName,
   signMessage,
   useLogin,
@@ -67,10 +67,10 @@ export function LoginPage() {
         throw new Error('Backup integrity check failed: recovered key does not match account');
       }
 
-      // Generate new device keypair
-      const deviceKeyPair = generateKeyPair(crypto);
+      // Generate new device keypair via Web Crypto (non-extractable private key)
+      const deviceKeyPair = await generateDeviceKeyPair();
 
-      // Sign device certificate with root key
+      // Sign device certificate with root key (Uint8Array — ephemeral)
       const certificate = signMessage(deviceKeyPair.publicKey, rootPrivateKey);
 
       setIsDecrypting(false);

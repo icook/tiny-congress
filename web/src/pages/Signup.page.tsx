@@ -6,6 +6,7 @@
 import { useState } from 'react';
 import {
   buildBackupEnvelope,
+  generateDeviceKeyPair,
   generateKeyPair,
   getDeviceName,
   signMessage,
@@ -39,13 +40,15 @@ export function SignupPage() {
     setIsGeneratingKeys(true);
 
     try {
-      // Generate root key pair
+      // Generate root key pair (raw bytes — ephemeral, never stored)
       const rootKeyPair = generateKeyPair(crypto);
 
-      // Generate device key pair
-      const deviceKeyPair = generateKeyPair(crypto);
+      // Generate device key pair via Web Crypto (non-extractable private key)
+      const deviceKeyPair = await generateDeviceKeyPair();
 
       // Sign the device pubkey with the root key (certificate)
+      // Root key is a Uint8Array — we use @noble/curves for this since
+      // it's an ephemeral key that's discarded after signup.
       const certificate = signMessage(deviceKeyPair.publicKey, rootKeyPair.privateKey);
 
       // Build encrypted backup envelope
@@ -65,7 +68,7 @@ export function SignupPage() {
         },
       });
 
-      // Store device credentials in session context
+      // Store device credentials in session context (CryptoKey is non-extractable)
       setDevice(response.device_kid, deviceKeyPair.privateKey);
 
       setCreatedAccount(response);

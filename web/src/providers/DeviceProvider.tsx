@@ -3,6 +3,10 @@
  *
  * On mount, reads credentials from IndexedDB. On setDevice/clearDevice,
  * writes/deletes from IndexedDB and updates React state.
+ *
+ * The device private key is a non-extractable CryptoKey — raw key material
+ * never enters JavaScript memory. CryptoKey is structured-cloneable, so
+ * IndexedDB can store it directly.
  */
 
 import {
@@ -23,18 +27,18 @@ const CURRENT_KEY = 'current';
 
 interface StoredDevice {
   kid: string;
-  privateKey: Uint8Array;
+  privateKey: CryptoKey;
 }
 
 interface DeviceContextValue {
   /** Current device KID, or null if not authenticated */
   deviceKid: string | null;
-  /** Current device signing key, or null if not authenticated */
-  privateKey: Uint8Array | null;
+  /** Non-extractable CryptoKey for signing, or null if not authenticated */
+  privateKey: CryptoKey | null;
   /** True while loading credentials from IndexedDB on mount */
   isLoading: boolean;
   /** Store device credentials after signup/login */
-  setDevice: (kid: string, key: Uint8Array) => void;
+  setDevice: (kid: string, key: CryptoKey) => void;
   /** Clear device credentials (logout) */
   clearDevice: () => void;
 }
@@ -81,7 +85,7 @@ interface DeviceProviderProps {
 
 export function DeviceProvider({ children }: DeviceProviderProps) {
   const [deviceKid, setDeviceKid] = useState<string | null>(null);
-  const [privateKey, setPrivateKey] = useState<Uint8Array | null>(null);
+  const [privateKey, setPrivateKey] = useState<CryptoKey | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   // Load from IndexedDB on mount
@@ -103,7 +107,7 @@ export function DeviceProvider({ children }: DeviceProviderProps) {
       });
   }, []);
 
-  const setDeviceFn = useCallback((kid: string, key: Uint8Array) => {
+  const setDeviceFn = useCallback((kid: string, key: CryptoKey) => {
     setDeviceKid(kid);
     setPrivateKey(key);
     saveDevice({ kid, privateKey: key }).catch((err: unknown) => {
