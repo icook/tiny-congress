@@ -25,22 +25,22 @@ export interface DecryptFailure {
 
 export type WorkerResponse = DecryptSuccess | DecryptFailure;
 
-self.onmessage = async (event: MessageEvent<DecryptRequest>) => {
-  const { envelope, password } = event.data;
+export async function handleDecryptRequest(request: DecryptRequest): Promise<WorkerResponse> {
+  const { envelope, password } = request;
 
   try {
     const rootPrivateKey = await decryptBackupEnvelope(envelope, password);
-    const response: DecryptSuccess = {
-      type: 'success',
-      rootPrivateKey,
-    };
-    self.postMessage(response);
+    return { type: 'success', rootPrivateKey };
   } catch (err) {
-    const response: DecryptFailure = {
+    return {
       type: 'error',
       message: err instanceof Error ? err.message : 'Decryption failed',
       isDecryptionError: err instanceof DecryptionError,
     };
-    self.postMessage(response);
   }
+}
+
+self.onmessage = async (event: MessageEvent<DecryptRequest>) => {
+  const response = await handleDecryptRequest(event.data);
+  self.postMessage(response);
 };

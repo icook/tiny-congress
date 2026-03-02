@@ -16,12 +16,24 @@ import { DecryptionError } from './crypto';
  * @throws DecryptionError if password is wrong or envelope is corrupt
  * @throws Error for other failures
  */
+const WORKER_TIMEOUT_MS = 30_000;
+
 export function decryptBackupInWorker(envelope: Uint8Array, password: string): Promise<Uint8Array> {
   return new Promise((resolve, reject) => {
     const worker = new Worker(new URL('./backup-worker.ts', import.meta.url), { type: 'module' });
 
-    worker.onmessage = (event: MessageEvent<WorkerResponse>) => {
+    const timeoutId = setTimeout(() => {
       worker.terminate();
+      reject(new Error('Backup decryption timed out'));
+    }, WORKER_TIMEOUT_MS);
+
+    function cleanup() {
+      clearTimeout(timeoutId);
+      worker.terminate();
+    }
+
+    worker.onmessage = (event: MessageEvent<WorkerResponse>) => {
+      cleanup();
       const response = event.data;
 
       if (response.type === 'success') {
@@ -34,8 +46,13 @@ export function decryptBackupInWorker(envelope: Uint8Array, password: string): P
     };
 
     worker.onerror = (event) => {
-      worker.terminate();
+      cleanup();
       reject(new Error(`Worker error: ${event.message}`));
+    };
+
+    worker.onmessageerror = () => {
+      cleanup();
+      reject(new Error('Worker message deserialization failed'));
     };
 
     const request: DecryptRequest = { type: 'decrypt', envelope, password };
