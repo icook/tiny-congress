@@ -870,15 +870,6 @@ mod tests {
 
     use crate::identity::repo::AccountRecord;
 
-    fn mock_account_record(root_pubkey: &str) -> AccountRecord {
-        AccountRecord {
-            id: Uuid::new_v4(),
-            username: "alice".to_string(),
-            root_pubkey: root_pubkey.to_string(),
-            root_kid: Kid::derive(&[0u8; 32]),
-        }
-    }
-
     fn valid_login_request() -> (LoginRequest, AccountRecord) {
         let root_signing_key = SigningKey::generate(&mut OsRng);
         let root_pubkey_bytes = root_signing_key.verifying_key().to_bytes();
@@ -921,11 +912,22 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_login_invalid_device_name() {
+        let svc = service_with_mock_repo();
+
+        let req = LoginRequest {
+            username: "alice".to_string(),
+            device_pubkey: encode_base64url(&[1u8; 32]),
+            device_name: "   ".to_string(),
+            certificate: encode_base64url(&[0u8; 64]),
+        };
+        let err = svc.login(req).await.unwrap_err();
+        assert!(matches!(err, LoginError::InvalidDeviceName(_)));
+    }
+
+    #[tokio::test]
     async fn test_login_invalid_pubkey() {
-        let repo = MockIdentityRepo::new();
-        let account = mock_account_record(&encode_base64url(&[0u8; 32]));
-        repo.set_account_by_username_result(Ok(account));
-        let svc = DefaultIdentityService::new(Arc::new(repo));
+        let svc = service_with_mock_repo();
 
         let req = LoginRequest {
             username: "alice".to_string(),
@@ -939,10 +941,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_login_invalid_pubkey_length() {
-        let repo = MockIdentityRepo::new();
-        let account = mock_account_record(&encode_base64url(&[0u8; 32]));
-        repo.set_account_by_username_result(Ok(account));
-        let svc = DefaultIdentityService::new(Arc::new(repo));
+        let svc = service_with_mock_repo();
 
         let req = LoginRequest {
             username: "alice".to_string(),

@@ -340,7 +340,19 @@ fn login_json(username: &str, keys: &SignupKeys) -> String {
 async fn test_login_handler_success() {
     let (app, keys, _db) = signup_user("logintest").await;
 
-    let body = login_json("logintest", &keys);
+    let new_device_key = SigningKey::generate(&mut OsRng);
+    let new_device_pubkey = new_device_key.verifying_key().to_bytes();
+    let cert = keys.root_signing_key.sign(&new_device_pubkey);
+
+    let body = serde_json::json!({
+        "username": "logintest",
+        "device": {
+            "pubkey": encode_base64url(&new_device_pubkey),
+            "name": "Login Device",
+            "certificate": encode_base64url(&cert.to_bytes()),
+        }
+    })
+    .to_string();
 
     let response = app
         .oneshot(
@@ -362,7 +374,11 @@ async fn test_login_handler_success() {
     let json: serde_json::Value = serde_json::from_slice(&resp_body).expect("json");
     assert!(json["account_id"].is_string());
     assert!(json["root_kid"].is_string());
-    assert!(json["device_kid"].is_string());
+    assert_eq!(
+        json["device_kid"].as_str().unwrap(),
+        tc_crypto::Kid::derive(&new_device_pubkey).to_string(),
+        "device_kid should be derived from the submitted pubkey"
+    );
 }
 
 #[shared_runtime_test]
