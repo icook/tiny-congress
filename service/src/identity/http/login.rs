@@ -54,7 +54,7 @@ pub struct LoginResponse {
 /// Validated login fields after input parsing and certificate verification.
 struct ValidatedLogin {
     device_kid: Kid,
-    device_name: String,
+    device_name: DeviceName,
     cert_bytes: Vec<u8>,
 }
 
@@ -101,7 +101,7 @@ fn validate_login_device(
 
     Ok(ValidatedLogin {
         device_kid,
-        device_name: device_name.as_str().to_string(),
+        device_name,
         cert_bytes,
     })
 }
@@ -111,10 +111,9 @@ pub async fn login(
     Extension(repo): Extension<Arc<dyn IdentityRepo>>,
     Json(req): Json<LoginRequest>,
 ) -> impl IntoResponse {
-    // Validate timestamp
+    // Validate timestamp — use abs_diff to avoid overflow on extreme values
     let now = chrono::Utc::now().timestamp();
-    let skew = (now - req.timestamp).abs();
-    if skew > MAX_TIMESTAMP_SKEW {
+    if now.abs_diff(req.timestamp) > MAX_TIMESTAMP_SKEW as u64 {
         return bad_request("Timestamp out of range");
     }
 
@@ -168,7 +167,7 @@ pub async fn login(
             account.id,
             &validated.device_kid,
             &req.device.pubkey,
-            &validated.device_name,
+            validated.device_name.as_str(),
             &validated.cert_bytes,
         )
         .await
@@ -208,11 +207,5 @@ fn bad_request(msg: &str) -> axum::response::Response {
 }
 
 fn internal_error() -> axum::response::Response {
-    (
-        StatusCode::INTERNAL_SERVER_ERROR,
-        Json(ErrorResponse {
-            error: "Internal server error".to_string(),
-        }),
-    )
-        .into_response()
+    super::internal_error()
 }
