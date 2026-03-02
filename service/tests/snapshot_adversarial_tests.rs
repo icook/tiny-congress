@@ -31,7 +31,7 @@ use tower::ServiceExt;
 /// Otherwise falls back to a plain-text snapshot.
 async fn snapshot_response(name: &str, response: axum::http::Response<Body>) {
     let status = response.status();
-    let body_bytes = axum::body::to_bytes(response.into_body(), 4096)
+    let body_bytes = axum::body::to_bytes(response.into_body(), 1024 * 1024)
         .await
         .expect("read body");
 
@@ -184,6 +184,10 @@ async fn test_snapshot_empty_signature_response() {
 // =========================================================================
 // Trust Boundary: Signup — malformed JSON body
 // =========================================================================
+
+// Note: Signup validation errors (via Axum's Json extractor rejection) return plain text,
+// while auth middleware errors return JSON {"error": "..."}. This inconsistency is tracked
+// as a known production behavior, not a test issue.
 
 /// Snapshot the full error response when the signup endpoint receives
 /// syntactically invalid JSON.
