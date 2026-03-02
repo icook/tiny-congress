@@ -38,6 +38,33 @@ pub fn sign_request(
     ]
 }
 
+/// Build auth headers for a device-authenticated request at a specific timestamp.
+///
+/// Like [`sign_request`], but accepts an explicit Unix timestamp and nonce
+/// instead of using `Utc::now()` and a random UUID. This is useful for
+/// testing timestamp skew enforcement and replay detection.
+pub fn sign_request_at_timestamp(
+    method: &str,
+    path: &str,
+    body: &[u8],
+    signing_key: &SigningKey,
+    kid: &Kid,
+    timestamp: i64,
+    nonce: &str,
+) -> Vec<(&'static str, String)> {
+    let body_hash = Sha256::digest(body);
+    let body_hash_hex = format!("{body_hash:x}");
+    let canonical = format!("{method}\n{path}\n{timestamp}\n{nonce}\n{body_hash_hex}");
+    let signature = signing_key.sign(canonical.as_bytes());
+
+    vec![
+        ("X-Device-Kid", kid.to_string()),
+        ("X-Signature", encode_base64url(&signature.to_bytes())),
+        ("X-Timestamp", timestamp.to_string()),
+        ("X-Nonce", nonce.to_string()),
+    ]
+}
+
 /// Build a complete authenticated request for a device endpoint.
 ///
 /// Wraps [`sign_request`] into a full `Request<Body>` with auth headers

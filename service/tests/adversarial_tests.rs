@@ -17,13 +17,32 @@ use axum::{
     http::{header::CONTENT_TYPE, Method, Request, StatusCode},
 };
 use common::app_builder::TestAppBuilder;
-use common::factories::{build_authed_request, sign_request, signup_user, signup_user_in_pool};
+use common::factories::{
+    build_authed_request, sign_request, sign_request_at_timestamp, signup_user, signup_user_in_pool,
+};
 use ed25519_dalek::{Signer, SigningKey};
 use rand::rngs::OsRng;
-use sha2::{Digest, Sha256};
 use tc_crypto::{encode_base64url, BackupEnvelope, Kid};
 use tc_test_macros::shared_runtime_test;
 use tower::ServiceExt;
+
+/// Read the response body as JSON and extract the `"error"` field.
+///
+/// Panics with a descriptive message if the body is not valid JSON or lacks
+/// an `"error"` string field — both of which indicate a server bug in error
+/// response formatting.
+async fn error_body(response: axum::http::Response<Body>) -> String {
+    let status = response.status();
+    let body = axum::body::to_bytes(response.into_body(), 4096)
+        .await
+        .expect("failed to read response body");
+    let json: serde_json::Value = serde_json::from_slice(&body)
+        .unwrap_or_else(|e| panic!("response is not JSON ({status}): {e}, raw: {body:?}"));
+    json["error"]
+        .as_str()
+        .unwrap_or_else(|| panic!("response JSON missing \"error\" field ({status}): {json}"))
+        .to_string()
+}
 
 // =========================================================================
 // Trust Boundary: Signup — certificate forgery (HTTP integration level)
@@ -84,6 +103,11 @@ async fn test_tb_signup_forged_certificate_http() {
         .expect("response");
 
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let error = error_body(response).await;
+    assert_eq!(
+        error, "Invalid device certificate",
+        "forged certificate must be rejected with certificate-specific error"
+    );
 }
 
 // =========================================================================
@@ -126,6 +150,11 @@ async fn test_tb_cross_account_certificate_on_add_device() {
 
     let response = app.oneshot(req).await.expect("response");
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let error = error_body(response).await;
+    assert_eq!(
+        error, "Invalid device certificate",
+        "cross-account certificate must be rejected with certificate-specific error"
+    );
 }
 
 // =========================================================================
@@ -168,6 +197,11 @@ async fn test_tb_bit_flipped_certificate_on_add_device() {
 
     let response = app.oneshot(req).await.expect("response");
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let error = error_body(response).await;
+    assert_eq!(
+        error, "Invalid device certificate",
+        "bit-flipped certificate must be rejected with certificate-specific error"
+    );
 }
 
 // =========================================================================
@@ -195,6 +229,11 @@ async fn test_tb_request_signed_by_unknown_kid() {
 
     let response = app.oneshot(req).await.expect("response");
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    let error = error_body(response).await;
+    assert_eq!(
+        error, "Device not found",
+        "unknown KID must be rejected with device-not-found error, not a generic 401"
+    );
 }
 
 // =========================================================================
@@ -237,6 +276,11 @@ async fn test_tb_tampered_body_after_signing() {
 
     let response = app.oneshot(req).await.expect("response");
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    let error = error_body(response).await;
+    assert_eq!(
+        error, "Invalid signature",
+        "tampered body must fail signature verification, not a different auth step"
+    );
 }
 
 // =========================================================================
@@ -281,6 +325,11 @@ async fn test_tb_tampered_path_after_signing() {
 
     let response = app.oneshot(req).await.expect("response");
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    let error = error_body(response).await;
+    assert_eq!(
+        error, "Invalid signature",
+        "tampered path must fail signature verification, not a different auth step"
+    );
 }
 
 // =========================================================================
@@ -307,23 +356,29 @@ async fn test_tb_future_timestamp_rejected() {
 
     let future_timestamp = chrono::Utc::now().timestamp() + 600; // 10 minutes in the future
     let nonce = uuid::Uuid::new_v4().to_string();
-    let body_hash = Sha256::digest(b"");
-    let body_hash_hex = format!("{body_hash:x}");
-    let canonical = format!("GET\n/auth/devices\n{future_timestamp}\n{nonce}\n{body_hash_hex}");
-    let signature = signing_key.sign(canonical.as_bytes());
+    let auth_headers = sign_request_at_timestamp(
+        "GET",
+        "/auth/devices",
+        b"",
+        &signing_key,
+        &kid,
+        future_timestamp,
+        &nonce,
+    );
 
-    let req = Request::builder()
-        .method(Method::GET)
-        .uri("/auth/devices")
-        .header("X-Device-Kid", kid.to_string())
-        .header("X-Signature", encode_base64url(&signature.to_bytes()))
-        .header("X-Timestamp", future_timestamp.to_string())
-        .header("X-Nonce", &nonce)
-        .body(Body::empty())
-        .expect("request");
+    let mut builder = Request::builder().method(Method::GET).uri("/auth/devices");
+    for (name, value) in &auth_headers {
+        builder = builder.header(*name, value.as_str());
+    }
+    let req = builder.body(Body::empty()).expect("request");
 
     let response = app.oneshot(req).await.expect("response");
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    let error = error_body(response).await;
+    assert_eq!(
+        error, "Timestamp out of range",
+        "future timestamp must be rejected with timestamp-specific error"
+    );
 }
 
 // =========================================================================
@@ -362,6 +417,11 @@ async fn test_tb_empty_signature_rejected() {
 
     let response = app.oneshot(req).await.expect("response");
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    let error = error_body(response).await;
+    assert_eq!(
+        error, "Signature must be 64 bytes",
+        "empty signature must be rejected at size check, not silently accepted"
+    );
 }
 
 // =========================================================================
@@ -407,4 +467,9 @@ async fn test_tb_method_mismatch_rejected() {
 
     let response = app.oneshot(req).await.expect("response");
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    let error = error_body(response).await;
+    assert_eq!(
+        error, "Invalid signature",
+        "method mismatch must fail signature verification, not a different auth step"
+    );
 }
