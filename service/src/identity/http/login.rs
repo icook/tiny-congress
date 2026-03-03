@@ -135,13 +135,9 @@ pub async fn login(
     };
 
     // Decode root public key from the stored account
-    let Ok(root_pubkey_bytes) = decode_base64url(&account.root_pubkey) else {
-        tracing::error!("Corrupted root pubkey for account {}", account.id);
-        return super::internal_error();
-    };
-    let Ok(root_pubkey_arr): Result<[u8; 32], _> = root_pubkey_bytes.as_slice().try_into() else {
-        tracing::error!("Corrupted root pubkey length for account {}", account.id);
-        return super::internal_error();
+    let root_pubkey_arr = match super::decode_account_root_pubkey(&account) {
+        Ok(arr) => arr,
+        Err(resp) => return resp,
     };
 
     // Validate device fields and verify the timestamp-bound certificate
