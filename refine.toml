@@ -1,0 +1,25 @@
+# Automated refinement configuration
+# Edit [focus] to point at the directory you want refined.
+# Run: ./scripts/refine.sh
+
+[focus]
+path = "service/src/identity/"
+# glob = "**/*_handler.rs"  # optional: narrow within focus path
+
+[types]
+pattern_enforcement = true
+code_cleanup = true
+test_coverage = true
+security_hardening = true
+
+[behavior]
+# Seconds to wait between iterations (0 = as fast as possible)
+cooldown = 0
+# Stop after N PRs (0 = unlimited)
+max_prs = 0
+# Stop after N consecutive "nothing to improve" results
+idle_limit = 3
+
+[prompts]
+# Markdown file with project-specific refinement guidance
+guidance = "docs/refine-guidance.md"
