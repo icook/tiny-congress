@@ -103,7 +103,7 @@ pub async fn add_device(
             auth.account_id,
             &validated.device_kid,
             &req.pubkey,
-            validated.device_name.as_ref(),
+            validated.device_name.as_str(),
             &validated.cert_bytes,
         )
         .await
@@ -140,7 +140,7 @@ pub async fn add_device(
 /// Validated fields for adding a device, after input validation and certificate check.
 struct ValidatedAddDevice {
     device_kid: Kid,
-    device_name: String,
+    device_name: DeviceName,
     cert_bytes: Vec<u8>,
 }
 
@@ -202,7 +202,7 @@ async fn validate_add_device_request(
 
     Ok(ValidatedAddDevice {
         device_kid,
-        device_name: device_name.as_str().to_string(),
+        device_name,
         cert_bytes,
     })
 }
