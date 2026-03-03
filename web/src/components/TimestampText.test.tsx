@@ -23,7 +23,7 @@ test('cycles to UTC on click', async () => {
 
   // Click → UTC
   await user.click(el);
-  expect(el).toHaveTextContent('2024');
+  expect(el).toHaveTextContent('UTC');
 
   // Click → relative
   await user.click(el);
@@ -42,6 +42,28 @@ test('respects defaultMode prop', () => {
 test('falls back to raw string for invalid timestamps', () => {
   render(<TimestampText value="unknown" data-testid="ts" />);
   expect(screen.getByTestId('ts')).toHaveTextContent('unknown');
+});
+
+test('cycles via keyboard (Enter and Space)', async () => {
+  const user = userEvent.setup();
+  render(<TimestampText value={TIMESTAMP} data-testid="ts" />);
+  const el = screen.getByTestId('ts');
+
+  // Tab to focus the element
+  await user.tab();
+  expect(el).toHaveFocus();
+
+  // Enter → UTC
+  await user.keyboard('{Enter}');
+  expect(el).toHaveTextContent('UTC');
+
+  // Space → relative
+  await user.keyboard(' ');
+  expect(el).toHaveTextContent(/ago|year|month|day|hour|minute|second/i);
+
+  // Other keys should not cycle
+  await user.keyboard('a');
+  expect(el).toHaveTextContent(/ago|year|month|day|hour|minute|second/i);
 });
 
 test('does not cycle when value is invalid', async () => {
