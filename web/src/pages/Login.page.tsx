@@ -24,7 +24,7 @@ import {
 import {
   decryptBackupEnvelope,
   fetchBackup,
-  generateKeyPair,
+  generateDeviceKeyPair,
   getDeviceName,
   signMessage,
   useLogin,
@@ -70,8 +70,8 @@ export function LoginPage() {
         throw new Error('Backup integrity check failed: recovered key does not match account');
       }
 
-      // 3. Generate a new device key pair for this session
-      const deviceKeyPair = generateKeyPair(crypto);
+      // 3. Generate a new device key pair (non-extractable CryptoKey via Web Crypto)
+      const deviceKeyPair = await generateDeviceKeyPair();
 
       // 4. Build the timestamp-bound signed payload using the RECOVERED root key
       const timestamp = Math.floor(Date.now() / 1000);

@@ -59,11 +59,10 @@ vi.mock('@/features/identity', async (importOriginal) => {
       error: null,
       reset: vi.fn(),
     })),
-    generateKeyPair: vi.fn(() => ({
+    generateDeviceKeyPair: vi.fn().mockResolvedValue({
       publicKey: new Uint8Array(32),
-      privateKey: new Uint8Array(32),
-      kid: 'kid-123',
-    })),
+      privateKey: { type: 'private', algorithm: { name: 'Ed25519' } } as CryptoKey,
+    }),
     signMessage: vi.fn(() => new Uint8Array(64)),
     fetchBackup: (...args: unknown[]) => mockFetchBackup(...args),
     decryptBackupEnvelope: (...args: unknown[]) => mockDecryptBackupEnvelope(...args),
@@ -130,8 +129,11 @@ describe('LoginPage', () => {
       })
     );
 
-    // Should store device credentials
-    expect(mockSetDevice).toHaveBeenCalledWith('kid-device', expect.any(Uint8Array) as Uint8Array);
+    // Should store device credentials (non-extractable CryptoKey)
+    expect(mockSetDevice).toHaveBeenCalledWith(
+      'kid-device',
+      expect.objectContaining({ type: 'private' }) as CryptoKey
+    );
   });
 
   test('shows error when backup decryption fails (wrong password)', async () => {
