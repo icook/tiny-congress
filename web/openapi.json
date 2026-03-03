@@ -60,23 +60,19 @@
         ],
         "properties": {
           "buildTime": {
-            "type": "string",
-            "description": "Build timestamp in RFC3339 format."
+            "type": "string"
           },
           "gitSha": {
-            "type": "string",
-            "description": "Git commit SHA."
+            "type": "string"
           },
           "message": {
             "type": [
               "string",
               "null"
-            ],
-            "description": "Optional build message or description."
+            ]
           },
           "version": {
-            "type": "string",
-            "description": "Application version (from `APP_VERSION` env var, see #256 for prefix standardization)."
+            "type": "string"
           }
         }
       },

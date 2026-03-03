@@ -20,21 +20,17 @@ use uuid::Uuid;
 use super::service::{IdentityService, SignupError, SignupRequest};
 use tc_crypto::Kid;
 
-/// Signup response.
+/// Signup response
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SignupResponse {
-    /// Unique identifier for the created account.
     pub account_id: Uuid,
-    /// Key ID derived from the root public key.
     pub root_kid: Kid,
-    /// Key ID for the initial device key.
     pub device_kid: Kid,
 }
 
-/// Error response.
+/// Error response
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ErrorResponse {
-    /// Human-readable error message.
     pub error: String,
 }
 
