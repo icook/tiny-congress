@@ -301,7 +301,7 @@ run_iteration() {
     # Strategy 2: JSON is inside a markdown code fence
     if [[ -z "$json_block" ]]; then
         json_block="$(echo "$response_text" | \
-            sed -n '/^```json/,/^```/{/^```/d;p}' | \
+            awk '/^```json/{found=1;next} /^```/{found=0} found{print}' | \
             jq -c '.' 2>/dev/null || echo "")"
         # Verify it has an action field
         if [[ -n "$json_block" ]] && ! echo "$json_block" | jq -e '.action' &>/dev/null; then
