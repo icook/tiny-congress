@@ -197,10 +197,10 @@ jobs:
           retention-days: 7
 
   # ============================================================
-  # JOB 0c: Verify GraphQL codegen is up-to-date
+  # JOB 0c: Verify codegen is up-to-date (GraphQL + OpenAPI)
   # ============================================================
   codegen-check:
-    name: Check GraphQL codegen
+    name: Check codegen
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -233,12 +233,12 @@ jobs:
 
       - name: Check for uncommitted changes
         run: |
-          if ! git diff --quiet web/schema.graphql web/src/api/generated/; then
-            echo "::error::GraphQL codegen is out of date. Run 'just codegen' and commit the changes."
-            git diff web/schema.graphql web/src/api/generated/
+          if ! git diff --quiet web/schema.graphql web/openapi.json web/src/api/generated/; then
+            echo "::error::Codegen is out of date. Run 'just codegen' and commit the changes."
+            git diff web/schema.graphql web/openapi.json web/src/api/generated/
             exit 1
           fi
-          echo "✓ GraphQL codegen is up to date"
+          echo "✓ Codegen is up to date"
 
   # ============================================================
   # JOB 0d: Security & Dependency Audit
