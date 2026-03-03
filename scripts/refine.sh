@@ -366,3 +366,57 @@ for i, c in enumerate(text):
 
     echo "$action"
 }
+
+# ── Main loop ───────────────────────────────────────────────────────
+
+main() {
+    log "=== Refinement loop starting ==="
+    log "Focus: $FOCUS_PATH"
+    log "Types: ${ENABLED_TYPES[*]}"
+    log "Idle limit: $IDLE_LIMIT"
+
+    local idle_count=0
+    local pr_count=0
+
+    while true; do
+        local action
+        action="$(run_iteration)" || {
+            log "Iteration failed, continuing after cooldown"
+            sleep "${COOLDOWN:-5}"
+            continue
+        }
+
+        case "$action" in
+            change)
+                idle_count=0
+                pr_count=$((pr_count + 1))
+                log "PRs opened so far: $pr_count"
+                if [[ "$MAX_PRS" -gt 0 && "$pr_count" -ge "$MAX_PRS" ]]; then
+                    log "Reached max_prs=$MAX_PRS, stopping"
+                    break
+                fi
+                ;;
+            ticket)
+                idle_count=0
+                ;;
+            clean)
+                idle_count=$((idle_count + 1))
+                log "Idle count: $idle_count / $IDLE_LIMIT"
+                if [[ "$idle_count" -ge "$IDLE_LIMIT" ]]; then
+                    log "Reached idle_limit=$IDLE_LIMIT, focus area clean"
+                    break
+                fi
+                ;;
+        esac
+
+        if [[ "$COOLDOWN" -gt 0 ]]; then
+            log "Cooling down for ${COOLDOWN}s"
+            sleep "$COOLDOWN"
+        fi
+    done
+
+    log "=== Refinement loop finished ==="
+    log "Summary: $pr_count PRs opened, $idle_count consecutive idle results"
+}
+
+main
