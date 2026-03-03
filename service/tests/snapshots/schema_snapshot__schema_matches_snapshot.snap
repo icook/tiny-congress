@@ -1,6 +1,5 @@
 ---
 source: service/tests/schema_snapshot.rs
-assertion_line: 188
 expression: current_schema
 ---
 -- Schema Snapshot
@@ -38,7 +37,7 @@ CREATE TABLE reputation__endorsements (
     id UUID NOT NULL DEFAULT gen_random_uuid(),
     subject_id UUID NOT NULL,
     topic TEXT NOT NULL,
-    issuer_id UUID NOT NULL,
+    issuer_id UUID,
     evidence JSONB,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     revoked_at TIMESTAMPTZ);
@@ -49,12 +48,6 @@ CREATE TABLE reputation__external_identities (
     provider TEXT NOT NULL,
     provider_subject TEXT NOT NULL,
     linked_at TIMESTAMPTZ NOT NULL DEFAULT now());
-
-CREATE TABLE reputation__verifier_accounts (
-    id UUID NOT NULL DEFAULT gen_random_uuid(),
-    name TEXT NOT NULL,
-    description TEXT,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now());
 
 CREATE TABLE request_nonces (
     nonce_hash BYTEA NOT NULL,
@@ -135,8 +128,11 @@ CREATE INDEX idx_endorsements_topic ON public.reputation__endorsements USING btr
 -- reputation__endorsements.reputation__endorsements_pkey
 CREATE UNIQUE INDEX reputation__endorsements_pkey ON public.reputation__endorsements USING btree (id)
 
--- reputation__endorsements.uq_endorsements_subject_topic
-CREATE UNIQUE INDEX uq_endorsements_subject_topic ON public.reputation__endorsements USING btree (subject_id, topic)
+-- reputation__endorsements.uq_endorsements_genesis
+CREATE UNIQUE INDEX uq_endorsements_genesis ON public.reputation__endorsements USING btree (subject_id, topic) WHERE (issuer_id IS NULL)
+
+-- reputation__endorsements.uq_endorsements_subject_topic_issuer
+CREATE UNIQUE INDEX uq_endorsements_subject_topic_issuer ON public.reputation__endorsements USING btree (subject_id, topic, issuer_id)
 
 -- reputation__external_identities.idx_external_identities_account
 CREATE INDEX idx_external_identities_account ON public.reputation__external_identities USING btree (account_id)
@@ -146,12 +142,6 @@ CREATE UNIQUE INDEX reputation__external_identities_pkey ON public.reputation__e
 
 -- reputation__external_identities.uq_external_identities_provider_subject
 CREATE UNIQUE INDEX uq_external_identities_provider_subject ON public.reputation__external_identities USING btree (provider, provider_subject)
-
--- reputation__verifier_accounts.reputation__verifier_accounts_pkey
-CREATE UNIQUE INDEX reputation__verifier_accounts_pkey ON public.reputation__verifier_accounts USING btree (id)
-
--- reputation__verifier_accounts.uq_verifier_accounts_name
-CREATE UNIQUE INDEX uq_verifier_accounts_name ON public.reputation__verifier_accounts USING btree (name)
 
 -- request_nonces.idx_request_nonces_created_at
 CREATE INDEX idx_request_nonces_created_at ON public.request_nonces USING btree (created_at)
@@ -195,7 +185,7 @@ CREATE UNIQUE INDEX uq_votes_poll_dimension_user ON public.rooms__votes USING bt
 -- Foreign Keys
 -- account_backups.account_id -> accounts.id (ON UPDATE NO ACTION, ON DELETE CASCADE)
 -- device_keys.account_id -> accounts.id (ON UPDATE NO ACTION, ON DELETE CASCADE)
--- reputation__endorsements.issuer_id -> reputation__verifier_accounts.id (ON UPDATE NO ACTION, ON DELETE NO ACTION)
+-- reputation__endorsements.issuer_id -> accounts.id (ON UPDATE NO ACTION, ON DELETE NO ACTION)
 -- reputation__endorsements.subject_id -> accounts.id (ON UPDATE NO ACTION, ON DELETE CASCADE)
 -- reputation__external_identities.account_id -> accounts.id (ON UPDATE NO ACTION, ON DELETE CASCADE)
 -- rooms__poll_dimensions.poll_id -> rooms__polls.id (ON UPDATE NO ACTION, ON DELETE CASCADE)
@@ -234,11 +224,9 @@ CREATE UNIQUE INDEX uq_votes_poll_dimension_user ON public.rooms__votes USING bt
 -- device_keys: uq_device_keys_kid (UNIQUE)
 -- reputation__endorsements: reputation__endorsements_created_at_not_null (CHECK)
 -- reputation__endorsements: reputation__endorsements_id_not_null (CHECK)
--- reputation__endorsements: reputation__endorsements_issuer_id_not_null (CHECK)
 -- reputation__endorsements: reputation__endorsements_pkey (PRIMARY KEY)
 -- reputation__endorsements: reputation__endorsements_subject_id_not_null (CHECK)
 -- reputation__endorsements: reputation__endorsements_topic_not_null (CHECK)
--- reputation__endorsements: uq_endorsements_subject_topic (UNIQUE)
 -- reputation__external_identities: reputation__external_identities_account_id_not_null (CHECK)
 -- reputation__external_identities: reputation__external_identities_id_not_null (CHECK)
 -- reputation__external_identities: reputation__external_identities_linked_at_not_null (CHECK)
@@ -246,11 +234,6 @@ CREATE UNIQUE INDEX uq_votes_poll_dimension_user ON public.rooms__votes USING bt
 -- reputation__external_identities: reputation__external_identities_provider_not_null (CHECK)
 -- reputation__external_identities: reputation__external_identities_provider_subject_not_null (CHECK)
 -- reputation__external_identities: uq_external_identities_provider_subject (UNIQUE)
--- reputation__verifier_accounts: reputation__verifier_accounts_created_at_not_null (CHECK)
--- reputation__verifier_accounts: reputation__verifier_accounts_id_not_null (CHECK)
--- reputation__verifier_accounts: reputation__verifier_accounts_name_not_null (CHECK)
--- reputation__verifier_accounts: reputation__verifier_accounts_pkey (PRIMARY KEY)
--- reputation__verifier_accounts: uq_verifier_accounts_name (UNIQUE)
 -- request_nonces: request_nonces_created_at_not_null (CHECK)
 -- request_nonces: request_nonces_nonce_hash_not_null (CHECK)
 -- request_nonces: request_nonces_pkey (PRIMARY KEY)
