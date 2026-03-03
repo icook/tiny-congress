@@ -54,7 +54,11 @@ pub async fn cast_simulated_votes(
         let existing_usize = existing.max(0) as usize;
 
         if existing_usize >= voter_count {
-            tracing::debug!(poll_id = %poll_id, existing = existing_usize, "poll already has enough voters, skipping");
+            tracing::debug!(
+                poll_id = %poll_id,
+                existing = existing_usize,
+                "poll already has enough voters, skipping"
+            );
             continue;
         }
 
