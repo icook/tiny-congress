@@ -57,5 +57,5 @@ ENV SQLX_OFFLINE=true \
     BUILD_TIME=${BUILD_TIME} \
     APP_VERSION=${APP_VERSION}
 
-USER app
+USER 1000
 CMD ["tinycongress-api"]
