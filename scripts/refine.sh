@@ -311,7 +311,7 @@ run_iteration() {
     # Strategy 3: scan text for a JSON object containing "action" using python
     if [[ -z "$json_block" ]]; then
         json_block="$(python3 -c "
-import json, re, sys
+import json, sys
 text = sys.stdin.read()
 # Find JSON objects by matching balanced braces
 depth = 0
