@@ -1,7 +1,7 @@
 //! Consolidated identity repository trait
 //!
 //! Provides a single [`IdentityRepo`] that combines all identity persistence
-//! operations (accounts, backups, device keys) plus a compound [`create_signup`]
+//! operations (accounts, backups, device keys) plus a compound [`IdentityRepo::create_signup`]
 //! that wraps the three inserts in a single transaction.
 
 use async_trait::async_trait;

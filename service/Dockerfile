@@ -39,7 +39,9 @@ FROM debian:bookworm-slim
 RUN apt-get update \
   && apt-get install -y --no-install-recommends ca-certificates libpq5 libssl3 \
   && apt-get upgrade -y libpq5 \
-  && rm -rf /var/lib/apt/lists/*
+  && rm -rf /var/lib/apt/lists/* \
+  && groupadd --system --gid 1000 app \
+  && useradd --system --uid 1000 --gid app --no-create-home app
 
 COPY --from=builder /usr/src/app/target/release/tinycongress-api /usr/local/bin/
 COPY --from=builder /usr/src/app/service/migrations /usr/local/migrations
@@ -55,4 +57,5 @@ ENV SQLX_OFFLINE=true \
     BUILD_TIME=${BUILD_TIME} \
     APP_VERSION=${APP_VERSION}
 
+USER 1000
 CMD ["tinycongress-api"]

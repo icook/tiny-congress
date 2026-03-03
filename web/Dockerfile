@@ -42,9 +42,8 @@ ENV BUILD_TIME=${BUILD_TIME}
 COPY web/ ./
 RUN yarn build
 
-# Production stage
-FROM nginx:alpine
-RUN apk upgrade --no-cache
+# Production stage — nginx-unprivileged runs as UID 101, listens on 8080
+FROM nginxinc/nginx-unprivileged:alpine
 WORKDIR /usr/share/nginx/html
 
 # SPA routing + runtime config cache headers
@@ -53,9 +52,8 @@ COPY web/nginx.conf /etc/nginx/conf.d/default.conf
 # Copy static assets from builder
 COPY --from=builder /app/dist/ ./
 
-# Entrypoint generates /config.js from env vars, then starts nginx
-COPY web/docker-entrypoint.sh /docker-entrypoint.sh
-RUN chmod +x /docker-entrypoint.sh
+# Entrypoint generates /tmp/config.js from env vars, then starts nginx
+COPY --chmod=755 web/docker-entrypoint.sh /docker-entrypoint.sh
 
-EXPOSE 80
+EXPOSE 8080
 ENTRYPOINT ["/docker-entrypoint.sh"]

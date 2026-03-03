@@ -4,6 +4,11 @@ metadata:
   name: test-artifacts-exporter
 spec:
   restartPolicy: Never
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 65534
+    seccompProfile:
+      type: RuntimeDefault
   volumes:
     - name: test-artifacts
       persistentVolumeClaim:
@@ -13,6 +18,12 @@ spec:
       image: alpine:3.20
       command: ["sh", "-c"]
       args: ["sleep 3600"]
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop:
+            - ALL
       volumeMounts:
         - name: test-artifacts
           mountPath: /artifacts
