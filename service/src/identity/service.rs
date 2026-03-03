@@ -241,6 +241,53 @@ impl DevicePubkey {
     }
 }
 
+// ─── CertificateSignature type ──────────────────────────────────────────────
+
+/// A validated Ed25519 certificate signature (exactly 64 bytes).
+///
+/// Can only be constructed through [`CertificateSignature::from_base64url`], which
+/// decodes and validates the byte length.
+#[derive(Debug, Clone)]
+pub struct CertificateSignature([u8; 64]);
+
+/// Error type for certificate signature validation failures.
+#[derive(Debug, PartialEq, Eq)]
+pub enum CertificateSignatureError {
+    InvalidEncoding,
+    InvalidLength,
+}
+
+impl std::fmt::Display for CertificateSignatureError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::InvalidEncoding => write!(f, "Invalid base64url encoding for certificate"),
+            Self::InvalidLength => write!(f, "certificate must be 64 bytes (Ed25519 signature)"),
+        }
+    }
+}
+
+impl CertificateSignature {
+    /// Decode and validate a base64url-encoded Ed25519 signature.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CertificateSignatureError`] if decoding fails or length is not 64.
+    pub fn from_base64url(encoded: &str) -> Result<Self, CertificateSignatureError> {
+        let bytes =
+            decode_base64url(encoded).map_err(|_| CertificateSignatureError::InvalidEncoding)?;
+        let arr: [u8; 64] = bytes
+            .try_into()
+            .map_err(|_| CertificateSignatureError::InvalidLength)?;
+        Ok(Self(arr))
+    }
+
+    /// Return the raw 64-byte signature.
+    #[must_use]
+    pub const fn as_bytes(&self) -> &[u8; 64] {
+        &self.0
+    }
+}
+
 // ─── Service trait and implementation ────────────────────────────────────────
 
 /// Orchestrates identity operations: validation + atomic persistence.
@@ -355,14 +402,8 @@ impl IdentityService for DefaultIdentityService {
             .map_err(|e| SignupError::Validation(e.to_string()))?;
 
         // Decode and verify certificate
-        let certificate_bytes = decode_base64url(&req.device.certificate).map_err(|_| {
-            SignupError::Validation("Invalid base64url encoding for device.certificate".to_string())
-        })?;
-        let cert_arr: [u8; 64] = certificate_bytes.as_slice().try_into().map_err(|_| {
-            SignupError::Validation(
-                "device.certificate must be 64 bytes (Ed25519 signature)".to_string(),
-            )
-        })?;
+        let cert_sig = CertificateSignature::from_base64url(&req.device.certificate)
+            .map_err(|e| SignupError::Validation(e.to_string()))?;
 
         // Verify the certificate: root key must have signed the device public key.
         // The signed message is the raw 32-byte device pubkey. This is sufficient because
@@ -370,8 +411,12 @@ impl IdentityService for DefaultIdentityService {
         // cannot be replayed for a different device. If a future "rotate device key"
         // feature reuses key material, the message format must be extended (e.g. with
         // account binding or a nonce).
-        verify_ed25519(&root_pubkey_arr, device_pubkey.as_bytes(), &cert_arr)
-            .map_err(|_| SignupError::Validation("Invalid device certificate".to_string()))?;
+        verify_ed25519(
+            &root_pubkey_arr,
+            device_pubkey.as_bytes(),
+            cert_sig.as_bytes(),
+        )
+        .map_err(|_| SignupError::Validation("Invalid device certificate".to_string()))?;
 
         // Build validated signup data and delegate to repo
         let validated = ValidatedSignup {
@@ -384,7 +429,7 @@ impl IdentityService for DefaultIdentityService {
             device_pubkey: req.device.pubkey.clone(),
             device_kid,
             device_name: device_name.as_str().to_string(),
-            certificate: certificate_bytes,
+            certificate: cert_sig.as_bytes().to_vec(),
         };
 
         self.repo
