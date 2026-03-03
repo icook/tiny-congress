@@ -141,7 +141,7 @@ pub async fn add_device(
 struct ValidatedAddDevice {
     device_kid: Kid,
     device_name: DeviceName,
-    cert_bytes: Vec<u8>,
+    cert_bytes: [u8; 64],
 }
 
 /// Validate and verify the add-device request inputs.
@@ -199,7 +199,7 @@ async fn validate_add_device_request(
     Ok(ValidatedAddDevice {
         device_kid,
         device_name,
-        cert_bytes,
+        cert_bytes: cert_arr,
     })
 }
 
