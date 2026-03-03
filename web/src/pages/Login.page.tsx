@@ -10,6 +10,7 @@ import { useState } from 'react';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { IconAlertTriangle } from '@tabler/icons-react';
 import { Link, useNavigate } from '@tanstack/react-router';
+import { flushSync } from 'react-dom';
 import {
   Alert,
   Button,
@@ -94,8 +95,14 @@ export function LoginPage() {
         },
       });
 
-      // Store device credentials in session context
-      setDevice(response.device_kid, deviceKeyPair.privateKey);
+      // Store device credentials in session context.
+      // flushSync ensures React commits the state update before navigate() runs.
+      // Without it, beforeLoad (which reads router context synchronously at call
+      // time) would see stale context and redirect back to /login.
+      // See https://github.com/TanStack/router/issues/2072
+      flushSync(() => {
+        setDevice(response.device_kid, deviceKeyPair.privateKey);
+      });
 
       // Navigate to settings page to show device list
       void navigate({ to: '/settings' });

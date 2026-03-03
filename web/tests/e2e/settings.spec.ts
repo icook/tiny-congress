@@ -1,10 +1,11 @@
 import { expect, test } from './fixtures';
 
-test('settings page shows auth warning when not signed in', async ({ page }) => {
+test('settings page redirects to login when not signed in', async ({ page }) => {
   await page.goto('/settings');
 
-  await expect(page.getByRole('heading', { name: /settings/i })).toBeVisible();
-  await expect(page.getByText(/sign up or log in to manage devices/i)).toBeVisible();
+  // Should redirect to login page
+  await expect(page).toHaveURL(/\/login/);
+  await expect(page.getByRole('heading', { name: /log in/i })).toBeVisible();
 });
 
 test('settings page shows device list after signup', async ({ page }) => {

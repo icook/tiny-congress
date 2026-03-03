@@ -9,7 +9,6 @@ vi.mock('@tanstack/react-router', () => ({
       {children}
     </a>
   ),
-  useNavigate: vi.fn(() => vi.fn()),
 }));
 
 // Hoist shared mocks so vi.mock factories (which are also hoisted) can reference them

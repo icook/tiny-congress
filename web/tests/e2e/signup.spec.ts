@@ -51,6 +51,25 @@ test('signup shows error for duplicate username @smoke', async ({ page }) => {
   await page.getByRole('button', { name: /sign up/i }).click();
   await expect(page.getByText(/Account Created/i)).toBeVisible({ timeout: 15_000 });
 
+  // Clear device state so the redirect guard doesn't block the signup page.
+  // deleteDatabase is blocked while DeviceProvider holds an open connection;
+  // resolve on onblocked too — the deletion completes when the page navigates away.
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve, reject) => {
+        const req = indexedDB.deleteDatabase('tc-device-store');
+        req.onsuccess = () => {
+          resolve();
+        };
+        req.onblocked = () => {
+          resolve();
+        };
+        req.onerror = () => {
+          reject(new Error(String(req.error)));
+        };
+      })
+  );
+
   // Navigate back to signup for a second attempt with the same username
   await page.goto('/signup');
   await expect(page.getByLabel(/username/i)).toBeVisible();
