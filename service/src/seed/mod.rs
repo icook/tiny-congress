@@ -2,4 +2,5 @@
 
 pub mod accounts;
 pub mod config;
+pub mod content;
 pub mod llm;
