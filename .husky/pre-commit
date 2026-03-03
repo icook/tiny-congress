@@ -26,4 +26,13 @@ if git diff --cached --name-only | grep -q '\.rs$'; then
   fi
 fi
 
+# Guard: openapi.json changes require regenerated rest.ts
+if git diff --cached --name-only | grep -q 'web/openapi.json'; then
+  if ! git diff --cached --name-only | grep -q 'web/src/api/generated/rest.ts'; then
+    echo "web/openapi.json is staged but web/src/api/generated/rest.ts is not."
+    echo "Run 'just codegen' and stage the generated file."
+    exit 1
+  fi
+fi
+
 exit $frontend_status
