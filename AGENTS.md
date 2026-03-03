@@ -17,6 +17,9 @@ This file is a concise index of rules and pointers—not detailed documentation.
 - `service/`: Rust GraphQL API, workers, and SQL migrations (`migrations/`). Tests live in `service/tests/` (`*_tests.rs`).
 - `web/`: React/Mantine client on Vite. Source under `web/src/`, shared mocks in `web/test-utils/`.
 - `dockerfiles/`, `skaffold.yaml`, `kube/`: Container and Kubernetes assets for CI, integration, and demo environments.
+- `.plan/`: Ephemeral feature specs and design docs — **do not commit to PRs** (removed on merge).
+- `.scratch/`: Temporary working notes — **do not commit** (deleted after task).
+- Do NOT create `docs/plans/` or similar directories. Use `.plan/` for in-progress designs and `.scratch/` for throwaway analysis. Only permanent documentation belongs in `docs/` (see `docs/README.md` for placement rules).
 
 ## Domain Model
 
