@@ -43,6 +43,9 @@ pub const MAX_TIMESTAMP_SKEW: i64 = 300;
 /// before signature verification.
 const MAX_BODY_SIZE: usize = 64 * 1024;
 
+/// Maximum length of the X-Nonce header value (chars).
+const MAX_NONCE_LENGTH: usize = 64;
+
 /// Authenticated device extracted from signed request headers.
 ///
 /// Implements `FromRequest` — reads the full body, verifies the signature,
@@ -126,6 +129,13 @@ impl<S: Send + Sync> FromRequest<S> for AuthenticatedDevice {
             .and_then(|v| v.to_str().ok())
             .ok_or_else(|| auth_error("Missing X-Nonce header"))?
             .to_string();
+
+        if nonce.is_empty() {
+            return Err(auth_error("X-Nonce must not be empty"));
+        }
+        if nonce.len() > MAX_NONCE_LENGTH {
+            return Err(auth_error("X-Nonce too long"));
+        }
 
         // Parse KID
         let kid: Kid = kid_str
@@ -289,5 +299,16 @@ mod tests {
         assert!(
             canonical.ends_with("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855")
         );
+    }
+
+    #[test]
+    fn test_nonce_length_boundary() {
+        // Exactly at the limit — should be accepted
+        let at_limit = "a".repeat(MAX_NONCE_LENGTH);
+        assert_eq!(at_limit.len(), MAX_NONCE_LENGTH);
+
+        // One over the limit — should be rejected
+        let over_limit = "a".repeat(MAX_NONCE_LENGTH + 1);
+        assert!(over_limit.len() > MAX_NONCE_LENGTH);
     }
 }
