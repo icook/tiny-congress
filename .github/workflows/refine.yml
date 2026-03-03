@@ -1,0 +1,128 @@
+name: Refinement Loop
+
+# Automated code refinement — finds and fixes one issue per iteration,
+# creates PRs, and auto-fixes CI failures.
+#
+# Required secrets:
+#   ANTHROPIC_API_KEY  — Claude API key for `claude -p`
+#   REFINE_PAT         — GitHub PAT (repo scope) so pushed branches trigger CI.
+#                        The default GITHUB_TOKEN does NOT trigger workflows on push.
+#                        Create at: https://github.com/settings/tokens (classic, repo scope)
+
+on:
+  schedule:
+    # Every 4 hours
+    - cron: '0 */4 * * *'
+  workflow_dispatch:
+    inputs:
+      max_prs:
+        description: 'Max PRs to create (0 = use refine.toml default)'
+        required: false
+        default: '0'
+        type: string
+
+concurrency:
+  group: refinement
+  # Don't cancel — let the running loop finish its iteration
+  cancel-in-progress: false
+
+jobs:
+  refine:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      actions: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          # Use PAT so pushed branches trigger CI workflows
+          token: ${{ secrets.REFINE_PAT || secrets.GITHUB_TOKEN }}
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      # ── Tool setup ──────────────────────────────────────────────
+
+      - name: Install Claude CLI
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Install yq
+        run: |
+          sudo wget -qO /usr/local/bin/yq \
+            https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+          sudo chmod +x /usr/local/bin/yq
+
+      - name: Install just
+        uses: extractions/setup-just@v3
+
+      # ── Rust toolchain (for `just lint-backend` / `just test-backend`) ──
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: service
+
+      # ── Node toolchain (for `just lint-frontend` / `just test-frontend`) ──
+
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: web/.nvmrc
+          cache: yarn
+          cache-dependency-path: web/yarn.lock
+
+      - name: Enable corepack
+        run: corepack enable
+
+      - name: Install frontend dependencies
+        run: cd web && yarn install --immutable
+
+      # ── Docker (for testcontainers in backend tests) ──
+
+      - name: Build test postgres image
+        run: docker build -t tc-postgres:local -f dockerfiles/Dockerfile.postgres dockerfiles/
+
+      # ── WASM (for frontend tests) ──
+
+      - name: Install wasm-pack
+        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+
+      - name: Build WASM (dev)
+        run: just _build-wasm-dev
+
+      # ── Override max_prs if provided via workflow_dispatch ──
+
+      - name: Override max_prs
+        if: ${{ github.event.inputs.max_prs != '0' && github.event.inputs.max_prs != '' }}
+        run: |
+          yq -i -p toml -o toml '.behavior.max_prs = ${{ github.event.inputs.max_prs }}' refine.toml
+          echo "Overrode max_prs to ${{ github.event.inputs.max_prs }}"
+
+      # ── Run ──────────────────────────────────────────────────────
+
+      - name: Run refinement loop
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GH_TOKEN: ${{ secrets.REFINE_PAT || secrets.GITHUB_TOKEN }}
+        run: ./scripts/refine.sh
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: refine-logs-${{ github.run_id }}
+          path: .claude/refine.log
+          retention-days: 14

@@ -19,6 +19,14 @@ max_prs = 0
 # Stop after N consecutive "nothing to improve" results
 idle_limit = 3
 
+[ci]
+# Wait for CI after creating a PR and auto-fix failures
+auto_fix = true
+# Max fix attempts per PR before giving up
+max_fix_attempts = 2
+# Max seconds to wait for CI checks to complete
+check_timeout = 900
+
 [prompts]
 # Markdown file with project-specific refinement guidance
 guidance = "docs/refine-guidance.md"
