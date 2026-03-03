@@ -67,12 +67,13 @@ urlencoding = "2"
 
 # Cryptography
 tc-crypto = { path = "../crates/tc-crypto", version = "0.1.0", features = ["ed25519"] }
+ed25519-dalek = { version = "2", features = ["rand_core"] }
 hmac = "0.12"
 sha2 = "0.10"
 rand = "0.8"
 
 [dev-dependencies]
-ed25519-dalek = { version = "2", features = ["rand_core"] }
+figment = { version = "0.10", features = ["test"] }
 hyper = "1.6"
 insta = { version = "1.41", features = ["json", "redactions"] }
 proptest = "1"
@@ -91,8 +92,8 @@ name = "export_openapi"
 path = "src/bin/export_openapi.rs"
 
 [[bin]]
-name = "seed"
-path = "src/bin/seed.rs"
+name = "sim"
+path = "src/bin/sim.rs"
 
 # cargo-machete false positives (used via derive macros)
 [package.metadata.cargo-machete]

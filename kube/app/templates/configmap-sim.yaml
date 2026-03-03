@@ -1,0 +1,17 @@
+{{- if .Values.sim.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "app.fullname" . }}-sim
+  labels:
+    {{- include "app.labels" . | nindent 4 }}
+    app.kubernetes.io/component: sim
+data:
+  SIM_API_URL: {{ .Values.sim.apiUrl | quote }}
+  SIM_OPENROUTER_MODEL: {{ .Values.sim.openrouterModel | quote }}
+  SIM_TARGET_ROOMS: {{ .Values.sim.targetRooms | quote }}
+  SIM_VOTES_PER_POLL: {{ .Values.sim.votesPerPoll | quote }}
+  SIM_VOTER_COUNT: {{ .Values.sim.voterCount | quote }}
+  SIM_SYSTEM_PROMPT: {{ .Values.sim.systemPrompt | quote }}
+  SIM_LOG_LEVEL: {{ .Values.sim.logLevel | quote }}
+{{- end }}

@@ -231,15 +231,18 @@ cargoCache:
   # Path inside KinD node (mapped from ./service/target via kind-config.yaml)
   hostPath: /cargo-cache
 
-# Demo seed worker configuration
-seed:
+# Simulation worker configuration
+sim:
   enabled: false
   schedule: "*/30 * * * *"  # Every 30 minutes
+  apiUrl: ""
+  verifierApiKey: ""
   openrouterApiKey: ""
   openrouterModel: "anthropic/claude-sonnet-4-6"
   targetRooms: 5
   votesPerPoll: 15
   voterCount: 20
+  logLevel: "info"
   systemPrompt: >-
     You are a civic engagement topic generator. Generate realistic local
     governance topics suitable for community polling. Topics should be

@@ -1,8 +1,8 @@
-//! LLM response types and `OpenRouter` client for generating seed content.
+//! LLM response types and `OpenRouter` client for generating sim content.
 
 use serde::{Deserialize, Serialize};
 
-use super::config::SeedConfig;
+use super::config::SimConfig;
 
 // ---------------------------------------------------------------------------
 // Public response types – deserialized from LLM JSON output
@@ -10,29 +10,29 @@ use super::config::SeedConfig;
 
 /// Top-level LLM response containing generated rooms.
 #[derive(Debug, Clone, Deserialize)]
-pub struct SeedContent {
-    pub rooms: Vec<SeedRoom>,
+pub struct SimContent {
+    pub rooms: Vec<SimRoom>,
 }
 
 /// A generated room with its polls.
 #[derive(Debug, Clone, Deserialize)]
-pub struct SeedRoom {
+pub struct SimRoom {
     pub name: String,
     pub description: String,
-    pub polls: Vec<SeedPoll>,
+    pub polls: Vec<SimPoll>,
 }
 
 /// A generated poll with its dimensions.
 #[derive(Debug, Clone, Deserialize)]
-pub struct SeedPoll {
+pub struct SimPoll {
     pub question: String,
     pub description: String,
-    pub dimensions: Vec<SeedDimension>,
+    pub dimensions: Vec<SimDimension>,
 }
 
 /// A single dimension for opinion-space voting.
 #[derive(Debug, Clone, Deserialize)]
-pub struct SeedDimension {
+pub struct SimDimension {
     pub name: String,
     pub description: String,
     pub min: f32,
@@ -110,7 +110,7 @@ Respond with ONLY valid JSON matching this schema:
 
 /// Build the system and user messages for the LLM request.
 #[must_use]
-pub fn build_messages(config: &SeedConfig, rooms_needed: usize) -> Vec<ChatMessage> {
+pub fn build_messages(config: &SimConfig, rooms_needed: usize) -> Vec<ChatMessage> {
     let user_content = USER_PROMPT_TEMPLATE.replace("{N}", &rooms_needed.to_string());
 
     vec![
@@ -125,7 +125,7 @@ pub fn build_messages(config: &SeedConfig, rooms_needed: usize) -> Vec<ChatMessa
     ]
 }
 
-/// Call the `OpenRouter` API to generate seed content.
+/// Call the `OpenRouter` API to generate sim content.
 ///
 /// # Errors
 ///
@@ -133,9 +133,9 @@ pub fn build_messages(config: &SeedConfig, rooms_needed: usize) -> Vec<ChatMessa
 /// or the LLM returns an empty choices array.
 pub async fn generate_content(
     client: &reqwest::Client,
-    config: &SeedConfig,
+    config: &SimConfig,
     rooms_needed: usize,
-) -> Result<SeedContent, anyhow::Error> {
+) -> Result<SimContent, anyhow::Error> {
     let messages = build_messages(config, rooms_needed);
 
     let request = ChatRequest {
@@ -171,7 +171,7 @@ pub async fn generate_content(
         .next()
         .ok_or_else(|| anyhow::anyhow!("OpenRouter returned empty choices array"))?;
 
-    let content: SeedContent = serde_json::from_str(&first_choice.message.content)?;
+    let content: SimContent = serde_json::from_str(&first_choice.message.content)?;
 
     Ok(content)
 }
@@ -181,6 +181,7 @@ pub async fn generate_content(
 // ---------------------------------------------------------------------------
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
 
@@ -215,7 +216,7 @@ mod tests {
             ]
         }"#;
 
-        let content: SeedContent = serde_json::from_str(json).expect("valid JSON");
+        let content: SimContent = serde_json::from_str(json).expect("valid JSON");
         assert_eq!(content.rooms.len(), 1);
         assert_eq!(content.rooms[0].name, "Downtown Revitalization");
         assert_eq!(content.rooms[0].polls.len(), 1);
@@ -226,19 +227,22 @@ mod tests {
     #[test]
     fn deserializes_empty_rooms_array() {
         let json = r#"{"rooms": []}"#;
-        let content: SeedContent = serde_json::from_str(json).expect("valid JSON");
+        let content: SimContent = serde_json::from_str(json).expect("valid JSON");
         assert!(content.rooms.is_empty());
     }
 
     #[test]
     fn builds_correct_messages() {
-        let config = SeedConfig {
+        let config = SimConfig {
+            api_url: "http://localhost:4000".to_string(),
+            verifier_api_key: "test-key".to_string(),
             openrouter_api_key: "test-key".to_string(),
             openrouter_model: "test-model".to_string(),
             target_rooms: 5,
             votes_per_poll: 15,
             system_prompt: "You are a test system.".to_string(),
             voter_count: 20,
+            log_level: "info".to_string(),
         };
 
         let messages = build_messages(&config, 2);

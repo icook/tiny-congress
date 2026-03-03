@@ -1,0 +1,37 @@
+{{- if .Values.sim.enabled }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "app.fullname" . }}-sim
+  labels:
+    {{- include "app.labels" . | nindent 4 }}
+    app.kubernetes.io/component: sim
+spec:
+  schedule: {{ .Values.sim.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 300
+      template:
+        metadata:
+          labels:
+            {{- include "app.selectorLabels" . | nindent 12 }}
+            app.kubernetes.io/component: sim
+        spec:
+          serviceAccountName: {{ include "app.serviceAccountName" . }}
+          restartPolicy: OnFailure
+          containers:
+            - name: sim
+              image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}{{ if .Values.image.digest }}@{{ .Values.image.digest }}{{ end }}"
+              command: ["sim"]
+              envFrom:
+                - configMapRef:
+                    name: {{ include "app.fullname" . }}-sim
+                - secretRef:
+                    name: {{ include "app.fullname" . }}-sim
+              resources:
+                {{- toYaml .Values.sim.resources | nindent 16 }}
+{{- end }}
