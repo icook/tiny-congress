@@ -4,10 +4,10 @@ name: Refinement Loop
 # creates PRs, and auto-fixes CI failures.
 #
 # Required secrets:
-#   ANTHROPIC_API_KEY  — Claude API key for `claude -p`
-#   REFINE_PAT         — GitHub PAT (repo scope) so pushed branches trigger CI.
-#                        The default GITHUB_TOKEN does NOT trigger workflows on push.
-#                        Create at: https://github.com/settings/tokens (classic, repo scope)
+#   CLAUDE_CODE_OAUTH_TOKEN — OAuth token from Claude Max/Pro subscription (for `claude -p`)
+#   REFINE_PAT              — Fine-grained GitHub PAT so pushed branches trigger CI.
+#                              The default GITHUB_TOKEN does NOT trigger workflows on push.
+#                              Run: ./scripts/refine-setup.sh
 
 on:
   schedule:
@@ -115,7 +115,7 @@ jobs:
 
       - name: Run refinement loop
         env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           GH_TOKEN: ${{ secrets.REFINE_PAT || secrets.GITHUB_TOKEN }}
         run: ./scripts/refine.sh
 
