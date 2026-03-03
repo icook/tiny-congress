@@ -1,0 +1,14 @@
+# Hadolint configuration
+# https://github.com/hadolint/hadolint
+
+failure-threshold: warning
+
+ignored:
+  # Pin versions at the base image level (debian:bookworm-slim, postgres:18),
+  # not individual apt packages. Pinning apt versions breaks builds when the
+  # exact version expires from repos and prevents security patches.
+  - DL3008
+
+trustedRegistries:
+  - docker.io
+  - ghcr.io

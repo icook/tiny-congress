@@ -26,24 +26,40 @@ utoipa = { version = "5", features = ["axum_extras", "chrono", "uuid"] }
 utoipa-swagger-ui = { version = "9", features = ["axum"] }
 
 # Database
-sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "postgres", "macros", "uuid", "chrono"] }
-sqlx-core = { version = "0.8", default-features = false, features = ["_rt-tokio", "_tls-rustls-ring-webpki", "chrono", "uuid", "json", "migrate"] }
-sqlx-postgres = { version = "0.8", default-features = false, features = ["chrono", "uuid", "json", "migrate"] }
+sqlx = { version = "0.8", default-features = false, features = [
+  "runtime-tokio",
+  "postgres",
+  "macros",
+  "uuid",
+  "chrono",
+] }
+sqlx-core = { version = "0.8", default-features = false, features = [
+  "_rt-tokio",
+  "_tls-rustls-ring-webpki",
+  "chrono",
+  "uuid",
+  "json",
+  "migrate",
+] }
+sqlx-postgres = { version = "0.8", default-features = false, features = [
+  "chrono",
+  "uuid",
+  "json",
+  "migrate",
+] }
 
 # Configuration
 figment = { version = "0.10", features = ["yaml", "env"] }
 
-# Async
-async-trait = "0.1"
-
 # Utilities
+anyhow = "1.0"
+async-trait = "0.1"
 chrono = { version = "0.4", features = ["serde"] }
-uuid = { version = "1.16", features = ["v4", "serde"] }
 serde = { version = "1.0", features = ["derive"] }
+serde-aux = "4.7.0"
 serde_json = "1.0"
 thiserror = "2.0"
-anyhow = "1.0"
-serde-aux = "4.7.0"
+uuid = { version = "1.16", features = ["v4", "serde"] }
 
 # HTTP client (OAuth flows)
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
