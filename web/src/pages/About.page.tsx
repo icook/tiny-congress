@@ -2,6 +2,7 @@ import { IconAlertTriangle, IconInfoCircle } from '@tabler/icons-react';
 import { useQuery } from '@tanstack/react-query';
 import { Alert, Card, Group, Loader, Stack, Text, Title } from '@mantine/core';
 import { buildInfoQuery } from '../api/queries';
+import { TimestampText } from '../components/TimestampText';
 
 export function AboutPage() {
   const { data, isPending, isError, error } = useQuery(buildInfoQuery);
@@ -43,7 +44,7 @@ export function AboutPage() {
           <Stack gap="sm">
             <Metric label="API Version" value={data.version} testId="api-version" />
             <Metric label="Git SHA" value={data.gitSha} testId="api-git-sha" />
-            <Metric label="Build time" value={data.buildTime} testId="api-build-time" />
+            <TimestampMetric label="Build time" value={data.buildTime} testId="api-build-time" />
             {data.message ? (
               <Metric label="Message" value={data.message} testId="api-build-message" />
             ) : null}
@@ -54,7 +55,7 @@ export function AboutPage() {
       <Card shadow="sm" padding="lg" radius="md" withBorder>
         <Stack gap="sm">
           <Metric label="UI Git SHA" value={__UI_GIT_SHA__} testId="ui-git-sha" />
-          <Metric label="UI Build time" value={__UI_BUILD_TIME__} testId="ui-build-time" />
+          <TimestampMetric label="UI Build time" value={__UI_BUILD_TIME__} testId="ui-build-time" />
         </Stack>
       </Card>
     </Stack>
@@ -68,6 +69,25 @@ function Metric({ label, value, testId }: { label: string; value: string; testId
         {label}
       </Text>
       <Text data-testid={testId}>{value}</Text>
+    </Group>
+  );
+}
+
+function TimestampMetric({
+  label,
+  value,
+  testId,
+}: {
+  label: string;
+  value: string;
+  testId: string;
+}) {
+  return (
+    <Group gap="xs" wrap="nowrap">
+      <Text fw={500} w={120}>
+        {label}
+      </Text>
+      <TimestampText value={value} data-testid={testId} />
     </Group>
   );
 }
