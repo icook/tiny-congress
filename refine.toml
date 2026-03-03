@@ -4,7 +4,6 @@
 
 [focus]
 path = "service/src/identity/"
-# glob = "**/*_handler.rs"  # optional: narrow within focus path
 
 [types]
 pattern_enforcement = true
