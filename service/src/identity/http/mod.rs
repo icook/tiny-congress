@@ -55,7 +55,7 @@ pub fn router() -> Router {
 
 /// Returns `true` when `timestamp` differs from `now` by more than [`auth::MAX_TIMESTAMP_SKEW`].
 ///
-/// Uses [`u64::abs_diff`] to compute the absolute difference without overflow on
+/// Uses [`i64::abs_diff`] to compute the absolute difference without overflow on
 /// extreme values (`i64::MIN`, `i64::MAX`).
 pub(crate) const fn timestamp_is_stale(now: i64, timestamp: i64) -> bool {
     now.abs_diff(timestamp) > auth::MAX_TIMESTAMP_SKEW as u64
