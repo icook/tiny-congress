@@ -70,7 +70,7 @@ jobs:
         run: just lint-frontend
 
   # ============================================================
-  # JOB 0b1: Static Analysis (typos, TOML, Dockerfiles, workflows, scripts)
+  # JOB 0b1: Static Analysis (typos, Dockerfiles, workflows, scripts)
   # ============================================================
   static-analysis:
     name: Static Analysis
@@ -89,12 +89,12 @@ jobs:
 
       - name: Install hadolint
         run: |
-          curl -sL "https://github.com/hadolint/hadolint/releases/latest/download/hadolint-Linux-x86_64" -o hadolint
+          curl -fsSL "https://github.com/hadolint/hadolint/releases/latest/download/hadolint-Linux-x86_64" -o hadolint
           sudo install hadolint /usr/local/bin/
 
       - name: Install actionlint
         run: |
-          bash <(curl -sL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
+          bash <(curl -fsSL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
           sudo install actionlint /usr/local/bin/
 
       - name: Run static analysis
