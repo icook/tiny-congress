@@ -428,7 +428,7 @@ setup:
     @echo ""
     @echo "Static analysis tools (optional, for lint-static):"
     @echo "  - typos: $(typos --version 2>/dev/null || echo "NOT INSTALLED - cargo install typos-cli")"
-@echo "  - hadolint: $(hadolint --version 2>/dev/null || echo "NOT INSTALLED - brew install hadolint")"
+    @echo "  - hadolint: $(hadolint --version 2>/dev/null || echo 'NOT INSTALLED - brew install hadolint')"
     @echo "  - actionlint: $(actionlint --version 2>/dev/null || echo "NOT INSTALLED - brew install actionlint")"
     @echo "  - shellcheck: $(shellcheck --version 2>/dev/null | head -2 | tail -1 || echo "NOT INSTALLED - brew install shellcheck")"
     @echo ""

@@ -79,10 +79,20 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Install tools
+      - name: Install typos
         uses: taiki-e/install-action@v2
         with:
-          tool: typos-cli,hadolint,actionlint
+          tool: typos-cli
+
+      - name: Install hadolint
+        run: |
+          curl -sL "https://github.com/hadolint/hadolint/releases/latest/download/hadolint-Linux-x86_64" -o hadolint
+          sudo install hadolint /usr/local/bin/
+
+      - name: Install actionlint
+        run: |
+          bash <(curl -sL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
+          sudo install actionlint /usr/local/bin/
 
       - name: Run static analysis
         run: |
