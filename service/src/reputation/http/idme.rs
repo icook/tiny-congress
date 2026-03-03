@@ -24,6 +24,10 @@ use crate::reputation::service::EndorsementService;
 
 type HmacSha256 = Hmac<Sha256>;
 
+/// The account ID of the bootstrapped ID.me verifier, injected as an Axum extension.
+#[derive(Clone)]
+pub struct IdMeVerifierAccountId(pub Uuid);
+
 fn http_client() -> &'static reqwest::Client {
     static CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
     CLIENT.get_or_init(reqwest::Client::new)
@@ -153,11 +157,20 @@ pub async fn callback(
     Extension(config): Extension<Arc<IdMeConfig>>,
     Extension(endorsement_service): Extension<Arc<dyn EndorsementService>>,
     Extension(repo): Extension<Arc<dyn ReputationRepo>>,
+    Extension(verifier_id): Extension<IdMeVerifierAccountId>,
     Query(query): Query<CallbackQuery>,
 ) -> impl IntoResponse {
     let frontend_url = &config.frontend_callback_url;
 
-    match process_callback(&config, &*endorsement_service, &*repo, &query).await {
+    match process_callback(
+        &config,
+        &*endorsement_service,
+        &*repo,
+        verifier_id.0,
+        &query,
+    )
+    .await
+    {
         Ok(()) => redirect_to_frontend(frontend_url, "success", ""),
         Err(msg) => redirect_to_frontend(frontend_url, "error", &msg),
     }
@@ -169,6 +182,7 @@ async fn process_callback(
     config: &IdMeConfig,
     endorsement_service: &dyn EndorsementService,
     repo: &dyn ReputationRepo,
+    verifier_account_id: Uuid,
     query: &CallbackQuery,
 ) -> Result<(), String> {
     // Handle errors from ID.me
@@ -196,7 +210,13 @@ async fn process_callback(
     link_identity_if_new(repo, state.account_id, &userinfo.sub).await?;
 
     // Create endorsement
-    create_verification_endorsement(endorsement_service, state.account_id, &userinfo.sub).await
+    create_verification_endorsement(
+        endorsement_service,
+        state.account_id,
+        verifier_account_id,
+        &userinfo.sub,
+    )
+    .await
 }
 
 async fn exchange_code(config: &IdMeConfig, code: &str) -> Result<String, String> {
@@ -293,10 +313,16 @@ async fn link_identity_if_new(
 async fn create_verification_endorsement(
     service: &dyn EndorsementService,
     account_id: Uuid,
+    verifier_account_id: Uuid,
     idme_sub: &str,
 ) -> Result<(), String> {
     match service
-        .create_endorsement(account_id, "identity_verified", "idme", None)
+        .create_endorsement(
+            account_id,
+            "identity_verified",
+            Some(verifier_account_id),
+            None,
+        )
         .await
     {
         Ok(_) => {

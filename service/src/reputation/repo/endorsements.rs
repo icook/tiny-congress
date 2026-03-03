@@ -10,7 +10,7 @@ pub struct EndorsementRecord {
     pub id: Uuid,
     pub subject_id: Uuid,
     pub topic: String,
-    pub issuer_id: Uuid,
+    pub issuer_id: Option<Uuid>,
     pub evidence: Option<serde_json::Value>,
     pub created_at: DateTime<Utc>,
     pub revoked_at: Option<DateTime<Utc>>,
@@ -42,7 +42,7 @@ struct EndorsementRow {
     id: Uuid,
     subject_id: Uuid,
     topic: String,
-    issuer_id: Uuid,
+    issuer_id: Option<Uuid>,
     evidence: Option<serde_json::Value>,
     created_at: DateTime<Utc>,
     revoked_at: Option<DateTime<Utc>>,
@@ -70,7 +70,7 @@ pub async fn create_endorsement<'e, E>(
     executor: E,
     subject_id: Uuid,
     topic: &str,
-    issuer_id: Uuid,
+    issuer_id: Option<Uuid>,
     evidence: Option<&serde_json::Value>,
 ) -> Result<CreatedEndorsement, EndorsementRepoError>
 where
@@ -101,7 +101,9 @@ where
         Err(e) => {
             if let sqlx::Error::Database(ref db_err) = e {
                 if let Some(constraint) = db_err.constraint() {
-                    if constraint == "uq_endorsements_subject_topic" {
+                    if constraint == "uq_endorsements_subject_topic_issuer"
+                        || constraint == "uq_endorsements_genesis"
+                    {
                         return Err(EndorsementRepoError::Duplicate);
                     }
                 }

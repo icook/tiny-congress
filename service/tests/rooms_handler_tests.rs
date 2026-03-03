@@ -54,15 +54,11 @@ async fn signup_and_get_account(
     (app, keys, account_id)
 }
 
-/// Helper: bootstrap ID.me verifier and create an endorsement for a user.
+/// Helper: create a genesis endorsement for a user (no verifier account needed).
 async fn endorse_user(pool: &sqlx::PgPool, account_id: uuid::Uuid, topic: &str) {
-    use tinycongress_api::reputation::repo::{create_endorsement, ensure_verifier_account};
+    use tinycongress_api::reputation::repo::create_endorsement;
 
-    let verifier = ensure_verifier_account(pool, "idme", Some("ID.me"))
-        .await
-        .expect("verifier");
-
-    create_endorsement(pool, account_id, topic, verifier.id, None)
+    create_endorsement(pool, account_id, topic, None, None)
         .await
         .expect("endorsement");
 }
