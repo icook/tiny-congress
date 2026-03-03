@@ -34,9 +34,68 @@ CREATE TABLE device_keys (
     revoked_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now());
 
+CREATE TABLE reputation__endorsements (
+    id UUID NOT NULL DEFAULT gen_random_uuid(),
+    subject_id UUID NOT NULL,
+    topic TEXT NOT NULL,
+    issuer_id UUID NOT NULL,
+    evidence JSONB,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    revoked_at TIMESTAMPTZ);
+
+CREATE TABLE reputation__external_identities (
+    id UUID NOT NULL DEFAULT gen_random_uuid(),
+    account_id UUID NOT NULL,
+    provider TEXT NOT NULL,
+    provider_subject TEXT NOT NULL,
+    linked_at TIMESTAMPTZ NOT NULL DEFAULT now());
+
+CREATE TABLE reputation__verifier_accounts (
+    id UUID NOT NULL DEFAULT gen_random_uuid(),
+    name TEXT NOT NULL,
+    description TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now());
+
 CREATE TABLE request_nonces (
     nonce_hash BYTEA NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now());
+
+CREATE TABLE rooms__poll_dimensions (
+    id UUID NOT NULL DEFAULT gen_random_uuid(),
+    poll_id UUID NOT NULL,
+    name TEXT NOT NULL,
+    description TEXT,
+    min_value FLOAT4 NOT NULL DEFAULT 0.0,
+    max_value FLOAT4 NOT NULL DEFAULT 1.0,
+    sort_order INT4 NOT NULL DEFAULT 0);
+
+CREATE TABLE rooms__polls (
+    id UUID NOT NULL DEFAULT gen_random_uuid(),
+    room_id UUID NOT NULL,
+    question TEXT NOT NULL,
+    description TEXT,
+    status TEXT NOT NULL DEFAULT 'draft'::text,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    activated_at TIMESTAMPTZ,
+    closed_at TIMESTAMPTZ);
+
+CREATE TABLE rooms__rooms (
+    id UUID NOT NULL DEFAULT gen_random_uuid(),
+    name TEXT NOT NULL,
+    description TEXT,
+    eligibility_topic TEXT NOT NULL DEFAULT 'identity_verified'::text,
+    status TEXT NOT NULL DEFAULT 'open'::text,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    closed_at TIMESTAMPTZ);
+
+CREATE TABLE rooms__votes (
+    id UUID NOT NULL DEFAULT gen_random_uuid(),
+    poll_id UUID NOT NULL,
+    dimension_id UUID NOT NULL,
+    user_id UUID NOT NULL,
+    value FLOAT4 NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 -- Indexes
@@ -67,15 +126,83 @@ CREATE INDEX idx_device_keys_account ON public.device_keys USING btree (account_
 -- device_keys.uq_device_keys_kid
 CREATE UNIQUE INDEX uq_device_keys_kid ON public.device_keys USING btree (device_kid)
 
+-- reputation__endorsements.idx_endorsements_subject
+CREATE INDEX idx_endorsements_subject ON public.reputation__endorsements USING btree (subject_id)
+
+-- reputation__endorsements.idx_endorsements_topic
+CREATE INDEX idx_endorsements_topic ON public.reputation__endorsements USING btree (topic)
+
+-- reputation__endorsements.reputation__endorsements_pkey
+CREATE UNIQUE INDEX reputation__endorsements_pkey ON public.reputation__endorsements USING btree (id)
+
+-- reputation__endorsements.uq_endorsements_subject_topic
+CREATE UNIQUE INDEX uq_endorsements_subject_topic ON public.reputation__endorsements USING btree (subject_id, topic)
+
+-- reputation__external_identities.idx_external_identities_account
+CREATE INDEX idx_external_identities_account ON public.reputation__external_identities USING btree (account_id)
+
+-- reputation__external_identities.reputation__external_identities_pkey
+CREATE UNIQUE INDEX reputation__external_identities_pkey ON public.reputation__external_identities USING btree (id)
+
+-- reputation__external_identities.uq_external_identities_provider_subject
+CREATE UNIQUE INDEX uq_external_identities_provider_subject ON public.reputation__external_identities USING btree (provider, provider_subject)
+
+-- reputation__verifier_accounts.reputation__verifier_accounts_pkey
+CREATE UNIQUE INDEX reputation__verifier_accounts_pkey ON public.reputation__verifier_accounts USING btree (id)
+
+-- reputation__verifier_accounts.uq_verifier_accounts_name
+CREATE UNIQUE INDEX uq_verifier_accounts_name ON public.reputation__verifier_accounts USING btree (name)
+
 -- request_nonces.idx_request_nonces_created_at
 CREATE INDEX idx_request_nonces_created_at ON public.request_nonces USING btree (created_at)
 
 -- request_nonces.request_nonces_pkey
 CREATE UNIQUE INDEX request_nonces_pkey ON public.request_nonces USING btree (nonce_hash)
 
+-- rooms__poll_dimensions.idx_poll_dimensions_poll
+CREATE INDEX idx_poll_dimensions_poll ON public.rooms__poll_dimensions USING btree (poll_id)
+
+-- rooms__poll_dimensions.rooms__poll_dimensions_pkey
+CREATE UNIQUE INDEX rooms__poll_dimensions_pkey ON public.rooms__poll_dimensions USING btree (id)
+
+-- rooms__poll_dimensions.uq_poll_dimensions_poll_name
+CREATE UNIQUE INDEX uq_poll_dimensions_poll_name ON public.rooms__poll_dimensions USING btree (poll_id, name)
+
+-- rooms__polls.idx_polls_room
+CREATE INDEX idx_polls_room ON public.rooms__polls USING btree (room_id)
+
+-- rooms__polls.rooms__polls_pkey
+CREATE UNIQUE INDEX rooms__polls_pkey ON public.rooms__polls USING btree (id)
+
+-- rooms__rooms.rooms__rooms_pkey
+CREATE UNIQUE INDEX rooms__rooms_pkey ON public.rooms__rooms USING btree (id)
+
+-- rooms__rooms.uq_rooms_name
+CREATE UNIQUE INDEX uq_rooms_name ON public.rooms__rooms USING btree (name)
+
+-- rooms__votes.idx_votes_poll
+CREATE INDEX idx_votes_poll ON public.rooms__votes USING btree (poll_id)
+
+-- rooms__votes.idx_votes_user
+CREATE INDEX idx_votes_user ON public.rooms__votes USING btree (user_id)
+
+-- rooms__votes.rooms__votes_pkey
+CREATE UNIQUE INDEX rooms__votes_pkey ON public.rooms__votes USING btree (id)
+
+-- rooms__votes.uq_votes_poll_dimension_user
+CREATE UNIQUE INDEX uq_votes_poll_dimension_user ON public.rooms__votes USING btree (poll_id, dimension_id, user_id)
+
 -- Foreign Keys
 -- account_backups.account_id -> accounts.id (ON UPDATE NO ACTION, ON DELETE CASCADE)
 -- device_keys.account_id -> accounts.id (ON UPDATE NO ACTION, ON DELETE CASCADE)
+-- reputation__endorsements.issuer_id -> reputation__verifier_accounts.id (ON UPDATE NO ACTION, ON DELETE NO ACTION)
+-- reputation__endorsements.subject_id -> accounts.id (ON UPDATE NO ACTION, ON DELETE CASCADE)
+-- reputation__external_identities.account_id -> accounts.id (ON UPDATE NO ACTION, ON DELETE CASCADE)
+-- rooms__poll_dimensions.poll_id -> rooms__polls.id (ON UPDATE NO ACTION, ON DELETE CASCADE)
+-- rooms__polls.room_id -> rooms__rooms.id (ON UPDATE NO ACTION, ON DELETE CASCADE)
+-- rooms__votes.dimension_id -> rooms__poll_dimensions.id (ON UPDATE NO ACTION, ON DELETE CASCADE)
+-- rooms__votes.poll_id -> rooms__polls.id (ON UPDATE NO ACTION, ON DELETE CASCADE)
+-- rooms__votes.user_id -> accounts.id (ON UPDATE NO ACTION, ON DELETE CASCADE)
 
 -- Constraints
 -- account_backups: account_backups_account_id_not_null (CHECK)
@@ -105,6 +232,57 @@ CREATE UNIQUE INDEX request_nonces_pkey ON public.request_nonces USING btree (no
 -- device_keys: device_keys_id_not_null (CHECK)
 -- device_keys: device_keys_pkey (PRIMARY KEY)
 -- device_keys: uq_device_keys_kid (UNIQUE)
+-- reputation__endorsements: reputation__endorsements_created_at_not_null (CHECK)
+-- reputation__endorsements: reputation__endorsements_id_not_null (CHECK)
+-- reputation__endorsements: reputation__endorsements_issuer_id_not_null (CHECK)
+-- reputation__endorsements: reputation__endorsements_pkey (PRIMARY KEY)
+-- reputation__endorsements: reputation__endorsements_subject_id_not_null (CHECK)
+-- reputation__endorsements: reputation__endorsements_topic_not_null (CHECK)
+-- reputation__endorsements: uq_endorsements_subject_topic (UNIQUE)
+-- reputation__external_identities: reputation__external_identities_account_id_not_null (CHECK)
+-- reputation__external_identities: reputation__external_identities_id_not_null (CHECK)
+-- reputation__external_identities: reputation__external_identities_linked_at_not_null (CHECK)
+-- reputation__external_identities: reputation__external_identities_pkey (PRIMARY KEY)
+-- reputation__external_identities: reputation__external_identities_provider_not_null (CHECK)
+-- reputation__external_identities: reputation__external_identities_provider_subject_not_null (CHECK)
+-- reputation__external_identities: uq_external_identities_provider_subject (UNIQUE)
+-- reputation__verifier_accounts: reputation__verifier_accounts_created_at_not_null (CHECK)
+-- reputation__verifier_accounts: reputation__verifier_accounts_id_not_null (CHECK)
+-- reputation__verifier_accounts: reputation__verifier_accounts_name_not_null (CHECK)
+-- reputation__verifier_accounts: reputation__verifier_accounts_pkey (PRIMARY KEY)
+-- reputation__verifier_accounts: uq_verifier_accounts_name (UNIQUE)
 -- request_nonces: request_nonces_created_at_not_null (CHECK)
 -- request_nonces: request_nonces_nonce_hash_not_null (CHECK)
 -- request_nonces: request_nonces_pkey (PRIMARY KEY)
+-- rooms__poll_dimensions: rooms__poll_dimensions_id_not_null (CHECK)
+-- rooms__poll_dimensions: rooms__poll_dimensions_max_value_not_null (CHECK)
+-- rooms__poll_dimensions: rooms__poll_dimensions_min_value_not_null (CHECK)
+-- rooms__poll_dimensions: rooms__poll_dimensions_name_not_null (CHECK)
+-- rooms__poll_dimensions: rooms__poll_dimensions_pkey (PRIMARY KEY)
+-- rooms__poll_dimensions: rooms__poll_dimensions_poll_id_not_null (CHECK)
+-- rooms__poll_dimensions: rooms__poll_dimensions_sort_order_not_null (CHECK)
+-- rooms__poll_dimensions: uq_poll_dimensions_poll_name (UNIQUE)
+-- rooms__polls: rooms__polls_created_at_not_null (CHECK)
+-- rooms__polls: rooms__polls_id_not_null (CHECK)
+-- rooms__polls: rooms__polls_pkey (PRIMARY KEY)
+-- rooms__polls: rooms__polls_question_not_null (CHECK)
+-- rooms__polls: rooms__polls_room_id_not_null (CHECK)
+-- rooms__polls: rooms__polls_status_check (CHECK)
+-- rooms__polls: rooms__polls_status_not_null (CHECK)
+-- rooms__rooms: rooms__rooms_created_at_not_null (CHECK)
+-- rooms__rooms: rooms__rooms_eligibility_topic_not_null (CHECK)
+-- rooms__rooms: rooms__rooms_id_not_null (CHECK)
+-- rooms__rooms: rooms__rooms_name_not_null (CHECK)
+-- rooms__rooms: rooms__rooms_pkey (PRIMARY KEY)
+-- rooms__rooms: rooms__rooms_status_check (CHECK)
+-- rooms__rooms: rooms__rooms_status_not_null (CHECK)
+-- rooms__rooms: uq_rooms_name (UNIQUE)
+-- rooms__votes: rooms__votes_created_at_not_null (CHECK)
+-- rooms__votes: rooms__votes_dimension_id_not_null (CHECK)
+-- rooms__votes: rooms__votes_id_not_null (CHECK)
+-- rooms__votes: rooms__votes_pkey (PRIMARY KEY)
+-- rooms__votes: rooms__votes_poll_id_not_null (CHECK)
+-- rooms__votes: rooms__votes_updated_at_not_null (CHECK)
+-- rooms__votes: rooms__votes_user_id_not_null (CHECK)
+-- rooms__votes: rooms__votes_value_not_null (CHECK)
+-- rooms__votes: uq_votes_poll_dimension_user (UNIQUE)

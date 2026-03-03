@@ -9,13 +9,20 @@ import {
   type SignupRequest,
 } from './client';
 
-// Mock signWithDeviceKey so tests don't need real Web Crypto Ed25519
-vi.mock('../keys', async (importOriginal) => {
-  const original = await importOriginal<typeof import('../keys')>();
-  return {
-    ...original,
-    signWithDeviceKey: vi.fn().mockResolvedValue(new Uint8Array(64)),
-  };
+// Mock crypto.subtle.sign so tests don't need real Web Crypto Ed25519 keys
+const mockSign = vi.fn().mockResolvedValue(new ArrayBuffer(64));
+const originalSubtle = globalThis.crypto.subtle;
+Object.defineProperty(globalThis.crypto, 'subtle', {
+  value: new Proxy(originalSubtle, {
+    get(target, prop) {
+      if (prop === 'sign') {
+        return mockSign;
+      }
+      const val = Reflect.get(target, prop) as unknown;
+      return typeof val === 'function' ? val.bind(target) : val;
+    },
+  }),
+  configurable: true,
 });
 
 function headersOf(mockFetch: Mock): Record<string, string> {

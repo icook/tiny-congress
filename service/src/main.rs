@@ -30,7 +30,17 @@ use tinycongress_api::{
         repo::{IdentityRepo, PgIdentityRepo},
         service::{DefaultIdentityService, IdentityService},
     },
+    reputation::{
+        self,
+        repo::{PgReputationRepo, ReputationRepo},
+        service::{DefaultEndorsementService, EndorsementService},
+    },
     rest::{self, ApiDoc},
+    rooms::{
+        self,
+        repo::{PgRoomsRepo, RoomsRepo},
+        service::{DefaultRoomsService, RoomsService},
+    },
 };
 use tower_http::cors::{AllowOrigin, Any, CorsLayer};
 use utoipa::OpenApi;
@@ -101,6 +111,100 @@ fn spawn_nonce_cleanup(pool: sqlx::PgPool) {
     });
 }
 
+/// Build the Axum router with all service layers wired up.
+#[allow(clippy::too_many_lines)]
+async fn build_app(
+    config: &Config,
+    pool: PgPool,
+    build_info: BuildInfo,
+    schema: Schema<QueryRoot, MutationRoot, EmptySubscription>,
+    allow_origin: AllowOrigin,
+) -> Result<(Router, PgPool), anyhow::Error> {
+    let rest_v1 = Router::new().route("/build-info", get(rest::get_build_info));
+
+    // Identity wiring
+    let repo = Arc::new(PgIdentityRepo::new(pool.clone()));
+    let service = Arc::new(DefaultIdentityService::new(repo.clone())) as Arc<dyn IdentityService>;
+    let repo_ext = repo as Arc<dyn IdentityRepo>;
+
+    let synthetic_backup_key = identity::http::backup::SyntheticBackupKey::new(
+        config.synthetic_backup_key.as_bytes().to_vec(),
+    );
+
+    // Reputation wiring
+    let reputation_repo = Arc::new(PgReputationRepo::new(pool.clone()));
+    let endorsement_service = Arc::new(DefaultEndorsementService::new(reputation_repo.clone()))
+        as Arc<dyn EndorsementService>;
+    let reputation_repo_ext = reputation_repo as Arc<dyn ReputationRepo>;
+
+    if config.idme.is_some() {
+        reputation::service::bootstrap_idme_verifier(&*reputation_repo_ext)
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to bootstrap ID.me verifier: {e}"))?;
+    }
+
+    // Rooms wiring
+    let rooms_repo = Arc::new(PgRoomsRepo::new(pool.clone()));
+    let rooms_service = Arc::new(DefaultRoomsService::new(
+        rooms_repo as Arc<dyn RoomsRepo>,
+        endorsement_service.clone(),
+    )) as Arc<dyn RoomsService>;
+
+    let app = Router::new()
+        .route("/graphql", {
+            let route = axum::routing::post(graphql_handler);
+            if config.graphql.playground_enabled {
+                tracing::info!("GraphQL Playground enabled at /graphql");
+                route.get(graphql_playground)
+            } else {
+                tracing::info!(
+                    "GraphQL Playground disabled (enable via TC_GRAPHQL__PLAYGROUND_ENABLED=true)"
+                );
+                route
+            }
+        })
+        .nest("/api/v1", rest_v1)
+        .merge(identity::http::router())
+        .merge(reputation::http::router())
+        .merge(rooms::http::router())
+        .route("/health", get(health_check))
+        .route("/ready", get(readiness_check))
+        .layer(Extension(schema))
+        .layer(Extension(service))
+        .layer(Extension(repo_ext))
+        .layer(Extension(endorsement_service))
+        .layer(Extension(reputation_repo_ext))
+        .layer(Extension(rooms_service))
+        .layer(Extension(synthetic_backup_key))
+        .layer(Extension(build_info))
+        .layer(Extension(pool.clone()));
+
+    // Add ID.me config extension if configured
+    let app = if let Some(ref idme_config) = config.idme {
+        tracing::info!("ID.me verification enabled");
+        app.layer(Extension(Arc::new(idme_config.clone())))
+    } else {
+        tracing::info!("ID.me verification disabled (no TC_IDME__* config)");
+        app
+    };
+
+    let app = app.layer(
+        CorsLayer::new()
+            .allow_methods([
+                Method::GET,
+                Method::POST,
+                Method::PUT,
+                Method::DELETE,
+                Method::PATCH,
+                Method::OPTIONS,
+            ])
+            .allow_headers(Any)
+            .allow_origin(allow_origin),
+    );
+
+    Ok((app, pool))
+}
+
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
     // Load and validate configuration first (fail-fast)
@@ -150,63 +254,12 @@ async fn main() -> Result<(), anyhow::Error> {
         None
     };
 
-    // REST API v1 routes
-    let rest_v1 = Router::new().route("/build-info", get(rest::get_build_info));
+    // Service wiring
+    let (app, pool_for_cleanup) =
+        build_app(&config, pool.clone(), build_info, schema, allow_origin).await?;
+    let mut app = app;
 
-    // Identity wiring
-    let repo = Arc::new(PgIdentityRepo::new(pool.clone()));
-    let service = Arc::new(DefaultIdentityService::new(repo.clone())) as Arc<dyn IdentityService>;
-    let repo_ext = repo as Arc<dyn IdentityRepo>;
-
-    // HMAC key for synthetic backup generation (anti-enumeration)
-    let synthetic_backup_key = identity::http::backup::SyntheticBackupKey::new(
-        config.synthetic_backup_key.as_bytes().to_vec(),
-    );
-
-    spawn_nonce_cleanup(pool.clone());
-
-    // Build the API
-    let mut app = Router::new()
-        // GraphQL endpoint - POST always enabled, GET (playground) is conditional
-        .route("/graphql", {
-            let route = axum::routing::post(graphql_handler);
-            if config.graphql.playground_enabled {
-                tracing::info!("GraphQL Playground enabled at /graphql");
-                route.get(graphql_playground)
-            } else {
-                tracing::info!(
-                    "GraphQL Playground disabled (enable via TC_GRAPHQL__PLAYGROUND_ENABLED=true)"
-                );
-                route
-            }
-        })
-        // REST API v1
-        .nest("/api/v1", rest_v1)
-        // Identity routes
-        .merge(identity::http::router())
-        // Probe routes
-        .route("/health", get(health_check))
-        .route("/ready", get(readiness_check))
-        // Add the schema to the extension
-        .layer(Extension(schema))
-        .layer(Extension(service))
-        .layer(Extension(repo_ext))
-        .layer(Extension(synthetic_backup_key))
-        .layer(Extension(build_info))
-        .layer(Extension(pool.clone()))
-        .layer(
-            CorsLayer::new()
-                .allow_methods([
-                    Method::GET,
-                    Method::POST,
-                    Method::PUT,
-                    Method::DELETE,
-                    Method::PATCH,
-                    Method::OPTIONS,
-                ])
-                .allow_headers(Any)
-                .allow_origin(allow_origin),
-        );
+    spawn_nonce_cleanup(pool_for_cleanup);
 
     // Add security headers middleware if enabled
     if let Some(headers) = security_headers {

@@ -1,10 +1,18 @@
-import { createRootRoute, createRoute, createRouter, RouterProvider } from '@tanstack/react-router';
+import {
+  createRootRoute,
+  createRoute,
+  createRouter,
+  RouterProvider,
+  useParams,
+} from '@tanstack/react-router';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { AboutPage } from './pages/About.page';
 import { DashboardPage } from './pages/Dashboard.page';
 import { HomePage } from './pages/Home.page';
 import { Layout } from './pages/Layout';
 import { LoginPage } from './pages/Login.page';
+import { PollPage } from './pages/Poll.page';
+import { RoomsPage } from './pages/Rooms.page';
 import { SettingsPage } from './pages/Settings.page';
 import { SignupPage } from './pages/Signup.page';
 import { ThreadedConversationPage } from './pages/ThreadedConversation.page';
@@ -55,6 +63,18 @@ const settingsRoute = createRoute({
   component: SettingsPage,
 });
 
+const roomsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: 'rooms',
+  component: RoomsPage,
+});
+
+const pollRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: 'rooms/$roomId/polls/$pollId',
+  component: PollPageWrapper,
+});
+
 const routeTree = rootRoute.addChildren([
   homeRoute,
   dashboardRoute,
@@ -63,6 +83,8 @@ const routeTree = rootRoute.addChildren([
   signupRoute,
   loginRoute,
   settingsRoute,
+  roomsRoute,
+  pollRoute,
   createPlaceholderRoute('analytics', 'Analytics', 'Analytics page content'),
   createPlaceholderRoute('releases', 'Releases', 'Releases page content'),
   createPlaceholderRoute('account', 'Account', 'Account page content'),
@@ -83,6 +105,11 @@ export function Router() {
       <RouterProvider router={router} />
     </ErrorBoundary>
   );
+}
+
+function PollPageWrapper() {
+  const { roomId, pollId } = useParams({ from: '/rooms/$roomId/polls/$pollId' });
+  return <PollPage roomId={roomId} pollId={pollId} />;
 }
 
 function createPlaceholderRoute(path: string, title: string, description: string) {

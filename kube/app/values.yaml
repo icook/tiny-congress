@@ -183,6 +183,20 @@ postgres:
 # external secret manager.
 syntheticBackupKey: ""
 
+# ID.me OAuth verification (optional)
+# When enabled, users can verify their identity via ID.me
+idme:
+  enabled: false
+  clientId: ""
+  clientSecret: ""
+  # OAuth URLs default to ID.me sandbox; override for production
+  authorizeUrl: ""
+  tokenUrl: ""
+  userinfoUrl: ""
+  redirectUri: ""
+  stateSecret: ""
+  frontendCallbackUrl: ""
+
 # Cargo build cache for dev mode (hostPath volume)
 # Shares build cache with local dev via KinD extraMounts
 # Requires: kind create cluster --config kind-config.yaml

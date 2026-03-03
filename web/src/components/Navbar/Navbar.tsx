@@ -1,6 +1,7 @@
 import {
   IconCalendarStats,
   IconDeviceDesktopAnalytics,
+  IconDoor,
   IconGauge,
   IconHome2,
   IconInfoCircle,
@@ -13,6 +14,7 @@ import { Box, NavLink, Stack, useComputedColorScheme, useMantineTheme } from '@m
 const navLinks = [
   { icon: IconHome2, label: 'Home', path: '/' },
   { icon: IconGauge, label: 'Dashboard', path: '/dashboard' },
+  { icon: IconDoor, label: 'Rooms', path: '/rooms' },
   { icon: IconMessages, label: 'Conversations', path: '/conversations' },
   { icon: IconInfoCircle, label: 'About', path: '/about' },
   { icon: IconDeviceDesktopAnalytics, label: 'Analytics', path: '/analytics' },

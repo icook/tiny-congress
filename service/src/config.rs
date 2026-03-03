@@ -31,6 +31,9 @@ pub struct Config {
     /// Set via `TC_SYNTHETIC_BACKUP_KEY` environment variable.
     #[serde(default)]
     pub synthetic_backup_key: String,
+    /// ID.me OAuth configuration. Optional — verification is disabled when absent.
+    #[serde(default)]
+    pub idme: Option<IdMeConfig>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -242,6 +245,43 @@ pub struct GraphQLConfig {
     pub playground_enabled: bool,
 }
 
+/// ID.me OAuth 2.0 configuration.
+///
+/// All fields are required when ID.me verification is enabled.
+/// Set via `TC_IDME__*` environment variables.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct IdMeConfig {
+    pub client_id: String,
+    pub client_secret: String,
+    #[serde(default = "default_idme_authorize_url")]
+    pub authorize_url: String,
+    #[serde(default = "default_idme_token_url")]
+    pub token_url: String,
+    #[serde(default = "default_idme_userinfo_url")]
+    pub userinfo_url: String,
+    /// The callback URL that ID.me redirects to after authorization.
+    /// Must match the redirect URI registered with ID.me.
+    pub redirect_uri: String,
+    /// HMAC key for signing OAuth state parameters (anti-CSRF).
+    /// Must be at least 32 bytes.
+    pub state_secret: String,
+    /// Frontend URL to redirect to after callback processing.
+    /// The result (success/error) is appended as query parameters.
+    pub frontend_callback_url: String,
+}
+
+fn default_idme_authorize_url() -> String {
+    "https://api.idmelabs.com/oauth/authorize".to_string()
+}
+
+fn default_idme_token_url() -> String {
+    "https://api.idmelabs.com/oauth/token".to_string()
+}
+
+fn default_idme_userinfo_url() -> String {
+    "https://api.idmelabs.com/api/public/v3/userinfo".to_string()
+}
+
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct SwaggerConfig {
     /// Enable Swagger UI at /swagger-ui.
@@ -275,6 +315,7 @@ impl Default for Config {
             graphql: GraphQLConfig::default(),
             swagger: SwaggerConfig::default(),
             synthetic_backup_key: String::new(),
+            idme: None,
         }
     }
 }
