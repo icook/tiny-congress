@@ -1,0 +1,158 @@
+//! HTTP handlers for reputation system
+
+pub mod idme;
+
+use std::sync::Arc;
+
+use axum::{
+    extract::{Extension, Query},
+    http::StatusCode,
+    response::IntoResponse,
+    routing::get,
+    Json, Router,
+};
+use serde::{Deserialize, Serialize};
+use uuid::Uuid;
+
+use super::service::{EndorsementError, EndorsementService};
+use crate::identity::http::auth::AuthenticatedDevice;
+use crate::identity::http::ErrorResponse;
+
+// ─── Response types ────────────────────────────────────────────────────────
+
+#[derive(Debug, Serialize)]
+pub struct EndorsementResponse {
+    pub id: Uuid,
+    pub subject_id: Uuid,
+    pub topic: String,
+    pub issuer_id: Uuid,
+    pub created_at: String,
+    pub revoked: bool,
+}
+
+#[derive(Debug, Serialize)]
+pub struct EndorsementsListResponse {
+    pub endorsements: Vec<EndorsementResponse>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct HasEndorsementResponse {
+    pub has_endorsement: bool,
+}
+
+// ─── Query types ───────────────────────────────────────────────────────────
+
+#[derive(Debug, Deserialize)]
+pub struct EndorsementQuery {
+    pub subject_id: Option<Uuid>,
+    pub topic: Option<String>,
+}
+
+// ─── Router ────────────────────────────────────────────────────────────────
+
+pub fn router() -> Router {
+    Router::new()
+        .route("/me/endorsements", get(my_endorsements))
+        .route("/endorsements/check", get(check_endorsement))
+        .route("/auth/idme/authorize", get(idme::authorize))
+        .route("/auth/idme/callback", get(idme::callback))
+}
+
+// ─── Handlers ──────────────────────────────────────────────────────────────
+
+/// List endorsements for the authenticated user.
+async fn my_endorsements(
+    Extension(service): Extension<Arc<dyn EndorsementService>>,
+    auth: AuthenticatedDevice,
+) -> impl IntoResponse {
+    match service.list_endorsements(auth.account_id).await {
+        Ok(endorsements) => {
+            let response = EndorsementsListResponse {
+                endorsements: endorsements
+                    .into_iter()
+                    .map(|e| EndorsementResponse {
+                        id: e.id,
+                        subject_id: e.subject_id,
+                        topic: e.topic,
+                        issuer_id: e.issuer_id,
+                        created_at: e.created_at.to_rfc3339(),
+                        revoked: e.revoked_at.is_some(),
+                    })
+                    .collect(),
+            };
+            (StatusCode::OK, Json(response)).into_response()
+        }
+        Err(e) => endorsement_error_response(e),
+    }
+}
+
+/// Check if a subject has an endorsement for a topic (public endpoint).
+async fn check_endorsement(
+    Extension(service): Extension<Arc<dyn EndorsementService>>,
+    Query(query): Query<EndorsementQuery>,
+) -> impl IntoResponse {
+    let Some(subject_id) = query.subject_id else {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: "subject_id query parameter is required".to_string(),
+            }),
+        )
+            .into_response();
+    };
+
+    let Some(ref topic) = query.topic else {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: "topic query parameter is required".to_string(),
+            }),
+        )
+            .into_response();
+    };
+
+    match service.has_endorsement(subject_id, topic).await {
+        Ok(has) => (
+            StatusCode::OK,
+            Json(HasEndorsementResponse {
+                has_endorsement: has,
+            }),
+        )
+            .into_response(),
+        Err(e) => endorsement_error_response(e),
+    }
+}
+
+// ─── Error mapping ─────────────────────────────────────────────────────────
+
+fn endorsement_error_response(e: EndorsementError) -> axum::response::Response {
+    match e {
+        EndorsementError::Validation(msg) => {
+            (StatusCode::BAD_REQUEST, Json(ErrorResponse { error: msg })).into_response()
+        }
+        EndorsementError::Duplicate => (
+            StatusCode::CONFLICT,
+            Json(ErrorResponse {
+                error: "Endorsement already exists".to_string(),
+            }),
+        )
+            .into_response(),
+        EndorsementError::VerifierNotFound(_) => (
+            StatusCode::NOT_FOUND,
+            Json(ErrorResponse {
+                error: "Verifier not found".to_string(),
+            }),
+        )
+            .into_response(),
+        EndorsementError::Internal(ref msg) => {
+            tracing::error!("Endorsement error: {msg}");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse {
+                    error: "Internal server error".to_string(),
+                }),
+            )
+                .into_response()
+        }
+    }
+}

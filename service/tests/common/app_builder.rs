@@ -49,7 +49,17 @@ use tinycongress_api::{
         repo::{IdentityRepo, PgIdentityRepo},
         service::{DefaultIdentityService, IdentityService},
     },
+    reputation::{
+        self,
+        repo::{PgReputationRepo, ReputationRepo},
+        service::{DefaultEndorsementService, EndorsementService},
+    },
     rest::{self, ApiDoc},
+    rooms::{
+        self,
+        repo::{PgRoomsRepo, RoomsRepo},
+        service::{DefaultRoomsService, RoomsService},
+    },
 };
 use tower_http::cors::{AllowOrigin, Any, CorsLayer};
 use utoipa::OpenApi;
@@ -86,6 +96,10 @@ pub struct TestAppBuilder {
     include_rest: bool,
     /// Whether to include identity routes
     include_identity: bool,
+    /// Whether to include reputation routes
+    include_reputation: bool,
+    /// Whether to include rooms routes
+    include_rooms: bool,
     /// Whether to include health check route
     include_health: bool,
     /// Whether to include Swagger UI
@@ -99,6 +113,12 @@ pub struct TestAppBuilder {
     identity_service: Option<Arc<dyn IdentityService>>,
     /// Identity repo for device/backup/login handlers
     identity_repo: Option<Arc<dyn IdentityRepo>>,
+    /// Endorsement service for reputation + rooms
+    endorsement_service: Option<Arc<dyn EndorsementService>>,
+    /// Reputation repo for reputation routes
+    reputation_repo: Option<Arc<dyn ReputationRepo>>,
+    /// Rooms service for room/poll routes
+    rooms_service: Option<Arc<dyn RoomsService>>,
     /// CORS allowed origins (None means no CORS layer)
     cors_origins: Option<Vec<String>>,
     /// Security headers config (None means disabled)
@@ -119,12 +139,17 @@ impl TestAppBuilder {
             include_graphql: false,
             include_rest: false,
             include_identity: false,
+            include_reputation: false,
+            include_rooms: false,
             include_health: false,
             include_swagger: false,
             build_info: None,
             pool: None,
             identity_service: None,
             identity_repo: None,
+            endorsement_service: None,
+            reputation_repo: None,
+            rooms_service: None,
             cors_origins: None,
             security_headers: None,
         }
@@ -213,6 +238,40 @@ impl TestAppBuilder {
         self.identity_repo = Some(Arc::clone(&repo) as Arc<dyn IdentityRepo>);
         self.identity_service =
             Some(Arc::new(DefaultIdentityService::new(repo)) as Arc<dyn IdentityService>);
+        self.pool = Some(pool);
+        self
+    }
+
+    /// Include rooms and reputation routes with a real database pool.
+    ///
+    /// This wires up the full rooms + endorsement stack, matching main.rs.
+    /// Identity routes are also enabled since room operations require auth.
+    #[must_use]
+    pub fn with_rooms_pool(mut self, pool: PgPool) -> Self {
+        // Identity wiring (needed for auth)
+        self.include_identity = true;
+        let identity_repo = Arc::new(PgIdentityRepo::new(pool.clone()));
+        self.identity_repo = Some(Arc::clone(&identity_repo) as Arc<dyn IdentityRepo>);
+        self.identity_service =
+            Some(Arc::new(DefaultIdentityService::new(identity_repo)) as Arc<dyn IdentityService>);
+
+        // Reputation wiring
+        self.include_reputation = true;
+        let reputation_repo = Arc::new(PgReputationRepo::new(pool.clone()));
+        let endorsement_service = Arc::new(DefaultEndorsementService::new(
+            reputation_repo.clone() as Arc<dyn ReputationRepo>
+        )) as Arc<dyn EndorsementService>;
+        self.reputation_repo = Some(reputation_repo as Arc<dyn ReputationRepo>);
+        self.endorsement_service = Some(endorsement_service.clone());
+
+        // Rooms wiring
+        self.include_rooms = true;
+        let rooms_repo = Arc::new(PgRoomsRepo::new(pool.clone()));
+        self.rooms_service = Some(Arc::new(DefaultRoomsService::new(
+            rooms_repo as Arc<dyn RoomsRepo>,
+            endorsement_service,
+        )) as Arc<dyn RoomsService>);
+
         self.pool = Some(pool);
         self
     }
@@ -322,6 +381,14 @@ impl TestAppBuilder {
             app = app.merge(identity::http::router());
         }
 
+        if self.include_reputation {
+            app = app.merge(reputation::http::router());
+        }
+
+        if self.include_rooms {
+            app = app.merge(rooms::http::router());
+        }
+
         if self.include_health {
             app = app
                 .route("/health", get(health_check))
@@ -341,6 +408,18 @@ impl TestAppBuilder {
 
         if let Some(repo) = self.identity_repo {
             app = app.layer(Extension(repo));
+        }
+
+        if let Some(service) = self.endorsement_service {
+            app = app.layer(Extension(service));
+        }
+
+        if let Some(repo) = self.reputation_repo {
+            app = app.layer(Extension(repo));
+        }
+
+        if let Some(service) = self.rooms_service {
+            app = app.layer(Extension(service));
         }
 
         // Always provide a synthetic backup HMAC key when identity routes are active

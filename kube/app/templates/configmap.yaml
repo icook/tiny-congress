@@ -21,3 +21,11 @@ data:
       playground_enabled: {{ .Values.graphql.playgroundEnabled | default false }}
     swagger:
       enabled: {{ .Values.swagger.enabled | default false }}
+{{- if .Values.idme.enabled }}
+    idme:
+      authorize_url: {{ .Values.idme.authorizeUrl | default "https://api.idmelabs.com/oauth/authorize" | quote }}
+      token_url: {{ .Values.idme.tokenUrl | default "https://api.idmelabs.com/oauth/token" | quote }}
+      userinfo_url: {{ .Values.idme.userinfoUrl | default "https://api.idmelabs.com/api/public/v3/userinfo" | quote }}
+      redirect_uri: {{ .Values.idme.redirectUri | quote }}
+      frontend_callback_url: {{ .Values.idme.frontendCallbackUrl | quote }}
+{{- end }}

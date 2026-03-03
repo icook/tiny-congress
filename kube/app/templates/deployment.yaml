@@ -54,6 +54,23 @@ spec:
                 secretKeyRef:
                   name: {{ include "app.fullname" . }}-app
                   key: synthetic-backup-key
+            {{- if .Values.idme.enabled }}
+            - name: TC_IDME__CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "app.fullname" . }}-idme
+                  key: client-id
+            - name: TC_IDME__CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "app.fullname" . }}-idme
+                  key: client-secret
+            - name: TC_IDME__STATE_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "app.fullname" . }}-idme
+                  key: state-secret
+            {{- end }}
           startupProbe:
             {{- toYaml .Values.startupProbe | nindent 12 }}
           livenessProbe:

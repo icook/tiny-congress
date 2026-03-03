@@ -13,4 +13,6 @@ pub mod db;
 pub mod graphql;
 pub mod http;
 pub mod identity;
+pub mod reputation;
 pub mod rest;
+pub mod rooms;

@@ -3,9 +3,75 @@
  * Type-safe REST client for identity endpoints
  */
 
-import { getApiBaseUrl } from '@/config';
+import { fetchJson } from '@/api/fetchClient';
 import type { CryptoModule } from '@/providers/CryptoProvider';
 import { signWithDeviceKey } from '../keys';
+
+// Re-export for backward compatibility (tests import from here)
+export { fetchJson };
+
+async function sha256Hex(data: Uint8Array): Promise<string> {
+  const hash = await globalThis.crypto.subtle.digest(
+    'SHA-256',
+    data as ArrayBufferView<ArrayBuffer>
+  );
+  return Array.from(new Uint8Array(hash))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+}
+
+async function buildAuthHeaders(
+  method: string,
+  path: string,
+  bodyBytes: Uint8Array,
+  deviceKid: string,
+  privateKey: CryptoKey,
+  wasmCrypto: CryptoModule
+): Promise<Record<string, string>> {
+  const timestamp = Math.floor(Date.now() / 1000).toString();
+  const nonce = globalThis.crypto.randomUUID();
+  const bodyHash = await sha256Hex(bodyBytes);
+  const canonical = `${method}\n${path}\n${timestamp}\n${nonce}\n${bodyHash}`;
+  const signature = await signWithDeviceKey(new TextEncoder().encode(canonical), privateKey);
+
+  return {
+    'X-Device-Kid': deviceKid,
+    'X-Signature': wasmCrypto.encode_base64url(signature),
+    'X-Timestamp': timestamp,
+    'X-Nonce': nonce,
+  };
+}
+
+export async function signedFetchJson<T>(
+  path: string,
+  method: string,
+  deviceKid: string,
+  privateKey: CryptoKey,
+  wasmCrypto: CryptoModule,
+  body?: unknown
+): Promise<T> {
+  const bodyStr = body !== undefined ? JSON.stringify(body) : '';
+  const bodyBytes = new TextEncoder().encode(bodyStr);
+  const authHeaders = await buildAuthHeaders(
+    method,
+    path,
+    bodyBytes,
+    deviceKid,
+    privateKey,
+    wasmCrypto
+  );
+
+  const options: RequestInit = {
+    method,
+    headers: authHeaders,
+  };
+
+  if (body !== undefined) {
+    options.body = bodyStr;
+  }
+
+  return fetchJson<T>(path, options);
+}
 
 // === Types ===
 
@@ -69,120 +135,6 @@ export interface LoginResponse {
   account_id: string; // UUID
   root_kid: string;
   device_kid: string;
-}
-
-interface ApiErrorResponse {
-  error?: string;
-}
-
-// === API Functions ===
-
-export async function fetchJson<T>(path: string, options?: RequestInit): Promise<T> {
-  const url = `${getApiBaseUrl()}${path}`;
-
-  const merged = new Headers({ 'Content-Type': 'application/json' });
-  if (options?.headers) {
-    new Headers(options.headers).forEach((value, key) => {
-      merged.set(key, value);
-    });
-  }
-
-  const response = await fetch(url, {
-    ...options,
-    headers: merged,
-  });
-
-  if (!response.ok) {
-    let errorBody: ApiErrorResponse = { error: 'Unknown error' };
-    try {
-      errorBody = (await response.json()) as ApiErrorResponse;
-    } catch {
-      // JSON parsing failed, use default error
-    }
-    const errorMessage =
-      errorBody.error ?? `HTTP ${String(response.status)}: ${response.statusText}`;
-    throw new Error(errorMessage);
-  }
-
-  // 204 No Content has no body
-  if (response.status === 204) {
-    return undefined as T;
-  }
-
-  return response.json() as Promise<T>;
-}
-
-// === Signed Request Helper ===
-
-async function sha256Hex(data: Uint8Array): Promise<string> {
-  const hash = await globalThis.crypto.subtle.digest(
-    'SHA-256',
-    data as ArrayBufferView<ArrayBuffer>
-  );
-  return Array.from(new Uint8Array(hash))
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('');
-}
-
-/**
- * Build auth headers for signed device requests.
- * Uses the non-extractable CryptoKey via Web Crypto for signing.
- * Includes X-Nonce for replay prevention.
- */
-async function buildAuthHeaders(
-  method: string,
-  path: string,
-  bodyBytes: Uint8Array,
-  deviceKid: string,
-  privateKey: CryptoKey,
-  wasmCrypto: CryptoModule
-): Promise<Record<string, string>> {
-  const timestamp = Math.floor(Date.now() / 1000).toString();
-  const nonce = globalThis.crypto.randomUUID();
-  const bodyHash = await sha256Hex(bodyBytes);
-  const canonical = `${method}\n${path}\n${timestamp}\n${nonce}\n${bodyHash}`;
-  const signature = await signWithDeviceKey(new TextEncoder().encode(canonical), privateKey);
-
-  return {
-    'X-Device-Kid': deviceKid,
-    'X-Signature': wasmCrypto.encode_base64url(signature),
-    'X-Timestamp': timestamp,
-    'X-Nonce': nonce,
-  };
-}
-
-/**
- * Fetch JSON with device-signed authentication headers.
- */
-export async function signedFetchJson<T>(
-  path: string,
-  method: string,
-  deviceKid: string,
-  privateKey: CryptoKey,
-  wasmCrypto: CryptoModule,
-  body?: unknown
-): Promise<T> {
-  const bodyStr = body !== undefined ? JSON.stringify(body) : '';
-  const bodyBytes = new TextEncoder().encode(bodyStr);
-  const authHeaders = await buildAuthHeaders(
-    method,
-    path,
-    bodyBytes,
-    deviceKid,
-    privateKey,
-    wasmCrypto
-  );
-
-  const options: RequestInit = {
-    method,
-    headers: authHeaders,
-  };
-
-  if (body !== undefined) {
-    options.body = bodyStr;
-  }
-
-  return fetchJson<T>(path, options);
 }
 
 // === Auth ===

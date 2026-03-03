@@ -45,6 +45,10 @@ thiserror = "2.0"
 anyhow = "1.0"
 serde-aux = "4.7.0"
 
+# HTTP client (OAuth flows)
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+urlencoding = "2"
+
 # Cryptography
 tc-crypto = { path = "../crates/tc-crypto", version = "0.1.0", features = ["ed25519"] }
 hmac = "0.12"
