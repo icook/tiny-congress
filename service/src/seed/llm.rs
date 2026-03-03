@@ -82,7 +82,7 @@ struct ChoiceMessage {
 // Public functions
 // ---------------------------------------------------------------------------
 
-const USER_PROMPT_TEMPLATE: &str = r#"Generate exactly {N} community governance rooms. Each room must have 1-3 polls, and each poll must have 2-4 dimensions.
+const USER_PROMPT_TEMPLATE: &str = r#"Generate exactly {N} community governance rooms. Each room must have 2-3 polls, and each poll must have 3-5 dimensions.
 
 Respond with ONLY valid JSON matching this schema:
 {
@@ -224,7 +224,7 @@ mod tests {
     }
 
     #[test]
-    fn rejects_empty_rooms() {
+    fn deserializes_empty_rooms_array() {
         let json = r#"{"rooms": []}"#;
         let content: SeedContent = serde_json::from_str(json).expect("valid JSON");
         assert!(content.rooms.is_empty());
