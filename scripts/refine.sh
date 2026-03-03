@@ -144,16 +144,27 @@ Find a DIFFERENT improvement instead."
 
 # Gather open refinement PRs as a markdown list for inclusion in the prompt.
 # Claude sees the PR titles and avoids rediscovering the same issues.
+# Titles are sanitized (whitespace collapsed, truncated) to prevent prompt injection.
 get_pending_pr_summary() {
     local prs
+    local gh_exit=0
     prs="$(gh pr list --label "refinement" --state open \
         --json number,title \
-        --jq '.[] | "- #\(.number): \(.title)"' 2>/dev/null || echo "")"
+        --jq '.[] | "- #\(.number): \(.title)"' 2>/dev/null)" || gh_exit=$?
+
+    if [[ $gh_exit -ne 0 ]]; then
+        log "WARNING: gh pr list failed (exit $gh_exit), skipping deduplication"
+        echo ""
+        return 0
+    fi
 
     if [[ -z "$prs" ]]; then
         echo ""
         return 0
     fi
+
+    # Sanitize: collapse whitespace and cap each title to 120 chars
+    prs="$(echo "$prs" | sed 's/[[:space:]]\{1,\}/ /g' | cut -c1-120)"
 
     log "Found $(echo "$prs" | wc -l | tr -d ' ') open refinement PR(s)"
     echo "$prs"
