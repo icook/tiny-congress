@@ -809,6 +809,9 @@ jobs:
           ' "$FILE"
 
       - name: Commit and push
+        env:
+          TC_SHA: ${{ github.sha }}
+          TC_COMMIT_TITLE: ${{ github.event.head_commit.message }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -818,7 +821,12 @@ jobs:
             echo "No digest changes detected"
             exit 0
           fi
-          git commit -m "chore: update tiny-congress image digests
+          # Extract first line of source commit message
+          TC_TITLE=$(echo "$TC_COMMIT_TITLE" | head -n1)
+          TC_SHORT="${TC_SHA:0:7}"
+          git commit -m "chore: update tiny-congress image digests (tc@${TC_SHORT})
+
+          Source: ${TC_SHORT} ${TC_TITLE}
 
           tc-api-release: ${{ steps.digests.outputs.tc-api-release }}
           tc-ui-release: ${{ steps.digests.outputs.tc-ui-release }}
