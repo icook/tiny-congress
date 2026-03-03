@@ -3,8 +3,7 @@
  * Handles hooks, crypto, and API calls, delegates rendering to SignupForm
  */
 
-import { useEffect, useState } from 'react';
-import { useNavigate } from '@tanstack/react-router';
+import { useState } from 'react';
 import {
   buildBackupEnvelope,
   generateDeviceKeyPair,
@@ -20,8 +19,7 @@ import { useDevice } from '@/providers/DeviceProvider';
 export function SignupPage() {
   const crypto = useCryptoRequired();
   const signup = useSignup();
-  const { deviceKid, isLoading: deviceLoading, setDevice } = useDevice();
-  const navigate = useNavigate();
+  const { setDevice } = useDevice();
 
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -31,19 +29,6 @@ export function SignupPage() {
     root_kid: string;
     device_kid: string;
   } | null>(null);
-
-  // Redirect if user arrives already logged in — but not after a just-completed signup
-  const shouldRedirect = !deviceLoading && !!deviceKid && !createdAccount;
-
-  useEffect(() => {
-    if (shouldRedirect) {
-      void navigate({ to: '/settings' });
-    }
-  }, [shouldRedirect, navigate]);
-
-  if (deviceLoading || shouldRedirect) {
-    return null;
-  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

@@ -2,9 +2,7 @@
  * Settings page - Device management
  */
 
-import { useEffect } from 'react';
 import { IconAlertTriangle } from '@tabler/icons-react';
-import { useNavigate } from '@tanstack/react-router';
 import { Alert, Card, Loader, Stack, Text, Title } from '@mantine/core';
 import { useListDevices, useRenameDevice, useRevokeDevice } from '@/features/identity/api/queries';
 import { DeviceList } from '@/features/identity/components';
@@ -12,32 +10,15 @@ import { useCrypto } from '@/providers/CryptoProvider';
 import { useDevice } from '@/providers/DeviceProvider';
 
 export function SettingsPage() {
-  const { deviceKid, privateKey, isLoading: deviceLoading } = useDevice();
+  const { deviceKid, privateKey } = useDevice();
   const { crypto } = useCrypto();
-  const navigate = useNavigate();
 
   const devicesQuery = useListDevices(deviceKid, privateKey, crypto);
   const revokeMutation = useRevokeDevice(deviceKid, privateKey, crypto);
   const renameMutation = useRenameDevice(deviceKid, privateKey, crypto);
 
-  const shouldRedirect = !deviceLoading && !deviceKid;
-
-  useEffect(() => {
-    if (shouldRedirect) {
-      void navigate({ to: '/login' });
-    }
-  }, [shouldRedirect, navigate]);
-
-  if (deviceLoading) {
-    return (
-      <Stack gap="md" maw={800} mx="auto" mt="xl">
-        <Title order={2}>Settings</Title>
-        <Loader size="sm" />
-      </Stack>
-    );
-  }
-
-  if (shouldRedirect) {
+  // Defensive safety net — route guard guarantees deviceKid is set
+  if (!deviceKid) {
     return null;
   }
 

@@ -6,10 +6,11 @@
  * a time-bound certificate that prevents replay attacks.
  */
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { IconAlertTriangle } from '@tabler/icons-react';
 import { Link, useNavigate } from '@tanstack/react-router';
+import { flushSync } from 'react-dom';
 import {
   Alert,
   Button,
@@ -35,25 +36,13 @@ import { useDevice } from '@/providers/DeviceProvider';
 export function LoginPage() {
   const crypto = useCryptoRequired();
   const loginMutation = useLogin();
-  const { deviceKid, isLoading: deviceLoading, setDevice } = useDevice();
+  const { setDevice } = useDevice();
   const navigate = useNavigate();
 
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [isGeneratingKeys, setIsGeneratingKeys] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
-
-  const shouldRedirect = !deviceLoading && !!deviceKid;
-
-  useEffect(() => {
-    if (shouldRedirect) {
-      void navigate({ to: '/settings' });
-    }
-  }, [shouldRedirect, navigate]);
-
-  if (deviceLoading || shouldRedirect) {
-    return null;
-  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -106,8 +95,12 @@ export function LoginPage() {
         },
       });
 
-      // Store device credentials in session context
-      setDevice(response.device_kid, deviceKeyPair.privateKey);
+      // Store device credentials in session context.
+      // flushSync ensures React commits the state update before navigate() runs,
+      // so the auth-required beforeLoad guard sees the updated router context.
+      flushSync(() => {
+        setDevice(response.device_kid, deviceKeyPair.privateKey);
+      });
 
       // Navigate to settings page to show device list
       void navigate({ to: '/settings' });
