@@ -183,7 +183,7 @@ $summary
         --head "$branch" \
         --title "$pr_title" \
         --body "$pr_body" \
-        --label "refinement,auto-merge")"
+        --label "refinement" --label "auto-merge")"
     log "Created PR: $pr_url"
 
     # Enable auto-merge — don't fail the iteration if this fails
@@ -212,7 +212,7 @@ handle_ticket() {
 
     # Deduplicate — check for existing issues with same title
     local existing
-    existing="$(gh issue list --label "refinement,needs-design" \
+    existing="$(gh issue list --label "refinement" --label "needs-design" \
         --search "in:title $title" --json number --jq '.[0].number' 2>/dev/null || echo "")"
 
     if [[ -n "$existing" ]]; then
@@ -224,7 +224,7 @@ handle_ticket() {
     issue_url="$(gh issue create \
         --title "$title" \
         --body "$body" \
-        --label "refinement,needs-design")"
+        --label "refinement" --label "needs-design")"
     log "Created issue: $issue_url"
 }
 
