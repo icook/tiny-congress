@@ -359,6 +359,12 @@ refine:
 refine-dry-run:
     ./scripts/refine.sh --dry-run
 
+# Trigger refinement in GitHub Actions (requires CLAUDE_CODE_OAUTH_TOKEN + REFINE_PAT secrets)
+refine-remote *ARGS:
+    gh workflow run refine.yml {{ARGS}}
+    @echo "✓ Triggered refinement workflow"
+    @echo "  Watch: gh run watch --workflow refine.yml"
+
 # =============================================================================
 # Utility Commands
 # =============================================================================
