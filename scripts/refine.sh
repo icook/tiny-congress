@@ -263,6 +263,7 @@ run_iteration() {
             --output-format json \
             --tools "Read Edit Write Bash Glob Grep" \
             --no-session-persistence \
+            --dangerously-skip-permissions \
             --max-turns 50 \
             "$prompt"
     )" || claude_exit=$?
