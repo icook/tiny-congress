@@ -1,6 +1,9 @@
 /**
- * Login page — recover account on a new device
- * Fetches encrypted backup, decrypts with password, authorizes device
+ * Login page - Route-level container
+ * Handles hooks, crypto, and API calls for logging in with an existing account.
+ * The root private key is recovered by decrypting the backup envelope with the
+ * user's password. It then signs the device public key + timestamp to produce
+ * a time-bound certificate that prevents replay attacks.
  */
 
 import { useState } from 'react';
@@ -19,8 +22,7 @@ import {
   Title,
 } from '@mantine/core';
 import {
-  decryptBackupInWorker,
-  DecryptionError,
+  decryptBackupEnvelope,
   fetchBackup,
   generateDeviceKeyPair,
   getDeviceName,
@@ -38,46 +40,53 @@ export function LoginPage() {
 
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [isDecrypting, setIsDecrypting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [isGeneratingKeys, setIsGeneratingKeys] = useState(false);
+  const [localError, setLocalError] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError(null);
+    setLocalError(null);
+    loginMutation.reset();
 
     if (!username.trim() || !password) {
       return;
     }
 
-    setIsDecrypting(true);
+    setIsGeneratingKeys(true);
 
     try {
-      // Fetch encrypted backup
+      // 1. Fetch the encrypted backup envelope from the server
       const backupResponse = await fetchBackup(username.trim());
-
-      // Decode and decrypt backup
       const envelopeBytes = crypto.decode_base64url(backupResponse.encrypted_backup);
-      const rootPrivateKey = await decryptBackupInWorker(envelopeBytes, password);
 
-      // Verify recovered key matches the account's root_kid.
-      // Detects tampered or swapped backup envelopes.
+      // 2. Decrypt the envelope with the user's password to recover the root private key
+      const rootPrivateKey = await decryptBackupEnvelope(envelopeBytes, password);
+
+      // 2b. Defense-in-depth: verify the recovered key matches the account's root_kid.
+      // Catches tampered or swapped backup envelopes client-side.
       const recoveredPubkey = ed25519.getPublicKey(rootPrivateKey);
       const recoveredKid = crypto.derive_kid(recoveredPubkey);
       if (recoveredKid !== backupResponse.root_kid) {
         throw new Error('Backup integrity check failed: recovered key does not match account');
       }
 
-      // Generate new device keypair via Web Crypto (non-extractable private key)
+      // 3. Generate a new device key pair (non-extractable CryptoKey via Web Crypto)
       const deviceKeyPair = await generateDeviceKeyPair();
 
-      // Sign device certificate with root key (Uint8Array — ephemeral)
-      const certificate = signMessage(deviceKeyPair.publicKey, rootPrivateKey);
+      // 4. Build the timestamp-bound signed payload using the RECOVERED root key
+      const timestamp = Math.floor(Date.now() / 1000);
+      const timestampBytes = new Uint8Array(8);
+      new DataView(timestampBytes.buffer).setBigInt64(0, BigInt(timestamp), true);
 
-      setIsDecrypting(false);
+      const signedPayload = new Uint8Array(deviceKeyPair.publicKey.length + 8);
+      signedPayload.set(deviceKeyPair.publicKey, 0);
+      signedPayload.set(timestampBytes, deviceKeyPair.publicKey.length);
 
-      // Authorize new device
+      const certificate = signMessage(signedPayload, rootPrivateKey);
+
       const response = await loginMutation.mutateAsync({
         username: username.trim(),
+        timestamp,
         device: {
           pubkey: crypto.encode_base64url(deviceKeyPair.publicKey),
           name: getDeviceName(),
@@ -85,31 +94,28 @@ export function LoginPage() {
         },
       });
 
-      // Store device credentials
+      // Store device credentials in session context
       setDevice(response.device_kid, deviceKeyPair.privateKey);
 
-      // Navigate to settings
+      // Navigate to settings page to show device list
       void navigate({ to: '/settings' });
     } catch (err) {
-      setIsDecrypting(false);
-      if (err instanceof DecryptionError) {
-        setError(err.message);
-      } else if (err instanceof Error) {
-        setError(err.message);
-      } else {
-        setError('Login failed');
+      if (err instanceof Error) {
+        setLocalError(err.message);
       }
+    } finally {
+      setIsGeneratingKeys(false);
     }
   };
 
-  const isLoading = isDecrypting || loginMutation.isPending;
+  const displayError = localError;
 
   return (
     <Stack gap="md" maw={500} mx="auto" mt="xl">
       <div>
         <Title order={2}>Log In</Title>
         <Text c="dimmed" size="sm" mt="xs">
-          Recover your account on this device
+          Sign in to your TinyCongress account
         </Text>
       </div>
 
@@ -128,28 +134,29 @@ export function LoginPage() {
               onChange={(e) => {
                 setUsername(e.currentTarget.value);
               }}
-              disabled={isLoading}
+              disabled={loginMutation.isPending || isGeneratingKeys}
             />
 
             <PasswordInput
-              label="Backup Password"
+              label="Backup password"
+              placeholder="Enter your backup password"
               required
               value={password}
               onChange={(e) => {
                 setPassword(e.currentTarget.value);
               }}
-              disabled={isLoading}
+              disabled={loginMutation.isPending || isGeneratingKeys}
             />
 
-            {error ? (
+            {displayError ? (
               <Alert icon={<IconAlertTriangle size={16} />} title="Login failed" color="red">
-                {error}
+                {displayError}
               </Alert>
             ) : null}
 
             <Group justify="flex-end">
-              <Button type="submit" loading={isLoading}>
-                {isDecrypting ? 'Decrypting backup...' : 'Log In'}
+              <Button type="submit" loading={loginMutation.isPending || isGeneratingKeys}>
+                {isGeneratingKeys ? 'Decrypting backup...' : 'Log In'}
               </Button>
             </Group>
           </Stack>

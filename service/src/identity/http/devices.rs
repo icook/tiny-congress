@@ -18,7 +18,7 @@ use uuid::Uuid;
 use super::auth::AuthenticatedDevice;
 use super::ErrorResponse;
 use crate::identity::repo::{AccountRepoError, DeviceKeyRecord, DeviceKeyRepoError, IdentityRepo};
-use crate::identity::service::DeviceName;
+use crate::identity::service::{DeviceName, DevicePubkey};
 use tc_crypto::{decode_base64url, verify_ed25519, Kid};
 
 /// Device info returned in API responses (omits certificate and raw pubkey)
@@ -151,12 +151,8 @@ async fn validate_add_device_request(
     account_id: Uuid,
     req: &AddDeviceRequest,
 ) -> Result<ValidatedAddDevice, axum::response::Response> {
-    let Ok(device_pubkey_bytes) = decode_base64url(&req.pubkey) else {
-        return Err(super::bad_request("Invalid base64url encoding for pubkey"));
-    };
-    if device_pubkey_bytes.len() != 32 {
-        return Err(super::bad_request("pubkey must be 32 bytes (Ed25519)"));
-    }
+    let device_pubkey = DevicePubkey::from_base64url(&req.pubkey)
+        .map_err(|e| super::bad_request(&e.to_string()))?;
 
     let device_name =
         DeviceName::parse(&req.name).map_err(|e| super::bad_request(&e.to_string()))?;
@@ -194,11 +190,11 @@ async fn validate_add_device_request(
         return Err(super::internal_error());
     };
 
-    if verify_ed25519(&root_pubkey_arr, &device_pubkey_bytes, &cert_arr).is_err() {
+    if verify_ed25519(&root_pubkey_arr, device_pubkey.as_bytes(), &cert_arr).is_err() {
         return Err(super::bad_request("Invalid device certificate"));
     }
 
-    let device_kid = Kid::derive(&device_pubkey_bytes);
+    let device_kid = device_pubkey.kid();
 
     Ok(ValidatedAddDevice {
         device_kid,

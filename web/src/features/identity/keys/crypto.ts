@@ -38,7 +38,9 @@ export function generateKeyPair(crypto: CryptoModule): KeyPair {
 /**
  * Sign a message with an Ed25519 private key
  *
- * @returns 64-byte signature
+ * @param message - The message bytes to sign
+ * @param privateKey - The 32-byte Ed25519 private key
+ * @returns 64-byte Ed25519 signature
  */
 export function signMessage(message: Uint8Array, privateKey: Uint8Array): Uint8Array {
   return ed25519.sign(message, privateKey);

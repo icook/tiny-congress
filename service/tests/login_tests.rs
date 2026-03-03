@@ -1,9 +1,10 @@
-//! Login and backup retrieval integration tests.
+//! Login handler integration tests.
 //!
 //! Tests the unauthenticated login flow:
 //! - `GET /auth/backup/{username}` — fetch encrypted backup (returns 200 for both
 //!   existing and non-existent users to prevent username enumeration)
-//! - `POST /auth/login` — authorize a new device via root-key certificate
+//! - `POST /auth/login` — authorize a new device via timestamp-bound certificate
+//!   with nonce-based replay protection.
 
 mod common;
 
@@ -59,6 +60,41 @@ fn backup_request(username: &str) -> Request<Body> {
         .method(Method::GET)
         .uri(format!("/auth/backup/{username}"))
         .body(Body::empty())
+        .expect("request")
+}
+
+/// Build a valid login JSON body with timestamp-bound certificate.
+fn login_json(
+    username: &str,
+    root_signing_key: &SigningKey,
+    device_pubkey: &[u8],
+    device_name: &str,
+    timestamp: i64,
+) -> String {
+    // Certificate signs device_pubkey || timestamp (LE i64 bytes)
+    let mut signed_payload = Vec::with_capacity(40);
+    signed_payload.extend_from_slice(device_pubkey);
+    signed_payload.extend_from_slice(&timestamp.to_le_bytes());
+    let cert = root_signing_key.sign(&signed_payload);
+
+    serde_json::json!({
+        "username": username,
+        "timestamp": timestamp,
+        "device": {
+            "pubkey": encode_base64url(device_pubkey),
+            "name": device_name,
+            "certificate": encode_base64url(&cert.to_bytes()),
+        }
+    })
+    .to_string()
+}
+
+fn login_request(body: &str) -> Request<Body> {
+    Request::builder()
+        .method(Method::POST)
+        .uri("/auth/login")
+        .header(CONTENT_TYPE, "application/json")
+        .body(Body::from(body.to_string()))
         .expect("request")
 }
 
@@ -277,7 +313,7 @@ async fn test_backup_existing_user_no_backup_returns_synthetic() {
 
     let signup_body = to_bytes(signup_response.into_body(), 1024 * 1024)
         .await
-        .expect("signup body");
+        .expect("body");
     let signup_payload: serde_json::Value =
         serde_json::from_slice(&signup_body).expect("signup json");
     let signup_root_kid = signup_payload["root_kid"]
@@ -316,62 +352,32 @@ async fn test_backup_existing_user_no_backup_returns_synthetic() {
 }
 
 // =========================================================================
-// POST /auth/login
+// Success path
 // =========================================================================
 
-fn login_json(username: &str, keys: &SignupKeys) -> String {
-    // Generate a new device key for login (different from signup device)
-    let new_device_key = SigningKey::generate(&mut OsRng);
-    let new_device_pubkey = new_device_key.verifying_key().to_bytes();
-    let cert = keys.root_signing_key.sign(&new_device_pubkey);
-
-    serde_json::json!({
-        "username": username,
-        "device": {
-            "pubkey": encode_base64url(&new_device_pubkey),
-            "name": "Login Device",
-            "certificate": encode_base64url(&cert.to_bytes()),
-        }
-    })
-    .to_string()
-}
-
 #[shared_runtime_test]
-async fn test_login_handler_success() {
-    let (app, keys, _db) = signup_user("logintest").await;
+async fn test_login_success() {
+    let (app, keys, _db) = signup_user("loginuser").await;
 
+    // Now log in with a new device key
     let new_device_key = SigningKey::generate(&mut OsRng);
     let new_device_pubkey = new_device_key.verifying_key().to_bytes();
-    let cert = keys.root_signing_key.sign(&new_device_pubkey);
+    let timestamp = chrono::Utc::now().timestamp();
+    let body = login_json(
+        "loginuser",
+        &keys.root_signing_key,
+        &new_device_pubkey,
+        "Login Device",
+        timestamp,
+    );
 
-    let body = serde_json::json!({
-        "username": "logintest",
-        "device": {
-            "pubkey": encode_base64url(&new_device_pubkey),
-            "name": "Login Device",
-            "certificate": encode_base64url(&cert.to_bytes()),
-        }
-    })
-    .to_string();
-
-    let response = app
-        .oneshot(
-            Request::builder()
-                .method(Method::POST)
-                .uri("/auth/login")
-                .header(CONTENT_TYPE, "application/json")
-                .body(Body::from(body))
-                .expect("request"),
-        )
-        .await
-        .expect("response");
-
+    let response = app.oneshot(login_request(&body)).await.expect("response");
     assert_eq!(response.status(), StatusCode::CREATED);
 
-    let resp_body = to_bytes(response.into_body(), 1024 * 1024)
+    let body_bytes = to_bytes(response.into_body(), 1024 * 1024)
         .await
         .expect("body");
-    let json: serde_json::Value = serde_json::from_slice(&resp_body).expect("json");
+    let json: serde_json::Value = serde_json::from_slice(&body_bytes).expect("json");
     assert!(json["account_id"].is_string());
     assert!(json["root_kid"].is_string());
     assert_eq!(
@@ -381,161 +387,310 @@ async fn test_login_handler_success() {
     );
 }
 
+// =========================================================================
+// Timestamp validation
+// =========================================================================
+
 #[shared_runtime_test]
-async fn test_login_handler_account_not_found() {
-    let (app, keys, _db) = signup_user("loginnf").await;
+async fn test_login_expired_timestamp() {
+    let (app, keys, _db) = signup_user("expiredts").await;
 
-    let body = login_json("nonexistent", &keys);
+    // Login with timestamp 400s in the past
+    let new_device_key = SigningKey::generate(&mut OsRng);
+    let new_device_pubkey = new_device_key.verifying_key().to_bytes();
+    let old_timestamp = chrono::Utc::now().timestamp() - 400;
+    let body = login_json(
+        "expiredts",
+        &keys.root_signing_key,
+        &new_device_pubkey,
+        "Old Device",
+        old_timestamp,
+    );
 
-    let response = app
-        .oneshot(
-            Request::builder()
-                .method(Method::POST)
-                .uri("/auth/login")
-                .header(CONTENT_TYPE, "application/json")
-                .body(Body::from(body))
-                .expect("request"),
-        )
+    let response = app.oneshot(login_request(&body)).await.expect("response");
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+    let body_bytes = to_bytes(response.into_body(), 1024 * 1024)
         .await
-        .expect("response");
-
-    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        .expect("body");
+    let body_str = String::from_utf8(body_bytes.to_vec()).expect("utf8");
+    assert!(body_str.contains("Timestamp out of range"));
 }
 
 #[shared_runtime_test]
-async fn test_login_handler_invalid_certificate() {
-    let (app, _keys, _db) = signup_user("loginbadcert").await;
+async fn test_login_future_timestamp() {
+    let (app, keys, _db) = signup_user("futurets").await;
 
-    // Generate a device key but sign with a random key (not the root)
+    // Login with timestamp 400s in the future
     let new_device_key = SigningKey::generate(&mut OsRng);
     let new_device_pubkey = new_device_key.verifying_key().to_bytes();
-    let wrong_root = SigningKey::generate(&mut OsRng);
-    let bad_cert = wrong_root.sign(&new_device_pubkey);
+    let future_timestamp = chrono::Utc::now().timestamp() + 400;
+    let body = login_json(
+        "futurets",
+        &keys.root_signing_key,
+        &new_device_pubkey,
+        "Future Device",
+        future_timestamp,
+    );
 
-    let body = serde_json::json!({
-        "username": "loginbadcert",
-        "device": {
-            "pubkey": encode_base64url(&new_device_pubkey),
-            "name": "Bad Cert Device",
-            "certificate": encode_base64url(&bad_cert.to_bytes()),
-        }
-    })
-    .to_string();
-
-    let response = app
-        .oneshot(
-            Request::builder()
-                .method(Method::POST)
-                .uri("/auth/login")
-                .header(CONTENT_TYPE, "application/json")
-                .body(Body::from(body))
-                .expect("request"),
-        )
-        .await
-        .expect("response");
-
+    let response = app.oneshot(login_request(&body)).await.expect("response");
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 
-    let body = to_bytes(response.into_body(), 1024 * 1024)
+    let body_bytes = to_bytes(response.into_body(), 1024 * 1024)
         .await
         .expect("body");
-    let json: serde_json::Value = serde_json::from_slice(&body).expect("json");
+    let body_str = String::from_utf8(body_bytes.to_vec()).expect("utf8");
+    assert!(body_str.contains("Timestamp out of range"));
+}
+
+// =========================================================================
+// Replay protection
+// =========================================================================
+
+#[shared_runtime_test]
+async fn test_login_replay_detected() {
+    let (app, keys, _db) = signup_user("replaylogin").await;
+
+    // Build login request
+    let new_device_key = SigningKey::generate(&mut OsRng);
+    let new_device_pubkey = new_device_key.verifying_key().to_bytes();
+    let timestamp = chrono::Utc::now().timestamp();
+    let body = login_json(
+        "replaylogin",
+        &keys.root_signing_key,
+        &new_device_pubkey,
+        "Replay Device",
+        timestamp,
+    );
+
+    // First request succeeds
+    let response = app
+        .clone()
+        .oneshot(login_request(&body))
+        .await
+        .expect("response");
+    assert_eq!(response.status(), StatusCode::CREATED);
+
+    // Second request with exact same body is a replay
+    let response = app.oneshot(login_request(&body)).await.expect("response");
+
+    // The nonce check fires before create_device_key, so a replayed request
+    // must deterministically return BAD_REQUEST for the duplicate nonce.
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+    let body_bytes = to_bytes(response.into_body(), 1024 * 1024)
+        .await
+        .expect("body");
+    let body_str = String::from_utf8(body_bytes.to_vec()).expect("utf8");
     assert!(
-        json["error"]
-            .as_str()
-            .unwrap()
-            .contains("Invalid device certificate"),
-        "error body should mention invalid certificate, got: {json:?}"
+        body_str.contains("replay"),
+        "Expected replay error, got: {body_str}"
     );
 }
 
-#[shared_runtime_test]
-async fn test_login_handler_duplicate_device() {
-    let (app, keys, _db) = signup_user("logindup").await;
+// =========================================================================
+// Duplicate device
+// =========================================================================
 
-    // Generate a device key and login with it
+#[shared_runtime_test]
+async fn test_login_duplicate_device_returns_conflict() {
+    let (app, keys, _db) = signup_user("duplogin").await;
+
+    // Use the SAME device key for two logins, but different timestamps
+    let device_key = SigningKey::generate(&mut OsRng);
+    let device_pubkey = device_key.verifying_key().to_bytes();
+
+    let timestamp1 = chrono::Utc::now().timestamp();
+    let body1 = login_json(
+        "duplogin",
+        &keys.root_signing_key,
+        &device_pubkey,
+        "Device A",
+        timestamp1,
+    );
+
+    // First login succeeds
+    let response = app
+        .clone()
+        .oneshot(login_request(&body1))
+        .await
+        .expect("response");
+    assert_eq!(response.status(), StatusCode::CREATED);
+
+    // Second login with same pubkey but different timestamp returns 409
+    let timestamp2 = timestamp1 + 1;
+    let body2 = login_json(
+        "duplogin",
+        &keys.root_signing_key,
+        &device_pubkey,
+        "Device A",
+        timestamp2,
+    );
+
+    let response = app.oneshot(login_request(&body2)).await.expect("response");
+    assert_eq!(response.status(), StatusCode::CONFLICT);
+}
+
+// =========================================================================
+// Certificate verification
+// =========================================================================
+
+#[shared_runtime_test]
+async fn test_login_old_cert_format_rejected() {
+    let (app, keys, _db) = signup_user("oldformat").await;
+
+    // Build login with certificate that signs ONLY device_pubkey (no timestamp)
     let new_device_key = SigningKey::generate(&mut OsRng);
     let new_device_pubkey = new_device_key.verifying_key().to_bytes();
+    let timestamp = chrono::Utc::now().timestamp();
+
+    // Sign only the device pubkey (old format, without timestamp)
     let cert = keys.root_signing_key.sign(&new_device_pubkey);
 
     let body = serde_json::json!({
-        "username": "logindup",
+        "username": "oldformat",
+        "timestamp": timestamp,
         "device": {
             "pubkey": encode_base64url(&new_device_pubkey),
-            "name": "First Login",
+            "name": "Old Format Device",
             "certificate": encode_base64url(&cert.to_bytes()),
         }
     })
     .to_string();
 
+    let response = app.oneshot(login_request(&body)).await.expect("response");
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+    let body_bytes = to_bytes(response.into_body(), 1024 * 1024)
+        .await
+        .expect("body");
+    let body_str = String::from_utf8(body_bytes.to_vec()).expect("utf8");
+    assert!(body_str.contains("Invalid device certificate"));
+}
+
+#[shared_runtime_test]
+async fn test_login_wrong_root_key_rejected() {
+    let (app, _keys, _db) = signup_user("wrongroot").await;
+
+    // Login with a certificate signed by a different root key
+    let wrong_root = SigningKey::generate(&mut OsRng);
+    let new_device_key = SigningKey::generate(&mut OsRng);
+    let new_device_pubkey = new_device_key.verifying_key().to_bytes();
+    let timestamp = chrono::Utc::now().timestamp();
+    let body = login_json(
+        "wrongroot",
+        &wrong_root,
+        &new_device_pubkey,
+        "Wrong Root Device",
+        timestamp,
+    );
+
+    let response = app.oneshot(login_request(&body)).await.expect("response");
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+    let body_bytes = to_bytes(response.into_body(), 1024 * 1024)
+        .await
+        .expect("body");
+    let body_str = String::from_utf8(body_bytes.to_vec()).expect("utf8");
+    assert!(body_str.contains("Invalid device certificate"));
+}
+
+// =========================================================================
+// Error paths
+// =========================================================================
+
+#[shared_runtime_test]
+async fn test_login_handler_account_not_found() {
+    let (app, _keys, _db) = signup_user("loginnf").await;
+
+    let root = SigningKey::generate(&mut OsRng);
+    let device = SigningKey::generate(&mut OsRng);
+    let device_pubkey = device.verifying_key().to_bytes();
+    let timestamp = chrono::Utc::now().timestamp();
+
+    let body = login_json("nonexistent", &root, &device_pubkey, "Device", timestamp);
+
+    let response = app.oneshot(login_request(&body)).await.expect("response");
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+    let body_bytes = to_bytes(response.into_body(), 1024 * 1024)
+        .await
+        .expect("body");
+    let body_str = String::from_utf8(body_bytes.to_vec()).expect("utf8");
+    assert!(body_str.contains("Invalid credentials"));
+}
+
+#[shared_runtime_test]
+async fn test_login_empty_username() {
+    let db = isolated_db().await;
+    let app = TestAppBuilder::new()
+        .with_identity_pool(db.pool().clone())
+        .build();
+
+    let root = SigningKey::generate(&mut OsRng);
+    let device = SigningKey::generate(&mut OsRng);
+    let device_pubkey = device.verifying_key().to_bytes();
+    let timestamp = chrono::Utc::now().timestamp();
+
+    // Blank username (whitespace only)
+    let body = login_json("   ", &root, &device_pubkey, "Device", timestamp);
+    let response = app.oneshot(login_request(&body)).await.expect("response");
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+    let body_bytes = to_bytes(response.into_body(), 1024 * 1024)
+        .await
+        .expect("body");
+    let body_str = String::from_utf8(body_bytes.to_vec()).expect("utf8");
+    assert!(
+        body_str.contains("Username is required"),
+        "Expected username required error, got: {body_str}"
+    );
+}
+
+#[shared_runtime_test]
+async fn test_login_empty_device_name() {
+    let db = isolated_db().await;
+    let app = TestAppBuilder::new()
+        .with_identity_pool(db.pool().clone())
+        .build();
+
+    // Sign up a user first
+    let (signup_json, keys) = valid_signup_with_keys("emptydevname");
     let response = app
         .clone()
         .oneshot(
             Request::builder()
                 .method(Method::POST)
-                .uri("/auth/login")
+                .uri("/auth/signup")
                 .header(CONTENT_TYPE, "application/json")
-                .body(Body::from(body))
+                .body(Body::from(signup_json))
                 .expect("request"),
         )
         .await
         .expect("response");
     assert_eq!(response.status(), StatusCode::CREATED);
 
-    // Same device key again should conflict
-    let body2 = serde_json::json!({
-        "username": "logindup",
-        "device": {
-            "pubkey": encode_base64url(&new_device_pubkey),
-            "name": "Second Login",
-            "certificate": encode_base64url(&cert.to_bytes()),
-        }
-    })
-    .to_string();
+    // Login with empty device name
+    let new_device_key = SigningKey::generate(&mut OsRng);
+    let new_device_pubkey = new_device_key.verifying_key().to_bytes();
+    let timestamp = chrono::Utc::now().timestamp();
+    let body = login_json(
+        "emptydevname",
+        &keys.root_signing_key,
+        &new_device_pubkey,
+        "   ",
+        timestamp,
+    );
 
-    let response2 = app
-        .oneshot(
-            Request::builder()
-                .method(Method::POST)
-                .uri("/auth/login")
-                .header(CONTENT_TYPE, "application/json")
-                .body(Body::from(body2))
-                .expect("request"),
-        )
-        .await
-        .expect("response");
-
-    assert_eq!(response2.status(), StatusCode::CONFLICT);
-}
-
-#[shared_runtime_test]
-async fn test_login_handler_empty_username() {
-    let db = isolated_db().await;
-    let app = TestAppBuilder::new()
-        .with_identity_pool(db.pool().clone())
-        .build();
-
-    let body = serde_json::json!({
-        "username": "   ",
-        "device": {
-            "pubkey": encode_base64url(&[1u8; 32]),
-            "name": "Test Device",
-            "certificate": encode_base64url(&[0u8; 64]),
-        }
-    })
-    .to_string();
-
-    let response = app
-        .oneshot(
-            Request::builder()
-                .method(Method::POST)
-                .uri("/auth/login")
-                .header(CONTENT_TYPE, "application/json")
-                .body(Body::from(body))
-                .expect("request"),
-        )
-        .await
-        .expect("response");
-
+    let response = app.oneshot(login_request(&body)).await.expect("response");
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+    let body_bytes = to_bytes(response.into_body(), 1024 * 1024)
+        .await
+        .expect("body");
+    let body_str = String::from_utf8(body_bytes.to_vec()).expect("utf8");
+    assert!(
+        body_str.contains("empty"),
+        "Expected empty device name error, got: {body_str}"
+    );
 }
