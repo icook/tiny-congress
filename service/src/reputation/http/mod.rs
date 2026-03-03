@@ -25,7 +25,7 @@ pub struct EndorsementResponse {
     pub id: Uuid,
     pub subject_id: Uuid,
     pub topic: String,
-    pub issuer_id: Uuid,
+    pub issuer_id: Option<Uuid>,
     pub created_at: String,
     pub revoked: bool,
 }
@@ -134,13 +134,6 @@ fn endorsement_error_response(e: EndorsementError) -> axum::response::Response {
             StatusCode::CONFLICT,
             Json(ErrorResponse {
                 error: "Endorsement already exists".to_string(),
-            }),
-        )
-            .into_response(),
-        EndorsementError::VerifierNotFound(_) => (
-            StatusCode::NOT_FOUND,
-            Json(ErrorResponse {
-                error: "Verifier not found".to_string(),
             }),
         )
             .into_response(),

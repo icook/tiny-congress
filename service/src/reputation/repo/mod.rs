@@ -2,7 +2,6 @@
 
 pub mod endorsements;
 pub mod external_identities;
-pub mod verifier_accounts;
 
 pub use endorsements::{
     create_endorsement, has_endorsement, list_endorsements_by_subject, CreatedEndorsement,
@@ -11,10 +10,6 @@ pub use endorsements::{
 pub use external_identities::{
     get_external_identity_by_provider, link_external_identity, ExternalIdentityRecord,
     ExternalIdentityRepoError,
-};
-pub use verifier_accounts::{
-    ensure_verifier_account, get_verifier_account_by_name, CreatedVerifierAccount,
-    VerifierAccountRecord, VerifierAccountRepoError,
 };
 
 use async_trait::async_trait;
@@ -30,7 +25,7 @@ pub trait ReputationRepo: Send + Sync {
         &self,
         subject_id: Uuid,
         topic: &str,
-        issuer_id: Uuid,
+        issuer_id: Option<Uuid>,
         evidence: Option<&serde_json::Value>,
     ) -> Result<CreatedEndorsement, EndorsementRepoError>;
 
@@ -44,19 +39,6 @@ pub trait ReputationRepo: Send + Sync {
         &self,
         subject_id: Uuid,
     ) -> Result<Vec<EndorsementRecord>, EndorsementRepoError>;
-
-    // Verifier account operations
-
-    async fn ensure_verifier_account(
-        &self,
-        name: &str,
-        description: Option<&str>,
-    ) -> Result<CreatedVerifierAccount, VerifierAccountRepoError>;
-
-    async fn get_verifier_account_by_name(
-        &self,
-        name: &str,
-    ) -> Result<VerifierAccountRecord, VerifierAccountRepoError>;
 
     // External identity operations
 
@@ -92,7 +74,7 @@ impl ReputationRepo for PgReputationRepo {
         &self,
         subject_id: Uuid,
         topic: &str,
-        issuer_id: Uuid,
+        issuer_id: Option<Uuid>,
         evidence: Option<&serde_json::Value>,
     ) -> Result<CreatedEndorsement, EndorsementRepoError> {
         endorsements::create_endorsement(&self.pool, subject_id, topic, issuer_id, evidence).await
@@ -111,21 +93,6 @@ impl ReputationRepo for PgReputationRepo {
         subject_id: Uuid,
     ) -> Result<Vec<EndorsementRecord>, EndorsementRepoError> {
         endorsements::list_endorsements_by_subject(&self.pool, subject_id).await
-    }
-
-    async fn ensure_verifier_account(
-        &self,
-        name: &str,
-        description: Option<&str>,
-    ) -> Result<CreatedVerifierAccount, VerifierAccountRepoError> {
-        verifier_accounts::ensure_verifier_account(&self.pool, name, description).await
-    }
-
-    async fn get_verifier_account_by_name(
-        &self,
-        name: &str,
-    ) -> Result<VerifierAccountRecord, VerifierAccountRepoError> {
-        verifier_accounts::get_verifier_account_by_name(&self.pool, name).await
     }
 
     async fn link_external_identity(

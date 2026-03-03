@@ -137,11 +137,17 @@ async fn build_app(
         as Arc<dyn EndorsementService>;
     let reputation_repo_ext = reputation_repo as Arc<dyn ReputationRepo>;
 
-    if config.idme.is_some() {
-        reputation::service::bootstrap_idme_verifier(&*reputation_repo_ext)
+    // Bootstrap verifier accounts from config (replaced in Task 6 with config-driven bootstrap)
+    let idme_verifier_account_id = if config.idme.is_some() {
+        // Temporary bridge: create "idme" verifier as a real account with a genesis endorsement.
+        // This will be replaced by the config-driven bootstrap in Task 6.
+        let account_id = reputation::bootstrap::bootstrap_idme_verifier_account(&pool)
             .await
             .map_err(|e| anyhow::anyhow!("Failed to bootstrap ID.me verifier: {e}"))?;
-    }
+        Some(account_id)
+    } else {
+        None
+    };
 
     // Rooms wiring
     let rooms_repo = Arc::new(PgRoomsRepo::new(pool.clone()));
@@ -182,7 +188,13 @@ async fn build_app(
     // Add ID.me config extension if configured
     let app = if let Some(ref idme_config) = config.idme {
         tracing::info!("ID.me verification enabled");
-        app.layer(Extension(Arc::new(idme_config.clone())))
+        let mut app = app.layer(Extension(Arc::new(idme_config.clone())));
+        if let Some(verifier_id) = idme_verifier_account_id {
+            app = app.layer(Extension(reputation::http::idme::IdMeVerifierAccountId(
+                verifier_id,
+            )));
+        }
+        app
     } else {
         tracing::info!("ID.me verification disabled (no TC_IDME__* config)");
         app

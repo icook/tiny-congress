@@ -1,17 +1,14 @@
 //! Service layer for reputation operations
 //!
 //! Provides the [`EndorsementService`] trait that orchestrates endorsement
-//! creation, eligibility checks, and verifier bootstrap.
+//! creation and eligibility checks.
 
 use std::sync::Arc;
 
 use async_trait::async_trait;
 use uuid::Uuid;
 
-use super::repo::{
-    CreatedEndorsement, EndorsementRecord, EndorsementRepoError, ReputationRepo,
-    VerifierAccountRepoError,
-};
+use super::repo::{CreatedEndorsement, EndorsementRecord, EndorsementRepoError, ReputationRepo};
 
 // ─── Domain error type ─────────────────────────────────────────────────────
 
@@ -21,8 +18,6 @@ pub enum EndorsementError {
     Validation(String),
     #[error("endorsement already exists for this subject and topic")]
     Duplicate,
-    #[error("verifier not found: {0}")]
-    VerifierNotFound(String),
     #[error("internal error: {0}")]
     Internal(String),
 }
@@ -31,12 +26,15 @@ pub enum EndorsementError {
 
 #[async_trait]
 pub trait EndorsementService: Send + Sync {
-    /// Create an endorsement for a subject on a topic, issued by a verifier.
+    /// Create an endorsement for a subject on a topic.
+    ///
+    /// `issuer_id` is `None` for genesis (platform-bootstrapped) endorsements,
+    /// or `Some(account_id)` for verifier-issued endorsements.
     async fn create_endorsement(
         &self,
         subject_id: Uuid,
         topic: &str,
-        verifier_name: &str,
+        issuer_id: Option<Uuid>,
         evidence: Option<&serde_json::Value>,
     ) -> Result<CreatedEndorsement, EndorsementError>;
 
@@ -73,7 +71,7 @@ impl EndorsementService for DefaultEndorsementService {
         &self,
         subject_id: Uuid,
         topic: &str,
-        verifier_name: &str,
+        issuer_id: Option<Uuid>,
         evidence: Option<&serde_json::Value>,
     ) -> Result<CreatedEndorsement, EndorsementError> {
         if topic.is_empty() {
@@ -82,28 +80,8 @@ impl EndorsementService for DefaultEndorsementService {
             ));
         }
 
-        // Look up the verifier by name
-        let verifier = self
-            .repo
-            .get_verifier_account_by_name(verifier_name)
-            .await
-            .map_err(|e| match e {
-                VerifierAccountRepoError::NotFound => {
-                    EndorsementError::VerifierNotFound(verifier_name.to_string())
-                }
-                VerifierAccountRepoError::DuplicateName => {
-                    tracing::error!("Unexpected DuplicateName during verifier lookup");
-                    EndorsementError::Internal("Internal server error".to_string())
-                }
-                VerifierAccountRepoError::Database(e) => {
-                    tracing::error!("Verifier lookup failed: {e}");
-                    EndorsementError::Internal("Internal server error".to_string())
-                }
-            })?;
-
-        // Create the endorsement
         self.repo
-            .create_endorsement(subject_id, topic, verifier.id, evidence)
+            .create_endorsement(subject_id, topic, issuer_id, evidence)
             .await
             .map_err(|e| match e {
                 EndorsementRepoError::Duplicate => EndorsementError::Duplicate,
@@ -150,20 +128,4 @@ impl EndorsementService for DefaultEndorsementService {
                 _ => EndorsementError::Internal("Internal server error".to_string()),
             })
     }
-}
-
-/// Bootstrap the ID.me verifier account at startup.
-/// Returns the verifier account ID.
-///
-/// # Errors
-///
-/// Returns `VerifierAccountRepoError` if the database operation fails.
-pub async fn bootstrap_idme_verifier(
-    repo: &dyn ReputationRepo,
-) -> Result<Uuid, VerifierAccountRepoError> {
-    let verifier = repo
-        .ensure_verifier_account("idme", Some("ID.me identity verification service"))
-        .await?;
-    tracing::info!(verifier_id = %verifier.id, name = %verifier.name, "ID.me verifier account ready");
-    Ok(verifier.id)
 }
