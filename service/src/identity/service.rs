@@ -391,15 +391,9 @@ impl IdentityService for DefaultIdentityService {
             .map_err(|e| SignupError::Validation(e.to_string()))?;
 
         // Decode and validate device public key
-        let device_pubkey_bytes = decode_base64url(&req.device.pubkey).map_err(|_| {
-            SignupError::Validation("Invalid base64url encoding for device.pubkey".to_string())
-        })?;
-        if device_pubkey_bytes.len() != 32 {
-            return Err(SignupError::Validation(
-                "device.pubkey must be 32 bytes (Ed25519)".to_string(),
-            ));
-        }
-        let device_kid = Kid::derive(&device_pubkey_bytes);
+        let device_pubkey = DevicePubkey::from_base64url(&req.device.pubkey)
+            .map_err(|e| SignupError::Validation(e.to_string()))?;
+        let device_kid = device_pubkey.kid();
 
         // Validate device name
         let device_name = DeviceName::parse(&req.device.name)
@@ -421,7 +415,7 @@ impl IdentityService for DefaultIdentityService {
         // cannot be replayed for a different device. If a future "rotate device key"
         // feature reuses key material, the message format must be extended (e.g. with
         // account binding or a nonce).
-        verify_ed25519(&root_pubkey_arr, &device_pubkey_bytes, &cert_arr)
+        verify_ed25519(&root_pubkey_arr, device_pubkey.as_bytes(), &cert_arr)
             .map_err(|_| SignupError::Validation("Invalid device certificate".to_string()))?;
 
         // Build validated signup data and delegate to repo
@@ -811,7 +805,7 @@ mod tests {
         req.device.pubkey = encode_base64url(&[2u8; 16]);
         let err = svc.signup(&req).await.unwrap_err();
         match &err {
-            SignupError::Validation(msg) => assert!(msg.contains("device.pubkey")),
+            SignupError::Validation(msg) => assert!(msg.contains("32 bytes")),
             other => panic!("expected Validation, got: {other:?}"),
         }
     }
