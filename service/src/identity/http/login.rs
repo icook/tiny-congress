@@ -163,6 +163,7 @@ pub async fn login(
     // Nonce is intentionally recorded before create_device_key: if device
     // creation fails transiently, the user must generate a fresh
     // timestamp-bound certificate rather than retry. This is fail-closed.
+
     // Create device key
     match repo
         .create_device_key(
