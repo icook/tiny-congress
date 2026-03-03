@@ -4,6 +4,7 @@
  */
 
 import { fetchJson } from '@/api/fetchClient';
+import { signedFetchJson } from '@/api/signing';
 import type { CryptoModule } from '@/providers/CryptoProvider';
 
 // === Types ===
@@ -72,59 +73,6 @@ export interface HasEndorsementResponse {
   has_endorsement: boolean;
 }
 
-// === Signing helpers (inline to avoid cross-feature imports) ===
-
-async function sha256Hex(data: Uint8Array): Promise<string> {
-  const hash = await globalThis.crypto.subtle.digest(
-    'SHA-256',
-    data as ArrayBufferView<ArrayBuffer>
-  );
-  return Array.from(new Uint8Array(hash))
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('');
-}
-
-async function signedFetch<T>(
-  path: string,
-  method: string,
-  deviceKid: string,
-  privateKey: CryptoKey,
-  wasmCrypto: CryptoModule,
-  body?: unknown
-): Promise<T> {
-  const bodyStr = body !== undefined ? JSON.stringify(body) : '';
-  const bodyBytes = new TextEncoder().encode(bodyStr);
-
-  const timestamp = Math.floor(Date.now() / 1000).toString();
-  const nonce = globalThis.crypto.randomUUID();
-  const bodyHash = await sha256Hex(bodyBytes);
-  const canonical = `${method}\n${path}\n${timestamp}\n${nonce}\n${bodyHash}`;
-
-  const signatureBuffer = await globalThis.crypto.subtle.sign(
-    'Ed25519',
-    privateKey,
-    new TextEncoder().encode(canonical) as ArrayBufferView<ArrayBuffer>
-  );
-
-  const authHeaders: Record<string, string> = {
-    'X-Device-Kid': deviceKid,
-    'X-Signature': wasmCrypto.encode_base64url(new Uint8Array(signatureBuffer)),
-    'X-Timestamp': timestamp,
-    'X-Nonce': nonce,
-  };
-
-  const options: RequestInit = {
-    method,
-    headers: authHeaders,
-  };
-
-  if (body !== undefined) {
-    options.body = bodyStr;
-  }
-
-  return fetchJson<T>(path, options);
-}
-
 // === Public endpoints (no auth) ===
 
 export async function listRooms(): Promise<Room[]> {
@@ -166,7 +114,7 @@ export async function castVote(
   privateKey: CryptoKey,
   wasmCrypto: CryptoModule
 ): Promise<Vote[]> {
-  return signedFetch(
+  return signedFetchJson(
     `/rooms/${roomId}/polls/${pollId}/vote`,
     'POST',
     deviceKid,
@@ -183,7 +131,7 @@ export async function getMyVotes(
   privateKey: CryptoKey,
   wasmCrypto: CryptoModule
 ): Promise<Vote[]> {
-  return signedFetch(
+  return signedFetchJson(
     `/rooms/${roomId}/polls/${pollId}/my-votes`,
     'GET',
     deviceKid,

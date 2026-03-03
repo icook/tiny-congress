@@ -374,21 +374,16 @@ impl RoomsService for DefaultRoomsService {
             }
         }
 
-        // Upsert all votes
-        let mut results = Vec::with_capacity(votes.len());
-        for v in votes {
-            let record = self
-                .repo
-                .upsert_vote(poll_id, v.dimension_id, user_id, v.value)
-                .await
-                .map_err(|e| {
-                    tracing::error!("Vote upsert failed: {e}");
-                    VoteError::Internal("Internal server error".to_string())
-                })?;
-            results.push(record);
-        }
-
-        Ok(results)
+        // Upsert all votes atomically
+        let vote_tuples: Vec<(Uuid, f32)> =
+            votes.iter().map(|v| (v.dimension_id, v.value)).collect();
+        self.repo
+            .upsert_votes_batch(poll_id, user_id, &vote_tuples)
+            .await
+            .map_err(|e| {
+                tracing::error!("Vote upsert failed: {e}");
+                VoteError::Internal("Internal server error".to_string())
+            })
     }
 
     async fn get_poll_results(&self, poll_id: Uuid) -> Result<PollResults, PollError> {

@@ -57,6 +57,12 @@ pub trait RoomsRepo: Send + Sync {
         user_id: Uuid,
         value: f32,
     ) -> Result<VoteRecord, VoteRepoError>;
+    async fn upsert_votes_batch(
+        &self,
+        poll_id: Uuid,
+        user_id: Uuid,
+        votes: &[(Uuid, f32)],
+    ) -> Result<Vec<VoteRecord>, VoteRepoError>;
     async fn get_user_votes(
         &self,
         poll_id: Uuid,
@@ -156,6 +162,23 @@ impl RoomsRepo for PgRoomsRepo {
         value: f32,
     ) -> Result<VoteRecord, VoteRepoError> {
         votes::upsert_vote(&self.pool, poll_id, dimension_id, user_id, value).await
+    }
+
+    async fn upsert_votes_batch(
+        &self,
+        poll_id: Uuid,
+        user_id: Uuid,
+        votes: &[(Uuid, f32)],
+    ) -> Result<Vec<VoteRecord>, VoteRepoError> {
+        let mut tx = self.pool.begin().await?;
+        let mut results = Vec::with_capacity(votes.len());
+        for &(dimension_id, value) in votes {
+            let record =
+                votes::upsert_vote(&mut *tx, poll_id, dimension_id, user_id, value).await?;
+            results.push(record);
+        }
+        tx.commit().await?;
+        Ok(results)
     }
 
     async fn get_user_votes(

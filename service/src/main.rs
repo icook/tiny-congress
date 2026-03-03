@@ -137,9 +137,11 @@ async fn build_app(
         as Arc<dyn EndorsementService>;
     let reputation_repo_ext = reputation_repo as Arc<dyn ReputationRepo>;
 
-    reputation::service::bootstrap_idme_verifier(&*reputation_repo_ext)
-        .await
-        .map_err(|e| anyhow::anyhow!("Failed to bootstrap ID.me verifier: {e}"))?;
+    if config.idme.is_some() {
+        reputation::service::bootstrap_idme_verifier(&*reputation_repo_ext)
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to bootstrap ID.me verifier: {e}"))?;
+    }
 
     // Rooms wiring
     let rooms_repo = Arc::new(PgRoomsRepo::new(pool.clone()));

@@ -265,24 +265,30 @@ function ResultsTable({
     mean: number;
     median: number;
     stddev: number;
+    min: number;
+    max: number;
   }[];
 }) {
   return (
     <Stack gap="md">
-      {dimensions.map((dim) => (
-        <div key={dim.dimension_name}>
-          <Group justify="space-between" mb={4}>
-            <Text size="sm" fw={500}>
-              {dim.dimension_name}
-            </Text>
-            <Text size="xs" c="dimmed">
-              mean: {dim.mean.toFixed(2)} | median: {dim.median.toFixed(2)} | votes:{' '}
-              {String(dim.count)}
-            </Text>
-          </Group>
-          <Progress value={dim.mean * 100} size="lg" radius="sm" />
-        </div>
-      ))}
+      {dimensions.map((dim) => {
+        const range = dim.max - dim.min;
+        const pct = range > 0 ? ((dim.mean - dim.min) / range) * 100 : 0;
+        return (
+          <div key={dim.dimension_name}>
+            <Group justify="space-between" mb={4}>
+              <Text size="sm" fw={500}>
+                {dim.dimension_name}
+              </Text>
+              <Text size="xs" c="dimmed">
+                mean: {dim.mean.toFixed(2)} | median: {dim.median.toFixed(2)} | votes:{' '}
+                {String(dim.count)}
+              </Text>
+            </Group>
+            <Progress value={pct} size="lg" radius="sm" />
+          </div>
+        );
+      })}
 
       <Table striped highlightOnHover withTableBorder>
         <Table.Thead>

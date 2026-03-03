@@ -4,7 +4,7 @@
 //! On successful verification, creates an endorsement for the authenticated user
 //! and links the external identity for sybil prevention.
 
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 use axum::{
     extract::{Extension, Query},
@@ -24,6 +24,11 @@ use crate::reputation::service::EndorsementService;
 
 type HmacSha256 = Hmac<Sha256>;
 
+fn http_client() -> &'static reqwest::Client {
+    static CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
+    CLIENT.get_or_init(reqwest::Client::new)
+}
+
 // ─── State parameter (anti-CSRF) ──────────────────────────────────────────
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -35,16 +40,13 @@ struct OAuthState {
 
 const STATE_MAX_AGE_SECS: i64 = 300;
 
-fn sign_state(state: &OAuthState, secret: &[u8]) -> String {
-    let payload = serde_json::to_string(state).unwrap_or_default();
-    let mut mac = HmacSha256::new_from_slice(secret).unwrap_or_else(|_| {
-        HmacSha256::new_from_slice(b"fallback-key-minimum-length-32b!")
-            .unwrap_or_else(|_| unreachable!())
-    });
+fn sign_state(state: &OAuthState, secret: &[u8]) -> Result<String, &'static str> {
+    let payload = serde_json::to_string(state).map_err(|_| "failed to serialize state")?;
+    let mut mac = HmacSha256::new_from_slice(secret).map_err(|_| "invalid HMAC secret")?;
     mac.update(payload.as_bytes());
     let sig = tc_crypto::encode_base64url(&mac.finalize().into_bytes());
     let payload_b64 = tc_crypto::encode_base64url(payload.as_bytes());
-    format!("{payload_b64}.{sig}")
+    Ok(format!("{payload_b64}.{sig}"))
 }
 
 fn verify_state(state_str: &str, secret: &[u8]) -> Result<OAuthState, &'static str> {
@@ -69,7 +71,8 @@ fn verify_state(state_str: &str, secret: &[u8]) -> Result<OAuthState, &'static s
         serde_json::from_str(payload_str).map_err(|_| "invalid state payload")?;
 
     let now = chrono::Utc::now().timestamp();
-    if (now - state.ts).abs() > STATE_MAX_AGE_SECS {
+    let age = now - state.ts;
+    if !(0..=STATE_MAX_AGE_SECS).contains(&age) {
         return Err("state expired");
     }
 
@@ -115,7 +118,19 @@ pub async fn authorize(
         nonce,
         ts: chrono::Utc::now().timestamp(),
     };
-    let signed_state = sign_state(&state, config.state_secret.as_bytes());
+    let signed_state = match sign_state(&state, config.state_secret.as_bytes()) {
+        Ok(s) => s,
+        Err(e) => {
+            tracing::error!("Failed to sign OAuth state: {e}");
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(crate::identity::http::ErrorResponse {
+                    error: "Internal server error".to_string(),
+                }),
+            )
+                .into_response();
+        }
+    };
 
     let authorize_url = format!(
         "{}?client_id={}&redirect_uri={}&response_type=code&scope=openid&state={}",
@@ -163,7 +178,7 @@ async fn process_callback(
             .as_deref()
             .unwrap_or("Unknown error");
         tracing::warn!(error = %error, description = %desc, "ID.me authorization denied");
-        return Err(desc.to_string());
+        return Err("Identity verification was denied or cancelled".to_string());
     }
 
     let code = query.code.as_deref().ok_or("Missing authorization code")?;
@@ -185,8 +200,7 @@ async fn process_callback(
 }
 
 async fn exchange_code(config: &IdMeConfig, code: &str) -> Result<String, String> {
-    let client = reqwest::Client::new();
-    let resp = client
+    let resp = http_client()
         .post(&config.token_url)
         .form(&[
             ("grant_type", "authorization_code"),
@@ -219,8 +233,7 @@ async fn fetch_userinfo(
     config: &IdMeConfig,
     access_token: &str,
 ) -> Result<UserInfoResponse, String> {
-    let client = reqwest::Client::new();
-    let resp = client
+    let resp = http_client()
         .get(&config.userinfo_url)
         .bearer_auth(access_token)
         .send()
@@ -290,7 +303,10 @@ async fn create_verification_endorsement(
             tracing::info!(account_id = %account_id, idme_sub = %idme_sub, "ID.me verification successful");
             Ok(())
         }
-        Err(crate::reputation::service::EndorsementError::Duplicate) => Ok(()),
+        Err(crate::reputation::service::EndorsementError::Duplicate) => {
+            tracing::info!(account_id = %account_id, "Endorsement already exists (re-verification)");
+            Ok(())
+        }
         Err(e) => {
             tracing::error!("Failed to create endorsement: {e}");
             Err("Verification failed".to_string())
