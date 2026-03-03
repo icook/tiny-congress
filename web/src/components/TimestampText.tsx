@@ -4,7 +4,11 @@ import { Group, Text, Tooltip, type TextProps } from '@mantine/core';
 
 type Mode = 'local' | 'utc' | 'relative';
 
-const MODES: Mode[] = ['local', 'utc', 'relative'];
+const NEXT_MODE: Record<Mode, Mode> = {
+  local: 'utc',
+  utc: 'relative',
+  relative: 'local',
+};
 
 const NEXT_LABEL: Record<Mode, string> = {
   local: 'Show UTC',
@@ -88,18 +92,31 @@ export function TimestampText({
     if (!valid) {
       return;
     }
-    setMode((m) => MODES[(MODES.indexOf(m) + 1) % MODES.length]);
+    setMode((m) => NEXT_MODE[m]);
   };
 
   const display = valid ? formatTimestamp(date, mode) : value;
 
   return (
-    <Tooltip label={valid ? NEXT_LABEL[mode] : value} openDelay={300}>
+    <Tooltip label={valid ? NEXT_LABEL[mode] : 'Invalid date'} openDelay={300}>
       <Group
         gap={4}
         wrap="nowrap"
+        data-testid={testId}
+        role={valid ? 'button' : undefined}
+        tabIndex={valid ? 0 : undefined}
         style={{ cursor: valid ? 'pointer' : undefined, display: 'inline-flex' }}
         onClick={cycle}
+        onKeyDown={
+          valid
+            ? (e: React.KeyboardEvent) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  cycle();
+                }
+              }
+            : undefined
+        }
         onMouseEnter={() => {
           setHovered(true);
         }}
@@ -107,9 +124,7 @@ export function TimestampText({
           setHovered(false);
         }}
       >
-        <Text data-testid={testId} {...textProps}>
-          {display}
-        </Text>
+        <Text {...textProps}>{display}</Text>
         {valid && hovered ? (
           <IconArrowsExchange size={14} style={{ opacity: 0.5, flexShrink: 0 }} />
         ) : null}
