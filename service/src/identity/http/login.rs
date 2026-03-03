@@ -91,7 +91,9 @@ fn validate_login_device(
     signed_payload.extend_from_slice(&req.timestamp.to_le_bytes());
 
     if verify_ed25519(root_pubkey_arr, &signed_payload, &cert_arr).is_err() {
-        return Err(super::bad_request("Invalid device certificate"));
+        // Return 401 with generic message — must be indistinguishable from
+        // AccountNotFound to prevent username enumeration.
+        return Err(super::unauthorized("Invalid credentials"));
     }
 
     let device_kid = device_pubkey.kid();
@@ -123,7 +125,9 @@ pub async fn login(
     // Look up the account by username
     let account = match repo.get_account_by_username(username).await {
         Ok(a) => a,
-        Err(AccountRepoError::NotFound) => return super::bad_request("Invalid credentials"),
+        // Return 401 with generic message — indistinguishable from
+        // InvalidCertificate to prevent username enumeration.
+        Err(AccountRepoError::NotFound) => return super::unauthorized("Invalid credentials"),
         Err(e) => {
             tracing::error!("Login account lookup failed: {e}");
             return super::internal_error();

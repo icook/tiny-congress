@@ -559,13 +559,15 @@ async fn test_login_old_cert_format_rejected() {
     .to_string();
 
     let response = app.oneshot(login_request(&body)).await.expect("response");
-    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    // Returns 401 with generic message to prevent username enumeration —
+    // indistinguishable from AccountNotFound.
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 
     let body_bytes = to_bytes(response.into_body(), 1024 * 1024)
         .await
         .expect("body");
     let body_str = String::from_utf8(body_bytes.to_vec()).expect("utf8");
-    assert!(body_str.contains("Invalid device certificate"));
+    assert!(body_str.contains("Invalid credentials"));
 }
 
 #[shared_runtime_test]
@@ -586,13 +588,15 @@ async fn test_login_wrong_root_key_rejected() {
     );
 
     let response = app.oneshot(login_request(&body)).await.expect("response");
-    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    // Returns 401 with generic message to prevent username enumeration —
+    // indistinguishable from AccountNotFound.
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 
     let body_bytes = to_bytes(response.into_body(), 1024 * 1024)
         .await
         .expect("body");
     let body_str = String::from_utf8(body_bytes.to_vec()).expect("utf8");
-    assert!(body_str.contains("Invalid device certificate"));
+    assert!(body_str.contains("Invalid credentials"));
 }
 
 // =========================================================================
@@ -611,7 +615,9 @@ async fn test_login_handler_account_not_found() {
     let body = login_json("nonexistent", &root, &device_pubkey, "Device", timestamp);
 
     let response = app.oneshot(login_request(&body)).await.expect("response");
-    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    // Returns 401 (not 400) to prevent username enumeration — same as
+    // InvalidCertificate so attackers can't distinguish the two cases.
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 
     let body_bytes = to_bytes(response.into_body(), 1024 * 1024)
         .await

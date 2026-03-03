@@ -72,6 +72,16 @@ pub(crate) fn not_found(msg: &str) -> axum::response::Response {
         .into_response()
 }
 
+pub(crate) fn unauthorized(msg: &str) -> axum::response::Response {
+    (
+        StatusCode::UNAUTHORIZED,
+        Json(ErrorResponse {
+            error: msg.to_string(),
+        }),
+    )
+        .into_response()
+}
+
 pub(crate) fn internal_error() -> axum::response::Response {
     (
         StatusCode::INTERNAL_SERVER_ERROR,
