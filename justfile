@@ -131,15 +131,15 @@ codegen: _export-schema _export-openapi codegen-graphql codegen-openapi
 # =============================================================================
 
 # Run frontend unit tests (requires WASM artifacts)
-test-frontend: _build-wasm-dev
+test-frontend: _ensure-frontend-deps _build-wasm-dev
     cd web && yarn vitest
 
 # Run frontend unit tests in watch mode (requires WASM artifacts)
-test-frontend-watch: _build-wasm-dev
+test-frontend-watch: _ensure-frontend-deps _build-wasm-dev
     cd web && yarn vitest:watch
 
 # Run full frontend test suite (typecheck + lint + vitest + build) - includes E2E via CI
-test-frontend-full: _build-wasm-dev
+test-frontend-full: _ensure-frontend-deps _build-wasm-dev
     cd web && yarn test
 
 # Run frontend E2E tests with Playwright (requires running backend/frontend)
@@ -151,7 +151,7 @@ _typecheck-frontend:
     cd web && yarn typecheck
 
 # Run all frontend linting (prettier + eslint + stylelint)
-lint-frontend:
+lint-frontend: _ensure-frontend-deps
     cd web && yarn lint
 
 # Run eslint only
@@ -171,11 +171,11 @@ fmt-frontend:
     cd web && yarn prettier:write
 
 # Build frontend for production
-build-frontend:
+build-frontend: _ensure-frontend-deps
     cd web && yarn build
 
 # Run frontend dev server
-dev-frontend:
+dev-frontend: _ensure-frontend-deps
     cd web && yarn dev
 
 # Run Storybook dev server
@@ -186,9 +186,17 @@ dev-storybook:
 build-storybook:
     cd web && yarn storybook:build
 
-# Internal: Install frontend dependencies (used by CI)
-_install-frontend:
-    cd web && yarn install
+# Internal: Install frontend dependencies if yarn.lock is newer than node_modules
+_ensure-frontend-deps:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    ROOT="{{justfile_directory()}}"
+    STAMP="$ROOT/web/node_modules/.ts-yarn-install"
+    if [ ! -f "$STAMP" ] || [ "$ROOT/web/yarn.lock" -nt "$STAMP" ]; then
+        echo "Installing frontend dependencies..."
+        cd "$ROOT/web" && yarn install
+        touch "$STAMP"
+    fi
 
 # =============================================================================
 # Full-Stack Development (Requires Skaffold + Kubernetes Cluster)
@@ -315,7 +323,7 @@ test: test-backend test-wasm test-frontend
     @echo "✓ Unit tests passed"
 
 # Run frontend unit tests with coverage
-test-frontend-cov: _build-wasm-dev
+test-frontend-cov: _ensure-frontend-deps _build-wasm-dev
     cd web && yarn vitest:coverage
 
 # Run all unit tests with coverage
