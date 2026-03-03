@@ -1,4 +1,3 @@
-import { useEffect } from 'react';
 import {
   createRootRouteWithContext,
   createRoute,
@@ -6,9 +5,9 @@ import {
   Outlet,
   redirect,
   RouterProvider,
-  useNavigate,
   useParams,
 } from '@tanstack/react-router';
+import { AuthRequiredOutlet } from './components/AuthRequiredOutlet';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { AboutPage } from './pages/About.page';
 import { DashboardPage } from './pages/Dashboard.page';
@@ -150,24 +149,6 @@ export function Router() {
       <RouterProvider router={router} context={{ auth: { deviceKid } }} />
     </ErrorBoundary>
   );
-}
-
-/** Reactive fallback for auth-required routes — redirects on logout while on a protected page. */
-export function AuthRequiredOutlet() {
-  const { deviceKid } = useDevice();
-  const navigate = useNavigate();
-
-  useEffect(() => {
-    if (!deviceKid) {
-      void navigate({ to: '/login' });
-    }
-  }, [deviceKid, navigate]);
-
-  if (!deviceKid) {
-    return null;
-  }
-
-  return <Outlet />;
 }
 
 function PollPageWrapper() {
