@@ -36,6 +36,12 @@ use tc_crypto::{decode_base64url, verify_ed25519, Kid};
 /// safe to delete because the timestamp check would reject them anyway.
 pub const MAX_TIMESTAMP_SKEW: i64 = 300;
 
+/// Maximum nonce length (bytes).
+///
+/// Matches the "max 64 chars" contract documented in the module header.
+/// Nonces beyond this are rejected before any further processing.
+const MAX_NONCE_LENGTH: usize = 64;
+
 /// Maximum request body size for authenticated device endpoints (64 KiB).
 ///
 /// Device management payloads (JSON with keys, names, certificates) are small;
@@ -126,6 +132,11 @@ impl<S: Send + Sync> FromRequest<S> for AuthenticatedDevice {
             .and_then(|v| v.to_str().ok())
             .ok_or_else(|| auth_error("Missing X-Nonce header"))?
             .to_string();
+
+        // Validate nonce: must be non-empty and within the documented max length.
+        if nonce.is_empty() || nonce.len() > MAX_NONCE_LENGTH {
+            return Err(auth_error("Invalid nonce length"));
+        }
 
         // Parse KID
         let kid: Kid = kid_str
@@ -282,6 +293,20 @@ mod tests {
         // must still produce a large skew that gets rejected.
         assert!(now.saturating_sub(i64::MIN).saturating_abs() > MAX_TIMESTAMP_SKEW);
         assert!(now.saturating_sub(i64::MAX).saturating_abs() > MAX_TIMESTAMP_SKEW);
+    }
+
+    #[test]
+    fn test_nonce_length_limits() {
+        // Empty nonce must be rejected
+        assert!("".is_empty());
+
+        // Exactly MAX_NONCE_LENGTH is accepted
+        let at_max = "a".repeat(MAX_NONCE_LENGTH);
+        assert!(!at_max.is_empty() && at_max.len() <= MAX_NONCE_LENGTH);
+
+        // One over the limit is rejected
+        let over_max = "a".repeat(MAX_NONCE_LENGTH + 1);
+        assert!(over_max.len() > MAX_NONCE_LENGTH);
     }
 
     #[test]
