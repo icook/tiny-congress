@@ -138,7 +138,7 @@ impl<S: Send + Sync> FromRequest<S> for AuthenticatedDevice {
             .map_err(|_| auth_error("Invalid timestamp"))?;
 
         let now = chrono::Utc::now().timestamp();
-        let skew = (now - timestamp).abs();
+        let skew = now.saturating_sub(timestamp).saturating_abs();
         if skew > MAX_TIMESTAMP_SKEW {
             return Err(auth_error("Timestamp out of range"));
         }
@@ -264,14 +264,24 @@ mod tests {
         let now = chrono::Utc::now().timestamp();
 
         // Within range
-        assert!((now - now).abs() <= MAX_TIMESTAMP_SKEW);
+        assert!(now.saturating_sub(now).saturating_abs() <= MAX_TIMESTAMP_SKEW);
 
         // Outside range
         let old = now - MAX_TIMESTAMP_SKEW - 1;
-        assert!((now - old).abs() > MAX_TIMESTAMP_SKEW);
+        assert!(now.saturating_sub(old).saturating_abs() > MAX_TIMESTAMP_SKEW);
 
         let future = now + MAX_TIMESTAMP_SKEW + 1;
-        assert!((now - future).abs() > MAX_TIMESTAMP_SKEW);
+        assert!(now.saturating_sub(future).saturating_abs() > MAX_TIMESTAMP_SKEW);
+    }
+
+    #[test]
+    fn test_timestamp_overflow_rejects() {
+        let now = chrono::Utc::now().timestamp();
+
+        // Crafted timestamps that would overflow plain (now - timestamp).abs()
+        // must still produce a large skew that gets rejected.
+        assert!(now.saturating_sub(i64::MIN).saturating_abs() > MAX_TIMESTAMP_SKEW);
+        assert!(now.saturating_sub(i64::MAX).saturating_abs() > MAX_TIMESTAMP_SKEW);
     }
 
     #[test]
