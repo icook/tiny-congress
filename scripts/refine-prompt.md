@@ -16,6 +16,10 @@ You are refining code in `{{FOCUS_PATH}}`.
    updating a test file or a direct caller.
 6. Run `just lint` and `just test` before committing. If they fail, fix or abandon.
 
+## Already in progress
+
+{{PENDING_CHANGES}}
+
 ## What to look for (in priority order)
 
 {{ENABLED_TYPES}}
