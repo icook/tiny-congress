@@ -107,9 +107,15 @@ jobs:
 
       - name: Override max_prs
         if: ${{ github.event.inputs.max_prs != '0' && github.event.inputs.max_prs != '' }}
+        env:
+          MAX_PRS: ${{ github.event.inputs.max_prs }}
         run: |
-          yq -i -p toml -o toml '.behavior.max_prs = ${{ github.event.inputs.max_prs }}' refine.toml
-          echo "Overrode max_prs to ${{ github.event.inputs.max_prs }}"
+          if ! [[ "$MAX_PRS" =~ ^[0-9]+$ ]]; then
+            echo "ERROR: max_prs must be numeric, got: $MAX_PRS" >&2
+            exit 1
+          fi
+          yq -i -p toml -o toml ".behavior.max_prs = $MAX_PRS" refine.toml
+          echo "Overrode max_prs to $MAX_PRS"
 
       # ── Run ──────────────────────────────────────────────────────
 

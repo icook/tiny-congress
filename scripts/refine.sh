@@ -208,7 +208,8 @@ wait_for_ci() {
     log "Waiting for CI checks on $pr_url (timeout ${timeout}s)"
 
     while [[ $elapsed -lt $timeout ]]; do
-        # Get check states: PENDING, SUCCESS, FAILURE, ERROR, CANCELLED
+        # gh pr checks returns uppercase states: PENDING, QUEUED, IN_PROGRESS, SUCCESS, FAILURE, etc.
+        # Verified empirically — `gh pr checks <url> --json state --jq '.[].state'`
         local states
         states="$(gh pr checks "$pr_url" --json state --jq '[.[].state] | unique | join(",")' 2>/dev/null || echo "UNKNOWN")"
 
@@ -301,15 +302,25 @@ $failure_logs
         unset CLAUDECODE && \
         claude -p \
             --output-format json \
-            --tools "Read Edit Write Bash Glob Grep" \
+            --allowedTools "Read Edit Write Bash Glob Grep" \
             --no-session-persistence \
-            --dangerously-skip-permissions \
             --max-turns 30 \
             "$fix_prompt"
     )" || claude_exit=$?
 
     if [[ $claude_exit -ne 0 ]]; then
         log "ERROR: Claude CI fix exited with code $claude_exit"
+        git -C "$REPO_ROOT" worktree remove "$wt_path" --force 2>/dev/null || true
+        return 1
+    fi
+
+    # Check if Claude signalled a skip (flaky test / infra issue)
+    local action
+    action="$(echo "$claude_output" | jq -r '.result // ""' 2>/dev/null | jq -r '.action // ""' 2>/dev/null || echo "")"
+    if [[ "$action" == "skip" ]]; then
+        local reason
+        reason="$(echo "$claude_output" | jq -r '.result // ""' 2>/dev/null | jq -r '.reason // "no reason given"' 2>/dev/null || echo "no reason given")"
+        log "CI fix skipped: $reason"
         git -C "$REPO_ROOT" worktree remove "$wt_path" --force 2>/dev/null || true
         return 1
     fi
@@ -485,9 +496,8 @@ run_iteration() {
         unset CLAUDECODE && \
         claude -p \
             --output-format json \
-            --tools "Read Edit Write Bash Glob Grep" \
+            --allowedTools "Read Edit Write Bash Glob Grep" \
             --no-session-persistence \
-            --dangerously-skip-permissions \
             --max-turns 50 \
             "$prompt"
     )" || claude_exit=$?
