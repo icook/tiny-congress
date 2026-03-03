@@ -153,7 +153,7 @@ export function Router() {
 }
 
 /** Reactive fallback for auth-required routes — redirects on logout while on a protected page. */
-function AuthRequiredOutlet() {
+export function AuthRequiredOutlet() {
   const { deviceKid } = useDevice();
   const navigate = useNavigate();
 

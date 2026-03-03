@@ -15,8 +15,21 @@ async function signupAndClearDevice(page: import('@playwright/test').Page, usern
   await page.getByRole('button', { name: /sign up/i }).click();
   await expect(page.getByText(/Account Created/i)).toBeVisible({ timeout: 15_000 });
 
-  // Clear IndexedDB to simulate a new device / fresh browser
-  await page.evaluate(() => indexedDB.deleteDatabase('tc-device-store'));
+  // Clear IndexedDB to simulate a new device / fresh browser.
+  // deleteDatabase returns an IDBOpenDBRequest — wrap in a Promise so we
+  // await actual completion before navigating.
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve, reject) => {
+        const req = indexedDB.deleteDatabase('tc-device-store');
+        req.onsuccess = () => {
+          resolve();
+        };
+        req.onerror = () => {
+          reject(new Error(String(req.error)));
+        };
+      })
+  );
 }
 
 test('login flow recovers account and shows device list', async ({ page }) => {
