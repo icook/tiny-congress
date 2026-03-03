@@ -191,8 +191,8 @@ _ensure-frontend-deps:
     #!/usr/bin/env bash
     set -euo pipefail
     ROOT="{{justfile_directory()}}"
-    STAMP="$ROOT/node_modules/.ts-yarn-install"
-    if [ ! -f "$STAMP" ] || [ "$ROOT/yarn.lock" -nt "$STAMP" ]; then
+    STAMP="$ROOT/web/node_modules/.ts-yarn-install"
+    if [ ! -f "$STAMP" ] || [ "$ROOT/web/yarn.lock" -nt "$STAMP" ]; then
         echo "Installing frontend dependencies..."
         cd "$ROOT/web" && yarn install
         touch "$STAMP"
