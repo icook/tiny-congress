@@ -16,3 +16,4 @@ pub mod identity;
 pub mod reputation;
 pub mod rest;
 pub mod rooms;
+pub mod seed;

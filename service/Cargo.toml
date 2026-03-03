@@ -90,6 +90,10 @@ path = "src/bin/export_schema.rs"
 name = "export_openapi"
 path = "src/bin/export_openapi.rs"
 
+[[bin]]
+name = "seed"
+path = "src/bin/seed.rs"
+
 # cargo-machete false positives (used via derive macros)
 [package.metadata.cargo-machete]
 ignored = ["serde", "thiserror", "async-trait", "utoipa"]
