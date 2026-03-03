@@ -79,6 +79,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
+      - name: Install just
+        uses: extractions/setup-just@v3
+
       - name: Install typos
         uses: taiki-e/install-action@v2
         with:
@@ -95,13 +98,7 @@ jobs:
           sudo install actionlint /usr/local/bin/
 
       - name: Run static analysis
-        run: |
-          set -euox pipefail
-
-          typos
-          hadolint --config .hadolint.yaml service/Dockerfile service/Dockerfile.dev web/Dockerfile web/Dockerfile.dev dockerfiles/Dockerfile.postgres
-          actionlint
-          find . -name "*.sh" -not -path "./.git/*" -exec shellcheck {} +
+        run: just lint-static
 
   # ============================================================
   # JOB 0b2: Build Storybook
@@ -155,9 +152,6 @@ jobs:
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
 
-      - name: Build Rust docs
-        run: cargo doc --workspace --no-deps
-
       - name: Set up Node
         uses: actions/setup-node@v6
         with:
@@ -171,9 +165,11 @@ jobs:
       - name: Install dependencies
         run: cd web && yarn install --immutable
 
-      - name: Build TypeScript docs
-        working-directory: web
-        run: yarn typedoc
+      - name: Install just
+        uses: extractions/setup-just@v3
+
+      - name: Build docs
+        run: just docs
 
       - name: Upload docs artifact
         uses: actions/upload-artifact@v6
@@ -240,27 +236,15 @@ jobs:
         with:
           fetch-depth: 0  # Full history for gitleaks
 
-      # Rust: advisories + licenses via cargo-deny
+      - name: Install just
+        uses: extractions/setup-just@v3
+
       - name: Install cargo-deny
         uses: taiki-e/install-action@cargo-deny
 
-      - name: Run cargo deny
-        working-directory: service
-        run: cargo deny check
-
-      # Rust: unused dependencies via cargo-machete
       - name: Install cargo-machete
         uses: taiki-e/install-action@cargo-machete
 
-      - name: Check for unused dependencies
-        working-directory: service
-        run: |
-          if ! cargo machete; then
-            echo "::error::Unused dependencies detected. Remove them or add to Cargo.toml [package.metadata.cargo-machete] ignored list."
-            exit 1
-          fi
-
-      # Frontend: vulnerabilities via yarn audit
       - name: Set up Node
         uses: actions/setup-node@v6
         with:
@@ -274,11 +258,13 @@ jobs:
       - name: Install frontend dependencies
         run: cd web && yarn install --immutable
 
-      - name: Run yarn audit
-        working-directory: web
-        run: yarn npm audit --severity high
+      - name: Run dependency audit
+        run: just audit-deps
 
-      # Secrets detection via gitleaks
+      - name: Check for unused dependencies
+        run: just audit-unused
+
+      # gitleaks GitHub Action provides richer integration than the CLI
       - name: Run gitleaks
         uses: gitleaks/gitleaks-action@v2
         env:

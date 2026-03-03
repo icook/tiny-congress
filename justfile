@@ -403,9 +403,9 @@ docs: docs-rust docs-ts
     @echo "  Rust: target/doc/tinycongress_api/index.html"
     @echo "  TypeScript: web/docs/index.html"
 
-# Build and open Rust API docs
+# Build Rust API docs
 docs-rust:
-    cargo doc --workspace --no-deps --open
+    cargo doc --workspace --no-deps
 
 # Build TypeScript docs
 docs-ts:
