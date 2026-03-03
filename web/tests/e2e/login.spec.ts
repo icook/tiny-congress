@@ -16,13 +16,16 @@ async function signupAndClearDevice(page: import('@playwright/test').Page, usern
   await expect(page.getByText(/Account Created/i)).toBeVisible({ timeout: 15_000 });
 
   // Clear IndexedDB to simulate a new device / fresh browser.
-  // deleteDatabase returns an IDBOpenDBRequest — wrap in a Promise so we
-  // await actual completion before navigating.
+  // deleteDatabase is blocked while DeviceProvider holds an open connection;
+  // resolve on onblocked too — the deletion completes when the page navigates away.
   await page.evaluate(
     () =>
       new Promise<void>((resolve, reject) => {
         const req = indexedDB.deleteDatabase('tc-device-store');
         req.onsuccess = () => {
+          resolve();
+        };
+        req.onblocked = () => {
           resolve();
         };
         req.onerror = () => {
