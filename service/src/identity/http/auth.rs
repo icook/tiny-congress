@@ -43,6 +43,13 @@ pub const MAX_TIMESTAMP_SKEW: i64 = 300;
 /// before signature verification.
 const MAX_BODY_SIZE: usize = 64 * 1024;
 
+/// Maximum length of the X-Nonce header value (bytes).
+///
+/// Nonces are typically UUIDs or random base64url strings; 64 bytes is
+/// generous. Enforcing a ceiling prevents unbounded allocation and keeps
+/// the canonical message compact.
+const MAX_NONCE_LENGTH: usize = 64;
+
 /// Authenticated device extracted from signed request headers.
 ///
 /// Implements `FromRequest` — reads the full body, verifies the signature,
@@ -126,6 +133,20 @@ impl<S: Send + Sync> FromRequest<S> for AuthenticatedDevice {
             .and_then(|v| v.to_str().ok())
             .ok_or_else(|| auth_error("Missing X-Nonce header"))?
             .to_string();
+
+        // Validate nonce: non-empty, bounded length, no control characters.
+        // Control characters (especially \n) must be rejected because the
+        // canonical message uses \n as a field delimiter — a nonce containing
+        // \n would alter the field structure of the signed payload.
+        if nonce.is_empty() {
+            return Err(auth_error("X-Nonce must not be empty"));
+        }
+        if nonce.len() > MAX_NONCE_LENGTH {
+            return Err(auth_error("X-Nonce too long"));
+        }
+        if nonce.bytes().any(|b| b.is_ascii_control()) {
+            return Err(auth_error("X-Nonce contains invalid characters"));
+        }
 
         // Parse KID
         let kid: Kid = kid_str
