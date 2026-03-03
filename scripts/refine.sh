@@ -258,6 +258,7 @@ run_iteration() {
     local claude_exit=0
     claude_output="$(
         cd "$wt_path" && \
+        unset CLAUDECODE && \
         claude -p \
             --output-format json \
             --tools "Read Edit Write Bash Glob Grep" \
