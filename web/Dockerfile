@@ -17,7 +17,8 @@ COPY crates/tc-crypto ./crates/tc-crypto
 RUN sed -i 's/members = \[.*\]/members = ["crates\/tc-crypto"]/' Cargo.toml
 
 # Build WASM
-RUN cd crates/tc-crypto && wasm-pack build --target web --release --out-dir /wasm-out
+WORKDIR /build/crates/tc-crypto
+RUN wasm-pack build --target web --release --out-dir /wasm-out
 
 # Node build stage
 FROM node:${NODE_VERSION}-slim AS builder

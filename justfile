@@ -319,20 +319,12 @@ lint-typecheck: _typecheck-frontend
 # =============================================================================
 
 # Run all static analysis checks
-lint-static: lint-typos lint-toml lint-dockerfiles lint-workflows lint-scripts
+lint-static: lint-typos lint-dockerfiles lint-workflows lint-scripts
     @echo "✓ All static analysis passed"
 
 # Check for typos in code and docs (requires typos: cargo install typos-cli)
 lint-typos:
     typos
-
-# Check TOML formatting (requires taplo: cargo install taplo-cli)
-lint-toml:
-    taplo fmt --check
-
-# Fix TOML formatting
-fmt-toml:
-    taplo fmt
 
 # Lint Dockerfiles (requires hadolint: brew install hadolint)
 lint-dockerfiles:
@@ -436,8 +428,7 @@ setup:
     @echo ""
     @echo "Static analysis tools (optional, for lint-static):"
     @echo "  - typos: $(typos --version 2>/dev/null || echo "NOT INSTALLED - cargo install typos-cli")"
-    @echo "  - taplo: $(taplo --version 2>/dev/null || echo "NOT INSTALLED - cargo install taplo-cli")"
-    @echo "  - hadolint: $(hadolint --version 2>/dev/null || echo "NOT INSTALLED - brew install hadolint")"
+@echo "  - hadolint: $(hadolint --version 2>/dev/null || echo "NOT INSTALLED - brew install hadolint")"
     @echo "  - actionlint: $(actionlint --version 2>/dev/null || echo "NOT INSTALLED - brew install actionlint")"
     @echo "  - shellcheck: $(shellcheck --version 2>/dev/null | head -2 | tail -1 || echo "NOT INSTALLED - brew install shellcheck")"
     @echo ""

@@ -77,28 +77,32 @@ jobs:
           UNVIABLE=$(jq '[.outcomes[] | select(.summary == "Unviable")] | length' "${OUTCOMES_FILE}")
           TOTAL=$(jq '.outcomes | length' "${OUTCOMES_FILE}")
 
-          echo "## Mutation Testing Results" >> "${GITHUB_STEP_SUMMARY}"
-          echo "" >> "${GITHUB_STEP_SUMMARY}"
-          echo "| Status | Count |" >> "${GITHUB_STEP_SUMMARY}"
-          echo "|--------|-------|" >> "${GITHUB_STEP_SUMMARY}"
-          echo "| Caught (killed) | ${CAUGHT} |" >> "${GITHUB_STEP_SUMMARY}"
-          echo "| **Survived (missed)** | **${SURVIVED}** |" >> "${GITHUB_STEP_SUMMARY}"
-          echo "| Timeout | ${TIMEOUT} |" >> "${GITHUB_STEP_SUMMARY}"
-          echo "| Unviable | ${UNVIABLE} |" >> "${GITHUB_STEP_SUMMARY}"
-          echo "| Total | ${TOTAL} |" >> "${GITHUB_STEP_SUMMARY}"
-          echo "" >> "${GITHUB_STEP_SUMMARY}"
+          {
+            echo "## Mutation Testing Results"
+            echo ""
+            echo "| Status | Count |"
+            echo "|--------|-------|"
+            echo "| Caught (killed) | ${CAUGHT} |"
+            echo "| **Survived (missed)** | **${SURVIVED}** |"
+            echo "| Timeout | ${TIMEOUT} |"
+            echo "| Unviable | ${UNVIABLE} |"
+            echo "| Total | ${TOTAL} |"
+            echo ""
+          } >> "${GITHUB_STEP_SUMMARY}"
 
           if [ "${SURVIVED}" -gt 0 ]; then
-            echo "### Surviving Mutants" >> "${GITHUB_STEP_SUMMARY}"
-            echo "" >> "${GITHUB_STEP_SUMMARY}"
-            echo "These mutations were not caught by the test suite:" >> "${GITHUB_STEP_SUMMARY}"
-            echo "" >> "${GITHUB_STEP_SUMMARY}"
-            echo '```' >> "${GITHUB_STEP_SUMMARY}"
-            # cargo-mutants v26 schema: .scenario.Mutant.name contains "file:line: description",
-            # .scenario.Mutant.file has the relative path, .scenario.Mutant.function is an object or null.
-            jq -r '.outcomes[] | select(.summary == "MissedMutant") | .scenario.Mutant.name' "${OUTCOMES_FILE}" >> "${GITHUB_STEP_SUMMARY}"
-            echo '```' >> "${GITHUB_STEP_SUMMARY}"
-            echo "" >> "${GITHUB_STEP_SUMMARY}"
+            {
+              echo "### Surviving Mutants"
+              echo ""
+              echo "These mutations were not caught by the test suite:"
+              echo ""
+              echo '```'
+              # cargo-mutants v26 schema: .scenario.Mutant.name contains "file:line: description",
+              # .scenario.Mutant.file has the relative path, .scenario.Mutant.function is an object or null.
+              jq -r '.outcomes[] | select(.summary == "MissedMutant") | .scenario.Mutant.name' "${OUTCOMES_FILE}"
+              echo '```'
+              echo ""
+            } >> "${GITHUB_STEP_SUMMARY}"
             echo "::warning::${SURVIVED} mutant(s) survived — review the mutation report artifact for details"
           else
             echo "All mutants were caught by the test suite." >> "${GITHUB_STEP_SUMMARY}"

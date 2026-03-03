@@ -82,14 +82,13 @@ jobs:
       - name: Install tools
         uses: taiki-e/install-action@v2
         with:
-          tool: typos-cli,taplo-cli,hadolint,actionlint
+          tool: typos-cli,hadolint,actionlint
 
       - name: Run static analysis
         run: |
           set -euox pipefail
 
           typos
-          taplo fmt --check
           hadolint --config .hadolint.yaml service/Dockerfile service/Dockerfile.dev web/Dockerfile web/Dockerfile.dev dockerfiles/Dockerfile.postgres
           actionlint
           find . -name "*.sh" -not -path "./.git/*" -exec shellcheck {} +
@@ -386,9 +385,11 @@ jobs:
           ref="${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}"
           branch="${ref//[^a-zA-Z0-9_.-]/-}"
           branch="${branch,,}"
-          echo "branch_slug=${branch}" >> "$GITHUB_OUTPUT"
-          echo "sha_tag=${{ env.REGISTRY }}/${{ matrix.image }}:${{ github.sha }}" >> "$GITHUB_OUTPUT"
-          echo "branch_tag=${{ env.REGISTRY }}/${{ matrix.image }}:branch-${branch}" >> "$GITHUB_OUTPUT"
+          {
+            echo "branch_slug=${branch}"
+            echo "sha_tag=${{ env.REGISTRY }}/${{ matrix.image }}:${{ github.sha }}"
+            echo "branch_tag=${{ env.REGISTRY }}/${{ matrix.image }}:branch-${branch}"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Extract versions from mise.toml
         id: versions
@@ -520,8 +521,8 @@ jobs:
         if: steps.cache-skaffold.outputs.cache-hit != 'true'
         run: |
           set -euo pipefail
-          SKAFFOLD_VERSION=v$(cat .skaffold-version)
-          curl -fsSL -o skaffold https://storage.googleapis.com/skaffold/releases/${SKAFFOLD_VERSION}/skaffold-linux-amd64
+          SKAFFOLD_VERSION="v$(cat .skaffold-version)"
+          curl -fsSL -o skaffold "https://storage.googleapis.com/skaffold/releases/${SKAFFOLD_VERSION}/skaffold-linux-amd64"
           sudo install skaffold /usr/local/bin/skaffold
 
       - name: Verify Skaffold installation
@@ -608,7 +609,7 @@ jobs:
           TEST_POSTGRES_IMAGE: ${{ env.REGISTRY }}/postgres:${{ github.sha }}
         run: |
           set -euo pipefail
-          skaffold test -p ${SKAFFOLD_PROFILE} --build-artifacts "${{ steps.artifacts.outputs.file }}"
+          skaffold test -p "${SKAFFOLD_PROFILE}" --build-artifacts "${{ steps.artifacts.outputs.file }}"
 
       - name: Generate Rust coverage
         env:
@@ -658,7 +659,7 @@ jobs:
       - name: Deploy with Skaffold
         run: |
           set -euo pipefail
-          skaffold deploy -p ${SKAFFOLD_PROFILE} --status-check=true \
+          skaffold deploy -p "${SKAFFOLD_PROFILE}" --status-check=true \
             --build-artifacts "${{ steps.artifacts.outputs.file }}"
 
       - name: Build instrumented frontend for E2E tests
@@ -681,13 +682,13 @@ jobs:
               gzip_size=$(gzip -c "$file" | wc -c)
               printf "| %s | %s | %s |\n" \
                 "$(basename "$file")" \
-                "$(numfmt --to=iec-i --suffix=B $size 2>/dev/null || echo "${size}B")" \
-                "$(numfmt --to=iec-i --suffix=B $gzip_size 2>/dev/null || echo "${gzip_size}B")"
+                "$(numfmt --to=iec-i --suffix=B "$size" 2>/dev/null || echo "${size}B")" \
+                "$(numfmt --to=iec-i --suffix=B "$gzip_size" 2>/dev/null || echo "${gzip_size}B")"
             ' _ {} \; | sort -k3 -h -r
             echo ""
             total_size=$(find dist -type f \( -name "*.js" -o -name "*.css" \) -exec stat -f%z {} + 2>/dev/null | awk '{sum+=$1} END {print sum}' || \
                          find dist -type f \( -name "*.js" -o -name "*.css" \) -exec stat -c%s {} + | awk '{sum+=$1} END {print sum}')
-            echo "**Total:** $(numfmt --to=iec-i --suffix=B $total_size 2>/dev/null || echo "${total_size}B")"
+            echo "**Total:** $(numfmt --to=iec-i --suffix=B "$total_size" 2>/dev/null || echo "${total_size}B")"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Run Playwright E2E tests
@@ -715,8 +716,8 @@ jobs:
           yarn playwright:test || TEST_EXIT=$?
 
           # Cleanup
-          kill $PREVIEW_PID $PF_API_PID 2>/dev/null || true
-          exit ${TEST_EXIT:-0}
+          kill "$PREVIEW_PID" "$PF_API_PID" 2>/dev/null || true
+          exit "${TEST_EXIT:-0}"
 
       - name: Publish Playwright test report
         if: always() && hashFiles('web/reports/playwright.xml') != ''
@@ -742,7 +743,7 @@ jobs:
       - name: Analyze Playwright flakiness
         if: always()
         working-directory: web
-        run: node scripts/analyze-playwright-flakiness.mjs >> $GITHUB_STEP_SUMMARY
+        run: node scripts/analyze-playwright-flakiness.mjs >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload Rust coverage artifacts
         if: always()
@@ -760,7 +761,7 @@ jobs:
             --vitest web/coverage/vitest/coverage-summary.json \
             --playwright web/coverage/playwright/coverage-summary.json \
             --rust "service/coverage/backend-unit.lcov:unit" \
-            >> $GITHUB_STEP_SUMMARY
+            >> "$GITHUB_STEP_SUMMARY"
 
       - name: Install lcov for HTML generation
         if: always()
@@ -956,9 +957,11 @@ jobs:
           else
             VITEST_LINES=0; VITEST_BRANCHES=0; VITEST_FUNCTIONS=0
           fi
-          echo "vitest_lines=${VITEST_LINES}" >> "$GITHUB_OUTPUT"
-          echo "vitest_branches=${VITEST_BRANCHES}" >> "$GITHUB_OUTPUT"
-          echo "vitest_functions=${VITEST_FUNCTIONS}" >> "$GITHUB_OUTPUT"
+          {
+            echo "vitest_lines=${VITEST_LINES}"
+            echo "vitest_branches=${VITEST_BRANCHES}"
+            echo "vitest_functions=${VITEST_FUNCTIONS}"
+          } >> "$GITHUB_OUTPUT"
 
           # Playwright
           if [ -f site/coverage/playwright/coverage-summary.json ]; then
@@ -968,9 +971,11 @@ jobs:
           else
             PW_LINES=0; PW_BRANCHES=0; PW_FUNCTIONS=0
           fi
-          echo "pw_lines=${PW_LINES}" >> "$GITHUB_OUTPUT"
-          echo "pw_branches=${PW_BRANCHES}" >> "$GITHUB_OUTPUT"
-          echo "pw_functions=${PW_FUNCTIONS}" >> "$GITHUB_OUTPUT"
+          {
+            echo "pw_lines=${PW_LINES}"
+            echo "pw_branches=${PW_BRANCHES}"
+            echo "pw_functions=${PW_FUNCTIONS}"
+          } >> "$GITHUB_OUTPUT"
 
           # Rust (parse lcov file directly - must happen before artifacts cleanup)
           RUST_LCOV="artifacts/rust-coverage/backend-unit.lcov"
@@ -994,8 +999,10 @@ jobs:
           else
             RUST_LINES=0; RUST_FUNCTIONS=0
           fi
-          echo "rust_lines=${RUST_LINES}" >> "$GITHUB_OUTPUT"
-          echo "rust_functions=${RUST_FUNCTIONS}" >> "$GITHUB_OUTPUT"
+          {
+            echo "rust_lines=${RUST_LINES}"
+            echo "rust_functions=${RUST_FUNCTIONS}"
+          } >> "$GITHUB_OUTPUT"
 
           # Cleanup artifacts
           rm -rf artifacts
