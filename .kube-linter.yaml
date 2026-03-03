@@ -14,7 +14,7 @@ checks:
   exclude:
     # Image tags are templated via Helm values, not hardcoded
     - "latest-tag"
-    # Default namespace usage is intentional for local dev (KinD)
+    # Default service account usage is intentional for local dev (KinD)
     - "default-service-account"
     # CPU limits can cause throttling; we use requests only
     - "unset-cpu-requirements"
