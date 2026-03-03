@@ -65,7 +65,8 @@ Even if you see these issues, do **not** change them in Phase 1. They go to Phas
 - Performance improvements
 - Adding or removing error handling
 - Changing types (e.g., `String` to a newtype) — even if the coding standards recommend it
-- Anything that changes observable behavior
+- Anything that changes observable behavior — except adding keyboard accessibility to elements that already have `onClick` handlers (those are completing missing behavior, not changing existing behavior)
+- Accessibility patterns that would change a component's public API (props interface) or require adding new dependencies
 
 ---
 
