@@ -149,17 +149,19 @@ handle_change() {
     local branch="$2"
     local summary="$3"
 
+    # Ensure cleanup always runs, even if push/PR creation fails
+    trap 'cleanup_worktree "$wt_path" "$branch"' RETURN
+
     # Verify there are actual commits beyond master
     local commit_count
     commit_count="$(git -C "$wt_path" rev-list --count master..HEAD)"
     if [[ "$commit_count" -eq 0 ]]; then
         log "WARNING: Claude reported 'change' but no commits found"
-        cleanup_worktree "$wt_path" "$branch"
         return 1
     fi
 
     # Push branch
-    git -C "$wt_path" push origin "$branch"
+    git -C "$wt_path" push --quiet origin "$branch"
     log "Pushed $branch"
 
     # Open PR
@@ -182,12 +184,10 @@ $summary
         --label "refinement,auto-merge")"
     log "Created PR: $pr_url"
 
-    # Enable auto-merge
-    gh pr merge "$pr_url" --auto --squash
+    # Enable auto-merge — don't fail the iteration if this fails
+    gh pr merge "$pr_url" --auto --squash || \
+        log "WARNING: Could not enable auto-merge for $pr_url (may need manual merge)"
     log "Auto-merge enabled for $pr_url"
-
-    # Don't wait for CI — the loop continues. Auto-merge handles it.
-    cleanup_worktree "$wt_path" "$branch"
 }
 
 handle_ticket() {
@@ -209,7 +209,7 @@ handle_ticket() {
     # Deduplicate — check for existing issues with same title
     local existing
     existing="$(gh issue list --label "refinement,needs-design" \
-        --search "$title" --json number --jq '.[0].number' 2>/dev/null || echo "")"
+        --search "in:title $title" --json number --jq '.[0].number' 2>/dev/null || echo "")"
 
     if [[ -n "$existing" ]]; then
         log "Duplicate finding, existing issue #$existing"
@@ -256,8 +256,9 @@ run_iteration() {
         cd "$wt_path" && \
         claude -p \
             --output-format json \
-            --allowedTools "Read Edit Write Bash Glob Grep" \
+            --tools "Read Edit Write Bash Glob Grep" \
             --no-session-persistence \
+            --max-turns 50 \
             "$prompt"
     )" || claude_exit=$?
 
@@ -283,9 +284,52 @@ run_iteration() {
         end
     ' 2>/dev/null || echo "$claude_output")"
 
-    # Extract JSON object from the response text (Claude may include other text)
-    local json_block
-    json_block="$(echo "$response_text" | grep -oE '\{[^}]*"action"[^}]*\}' | head -1 || echo "")"
+    # Extract JSON object from the response text
+    # Try multiple strategies: direct parse, code fence extraction, text scanning
+    local json_block=""
+
+    # Strategy 1: response_text is already valid JSON with "action"
+    if echo "$response_text" | jq -e '.action' &>/dev/null; then
+        json_block="$(echo "$response_text" | jq -c '.')"
+    fi
+
+    # Strategy 2: JSON is inside a markdown code fence
+    if [[ -z "$json_block" ]]; then
+        json_block="$(echo "$response_text" | \
+            sed -n '/^```json/,/^```/{/^```/d;p}' | \
+            jq -c '.' 2>/dev/null || echo "")"
+        # Verify it has an action field
+        if [[ -n "$json_block" ]] && ! echo "$json_block" | jq -e '.action' &>/dev/null; then
+            json_block=""
+        fi
+    fi
+
+    # Strategy 3: scan text for a JSON object containing "action" using python
+    if [[ -z "$json_block" ]]; then
+        json_block="$(python3 -c "
+import json, re, sys
+text = sys.stdin.read()
+# Find JSON objects by matching balanced braces
+depth = 0
+start = None
+for i, c in enumerate(text):
+    if c == '{':
+        if depth == 0:
+            start = i
+        depth += 1
+    elif c == '}':
+        depth -= 1
+        if depth == 0 and start is not None:
+            try:
+                obj = json.loads(text[start:i+1])
+                if 'action' in obj:
+                    print(json.dumps(obj))
+                    sys.exit(0)
+            except json.JSONDecodeError:
+                pass
+            start = None
+" <<< "$response_text" 2>/dev/null || echo "")"
+    fi
 
     if [[ -z "$json_block" ]]; then
         log "WARNING: Could not parse JSON from Claude's response"
