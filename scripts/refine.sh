@@ -116,12 +116,16 @@ build_prompt() {
         types_section+="$(type_section "$t")"$'\n'
     done
 
-    # Substitute placeholders
-    template="${template//\{\{FOCUS_PATH\}\}/$FOCUS_PATH}"
-    template="${template//\{\{GUIDANCE_CONTENT\}\}/$guidance}"
-    template="${template//\{\{ENABLED_TYPES\}\}/$types_section}"
-
-    echo "$template"
+    # Use perl for safe substitution — bash ${//} treats & as backreference
+    # in newer versions, corrupting content like TryFrom<&str>
+    FOCUS_PATH="$FOCUS_PATH" \
+    GUIDANCE_CONTENT="$guidance" \
+    ENABLED_TYPES="$types_section" \
+    perl -0777 -p -e '
+        s/\Q{{FOCUS_PATH}}\E/$ENV{FOCUS_PATH}/g;
+        s/\Q{{GUIDANCE_CONTENT}}\E/$ENV{GUIDANCE_CONTENT}/g;
+        s/\Q{{ENABLED_TYPES}}\E/$ENV{ENABLED_TYPES}/g;
+    ' "$template_file"
 }
 
 if $DRY_RUN; then
