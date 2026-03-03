@@ -87,6 +87,8 @@ spec:
             - name: app-config
               mountPath: /etc/tc
               readOnly: true
+            - name: tmp
+              mountPath: /tmp
             {{- if .Values.cargoCache.enabled }}
             - name: cargo-cache
               mountPath: /usr/src/app/target
@@ -95,6 +97,8 @@ spec:
         - name: app-config
           configMap:
             name: {{ include "app.fullname" . }}-config
+        - name: tmp
+          emptyDir: {}
         {{- if .Values.cargoCache.enabled }}
         - name: cargo-cache
           hostPath:
