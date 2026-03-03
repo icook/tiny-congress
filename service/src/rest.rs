@@ -86,8 +86,14 @@ impl IntoResponse for ProblemDetails {
     servers(
         (url = "/api/v1", description = "REST API v1")
     ),
-    paths(get_build_info),
-    components(schemas(BuildInfo, ProblemDetails, ProblemExtensions))
+    paths(get_build_info, crate::reputation::http::create_endorsement_as_verifier),
+    components(schemas(
+        BuildInfo,
+        ProblemDetails,
+        ProblemExtensions,
+        crate::reputation::http::CreateEndorsementRequest,
+        crate::reputation::http::CreatedEndorsementResponse,
+    ))
 )]
 pub struct ApiDoc;
 

@@ -1,6 +1,5 @@
 ---
 source: service/tests/openapi_snapshot_tests.rs
-assertion_line: 12
 expression: schema
 ---
 {
@@ -51,6 +50,53 @@ expression: schema
           }
         }
       }
+    },
+    "/verifiers/endorsements": {
+      "post": {
+        "tags": [
+          "Verifiers"
+        ],
+        "summary": "Create an endorsement as an authorized verifier.",
+        "description": "Checks that the authenticated caller has the `authorized_verifier` endorsement,\nresolves the target username to an account, and creates the endorsement.\n\n# Errors\n\nReturns an error response for unauthorized, forbidden, not-found, conflict, or internal errors.",
+        "operationId": "create_endorsement_as_verifier",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateEndorsementRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Endorsement created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreatedEndorsementResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Not an authorized verifier"
+          },
+          "404": {
+            "description": "User not found"
+          },
+          "409": {
+            "description": "Duplicate endorsement"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -77,6 +123,52 @@ expression: schema
             ]
           },
           "version": {
+            "type": "string"
+          }
+        }
+      },
+      "CreateEndorsementRequest": {
+        "type": "object",
+        "required": [
+          "username",
+          "topic"
+        ],
+        "properties": {
+          "evidence": {},
+          "topic": {
+            "type": "string"
+          },
+          "username": {
+            "type": "string"
+          }
+        }
+      },
+      "CreatedEndorsementResponse": {
+        "type": "object",
+        "required": [
+          "id",
+          "subject_id",
+          "topic",
+          "issuer_id",
+          "created_at"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "issuer_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "subject_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "topic": {
             "type": "string"
           }
         }

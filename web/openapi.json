@@ -1,3 +1,38 @@
+   Compiling tokio v1.48.0
+   Compiling futures-util v0.3.31
+   Compiling num-traits v0.2.19
+   Compiling rustls v0.23.35
+   Compiling tokio-stream v0.1.17
+   Compiling either v1.15.0
+   Compiling ed25519-dalek v2.2.0
+   Compiling tc-crypto v0.1.0 (/Users/icook/tiny-congress-4/crates/tc-crypto)
+   Compiling sqlx-core v0.8.6
+   Compiling chrono v0.4.42
+   Compiling ordered-float v2.10.1
+   Compiling atoi v2.0.0
+   Compiling serde-value v0.7.0
+   Compiling serde-aux v4.7.0
+   Compiling multer v3.1.0
+   Compiling async-graphql v7.0.17
+   Compiling sqlx-postgres v0.8.6
+   Compiling hyper v1.8.1
+   Compiling tower v0.5.2
+   Compiling tokio-tungstenite v0.28.0
+   Compiling tokio-rustls v0.26.4
+   Compiling tokio-util v0.7.17
+   Compiling tower-http v0.6.8
+   Compiling hyper-util v0.1.19
+   Compiling axum v0.8.7
+   Compiling hyper-rustls v0.27.7
+   Compiling sqlx-macros-core v0.8.6
+   Compiling reqwest v0.12.28
+   Compiling sqlx-macros v0.8.6
+   Compiling sqlx v0.8.6
+   Compiling utoipa-swagger-ui v9.0.2
+   Compiling async-graphql-axum v7.0.17
+   Compiling tinycongress-api v0.1.0 (/Users/icook/tiny-congress-4/service)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 15.69s
+     Running `/Users/icook/tiny-congress-4/target/debug/export_openapi`
 {
   "openapi": "3.1.0",
   "info": {
@@ -46,6 +81,53 @@
           }
         }
       }
+    },
+    "/verifiers/endorsements": {
+      "post": {
+        "tags": [
+          "Verifiers"
+        ],
+        "summary": "Create an endorsement as an authorized verifier.",
+        "description": "Checks that the authenticated caller has the `authorized_verifier` endorsement,\nresolves the target username to an account, and creates the endorsement.\n\n# Errors\n\nReturns an error response for unauthorized, forbidden, not-found, conflict, or internal errors.",
+        "operationId": "create_endorsement_as_verifier",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateEndorsementRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Endorsement created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreatedEndorsementResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Not an authorized verifier"
+          },
+          "404": {
+            "description": "User not found"
+          },
+          "409": {
+            "description": "Duplicate endorsement"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -72,6 +154,52 @@
             ]
           },
           "version": {
+            "type": "string"
+          }
+        }
+      },
+      "CreateEndorsementRequest": {
+        "type": "object",
+        "required": [
+          "username",
+          "topic"
+        ],
+        "properties": {
+          "evidence": {},
+          "topic": {
+            "type": "string"
+          },
+          "username": {
+            "type": "string"
+          }
+        }
+      },
+      "CreatedEndorsementResponse": {
+        "type": "object",
+        "required": [
+          "id",
+          "subject_id",
+          "topic",
+          "issuer_id",
+          "created_at"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "issuer_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "subject_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "topic": {
             "type": "string"
           }
         }

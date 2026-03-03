@@ -13,6 +13,7 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
+use utoipa::ToSchema;
 use uuid::Uuid;
 
 use super::service::{EndorsementError, EndorsementService};
@@ -43,7 +44,7 @@ pub struct HasEndorsementResponse {
 
 // ─── Verifier endpoint types ──────────────────────────────────────────────
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct CreateEndorsementRequest {
     pub username: String,
     pub topic: String,
@@ -51,7 +52,7 @@ pub struct CreateEndorsementRequest {
     pub evidence: Option<serde_json::Value>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct CreatedEndorsementResponse {
     pub id: Uuid,
     pub subject_id: Uuid,
@@ -153,6 +154,24 @@ async fn check_endorsement(
 ///
 /// Checks that the authenticated caller has the `authorized_verifier` endorsement,
 /// resolves the target username to an account, and creates the endorsement.
+///
+/// # Errors
+///
+/// Returns an error response for unauthorized, forbidden, not-found, conflict, or internal errors.
+#[utoipa::path(
+    post,
+    path = "/verifiers/endorsements",
+    tag = "Verifiers",
+    request_body = CreateEndorsementRequest,
+    responses(
+        (status = 201, description = "Endorsement created", body = CreatedEndorsementResponse),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Not an authorized verifier"),
+        (status = 404, description = "User not found"),
+        (status = 409, description = "Duplicate endorsement"),
+        (status = 500, description = "Internal server error")
+    )
+)]
 async fn create_endorsement_as_verifier(
     Extension(endorsement_service): Extension<Arc<dyn EndorsementService>>,
     Extension(pool): Extension<PgPool>,
