@@ -84,10 +84,18 @@ deploy:
             enabled: true
         # CORS origins use overrides (not setValues) because Helm --set
         # misparses commas and colons in URLs.
-        # Dev frontend (Vite) runs as root — relax security context for local dev.
+        # Dev images run as root — relax security context for local dev.
         overrides:
           cors:
             allowedOrigins: "http://localhost:5173,http://127.0.0.1:5173"
+          podSecurityContext:
+            runAsNonRoot: false
+          securityContext:
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
           frontend:
             podSecurityContext:
               runAsNonRoot: false
