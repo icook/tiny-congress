@@ -8,6 +8,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use serde::Deserialize;
 use tc_crypto::{decode_base64url, verify_ed25519, BackupEnvelope, Kid};
+use uuid::Uuid;
 
 use super::repo::{
     AccountRepoError, BackupRepoError, CreateSignupError, DeviceKeyRepoError, IdentityRepo,
@@ -45,6 +46,52 @@ pub struct SignupRequest {
     pub root_pubkey: String, // base64url encoded
     pub backup: SignupBackup,
     pub device: SignupDevice,
+}
+
+// ─── Login request types ────────────────────────────────────────────────────
+
+/// Login request payload passed from the HTTP layer to the service for validation and processing.
+#[derive(Debug)]
+pub struct LoginRequest {
+    pub username: String,
+    pub device_pubkey: String,
+    pub device_name: String,
+    pub certificate: String,
+}
+
+/// Successful login result.
+#[derive(Debug)]
+pub struct LoginResult {
+    pub account_id: Uuid,
+    pub root_kid: Kid,
+    pub device_kid: Kid,
+}
+
+/// Errors from the login flow.
+#[derive(Debug, thiserror::Error)]
+pub enum LoginError {
+    #[error("Username cannot be empty")]
+    EmptyUsername,
+    #[error("{0}")]
+    InvalidDeviceName(String),
+    #[error("Invalid base64url encoding for pubkey")]
+    InvalidPubkeyEncoding,
+    #[error("pubkey must be 32 bytes (Ed25519)")]
+    InvalidPubkeyLength,
+    #[error("Invalid base64url encoding for certificate")]
+    InvalidCertEncoding,
+    #[error("certificate must be 64 bytes (Ed25519 signature)")]
+    InvalidCertLength,
+    #[error("Account not found")]
+    AccountNotFound,
+    #[error("Invalid device certificate")]
+    InvalidCertificate,
+    #[error("Device key already registered")]
+    DuplicateDevice,
+    #[error("Maximum device limit reached")]
+    MaxDevicesReached,
+    #[error("Internal error")]
+    Internal,
 }
 
 // ─── Domain error type ──────────────────────────────────────────────────────
@@ -191,10 +238,11 @@ impl DeviceName {
 
 // ─── Service trait and implementation ────────────────────────────────────────
 
-/// Orchestrates the multi-step signup operation: validation + atomic persistence.
+/// Orchestrates identity operations: validation + atomic persistence.
 #[async_trait]
 pub trait IdentityService: Send + Sync {
     async fn signup(&self, req: &SignupRequest) -> Result<SignupResult, SignupError>;
+    async fn login(&self, req: LoginRequest) -> Result<LoginResult, LoginError>;
 }
 
 /// Production implementation — validates all fields then delegates to [`IdentityRepo`].
@@ -343,6 +391,104 @@ impl IdentityService for DefaultIdentityService {
             .await
             .map_err(map_signup_error)
     }
+
+    async fn login(&self, req: LoginRequest) -> Result<LoginResult, LoginError> {
+        // Login only checks for empty (not the full validate_username() like signup):
+        // returning a uniform "account not found" for any invalid format avoids
+        // leaking which username formats exist in the system.
+        let username = req.username.trim();
+        if username.is_empty() {
+            return Err(LoginError::EmptyUsername);
+        }
+
+        // Decode and validate device public key
+        let device_pubkey_bytes =
+            decode_base64url(&req.device_pubkey).map_err(|_| LoginError::InvalidPubkeyEncoding)?;
+        if device_pubkey_bytes.len() != 32 {
+            return Err(LoginError::InvalidPubkeyLength);
+        }
+
+        // Validate device name
+        let device_name = DeviceName::parse(&req.device_name)
+            .map_err(|e| LoginError::InvalidDeviceName(e.to_string()))?;
+
+        // Decode and validate certificate
+        let cert_bytes =
+            decode_base64url(&req.certificate).map_err(|_| LoginError::InvalidCertEncoding)?;
+        let cert_arr: [u8; 64] = cert_bytes
+            .as_slice()
+            .try_into()
+            .map_err(|_| LoginError::InvalidCertLength)?;
+
+        // Look up account by username
+        let account = self
+            .repo
+            .get_account_by_username(username)
+            .await
+            .map_err(|e| match e {
+                AccountRepoError::NotFound => LoginError::AccountNotFound,
+                // DuplicateUsername and DuplicateKey are structurally unreachable from
+                // get_account_by_username (only returned by create_account), but we must
+                // handle them exhaustively. Treat as internal errors like Database.
+                AccountRepoError::Database(db_err) => {
+                    tracing::error!("Login account lookup failed: {db_err}");
+                    LoginError::Internal
+                }
+                AccountRepoError::DuplicateUsername | AccountRepoError::DuplicateKey => {
+                    tracing::error!("Unexpected repo error during login account lookup: {e}");
+                    LoginError::Internal
+                }
+            })?;
+
+        // Decode root pubkey from stored account
+        let root_pubkey_bytes = decode_base64url(&account.root_pubkey).map_err(|_| {
+            tracing::error!("Corrupted root pubkey for account {}", account.id);
+            LoginError::Internal
+        })?;
+        let root_pubkey_arr: [u8; 32] = root_pubkey_bytes.as_slice().try_into().map_err(|_| {
+            tracing::error!("Corrupted root pubkey length for account {}", account.id);
+            LoginError::Internal
+        })?;
+
+        // Verify the certificate: root key must have signed the device public key.
+        verify_ed25519(&root_pubkey_arr, &device_pubkey_bytes, &cert_arr)
+            .map_err(|_| LoginError::InvalidCertificate)?;
+
+        let device_kid = Kid::derive(&device_pubkey_bytes);
+
+        // Create device key via repo
+        let created = self
+            .repo
+            .create_device_key(
+                account.id,
+                &device_kid,
+                &req.device_pubkey,
+                device_name.as_str(),
+                &cert_bytes,
+            )
+            .await
+            .map_err(|e| match e {
+                DeviceKeyRepoError::DuplicateKid => LoginError::DuplicateDevice,
+                DeviceKeyRepoError::MaxDevicesReached => LoginError::MaxDevicesReached,
+                // NotFound and AlreadyRevoked are structurally unreachable from
+                // create_device_key (only returned by get/revoke/rename/touch),
+                // but we must handle them exhaustively.
+                DeviceKeyRepoError::NotFound | DeviceKeyRepoError::AlreadyRevoked => {
+                    tracing::error!("Unexpected repo error during login device key creation: {e}");
+                    LoginError::Internal
+                }
+                DeviceKeyRepoError::Database(db_err) => {
+                    tracing::error!("Login device key creation failed: {db_err}");
+                    LoginError::Internal
+                }
+            })?;
+
+        Ok(LoginResult {
+            account_id: account.id,
+            root_kid: account.root_kid,
+            device_kid: created.device_kid,
+        })
+    }
 }
 
 // ─── Mock for handler tests ──────────────────────────────────────────────────
@@ -352,7 +498,10 @@ impl IdentityService for DefaultIdentityService {
 pub mod mock {
     //! Mock identity service for HTTP handler unit tests.
 
-    use super::{async_trait, IdentityService, SignupError, SignupRequest, SignupResult};
+    use super::{
+        async_trait, IdentityService, LoginError, LoginRequest, LoginResult, SignupError,
+        SignupRequest, SignupResult,
+    };
     use std::sync::Mutex;
     use tc_crypto::Kid;
     use uuid::Uuid;
@@ -363,6 +512,7 @@ pub mod mock {
     /// This mock is for handler tests that need to verify HTTP status code mapping.
     pub struct MockIdentityService {
         pub signup_result: Mutex<Option<Result<SignupResult, SignupError>>>,
+        pub login_result: Mutex<Option<Result<LoginResult, LoginError>>>,
     }
 
     impl MockIdentityService {
@@ -370,6 +520,7 @@ pub mod mock {
         pub const fn new() -> Self {
             Self {
                 signup_result: Mutex::new(None),
+                login_result: Mutex::new(None),
             }
         }
 
@@ -393,6 +544,15 @@ pub mod mock {
         pub fn set_signup_result(&self, result: Result<SignupResult, SignupError>) {
             *self.signup_result.lock().expect("lock poisoned") = Some(result);
         }
+
+        /// Set the result that `login()` will return.
+        ///
+        /// # Panics
+        ///
+        /// Panics if the internal mutex is poisoned.
+        pub fn set_login_result(&self, result: Result<LoginResult, LoginError>) {
+            *self.login_result.lock().expect("lock poisoned") = Some(result);
+        }
     }
 
     impl Default for MockIdentityService {
@@ -410,6 +570,20 @@ pub mod mock {
                 .take()
                 .unwrap_or_else(|| {
                     Ok(SignupResult {
+                        account_id: Uuid::new_v4(),
+                        root_kid: Kid::derive(&[0u8; 32]),
+                        device_kid: Kid::derive(&[1u8; 32]),
+                    })
+                })
+        }
+
+        async fn login(&self, _req: LoginRequest) -> Result<LoginResult, LoginError> {
+            self.login_result
+                .lock()
+                .expect("lock poisoned")
+                .take()
+                .unwrap_or_else(|| {
+                    Ok(LoginResult {
                         account_id: Uuid::new_v4(),
                         root_kid: Kid::derive(&[0u8; 32]),
                         device_kid: Kid::derive(&[1u8; 32]),
@@ -692,5 +866,156 @@ mod tests {
             }
             other => panic!("expected Internal, got: {other:?}"),
         }
+    }
+
+    // ── Login validation tests ──────────────────────────────────────────────
+
+    use crate::identity::repo::AccountRecord;
+
+    fn valid_login_request() -> (LoginRequest, AccountRecord) {
+        let root_signing_key = SigningKey::generate(&mut OsRng);
+        let root_pubkey_bytes = root_signing_key.verifying_key().to_bytes();
+
+        let device_signing_key = SigningKey::generate(&mut OsRng);
+        let device_pubkey_bytes = device_signing_key.verifying_key().to_bytes();
+
+        let certificate_sig = root_signing_key.sign(&device_pubkey_bytes);
+
+        let root_pubkey = encode_base64url(&root_pubkey_bytes);
+
+        let account = AccountRecord {
+            id: Uuid::new_v4(),
+            username: "alice".to_string(),
+            root_pubkey,
+            root_kid: Kid::derive(&root_pubkey_bytes),
+        };
+
+        let req = LoginRequest {
+            username: "alice".to_string(),
+            device_pubkey: encode_base64url(&device_pubkey_bytes),
+            device_name: "Test Device".to_string(),
+            certificate: encode_base64url(&certificate_sig.to_bytes()),
+        };
+
+        (req, account)
+    }
+
+    #[tokio::test]
+    async fn test_login_empty_username() {
+        let svc = service_with_mock_repo();
+        let req = LoginRequest {
+            username: "  ".to_string(),
+            device_pubkey: String::new(),
+            device_name: String::new(),
+            certificate: String::new(),
+        };
+        let err = svc.login(req).await.unwrap_err();
+        assert!(matches!(err, LoginError::EmptyUsername));
+    }
+
+    #[tokio::test]
+    async fn test_login_invalid_device_name() {
+        let svc = service_with_mock_repo();
+
+        let req = LoginRequest {
+            username: "alice".to_string(),
+            device_pubkey: encode_base64url(&[1u8; 32]),
+            device_name: "   ".to_string(),
+            certificate: encode_base64url(&[0u8; 64]),
+        };
+        let err = svc.login(req).await.unwrap_err();
+        assert!(matches!(err, LoginError::InvalidDeviceName(_)));
+    }
+
+    #[tokio::test]
+    async fn test_login_invalid_pubkey() {
+        let svc = service_with_mock_repo();
+
+        let req = LoginRequest {
+            username: "alice".to_string(),
+            device_pubkey: "!!!not-base64!!!".to_string(),
+            device_name: "Test Device".to_string(),
+            certificate: encode_base64url(&[0u8; 64]),
+        };
+        let err = svc.login(req).await.unwrap_err();
+        assert!(matches!(err, LoginError::InvalidPubkeyEncoding));
+    }
+
+    #[tokio::test]
+    async fn test_login_invalid_pubkey_length() {
+        let svc = service_with_mock_repo();
+
+        let req = LoginRequest {
+            username: "alice".to_string(),
+            device_pubkey: encode_base64url(&[1u8; 16]),
+            device_name: "Test Device".to_string(),
+            certificate: encode_base64url(&[0u8; 64]),
+        };
+        let err = svc.login(req).await.unwrap_err();
+        assert!(matches!(err, LoginError::InvalidPubkeyLength));
+    }
+
+    #[tokio::test]
+    async fn test_login_invalid_certificate() {
+        let (mut req, account) = valid_login_request();
+        req.certificate = encode_base64url(&[0xFFu8; 64]);
+
+        let repo = MockIdentityRepo::new();
+        repo.set_account_by_username_result(Ok(account));
+        let svc = DefaultIdentityService::new(Arc::new(repo));
+
+        let err = svc.login(req).await.unwrap_err();
+        assert!(matches!(err, LoginError::InvalidCertificate));
+    }
+
+    #[tokio::test]
+    async fn test_login_account_not_found() {
+        let svc = service_with_mock_repo();
+        let req = LoginRequest {
+            username: "nonexistent".to_string(),
+            device_pubkey: encode_base64url(&[1u8; 32]),
+            device_name: "Test Device".to_string(),
+            certificate: encode_base64url(&[0u8; 64]),
+        };
+        let err = svc.login(req).await.unwrap_err();
+        assert!(matches!(err, LoginError::AccountNotFound));
+    }
+
+    #[tokio::test]
+    async fn test_login_valid_request_succeeds() {
+        let (req, account) = valid_login_request();
+
+        let repo = MockIdentityRepo::new();
+        repo.set_account_by_username_result(Ok(account));
+        let svc = DefaultIdentityService::new(Arc::new(repo));
+
+        let result = svc.login(req).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_login_duplicate_device_maps_correctly() {
+        let (req, account) = valid_login_request();
+
+        let repo = MockIdentityRepo::new();
+        repo.set_account_by_username_result(Ok(account));
+        repo.set_create_device_key_error(DeviceKeyRepoError::DuplicateKid);
+        let svc = DefaultIdentityService::new(Arc::new(repo));
+
+        let err = svc.login(req).await.unwrap_err();
+        assert!(matches!(err, LoginError::DuplicateDevice));
+    }
+
+    #[tokio::test]
+    async fn test_login_max_devices_maps_correctly() {
+        let (req, account) = valid_login_request();
+
+        let repo = MockIdentityRepo::new();
+        repo.set_account_by_username_result(Ok(account));
+        repo.set_create_device_key_error(DeviceKeyRepoError::MaxDevicesReached);
+        let svc = DefaultIdentityService::new(Arc::new(repo));
+
+        let err = svc.login(req).await.unwrap_err();
+        assert!(matches!(err, LoginError::MaxDevicesReached));
     }
 }
