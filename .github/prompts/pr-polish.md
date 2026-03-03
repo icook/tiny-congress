@@ -40,6 +40,11 @@ Read the full PR diff using `gh pr diff`. Fix issues that are **unambiguously wr
 - **Trailing whitespace, missing newlines at EOF**
 - **Dead code introduced by this PR:** New `todo!()`, new unreachable branches, new commented-out code. Do not remove pre-existing dead code.
 - **Lint violations** that have a single correct fix (e.g., `clippy::needless_return`, `clippy::redundant_clone`, unused variables with `_` prefix missing)
+- **Accessibility on interactive elements:** When a PR adds a clickable element (`onClick`) without keyboard accessibility, add `role="button"`, `tabIndex={0}`, and an `onKeyDown` handler for Enter/Space that calls the same handler. When `data-testid` is on a non-interactive child but the click handler is on a parent wrapper, move the testid to the interactive element. Only fix elements introduced in the PR diff.
+- **Unused variables and dead bindings:** Remove destructured variables that are never read in TypeScript (e.g., `const { isLoading, data } = useQuery(...)` where `isLoading` is unused — drop it from the destructuring). This extends the existing "unused imports" rule to unused local bindings.
+- **Comment/code mismatches:** When a comment makes a factual claim that is provably wrong given the adjacent code (e.g., "returns `i32`" when the signature returns `u64`, or "both MIN and MAX overflow" when only MIN does), rewrite the comment to match the code. Never change code to match a comment. If the discrepancy could indicate a bug in the code rather than an outdated comment, flag it in Phase 2 instead.
+- **Doc precision:** Fix factual inaccuracies in doc comments — wrong units (chars vs bytes for `str::len()`), wrong types, wrong return values — but only when the correct answer is unambiguous from the function signature or body.
+- **Consistent build recipe dependencies:** When a justfile recipe operates on frontend assets but is missing the `_ensure-frontend-deps` dependency that sibling recipes use, add it. Apply the same pattern for any standard dependency that every recipe of a given type uses.
 
 ### How to Fix
 
