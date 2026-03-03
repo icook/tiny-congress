@@ -137,14 +137,18 @@ async fn build_app(
         as Arc<dyn EndorsementService>;
     let reputation_repo_ext = reputation_repo as Arc<dyn ReputationRepo>;
 
-    // Bootstrap verifier accounts from config (replaced in Task 6 with config-driven bootstrap)
-    let idme_verifier_account_id = if config.idme.is_some() {
-        // Temporary bridge: create "idme" verifier as a real account with a genesis endorsement.
-        // This will be replaced by the config-driven bootstrap in Task 6.
-        let account_id = reputation::bootstrap::bootstrap_idme_verifier_account(&pool)
+    // Bootstrap configured verifier accounts
+    let bootstrapped_verifiers =
+        reputation::bootstrap::bootstrap_verifiers(&pool, &config.verifiers)
             .await
-            .map_err(|e| anyhow::anyhow!("Failed to bootstrap ID.me verifier: {e}"))?;
-        Some(account_id)
+            .map_err(|e| anyhow::anyhow!("Failed to bootstrap verifiers: {e}"))?;
+
+    // Find the ID.me verifier account ID if ID.me is configured
+    let idme_verifier_account_id = if config.idme.is_some() {
+        bootstrapped_verifiers
+            .iter()
+            .find(|v| v.name == "idme")
+            .map(|v| v.account_id)
     } else {
         None
     };

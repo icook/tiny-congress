@@ -7,54 +7,81 @@
 use sqlx::PgPool;
 use uuid::Uuid;
 
-/// Temporary bootstrap for the ID.me verifier as a real account.
-///
-/// Creates a service account named "idme" if it doesn't already exist,
-/// and ensures it has an `authorized_verifier` genesis endorsement.
-///
-/// This will be replaced by config-driven bootstrap in a later task.
+use crate::config::VerifierConfig;
+
+pub struct BootstrappedVerifier {
+    pub name: String,
+    pub account_id: Uuid,
+}
+
+/// Bootstrap all configured verifiers. Idempotent — safe to call on every startup.
 ///
 /// # Errors
 ///
-/// Returns an error if the database operations fail.
-pub async fn bootstrap_idme_verifier_account(pool: &PgPool) -> Result<Uuid, anyhow::Error> {
-    // Generate a deterministic-ish keypair placeholder for the service account.
-    // In the config-driven version, this comes from TC_VERIFIERS config.
-    let name = "idme";
+/// Returns an error if any database operation fails.
+pub async fn bootstrap_verifiers(
+    pool: &PgPool,
+    verifiers: &[VerifierConfig],
+) -> Result<Vec<BootstrappedVerifier>, anyhow::Error> {
+    let mut result = Vec::with_capacity(verifiers.len());
 
-    // Try to find existing account by username
-    let existing = sqlx::query_scalar::<_, Uuid>("SELECT id FROM accounts WHERE username = $1")
-        .bind(name)
+    for v in verifiers {
+        let account_id = ensure_verifier_account(pool, &v.name, &v.public_key).await?;
+        ensure_authorized_verifier_endorsement(pool, account_id).await?;
+        tracing::info!(name = %v.name, account_id = %account_id, "Verifier bootstrapped");
+        result.push(BootstrappedVerifier {
+            name: v.name.clone(),
+            account_id,
+        });
+    }
+
+    Ok(result)
+}
+
+/// Ensure an account exists for this verifier. Returns the `account_id`.
+async fn ensure_verifier_account(
+    pool: &PgPool,
+    name: &str,
+    public_key: &str,
+) -> Result<Uuid, anyhow::Error> {
+    // Decode and derive KID from public key
+    let pubkey_bytes = tc_crypto::decode_base64url(public_key)
+        .map_err(|e| anyhow::anyhow!("Invalid verifier public key for {name}: {e}"))?;
+    let kid = tc_crypto::Kid::derive(&pubkey_bytes);
+
+    // Try to find existing account by root_kid
+    let existing = sqlx::query_scalar::<_, Uuid>("SELECT id FROM accounts WHERE root_kid = $1")
+        .bind(kid.as_str())
         .fetch_optional(pool)
         .await?;
 
-    let account_id = if let Some(id) = existing {
-        id
-    } else {
-        // Create a placeholder service account.
-        // The root_pubkey and root_kid are placeholders — the config-driven
-        // bootstrap (Task 6) will use real keys from TC_VERIFIERS config.
-        let id = Uuid::new_v4();
-        let placeholder_pubkey = tc_crypto::encode_base64url(&[0u8; 32]);
-        let placeholder_kid = tc_crypto::Kid::derive(&[0u8; 32]);
+    if let Some(id) = existing {
+        return Ok(id);
+    }
 
-        sqlx::query(
-            r"INSERT INTO accounts (id, username, root_pubkey, root_kid)
-              VALUES ($1, $2, $3, $4)
-              ON CONFLICT (username) DO UPDATE SET username = EXCLUDED.username
-              RETURNING id",
-        )
-        .bind(id)
-        .bind(name)
-        .bind(&placeholder_pubkey)
-        .bind(placeholder_kid.as_str())
-        .execute(pool)
-        .await?;
+    // Create new account
+    let id = Uuid::new_v4();
+    sqlx::query(
+        r"INSERT INTO accounts (id, username, root_pubkey, root_kid)
+          VALUES ($1, $2, $3, $4)
+          ON CONFLICT (username) DO UPDATE SET username = EXCLUDED.username
+          RETURNING id",
+    )
+    .bind(id)
+    .bind(name)
+    .bind(public_key)
+    .bind(kid.as_str())
+    .execute(pool)
+    .await?;
 
-        id
-    };
+    Ok(id)
+}
 
-    // Ensure authorized_verifier endorsement exists (genesis, NULL issuer)
+/// Ensure the account has an `authorized_verifier` endorsement (genesis, NULL issuer).
+async fn ensure_authorized_verifier_endorsement(
+    pool: &PgPool,
+    account_id: Uuid,
+) -> Result<(), anyhow::Error> {
     sqlx::query(
         r"INSERT INTO reputation__endorsements (id, subject_id, topic, issuer_id)
           VALUES (gen_random_uuid(), $1, 'authorized_verifier', NULL)
@@ -64,6 +91,5 @@ pub async fn bootstrap_idme_verifier_account(pool: &PgPool) -> Result<Uuid, anyh
     .execute(pool)
     .await?;
 
-    tracing::info!(account_id = %account_id, "ID.me verifier account bootstrapped");
-    Ok(account_id)
+    Ok(())
 }

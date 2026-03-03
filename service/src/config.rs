@@ -34,6 +34,20 @@ pub struct Config {
     /// ID.me OAuth configuration. Optional — verification is disabled when absent.
     #[serde(default)]
     pub idme: Option<IdMeConfig>,
+    /// Platform verifiers bootstrapped at startup. Each entry creates an account
+    /// (if missing) and grants the `authorized_verifier` endorsement.
+    /// Set via `TC_VERIFIERS` as a JSON array.
+    #[serde(default)]
+    pub verifiers: Vec<VerifierConfig>,
+}
+
+/// Configuration for a platform-bootstrapped verifier account.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct VerifierConfig {
+    /// Username for the verifier account.
+    pub name: String,
+    /// Base64url-encoded Ed25519 public key (root key for the verifier account).
+    pub public_key: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -316,6 +330,7 @@ impl Default for Config {
             swagger: SwaggerConfig::default(),
             synthetic_backup_key: String::new(),
             idme: None,
+            verifiers: Vec::new(),
         }
     }
 }
