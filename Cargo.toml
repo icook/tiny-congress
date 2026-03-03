@@ -45,10 +45,6 @@ similar_names = "allow"
 # - string_slice: Legitimate use for debug truncation (url[..20])
 # - arithmetic_side_effects: Too strict for general application code
 
-[workspace.lints.rust]
-# Require documentation on public items
-missing_docs = "warn"
-
 [workspace.lints.rustdoc]
 # Catch broken documentation links
 broken_intra_doc_links = "warn"
