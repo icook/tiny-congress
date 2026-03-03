@@ -18,7 +18,8 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use super::service::{IdentityService, SignupError, SignupRequest};
-use tc_crypto::Kid;
+use crate::identity::repo::AccountRecord;
+use tc_crypto::{decode_base64url, Kid};
 
 /// Signup response
 #[derive(Debug, Serialize, Deserialize)]
@@ -90,6 +91,26 @@ pub(crate) fn internal_error() -> axum::response::Response {
         }),
     )
         .into_response()
+}
+
+/// Decode the stored base64url root public key from an account record into raw bytes.
+///
+/// Both the login and add-device flows look up the root pubkey from the account record
+/// to verify a certificate. This helper consolidates the decode-and-check so both
+/// callers handle corruption identically.
+#[allow(clippy::result_large_err)]
+pub(crate) fn decode_account_root_pubkey(
+    account: &AccountRecord,
+) -> Result<[u8; 32], axum::response::Response> {
+    let Ok(bytes) = decode_base64url(&account.root_pubkey) else {
+        tracing::error!("Corrupted root pubkey for account {}", account.id);
+        return Err(internal_error());
+    };
+    let Ok(arr): Result<[u8; 32], _> = bytes.as_slice().try_into() else {
+        tracing::error!("Corrupted root pubkey length for account {}", account.id);
+        return Err(internal_error());
+    };
+    Ok(arr)
 }
 
 /// Handle signup request — delegates validation and persistence to [`IdentityService`].
@@ -301,5 +322,38 @@ mod tests {
         assert!(body_str.contains("Internal server error"));
         assert!(!body_str.contains("secret_password"));
         assert!(!body_str.contains("db-host"));
+    }
+
+    // ── Helper: decode_account_root_pubkey ─────────────────────────────────
+
+    fn test_account_record(root_pubkey: &str) -> AccountRecord {
+        AccountRecord {
+            id: Uuid::nil(),
+            username: "testuser".to_string(),
+            root_pubkey: root_pubkey.to_string(),
+            root_kid: Kid::derive(&[0u8; 32]),
+        }
+    }
+
+    #[test]
+    fn test_decode_account_root_pubkey_valid() {
+        use tc_crypto::encode_base64url;
+        let bytes = [1u8; 32];
+        let account = test_account_record(&encode_base64url(&bytes));
+        assert_eq!(decode_account_root_pubkey(&account).unwrap(), bytes);
+    }
+
+    #[test]
+    fn test_decode_account_root_pubkey_invalid_base64() {
+        let account = test_account_record("!!!not-base64!!!");
+        assert!(decode_account_root_pubkey(&account).is_err());
+    }
+
+    #[test]
+    fn test_decode_account_root_pubkey_wrong_length() {
+        use tc_crypto::encode_base64url;
+        let short = encode_base64url(&[1u8; 16]); // 16 bytes, not 32
+        let account = test_account_record(&short);
+        assert!(decode_account_root_pubkey(&account).is_err());
     }
 }

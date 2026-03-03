@@ -181,14 +181,7 @@ async fn validate_add_device_request(
         }
     };
 
-    let Ok(root_pubkey_bytes) = decode_base64url(&account.root_pubkey) else {
-        tracing::error!("Corrupted root pubkey for account {account_id}");
-        return Err(super::internal_error());
-    };
-    let Ok(root_pubkey_arr): Result<[u8; 32], _> = root_pubkey_bytes.as_slice().try_into() else {
-        tracing::error!("Corrupted root pubkey length for account {account_id}");
-        return Err(super::internal_error());
-    };
+    let root_pubkey_arr = super::decode_account_root_pubkey(&account)?;
 
     if verify_ed25519(&root_pubkey_arr, device_pubkey.as_bytes(), &cert_arr).is_err() {
         return Err(super::bad_request("Invalid device certificate"));
