@@ -28,6 +28,31 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/verifiers/endorsements': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Create an endorsement as an authorized verifier.
+     * @description Checks that the authenticated caller has the `authorized_verifier` endorsement,
+     *     resolves the target username to an account, and creates the endorsement.
+     *
+     *     # Errors
+     *
+     *     Returns an error response for unauthorized, forbidden, not-found, conflict, or internal errors.
+     */
+    post: operations['create_endorsement_as_verifier'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -38,6 +63,21 @@ export interface components {
       gitSha: string;
       message?: string | null;
       version: string;
+    };
+    CreateEndorsementRequest: {
+      evidence?: unknown;
+      topic: string;
+      username: string;
+    };
+    CreatedEndorsementResponse: {
+      created_at: string;
+      /** Format: uuid */
+      id: string;
+      /** Format: uuid */
+      issuer_id: string;
+      /** Format: uuid */
+      subject_id: string;
+      topic: string;
     };
     /** @description RFC 7807 Problem Details error response. */
     ProblemDetails: {
@@ -98,6 +138,65 @@ export interface operations {
         content: {
           'application/json': components['schemas']['ProblemDetails'];
         };
+      };
+    };
+  };
+  create_endorsement_as_verifier: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CreateEndorsementRequest'];
+      };
+    };
+    responses: {
+      /** @description Endorsement created */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CreatedEndorsementResponse'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Not an authorized verifier */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description User not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Duplicate endorsement */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Internal server error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
       };
     };
   };
