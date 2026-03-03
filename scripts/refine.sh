@@ -94,6 +94,7 @@ SECTION
 }
 
 build_prompt() {
+    local pending_changes="${1:-}"
     local template_file="$SCRIPT_DIR/refine-prompt.md"
     if [[ ! -f "$template_file" ]]; then
         log "ERROR: Prompt template not found at $template_file"
@@ -114,21 +115,64 @@ build_prompt() {
         types_section+="$(type_section "$t")"$'\n'
     done
 
+    # Build pending changes section
+    local pending_section=""
+    if [[ -n "$pending_changes" ]]; then
+        pending_section="The following improvements are already in-progress (open PRs). Do NOT re-implement these:
+
+$pending_changes
+Find a DIFFERENT improvement instead."
+    else
+        pending_section="No pending refinement PRs."
+    fi
+
     # Use perl for safe substitution — bash ${//} treats & as backreference
     # in newer versions, corrupting content like TryFrom<&str>
     FOCUS_PATH="$FOCUS_PATH" \
     GUIDANCE_CONTENT="$guidance" \
     ENABLED_TYPES="$types_section" \
+    PENDING_CHANGES="$pending_section" \
     perl -0777 -p -e '
         s/\Q{{FOCUS_PATH}}\E/$ENV{FOCUS_PATH}/g;
         s/\Q{{GUIDANCE_CONTENT}}\E/$ENV{GUIDANCE_CONTENT}/g;
         s/\Q{{ENABLED_TYPES}}\E/$ENV{ENABLED_TYPES}/g;
+        s/\Q{{PENDING_CHANGES}}\E/$ENV{PENDING_CHANGES}/g;
     ' "$template_file"
+}
+
+# ── Pending PR deduplication ───────────────────────────────────────
+
+# Gather open refinement PRs as a markdown list for inclusion in the prompt.
+# Claude sees the PR titles and avoids rediscovering the same issues.
+# Titles are sanitized (whitespace collapsed, truncated) to prevent prompt injection.
+get_pending_pr_summary() {
+    local prs
+    local gh_exit=0
+    prs="$(gh pr list --label "refinement" --state open \
+        --json number,title \
+        --jq '.[] | "- #\(.number): \(.title)"' 2>/dev/null)" || gh_exit=$?
+
+    if [[ $gh_exit -ne 0 ]]; then
+        log "WARNING: gh pr list failed (exit $gh_exit), skipping deduplication"
+        echo ""
+        return 0
+    fi
+
+    if [[ -z "$prs" ]]; then
+        echo ""
+        return 0
+    fi
+
+    # Sanitize: collapse whitespace and cap each title to 120 chars
+    prs="$(echo "$prs" | sed 's/[[:space:]]\{1,\}/ /g' | cut -c1-120)"
+
+    log "Found $(echo "$prs" | wc -l | tr -d ' ') open refinement PR(s)"
+    echo "$prs"
 }
 
 if $DRY_RUN; then
     log "=== DRY RUN: Generated prompt ==="
-    build_prompt
+    build_prompt "$(get_pending_pr_summary)"
     exit 0
 fi
 
@@ -249,9 +293,13 @@ run_iteration() {
     git -C "$REPO_ROOT" worktree add "$wt_path" -b "$branch" --quiet
     log "Created worktree at $wt_path (branch: $branch)"
 
-    # Build prompt
+    # Query open refinement PRs so Claude avoids rediscovering the same issues
+    local pending_summary
+    pending_summary="$(get_pending_pr_summary)"
+
+    # Build prompt (includes pending PR info so Claude avoids duplicates)
     local prompt
-    prompt="$(build_prompt)"
+    prompt="$(build_prompt "$pending_summary")"
 
     # Run Claude Code in the worktree
     local claude_output
