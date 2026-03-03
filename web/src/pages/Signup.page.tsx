@@ -4,6 +4,7 @@
  */
 
 import { useState } from 'react';
+import { useNavigate } from '@tanstack/react-router';
 import {
   buildBackupEnvelope,
   generateDeviceKeyPair,
@@ -19,7 +20,8 @@ import { useDevice } from '@/providers/DeviceProvider';
 export function SignupPage() {
   const crypto = useCryptoRequired();
   const signup = useSignup();
-  const { setDevice } = useDevice();
+  const { deviceKid, setDevice } = useDevice();
+  const navigate = useNavigate();
 
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -29,6 +31,11 @@ export function SignupPage() {
     root_kid: string;
     device_kid: string;
   } | null>(null);
+
+  if (deviceKid) {
+    void navigate({ to: '/settings' });
+    return null;
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

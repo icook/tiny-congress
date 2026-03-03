@@ -35,13 +35,18 @@ import { useDevice } from '@/providers/DeviceProvider';
 export function LoginPage() {
   const crypto = useCryptoRequired();
   const loginMutation = useLogin();
-  const { setDevice } = useDevice();
+  const { deviceKid, setDevice } = useDevice();
   const navigate = useNavigate();
 
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [isGeneratingKeys, setIsGeneratingKeys] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
+
+  if (deviceKid) {
+    void navigate({ to: '/settings' });
+    return null;
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

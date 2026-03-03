@@ -3,6 +3,7 @@
  */
 
 import { IconAlertTriangle } from '@tabler/icons-react';
+import { useNavigate } from '@tanstack/react-router';
 import { Alert, Card, Loader, Stack, Text, Title } from '@mantine/core';
 import { useListDevices, useRenameDevice, useRevokeDevice } from '@/features/identity/api/queries';
 import { DeviceList } from '@/features/identity/components';
@@ -12,6 +13,7 @@ import { useDevice } from '@/providers/DeviceProvider';
 export function SettingsPage() {
   const { deviceKid, privateKey, isLoading: deviceLoading } = useDevice();
   const { crypto } = useCrypto();
+  const navigate = useNavigate();
 
   const devicesQuery = useListDevices(deviceKid, privateKey, crypto);
   const revokeMutation = useRevokeDevice(deviceKid, privateKey, crypto);
@@ -27,14 +29,8 @@ export function SettingsPage() {
   }
 
   if (!deviceKid) {
-    return (
-      <Stack gap="md" maw={800} mx="auto" mt="xl">
-        <Title order={2}>Settings</Title>
-        <Alert icon={<IconAlertTriangle size={16} />} color="yellow">
-          You need to sign up or log in to manage devices.
-        </Alert>
-      </Stack>
-    );
+    void navigate({ to: '/login' });
+    return null;
   }
 
   return (
