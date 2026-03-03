@@ -5,11 +5,15 @@ import {
   IconGauge,
   IconHome2,
   IconInfoCircle,
+  IconLogin,
+  IconLogout,
   IconMessages,
+  IconSettings,
   IconUserPlus,
 } from '@tabler/icons-react';
-import { Link, useRouterState } from '@tanstack/react-router';
+import { Link, useNavigate, useRouterState } from '@tanstack/react-router';
 import { Box, NavLink, Stack, useComputedColorScheme, useMantineTheme } from '@mantine/core';
+import { useDevice } from '../../providers/DeviceProvider';
 
 const navLinks = [
   { icon: IconHome2, label: 'Home', path: '/' },
@@ -21,14 +25,29 @@ const navLinks = [
   { icon: IconCalendarStats, label: 'Releases', path: '/releases' },
 ];
 
-const authLinks = [{ icon: IconUserPlus, label: 'Sign Up', path: '/signup' }];
+const guestLinks = [
+  { icon: IconLogin, label: 'Login', path: '/login' },
+  { icon: IconUserPlus, label: 'Sign Up', path: '/signup' },
+];
+
+const authedLinks = [{ icon: IconSettings, label: 'Settings', path: '/settings' }];
 
 export function Navbar() {
+  const { deviceKid, clearDevice } = useDevice();
+  const navigate = useNavigate();
   const currentPath = useRouterState({
     select: (state) => state.location.pathname,
   });
   const theme = useMantineTheme();
   const colorScheme = useComputedColorScheme();
+  const isAuthenticated = Boolean(deviceKid);
+
+  const authLinks = isAuthenticated ? authedLinks : guestLinks;
+
+  const handleLogout = () => {
+    clearDevice();
+    void navigate({ to: '/' });
+  };
 
   const borderColor = colorScheme === 'dark' ? theme.colors.dark[4] : theme.colors.gray[3];
 
@@ -71,6 +90,14 @@ export function Navbar() {
               fw={500}
             />
           ))}
+          {isAuthenticated ? (
+            <NavLink
+              label="Logout"
+              leftSection={<IconLogout size={18} stroke={1.5} />}
+              onClick={handleLogout}
+              fw={500}
+            />
+          ) : null}
         </Stack>
       </Box>
     </Stack>
