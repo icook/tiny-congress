@@ -340,6 +340,18 @@ test-ci: _build-images-artifacts
     skaffold test --build-artifacts artifacts.json
 
 # =============================================================================
+# Automated Refinement
+# =============================================================================
+
+# Run automated refinement loop (reads refine.toml for focus area)
+refine:
+    ./scripts/refine.sh
+
+# Dry-run refinement (show generated prompt without executing)
+refine-dry-run:
+    ./scripts/refine.sh --dry-run
+
+# =============================================================================
 # Utility Commands
 # =============================================================================
 
