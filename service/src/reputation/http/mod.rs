@@ -8,10 +8,11 @@ use axum::{
     extract::{Extension, Query},
     http::StatusCode,
     response::IntoResponse,
-    routing::get,
+    routing::{get, post},
     Json, Router,
 };
 use serde::{Deserialize, Serialize};
+use sqlx::PgPool;
 use uuid::Uuid;
 
 use super::service::{EndorsementError, EndorsementService};
@@ -40,6 +41,25 @@ pub struct HasEndorsementResponse {
     pub has_endorsement: bool,
 }
 
+// ─── Verifier endpoint types ──────────────────────────────────────────────
+
+#[derive(Debug, Deserialize)]
+pub struct CreateEndorsementRequest {
+    pub username: String,
+    pub topic: String,
+    #[serde(default)]
+    pub evidence: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct CreatedEndorsementResponse {
+    pub id: Uuid,
+    pub subject_id: Uuid,
+    pub topic: String,
+    pub issuer_id: Uuid,
+    pub created_at: String,
+}
+
 // ─── Query types ───────────────────────────────────────────────────────────
 
 #[derive(Debug, Deserialize)]
@@ -54,6 +74,10 @@ pub fn router() -> Router {
     Router::new()
         .route("/me/endorsements", get(my_endorsements))
         .route("/endorsements/check", get(check_endorsement))
+        .route(
+            "/verifiers/endorsements",
+            post(create_endorsement_as_verifier),
+        )
         .route("/auth/idme/authorize", get(idme::authorize))
         .route("/auth/idme/callback", get(idme::callback))
 }
@@ -116,6 +140,90 @@ async fn check_endorsement(
             StatusCode::OK,
             Json(HasEndorsementResponse {
                 has_endorsement: has,
+            }),
+        )
+            .into_response(),
+        Err(e) => endorsement_error_response(e),
+    }
+}
+
+// ─── Verifier endpoint ────────────────────────────────────────────────────
+
+/// Create an endorsement as an authorized verifier.
+///
+/// Checks that the authenticated caller has the `authorized_verifier` endorsement,
+/// resolves the target username to an account, and creates the endorsement.
+async fn create_endorsement_as_verifier(
+    Extension(endorsement_service): Extension<Arc<dyn EndorsementService>>,
+    Extension(pool): Extension<PgPool>,
+    auth: AuthenticatedDevice,
+) -> impl IntoResponse {
+    // Parse body from AuthenticatedDevice (which already consumed it for signing)
+    let body: CreateEndorsementRequest = match auth.json() {
+        Ok(b) => b,
+        Err(e) => return e,
+    };
+    // 1. Check caller is an authorized verifier
+    let is_verifier = match endorsement_service
+        .has_endorsement(auth.account_id, "authorized_verifier")
+        .await
+    {
+        Ok(has) => has,
+        Err(e) => return endorsement_error_response(e),
+    };
+    if !is_verifier {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(ErrorResponse {
+                error: "Account is not an authorized verifier".to_string(),
+            }),
+        )
+            .into_response();
+    }
+
+    // 2. Resolve username → account_id
+    let subject = match crate::identity::repo::get_account_by_username(&pool, &body.username).await
+    {
+        Ok(account) => account,
+        Err(crate::identity::repo::AccountRepoError::NotFound) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: "User not found".to_string(),
+                }),
+            )
+                .into_response();
+        }
+        Err(e) => {
+            tracing::error!("Account lookup failed: {e}");
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse {
+                    error: "Internal server error".to_string(),
+                }),
+            )
+                .into_response();
+        }
+    };
+
+    // 3. Create endorsement
+    match endorsement_service
+        .create_endorsement(
+            subject.id,
+            &body.topic,
+            Some(auth.account_id),
+            body.evidence.as_ref(),
+        )
+        .await
+    {
+        Ok(created) => (
+            StatusCode::CREATED,
+            Json(CreatedEndorsementResponse {
+                id: created.id,
+                subject_id: created.subject_id,
+                topic: created.topic,
+                issuer_id: auth.account_id,
+                created_at: chrono::Utc::now().to_rfc3339(),
             }),
         )
             .into_response(),
