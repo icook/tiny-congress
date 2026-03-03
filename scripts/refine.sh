@@ -18,12 +18,22 @@ read_config() {
     yq -p toml -oy "$1" "$CONFIG"
 }
 
-FOCUS_PATH="$(read_config '.focus.path')"
+require_config() {
+    local value
+    value="$(read_config "$1")"
+    if [[ -z "$value" || "$value" == "null" ]]; then
+        echo "ERROR: required config key '$1' is missing or empty in $CONFIG" >&2
+        exit 1
+    fi
+    echo "$value"
+}
+
+FOCUS_PATH="$(require_config '.focus.path')"
 FOCUS_GLOB="$(read_config '.focus.glob // ""')"
-GUIDANCE_FILE="$(read_config '.prompts.guidance')"
-COOLDOWN="$(read_config '.behavior.cooldown')"
-MAX_PRS="$(read_config '.behavior.max_prs')"
-IDLE_LIMIT="$(read_config '.behavior.idle_limit')"
+GUIDANCE_FILE="$(require_config '.prompts.guidance')"
+COOLDOWN="$(require_config '.behavior.cooldown')"
+MAX_PRS="$(require_config '.behavior.max_prs')"
+IDLE_LIMIT="$(require_config '.behavior.idle_limit')"
 
 # Parse enabled types into a list (priority order: security > patterns > tests > cleanup)
 ENABLED_TYPES=()
@@ -83,13 +93,21 @@ SECTION
 }
 
 build_prompt() {
+    local template_file="$SCRIPT_DIR/refine-prompt.md"
+    if [[ ! -f "$template_file" ]]; then
+        log "ERROR: Prompt template not found at $template_file"
+        exit 1
+    fi
     local template
-    template="$(cat "$SCRIPT_DIR/refine-prompt.md")"
+    template="$(cat "$template_file")"
 
     # Read guidance content
     local guidance=""
-    if [[ -f "$REPO_ROOT/$GUIDANCE_FILE" ]]; then
-        guidance="$(cat "$REPO_ROOT/$GUIDANCE_FILE")"
+    local guidance_path="$REPO_ROOT/$GUIDANCE_FILE"
+    if [[ -f "$guidance_path" ]]; then
+        guidance="$(cat "$guidance_path")"
+    else
+        log "WARNING: Guidance file not found at $guidance_path"
     fi
 
     # Build enabled types section
