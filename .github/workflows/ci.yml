@@ -64,7 +64,7 @@ jobs:
         uses: extractions/setup-just@v3
 
       - name: Install dependencies
-        run: just _install-frontend
+        run: just _ensure-frontend-deps
 
       - name: Run Linters
         run: just lint-frontend
@@ -93,7 +93,7 @@ jobs:
         uses: extractions/setup-just@v3
 
       - name: Install dependencies
-        run: just _install-frontend
+        run: just _ensure-frontend-deps
 
       - name: Build Storybook
         run: just build-storybook
@@ -180,7 +180,7 @@ jobs:
         uses: extractions/setup-just@v3
 
       - name: Install frontend dependencies
-        run: just _install-frontend
+        run: just _ensure-frontend-deps
 
       - name: Run codegen
         run: just codegen
