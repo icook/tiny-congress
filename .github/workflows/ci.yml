@@ -808,6 +808,13 @@ jobs:
             .spec.values.postgres.image.digest = "${{ steps.digests.outputs.postgres }}"
           ' "$FILE"
 
+      - name: Pin chart source to matching commit
+        env:
+          TC_SHA: ${{ github.sha }}
+        run: |
+          SOURCE="clusters/sauce/workloads/tiny-congress/source.yaml"
+          yq -i '.spec.ref.commit = strenv(TC_SHA)' "$SOURCE"
+
       - name: Commit and push
         env:
           TC_SHA: ${{ github.sha }}
@@ -816,6 +823,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add clusters/sauce/workloads/tiny-congress/helmrelease-demo.yaml
+          git add clusters/sauce/workloads/tiny-congress/source.yaml
           # Only commit if there are actual changes
           if git diff --cached --quiet; then
             echo "No digest changes detected"
