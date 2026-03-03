@@ -2,6 +2,7 @@
  * Settings page - Device management
  */
 
+import { useEffect } from 'react';
 import { IconAlertTriangle } from '@tabler/icons-react';
 import { useNavigate } from '@tanstack/react-router';
 import { Alert, Card, Loader, Stack, Text, Title } from '@mantine/core';
@@ -19,6 +20,14 @@ export function SettingsPage() {
   const revokeMutation = useRevokeDevice(deviceKid, privateKey, crypto);
   const renameMutation = useRenameDevice(deviceKid, privateKey, crypto);
 
+  const shouldRedirect = !deviceLoading && !deviceKid;
+
+  useEffect(() => {
+    if (shouldRedirect) {
+      void navigate({ to: '/login' });
+    }
+  }, [shouldRedirect, navigate]);
+
   if (deviceLoading) {
     return (
       <Stack gap="md" maw={800} mx="auto" mt="xl">
@@ -28,8 +37,7 @@ export function SettingsPage() {
     );
   }
 
-  if (!deviceKid) {
-    void navigate({ to: '/login' });
+  if (shouldRedirect) {
     return null;
   }
 

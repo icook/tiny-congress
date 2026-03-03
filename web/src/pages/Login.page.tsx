@@ -6,7 +6,7 @@
  * a time-bound certificate that prevents replay attacks.
  */
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { IconAlertTriangle } from '@tabler/icons-react';
 import { Link, useNavigate } from '@tanstack/react-router';
@@ -35,7 +35,7 @@ import { useDevice } from '@/providers/DeviceProvider';
 export function LoginPage() {
   const crypto = useCryptoRequired();
   const loginMutation = useLogin();
-  const { deviceKid, setDevice } = useDevice();
+  const { deviceKid, isLoading: deviceLoading, setDevice } = useDevice();
   const navigate = useNavigate();
 
   const [username, setUsername] = useState('');
@@ -43,8 +43,15 @@ export function LoginPage() {
   const [isGeneratingKeys, setIsGeneratingKeys] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
 
-  if (deviceKid) {
-    void navigate({ to: '/settings' });
+  const shouldRedirect = !deviceLoading && !!deviceKid;
+
+  useEffect(() => {
+    if (shouldRedirect) {
+      void navigate({ to: '/settings' });
+    }
+  }, [shouldRedirect, navigate]);
+
+  if (deviceLoading || shouldRedirect) {
     return null;
   }
 
