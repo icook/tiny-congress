@@ -48,16 +48,17 @@ serviceAccount:
 
 podAnnotations: {}
 
-podSecurityContext: {}
-  # fsGroup: 2000
+podSecurityContext:
+  runAsNonRoot: true
+  seccompProfile:
+    type: RuntimeDefault
 
-securityContext: {}
-  # capabilities:
-  #   drop:
-  #   - ALL
-  # readOnlyRootFilesystem: true
-  # runAsNonRoot: true
-  # runAsUser: 1000
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
 
 service:
   type: ClusterIP
@@ -131,6 +132,17 @@ frontend:
     targetPort: 5173
     # Annotations to add to the frontend service (e.g., external-dns, load-balancer config)
     annotations: {}
+  podSecurityContext:
+    runAsNonRoot: true
+    seccompProfile:
+      type: RuntimeDefault
+  securityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop:
+        - ALL
+  resources: {}
   podDisruptionBudget:
     enabled: false
     # minAvailable: 1
@@ -176,6 +188,20 @@ postgres:
     enabled: false
     # Name of an existing PVC to use. If empty, defaults to "<fullname>-postgres"
     existingClaim: ""
+  # Postgres runs as UID 999 (postgres user in the official image).
+  # The entrypoint detects non-root and skips chown, running initdb directly.
+  podSecurityContext:
+    runAsUser: 999
+    runAsGroup: 999
+    fsGroup: 999
+    seccompProfile:
+      type: RuntimeDefault
+  securityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop:
+        - ALL
 
 # HMAC key for synthetic backup envelope generation (anti-enumeration).
 # Required — the app will refuse to start without it.

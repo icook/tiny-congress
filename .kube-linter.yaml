@@ -1,11 +1,15 @@
 # kube-linter configuration
 # See: https://github.com/stackrox/kube-linter/blob/main/docs/checks.md
 #
-# This config enables kube-linter with sensible defaults for a dev environment.
-# Security hardening checks (run-as-non-root, read-only-root-fs) are excluded
-# as they require significant manifest changes - track separately if needed.
+# Default checks plus security hardening (run-as-non-root, read-only-root-fs).
+# Containers that legitimately need root use ignore-check annotations.
 
 checks:
+  # Add security checks beyond the defaults
+  include:
+    - "run-as-non-root"
+    - "no-read-only-root-fs"
+
   # Exclude checks that don't apply to Helm templates or dev environments
   exclude:
     # Image tags are templated via Helm values, not hardcoded
@@ -23,11 +27,6 @@ checks:
     # Owner labels and email annotations not required for this project
     - "required-label-owner"
     - "required-annotation-email"
-    # Security hardening - excluded for now, track separately if needed
-    # TODO(#XXX): Enable run-as-non-root after updating manifests
-    - "run-as-non-root"
-    # TODO(#XXX): Enable no-read-only-root-fs after updating manifests
-    - "no-read-only-root-fs"
     # Probes for test/utility pods that run and exit don't make sense
     - "no-liveness-probe"
     - "no-readiness-probe"
