@@ -29,7 +29,6 @@ require_config() {
 }
 
 FOCUS_PATH="$(require_config '.focus.path')"
-FOCUS_GLOB="$(read_config '.focus.glob // ""')"
 GUIDANCE_FILE="$(require_config '.prompts.guidance')"
 COOLDOWN="$(require_config '.behavior.cooldown')"
 MAX_PRS="$(require_config '.behavior.max_prs')"
@@ -42,10 +41,12 @@ ENABLED_TYPES=()
 [[ "$(read_config '.types.test_coverage')" == "true" ]] && ENABLED_TYPES+=("test_coverage")
 [[ "$(read_config '.types.code_cleanup')" == "true" ]] && ENABLED_TYPES+=("code_cleanup")
 
+mkdir -p "$LOG_DIR"
+
 log() {
-    local msg="[$(date '+%Y-%m-%d %H:%M:%S')] $*"
+    local msg
+    msg="[$(date '+%Y-%m-%d %H:%M:%S')] $*"
     echo "$msg"
-    mkdir -p "$LOG_DIR"
     echo "$msg" >> "$LOG_FILE"
 }
 
@@ -98,9 +99,6 @@ build_prompt() {
         log "ERROR: Prompt template not found at $template_file"
         exit 1
     fi
-    local template
-    template="$(cat "$template_file")"
-
     # Read guidance content
     local guidance=""
     local guidance_path="$REPO_ROOT/$GUIDANCE_FILE"
@@ -189,9 +187,11 @@ $summary
     log "Created PR: $pr_url"
 
     # Enable auto-merge — don't fail the iteration if this fails
-    gh pr merge "$pr_url" --auto --squash || \
+    if gh pr merge "$pr_url" --auto --squash; then
+        log "Auto-merge enabled for $pr_url"
+    else
         log "WARNING: Could not enable auto-merge for $pr_url (may need manual merge)"
-    log "Auto-merge enabled for $pr_url"
+    fi
 }
 
 handle_ticket() {
@@ -381,14 +381,22 @@ main() {
 
     local idle_count=0
     local pr_count=0
+    local fail_count=0
+    local max_failures=5
 
     while true; do
         local action
         action="$(run_iteration)" || {
-            log "Iteration failed, continuing after cooldown"
-            sleep "${COOLDOWN:-5}"
+            fail_count=$((fail_count + 1))
+            log "Iteration failed ($fail_count / $max_failures), continuing after cooldown"
+            if [[ "$fail_count" -ge "$max_failures" ]]; then
+                log "ERROR: Reached $max_failures consecutive failures, stopping"
+                break
+            fi
+            sleep "$((COOLDOWN > 5 ? COOLDOWN : 5))"
             continue
         }
+        fail_count=0
 
         case "$action" in
             change)
