@@ -1,3 +1,12 @@
+#![deny(
+    clippy::expect_used,
+    clippy::panic,
+    clippy::print_stdout,
+    clippy::todo,
+    clippy::unimplemented,
+    clippy::unwrap_used
+)]
+
 use anyhow::Context;
 use tinycongress_api::{config::Config, db::setup_database, seed::config::SeedConfig};
 
@@ -8,8 +17,9 @@ async fn main() -> Result<(), anyhow::Error> {
 
     tracing_subscriber::fmt()
         .with_env_filter(
-            tracing_subscriber::EnvFilter::try_new(&config.logging.level)
-                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
+            tracing_subscriber::EnvFilter::try_new(&config.logging.level).map_err(|e| {
+                anyhow::anyhow!("invalid log level '{}': {e}", config.logging.level)
+            })?,
         )
         .init();
 
