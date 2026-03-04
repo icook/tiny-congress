@@ -733,6 +733,32 @@ mod tests {
 
     // ── rename_device error paths ────────────────────────────────────────────
 
+    #[tokio::test]
+    async fn test_rename_device_invalid_kid_format_returns_bad_request() {
+        use axum::response::IntoResponse;
+        use axum::{body::to_bytes, extract::Extension, extract::Path};
+
+        let account_id = Uuid::new_v4();
+        let auth_kid = Kid::derive(&[0xAAu8; 32]);
+
+        let repo = std::sync::Arc::new(MockIdentityRepo::new());
+        let body = axum::body::Bytes::from(r#"{"name":"Renamed Device"}"#);
+        let auth = AuthenticatedDevice::for_test(account_id, auth_kid, body);
+
+        let response = rename_device(
+            Extension(repo as std::sync::Arc<dyn crate::identity::repo::IdentityRepo>),
+            Path("not-a-valid-kid!!!".to_string()),
+            auth,
+        )
+        .await
+        .into_response();
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        let body = to_bytes(response.into_body(), 1024).await.expect("body");
+        let payload: serde_json::Value = serde_json::from_slice(&body).expect("json");
+        assert_eq!(payload["error"].as_str().unwrap(), "Invalid KID format");
+    }
+
     fn setup_rename_preconditions(
         account_id: Uuid,
         target_kid: &Kid,
