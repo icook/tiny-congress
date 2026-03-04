@@ -227,19 +227,12 @@ impl DevicePubkey {
 pub struct CertificateSignature([u8; 64]);
 
 /// Error type for certificate signature validation failures.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, thiserror::Error)]
 pub enum CertificateSignatureError {
+    #[error("Invalid base64url encoding for certificate")]
     InvalidEncoding,
+    #[error("certificate must be 64 bytes (Ed25519 signature)")]
     InvalidLength,
-}
-
-impl std::fmt::Display for CertificateSignatureError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::InvalidEncoding => write!(f, "Invalid base64url encoding for certificate"),
-            Self::InvalidLength => write!(f, "certificate must be 64 bytes (Ed25519 signature)"),
-        }
-    }
 }
 
 impl CertificateSignature {
