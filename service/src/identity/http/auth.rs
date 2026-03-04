@@ -341,7 +341,12 @@ mod tests {
         encode_base64url(&signing_key.sign(canonical.as_bytes()).to_bytes())
     }
 
-    fn build_auth_request(kid: &str, signature: &str, timestamp: i64, nonce: &str) -> Request<Body> {
+    fn build_auth_request(
+        kid: &str,
+        signature: &str,
+        timestamp: i64,
+        nonce: &str,
+    ) -> Request<Body> {
         Request::builder()
             .method("GET")
             .uri("/test")
