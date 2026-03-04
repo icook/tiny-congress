@@ -116,6 +116,14 @@ jobs:
       - name: Run static analysis
         run: just lint-static
 
+      - name: Reject ephemeral docs/plans/ directory
+        run: |
+          if find docs/plans -type f 2>/dev/null | head -1 | grep -q .; then
+            echo "::error::docs/plans/ should not be committed. Use .plan/ for ephemeral specs."
+            find docs/plans -type f
+            exit 1
+          fi
+
   # ============================================================
   # JOB 0b2: Build Storybook
   # ============================================================

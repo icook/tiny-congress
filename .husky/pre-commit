@@ -26,6 +26,15 @@ if git diff --cached --name-only | grep -q '\.rs$'; then
   fi
 fi
 
+# Guard: docs/plans/ should not exist — use .plan/ for ephemeral specs
+# Only block additions (--diff-filter=d excludes deletions, so cleanup commits pass)
+if git diff --cached --diff-filter=d --name-only | grep -q '^docs/plans/'; then
+  echo "ERROR: docs/plans/ should not be committed. Use .plan/ for ephemeral specs."
+  echo "Staged docs/plans/ files:"
+  git diff --cached --diff-filter=d --name-only | grep '^docs/plans/'
+  exit 1
+fi
+
 # Guard: openapi.json changes require regenerated rest.ts
 if git diff --cached --name-only | grep -q 'web/openapi.json'; then
   if ! git diff --cached --name-only | grep -q 'web/src/api/generated/rest.ts'; then
