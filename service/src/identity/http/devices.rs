@@ -680,6 +680,60 @@ mod tests {
 
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
     }
+
+    // ── list_devices ─────────────────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn test_list_devices_success_returns_ok_with_records() {
+        use axum::response::IntoResponse;
+        use axum::{body::to_bytes, extract::Extension};
+
+        let account_id = Uuid::new_v4();
+        let record = make_device_record(account_id);
+        let kid = record.device_kid.clone();
+
+        let repo = std::sync::Arc::new(MockIdentityRepo::new());
+        repo.set_list_device_keys_result(Ok(vec![record]));
+
+        let auth = AuthenticatedDevice::for_test(account_id, kid, axum::body::Bytes::new());
+
+        let response = list_devices(
+            Extension(repo as std::sync::Arc<dyn crate::identity::repo::IdentityRepo>),
+            auth,
+        )
+        .await
+        .into_response();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = to_bytes(response.into_body(), 1024).await.expect("body");
+        let payload: serde_json::Value = serde_json::from_slice(&body).expect("json");
+        assert_eq!(payload["devices"].as_array().unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_list_devices_db_error_returns_internal() {
+        use axum::extract::Extension;
+        use axum::response::IntoResponse;
+
+        let account_id = Uuid::new_v4();
+        let auth_kid = Kid::derive(&[0xAAu8; 32]);
+
+        let repo = std::sync::Arc::new(MockIdentityRepo::new());
+        repo.set_list_device_keys_result(Err(DeviceKeyRepoError::Database(sqlx::Error::Protocol(
+            "db error".to_string(),
+        ))));
+
+        let auth = AuthenticatedDevice::for_test(account_id, auth_kid, axum::body::Bytes::new());
+
+        let response = list_devices(
+            Extension(repo as std::sync::Arc<dyn crate::identity::repo::IdentityRepo>),
+            auth,
+        )
+        .await
+        .into_response();
+
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    }
 }
 
 /// Verify a device exists and belongs to the given account.

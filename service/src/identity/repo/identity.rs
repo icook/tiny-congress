@@ -376,6 +376,8 @@ pub mod mock {
         pub create_device_key_error: Mutex<Option<DeviceKeyRepoError>>,
         pub get_device_key_by_kid_result:
             Mutex<Option<Result<DeviceKeyRecord, DeviceKeyRepoError>>>,
+        pub list_device_keys_result:
+            Mutex<Option<Result<Vec<DeviceKeyRecord>, DeviceKeyRepoError>>>,
         pub get_backup_by_kid_result: Mutex<Option<Result<BackupRecord, BackupRepoError>>>,
         pub nonce_result: Mutex<Option<Result<(), NonceRepoError>>>,
         pub revoke_device_key_result: Mutex<Option<Result<(), DeviceKeyRepoError>>>,
@@ -391,6 +393,7 @@ pub mod mock {
                 account_by_id_result: Mutex::new(None),
                 create_device_key_error: Mutex::new(None),
                 get_device_key_by_kid_result: Mutex::new(None),
+                list_device_keys_result: Mutex::new(None),
                 get_backup_by_kid_result: Mutex::new(None),
                 nonce_result: Mutex::new(None),
                 revoke_device_key_result: Mutex::new(None),
@@ -453,6 +456,18 @@ pub mod mock {
                 .get_device_key_by_kid_result
                 .lock()
                 .expect("lock poisoned") = Some(result);
+        }
+
+        /// Set the result that [`IdentityRepo::list_device_keys_by_account`] will return.
+        ///
+        /// # Panics
+        ///
+        /// Panics if the internal mutex is poisoned.
+        pub fn set_list_device_keys_result(
+            &self,
+            result: Result<Vec<DeviceKeyRecord>, DeviceKeyRepoError>,
+        ) {
+            *self.list_device_keys_result.lock().expect("lock poisoned") = Some(result);
         }
 
         /// Set the result that [`IdentityRepo::get_backup_by_kid`] will return.
@@ -588,7 +603,11 @@ pub mod mock {
             &self,
             _account_id: Uuid,
         ) -> Result<Vec<DeviceKeyRecord>, DeviceKeyRepoError> {
-            Ok(vec![])
+            self.list_device_keys_result
+                .lock()
+                .expect("lock poisoned")
+                .take()
+                .unwrap_or(Ok(vec![]))
         }
 
         async fn get_device_key_by_kid(
