@@ -499,6 +499,40 @@ mod tests {
         assert_eq!(err.status(), StatusCode::INTERNAL_SERVER_ERROR);
     }
 
+    // ── add_device handler error paths ───────────────────────────────────────
+
+    #[tokio::test]
+    async fn test_add_device_create_device_key_db_error_returns_internal() {
+        use axum::extract::Extension;
+        use axum::response::IntoResponse;
+
+        let (req, account) = make_valid_components();
+        let repo = mock_with_account(account.clone());
+        repo.set_create_device_key_error(DeviceKeyRepoError::Database(sqlx::Error::Protocol(
+            "db error".to_string(),
+        )));
+        let repo = std::sync::Arc::new(repo);
+
+        let body = axum::body::Bytes::from(
+            serde_json::json!({
+                "pubkey": req.pubkey,
+                "name": req.name,
+                "certificate": req.certificate,
+            })
+            .to_string(),
+        );
+        let auth = AuthenticatedDevice::for_test(account.id, Kid::derive(&[0xAAu8; 32]), body);
+
+        let response = add_device(
+            Extension(repo as std::sync::Arc<dyn crate::identity::repo::IdentityRepo>),
+            auth,
+        )
+        .await
+        .into_response();
+
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    }
+
     // ── revoke_device error paths ────────────────────────────────────────────
 
     /// Build an `AuthenticatedDevice` and a repo where `get_owned_device` succeeds
