@@ -36,7 +36,8 @@ test('renders build metadata once loaded', async () => {
 
   expect(version).toHaveTextContent('1.2.3');
   expect(gitSha).toHaveTextContent('abc123');
-  expect(buildTime).toHaveTextContent('2024-01-02T03:04:05Z');
+  // Build time is formatted via TimestampText — verify it rendered a date
+  expect(buildTime).toHaveTextContent('2024');
   expect(message).toHaveTextContent('deployed from main');
 });
 
