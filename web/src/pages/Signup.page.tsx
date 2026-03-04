@@ -13,6 +13,7 @@ import {
   useSignup,
 } from '@/features/identity';
 import { SignupForm } from '@/features/identity/components';
+import { buildVerifierUrl } from '@/features/verification';
 import { useCryptoRequired } from '@/providers/CryptoProvider';
 import { useDevice } from '@/providers/DeviceProvider';
 
@@ -92,6 +93,7 @@ export function SignupPage() {
       loadingText={isGeneratingKeys ? 'Generating keys and encrypting backup...' : undefined}
       error={signup.isError ? signup.error.message : null}
       successData={createdAccount}
+      verifierUrl={buildVerifierUrl(username)}
     />
   );
 }

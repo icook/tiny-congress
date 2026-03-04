@@ -38,6 +38,9 @@ export interface SignupFormProps {
     root_kid: string;
     device_kid: string;
   } | null;
+
+  // Optional verifier URL for post-signup verification
+  verifierUrl?: string | null;
 }
 
 export function SignupForm({
@@ -50,6 +53,7 @@ export function SignupForm({
   loadingText,
   error,
   successData,
+  verifierUrl,
 }: SignupFormProps) {
   if (successData) {
     return (
@@ -60,9 +64,18 @@ export function SignupForm({
 
         <Stack gap="sm">
           <Title order={3}>What&apos;s next?</Title>
-          <Text size="sm">You&apos;re all set! Start exploring rooms and voting on polls.</Text>
+          <Text size="sm">
+            {verifierUrl
+              ? 'Verify your identity to start voting in rooms.'
+              : 'You\u0027re all set! Start exploring rooms and voting on polls.'}
+          </Text>
           <Group mt="xs">
-            <Button component={Link} to="/rooms">
+            {verifierUrl ? (
+              <Button component="a" href={verifierUrl}>
+                Verify Identity
+              </Button>
+            ) : null}
+            <Button component={Link} to="/rooms" variant={verifierUrl ? 'outline' : 'filled'}>
               Browse Rooms
             </Button>
             <Button component={Link} to="/settings" variant="outline">

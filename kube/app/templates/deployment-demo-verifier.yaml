@@ -1,0 +1,46 @@
+{{- if .Values.demoVerifier.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "app.fullname" . }}-demo-verifier
+  labels:
+    {{- include "app.labels" . | nindent 4 }}
+    app.kubernetes.io/component: demo-verifier
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "app.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: demo-verifier
+  template:
+    metadata:
+      labels:
+        {{- include "app.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: demo-verifier
+    spec:
+      serviceAccountName: {{ include "app.serviceAccountName" . }}
+      containers:
+        - name: demo-verifier
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}{{ if .Values.image.digest }}@{{ .Values.image.digest }}{{ end }}"
+          command: ["demo_verifier"]
+          ports:
+            - containerPort: 8090
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: {{ include "app.fullname" . }}-demo-verifier
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8090
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8090
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          resources:
+            {{- toYaml .Values.demoVerifier.resources | nindent 12 }}
+{{- end }}

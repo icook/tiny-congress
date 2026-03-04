@@ -95,6 +95,10 @@ path = "src/bin/export_openapi.rs"
 name = "sim"
 path = "src/bin/sim.rs"
 
+[[bin]]
+name = "demo_verifier"
+path = "src/bin/demo_verifier.rs"
+
 # cargo-machete false positives (used via derive macros)
 [package.metadata.cargo-machete]
 ignored = ["serde", "thiserror", "async-trait", "utoipa"]

@@ -257,3 +257,19 @@ sim:
     limits:
       cpu: 200m
       memory: 128Mi
+
+demoVerifier:
+  enabled: false
+  apiUrl: ""
+  allowedCallback: ""
+  listenAddr: "0.0.0.0:8090"
+  logLevel: "info"
+  ingress:
+    host: ""
+  resources:
+    requests:
+      cpu: 25m
+      memory: 64Mi
+    limits:
+      cpu: 250m
+      memory: 128Mi

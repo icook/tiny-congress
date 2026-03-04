@@ -1,0 +1,18 @@
+{{- if .Values.demoVerifier.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "app.fullname" . }}-demo-verifier
+  labels:
+    {{- include "app.labels" . | nindent 4 }}
+    app.kubernetes.io/component: demo-verifier
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8090
+      targetPort: 8090
+      protocol: TCP
+  selector:
+    {{- include "app.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: demo-verifier
+{{- end }}

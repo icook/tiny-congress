@@ -9,6 +9,7 @@
 interface RuntimeConfig {
   VITE_API_URL?: string;
   TC_ENVIRONMENT?: string;
+  TC_DEMO_VERIFIER_URL?: string;
 }
 
 declare global {
@@ -23,6 +24,10 @@ export function getEnvironment(): string {
     return 'production';
   }
   return env;
+}
+
+export function getDemoVerifierUrl(): string | null {
+  return window.__TC_ENV__?.TC_DEMO_VERIFIER_URL ?? null;
 }
 
 export function getApiBaseUrl(): string {
