@@ -352,10 +352,38 @@ jobs:
           echo "✓ SQLx snapshots are up to date"
 
   # ============================================================
+  # JOB 0f: Detect which paths changed (skip unnecessary builds)
+  # ============================================================
+  detect-changes:
+    name: Detect changed paths
+    runs-on: ubuntu-latest
+    outputs:
+      postgres: ${{ steps.filter.outputs.postgres }}
+      api: ${{ steps.filter.outputs.api }}
+      ui: ${{ steps.filter.outputs.ui }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            postgres:
+              - 'dockerfiles/Dockerfile.postgres'
+            api:
+              - 'service/**'
+              - 'crates/**'
+              - 'Cargo.toml'
+              - 'Cargo.lock'
+            ui:
+              - 'web/**'
+              - 'crates/tc-crypto/**'
+
+  # ============================================================
   # JOB 1: Build all container images in parallel
   # ============================================================
   build-images:
     name: Build ${{ matrix.image }}
+    needs: [detect-changes]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -403,7 +431,28 @@ jobs:
             echo "branch_tag=${{ env.REGISTRY }}/${{ matrix.image }}:branch-${branch}"
           } >> "$GITHUB_OUTPUT"
 
+      - name: Check if build needed
+        id: should-build
+        run: |
+          case "${{ matrix.image }}" in
+            tc-api-release) changed="${{ needs.detect-changes.outputs.api }}" ;;
+            tc-ui-release)  changed="${{ needs.detect-changes.outputs.ui }}" ;;
+            postgres)       changed="${{ needs.detect-changes.outputs.postgres }}" ;;
+            *)              changed="true" ;;
+          esac
+          echo "changed=${changed}" >> "$GITHUB_OUTPUT"
+          echo "${{ matrix.image }}: changed=${changed}"
+
+      - name: Retag existing image
+        if: steps.should-build.outputs.changed == 'false'
+        run: |
+          echo "No source changes for ${{ matrix.image }} — retagging branch-master as ${{ github.sha }}"
+          docker pull "${{ steps.tags.outputs.branch_tag }}"
+          docker tag "${{ steps.tags.outputs.branch_tag }}" "${{ steps.tags.outputs.sha_tag }}"
+          docker push "${{ steps.tags.outputs.sha_tag }}"
+
       - name: Extract versions from mise.toml
+        if: steps.should-build.outputs.changed != 'false'
         id: versions
         run: |
           RUST_VERSION=$(grep '^rust' mise.toml | sed 's/.*= *"\([^"]*\)".*/\1/')
@@ -412,6 +461,7 @@ jobs:
           echo "node=${NODE_VERSION}" >> "$GITHUB_OUTPUT"
 
       - name: Build and push ${{ matrix.image }}
+        if: steps.should-build.outputs.changed != 'false'
         uses: docker/build-push-action@v6
         with:
           context: ${{ matrix.context }}
@@ -838,22 +888,50 @@ jobs:
             echo "  ${IMAGE}: ${DIGEST}"
           done
 
+      - name: Read current digests
+        id: current
+        run: |
+          FILE="clusters/sauce/workloads/tiny-congress/helmrelease-demo.yaml"
+          SOURCE="clusters/sauce/workloads/tiny-congress/source.yaml"
+          {
+            echo "api=$(yq '.spec.values.image.digest' "$FILE")"
+            echo "ui=$(yq '.spec.values.frontend.image.digest' "$FILE")"
+            echo "pg=$(yq '.spec.values.postgres.image.digest' "$FILE")"
+            echo "commit=$(yq '.spec.ref.commit' "$SOURCE")"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Update HelmRelease digests
         run: |
           FILE="clusters/sauce/workloads/tiny-congress/helmrelease-demo.yaml"
-          # Use yq to update only the digest fields
-          yq -i '
-            .spec.values.image.digest = "${{ steps.digests.outputs.tc-api-release }}" |
-            .spec.values.frontend.image.digest = "${{ steps.digests.outputs.tc-ui-release }}" |
-            .spec.values.postgres.image.digest = "${{ steps.digests.outputs.postgres }}"
-          ' "$FILE"
+          CHANGED=""
+          # Use | as delimiter (digests contain colons)
+          for PAIR in \
+            "api|.spec.values.image.digest|${{ steps.digests.outputs.tc-api-release }}|${{ steps.current.outputs.api }}" \
+            "ui|.spec.values.frontend.image.digest|${{ steps.digests.outputs.tc-ui-release }}|${{ steps.current.outputs.ui }}" \
+            "pg|.spec.values.postgres.image.digest|${{ steps.digests.outputs.postgres }}|${{ steps.current.outputs.pg }}" \
+          ; do
+            IFS='|' read -r NAME PATH_EXPR NEW OLD <<< "$PAIR"
+            if [ "$NEW" = "$OLD" ]; then
+              echo "  ${NAME}: unchanged, skipping"
+            else
+              echo "  ${NAME}: ${OLD} -> ${NEW}"
+              yq -i "${PATH_EXPR} = \"${NEW}\"" "$FILE"
+              CHANGED="${CHANGED}${NAME} "
+            fi
+          done
+          echo "CHANGED_DIGESTS=${CHANGED}" >> "$GITHUB_ENV"
 
       - name: Pin chart source to matching commit
         env:
           TC_SHA: ${{ github.sha }}
         run: |
           SOURCE="clusters/sauce/workloads/tiny-congress/source.yaml"
-          yq -i '.spec.ref.commit = strenv(TC_SHA)' "$SOURCE"
+          if [ "${{ steps.current.outputs.commit }}" = "${TC_SHA}" ]; then
+            echo "  source commit: unchanged, skipping"
+          else
+            echo "  source commit: ${{ steps.current.outputs.commit }} -> ${TC_SHA}"
+            yq -i '.spec.ref.commit = strenv(TC_SHA)' "$SOURCE"
+          fi
 
       - name: Commit and push
         env:
@@ -869,16 +947,25 @@ jobs:
             echo "No digest changes detected"
             exit 0
           fi
-          # Extract first line of source commit message
+          # Build commit message with only changed digests
           TC_TITLE=$(echo "$TC_COMMIT_TITLE" | head -n1)
           TC_SHORT="${TC_SHA:0:7}"
+          BODY="Source: ${TC_SHORT} ${TC_TITLE}"
+          if echo "$CHANGED_DIGESTS" | grep -q "api"; then
+            BODY="${BODY}
+          tc-api-release: ${{ steps.digests.outputs.tc-api-release }}"
+          fi
+          if echo "$CHANGED_DIGESTS" | grep -q "ui"; then
+            BODY="${BODY}
+          tc-ui-release: ${{ steps.digests.outputs.tc-ui-release }}"
+          fi
+          if echo "$CHANGED_DIGESTS" | grep -q "pg"; then
+            BODY="${BODY}
+          postgres: ${{ steps.digests.outputs.postgres }}"
+          fi
           git commit -m "chore: update tiny-congress image digests (tc@${TC_SHORT})
 
-          Source: ${TC_SHORT} ${TC_TITLE}
-
-          tc-api-release: ${{ steps.digests.outputs.tc-api-release }}
-          tc-ui-release: ${{ steps.digests.outputs.tc-ui-release }}
-          postgres: ${{ steps.digests.outputs.postgres }}"
+          ${BODY}"
           git push
 
   # ============================================================

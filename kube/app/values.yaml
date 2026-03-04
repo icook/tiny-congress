@@ -204,9 +204,10 @@ postgres:
         - ALL
 
 # HMAC key for synthetic backup envelope generation (anti-enumeration).
-# Required — the app will refuse to start without it.
-# For production, override with a strong random secret via a sealed-secret or
-# external secret manager.
+# REQUIRED — helm template will fail if this is empty and no existing secret
+# is found via lookup. For production, override with a strong random secret
+# via a sealed-secret or external secret manager. For local dev, Skaffold
+# sets this via skaffold.yaml setValues.
 syntheticBackupKey: ""
 
 # ID.me OAuth verification (optional)

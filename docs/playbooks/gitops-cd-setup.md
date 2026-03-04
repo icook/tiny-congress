@@ -171,6 +171,7 @@ flux get helmrelease -n default
 | "No digest changes detected" | Images unchanged | Expected if no code changed; check GHCR for new tags |
 | Flux not reconciling | Webhook not configured | Check recent deliveries: `gh api repos/icook/homelab-gitops/hooks --jq '.[].last_response'` |
 | Pods not updating | Chart doesn't use digest | Verify templates include `@digest` suffix |
+| Helm template fails with "syntheticBackupKey must be set" | HelmRelease missing `syntheticBackupKey` value | Extract from cluster: `kubectl get secret tc-demo-app -n tiny-congress-demo -o jsonpath='{.data.synthetic-backup-key}' \| base64 -d` and add to HelmRelease values |
 
 ## Verification checklist
 
