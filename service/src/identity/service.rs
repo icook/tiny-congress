@@ -561,6 +561,11 @@ mod tests {
     // ── Username validation (direct function tests) ────────────────────────
 
     #[test]
+    fn test_validate_username_empty() {
+        assert_eq!(validate_username(""), Err(UsernameError::Empty));
+    }
+
+    #[test]
     fn test_validate_username_too_short() {
         assert_eq!(validate_username("ab"), Err(UsernameError::TooShort));
         assert_eq!(validate_username("a"), Err(UsernameError::TooShort));
