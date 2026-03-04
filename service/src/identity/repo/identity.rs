@@ -378,6 +378,8 @@ pub mod mock {
             Mutex<Option<Result<DeviceKeyRecord, DeviceKeyRepoError>>>,
         pub get_backup_by_kid_result: Mutex<Option<Result<BackupRecord, BackupRepoError>>>,
         pub nonce_result: Mutex<Option<Result<(), NonceRepoError>>>,
+        pub revoke_device_key_result: Mutex<Option<Result<(), DeviceKeyRepoError>>>,
+        pub rename_device_key_result: Mutex<Option<Result<(), DeviceKeyRepoError>>>,
     }
 
     impl MockIdentityRepo {
@@ -391,6 +393,8 @@ pub mod mock {
                 get_device_key_by_kid_result: Mutex::new(None),
                 get_backup_by_kid_result: Mutex::new(None),
                 nonce_result: Mutex::new(None),
+                revoke_device_key_result: Mutex::new(None),
+                rename_device_key_result: Mutex::new(None),
             }
         }
 
@@ -467,6 +471,24 @@ pub mod mock {
         /// Panics if the internal mutex is poisoned.
         pub fn set_nonce_result(&self, result: Result<(), NonceRepoError>) {
             *self.nonce_result.lock().expect("lock poisoned") = Some(result);
+        }
+
+        /// Set the result that [`IdentityRepo::revoke_device_key`] will return.
+        ///
+        /// # Panics
+        ///
+        /// Panics if the internal mutex is poisoned.
+        pub fn set_revoke_device_key_result(&self, result: Result<(), DeviceKeyRepoError>) {
+            *self.revoke_device_key_result.lock().expect("lock poisoned") = Some(result);
+        }
+
+        /// Set the result that [`IdentityRepo::rename_device_key`] will return.
+        ///
+        /// # Panics
+        ///
+        /// Panics if the internal mutex is poisoned.
+        pub fn set_rename_device_key_result(&self, result: Result<(), DeviceKeyRepoError>) {
+            *self.rename_device_key_result.lock().expect("lock poisoned") = Some(result);
         }
     }
 
@@ -581,7 +603,11 @@ pub mod mock {
         }
 
         async fn revoke_device_key(&self, _device_kid: &Kid) -> Result<(), DeviceKeyRepoError> {
-            Ok(())
+            self.revoke_device_key_result
+                .lock()
+                .expect("lock poisoned")
+                .take()
+                .unwrap_or(Ok(()))
         }
 
         async fn rename_device_key(
@@ -589,7 +615,11 @@ pub mod mock {
             _device_kid: &Kid,
             _new_name: &str,
         ) -> Result<(), DeviceKeyRepoError> {
-            Ok(())
+            self.rename_device_key_result
+                .lock()
+                .expect("lock poisoned")
+                .take()
+                .unwrap_or(Ok(()))
         }
 
         async fn touch_device_key(&self, _device_kid: &Kid) -> Result<(), DeviceKeyRepoError> {
