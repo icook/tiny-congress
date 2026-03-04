@@ -394,6 +394,33 @@ test('fetches user data', async () => {
 });
 ```
 
+## Routing & Auth Guards
+
+Routes are defined in `web/src/Router.tsx` using TanStack Router. Auth state comes from the `useDevice()` hook in `DeviceProvider`, which exposes `{ deviceKid: string | null, isLoading: boolean }`.
+
+### Route auth patterns
+
+| Layout | `beforeLoad` behavior | Example routes |
+|--------|----------------------|----------------|
+| Root | No guard | `/`, `/rooms`, `/about` |
+| Guest-only | Redirects authenticated → `/settings` | `/signup`, `/login` |
+| Auth-required | Redirects unauthenticated → `/login` | `/settings`, `/account` |
+
+### Two-layer auth guard
+
+Auth-required routes use **two** layers — both are needed:
+
+1. **`beforeLoad` guard** — handles navigation-time redirects (user navigates to `/settings` while logged out).
+2. **`AuthRequiredOutlet` component** — handles reactive logout (user's `deviceKid` becomes null mid-session, e.g. token cleared).
+
+When adding a new auth-required route, nest it under the `authRequiredLayout` parent route. Do not implement custom redirect logic.
+
+### Adding a new route
+
+1. Add the page component in `web/src/pages/` with `.page.tsx` suffix.
+2. Add the route in `Router.tsx` under the appropriate layout (root, guest-only, or auth-required).
+3. If the route needs auth, nest it under `authRequiredLayout` — the guard is inherited.
+
 ## Anti-patterns
 
 | Don't | Do Instead |
