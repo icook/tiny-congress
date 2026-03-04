@@ -482,6 +482,21 @@ mod tests {
         assert_eq!(err.status(), StatusCode::INTERNAL_SERVER_ERROR);
     }
 
+    #[tokio::test]
+    async fn test_validate_add_device_request_account_db_error_returns_internal() {
+        // DB error on post-auth account lookup must return 500, not leak the error.
+        let (req, account) = make_valid_components();
+        let repo = MockIdentityRepo::new();
+        repo.set_account_by_id_result(Err(crate::identity::repo::AccountRepoError::Database(
+            sqlx::Error::Protocol("db error".to_string()),
+        )));
+        let err = validate_add_device_request(&repo, account.id, &req)
+            .await
+            .err()
+            .expect("expected error");
+        assert_eq!(err.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    }
+
     // ── revoke_device error paths ────────────────────────────────────────────
 
     /// Build an `AuthenticatedDevice` and a repo where `get_owned_device` succeeds
