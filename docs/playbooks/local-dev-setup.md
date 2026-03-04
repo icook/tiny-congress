@@ -247,7 +247,7 @@ cargo install cargo-watch
 ### Node version mismatch
 
 ```bash
-just node-check    # See required version
+cat web/.nvmrc     # See required version
 cd web && nvm use  # Switch to correct version
 ```
 
@@ -290,4 +290,4 @@ Use sparingly—CI will still enforce these checks.
 - `docs/interfaces/environment-variables.md` - All env vars
 - `docs/playbooks/debugging-ci-failure.md` - When things break
 - `docs/playbooks/adding-migration.md` - Database changes
-- `README.md` - macOS initial setup
+- `README.md` - Project overview

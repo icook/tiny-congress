@@ -1,4 +1,4 @@
-# ADR-009: Repo/Service/HTTP Three-Layer Architecture
+# ADR-016: Repo/Service/HTTP Three-Layer Architecture
 
 ## Status
 Accepted
@@ -157,7 +157,7 @@ Both are gated behind `#[cfg(any(test, feature = "test-utils"))]`.
 - Rejected because it loses the "validation happened" guarantee — callers could pass arbitrary strings to repo methods
 
 ## References
-- [ADR-008: Identity Model](008-identity-model.md) — the domain model this architecture implements
+- [ADR-015: Identity Model](015-identity-model.md) — the domain model this architecture implements
 - [PR #322: Identity service layer](https://github.com/icook/tiny-congress/pull/322) — initial three-layer implementation
 - [PR #329: Consolidate identity traits](https://github.com/icook/tiny-congress/pull/329) — refactor from three traits to one
 - `service/src/identity/service.rs` — IdentityService trait and DefaultIdentityService

@@ -60,7 +60,7 @@ tiny-congress/
 | Rust test | `service/tests/` | `service/tests/voting_tests.rs` |
 | SQL migration | `service/migrations/` | `service/migrations/20240101_add_votes.sql` |
 | React component | `web/src/components/` | `web/src/components/VoteButton.tsx` |
-| React page | `web/src/pages/` | `web/src/pages/Dashboard.tsx` |
+| React page | `web/src/pages/` | `web/src/pages/Dashboard.page.tsx` |
 | React hook | `web/src/hooks/` | `web/src/hooks/useVoting.ts` |
 | Component test | Next to component | `web/src/components/VoteButton.test.tsx` |
 | E2E test | `web/tests/` | `web/tests/voting.spec.ts` |
@@ -88,7 +88,9 @@ web/src/features/identity/
 └── components/         # Feature-specific components (if needed)
 ```
 
-**When to use features/**: Domain areas with dedicated API endpoints, state, and multiple screens. Examples: `identity`, `voting`, `moderation`.
+**When to use features/**: Domain areas with dedicated API endpoints, state, and multiple screens. Examples: `identity`, `reputation`, `rooms`.
+
+**Page file naming**: Route pages use the `.page.tsx` suffix (e.g., `Login.page.tsx`, `Signup.page.tsx`).
 
 **When to use top-level**: Shared components, hooks, or pages used across features.
 
@@ -109,6 +111,8 @@ service/src/{domain}/
 │   └── *.rs        # Repository implementations
 └── policy/         # Authorization (if needed)
 ```
+
+**Current domain modules**: `identity/`, `reputation/`, `rooms/`, `sim/`
 
 **Standard subdirectories**:
 - `crypto/` - Signing, verification, key derivation

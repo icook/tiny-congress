@@ -9,11 +9,11 @@ Use this skill whenever you need to confirm that the Skaffold-powered developer 
 ## Prerequisites
 - Docker (or another container runtime) running locally.
 - Skaffold installed.
-- A local Kubernetes cluster such as Minikube or Colima, with `kubectl config current-context` pointing to it.
+- A local Kubernetes cluster (KinD recommended; see `docs/playbooks/local-dev-setup.md`), with `kubectl config current-context` pointing to it.
 - The repository dependencies (Rust toolchain, Node, etc.) installed so the containers can build.
 
 ## Procedure
-1. Start your local Kubernetes cluster (e.g. `minikube start`) if it is not already running.
+1. Start your local Kubernetes cluster (e.g. `just kind-create`) if it is not already running.
 2. From the repository root, run:
    ```bash
    skaffold dev --port-forward
