@@ -236,7 +236,6 @@ sim:
   enabled: false
   schedule: "*/30 * * * *"  # Every 30 minutes
   apiUrl: ""
-  verifierApiKey: ""
   openrouterApiKey: ""
   openrouterModel: "anthropic/claude-sonnet-4-6"
   targetRooms: 5

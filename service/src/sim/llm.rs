@@ -235,7 +235,6 @@ mod tests {
     fn builds_correct_messages() {
         let config = SimConfig {
             api_url: "http://localhost:4000".to_string(),
-            verifier_api_key: "test-key".to_string(),
             openrouter_api_key: "test-key".to_string(),
             openrouter_model: "test-model".to_string(),
             target_rooms: 5,

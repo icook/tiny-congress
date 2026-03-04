@@ -85,6 +85,61 @@ impl SimAccount {
         ))
     }
 
+    /// Create a deterministic verifier account.
+    ///
+    /// Uses a separate seed domain (`"tc-sim-verifier-*"`) so keys never
+    /// collide with voter accounts created via [`SimAccount::from_seed`].
+    /// The username is `"sim_verifier"`.
+    #[must_use]
+    pub fn verifier() -> Self {
+        let root_seed: [u8; 32] = Sha256::digest(b"tc-sim-verifier-root-key-v1").into();
+        let root_signing_key = SigningKey::from_bytes(&root_seed);
+
+        let device_seed: [u8; 32] = Sha256::digest(b"tc-sim-verifier-device-key-v1").into();
+        let device_signing_key = SigningKey::from_bytes(&device_seed);
+
+        let device_pubkey_bytes = device_signing_key.verifying_key().to_bytes();
+        let device_kid = Kid::derive(&device_pubkey_bytes);
+
+        Self {
+            username: "sim_verifier".to_string(),
+            account_id: None,
+            root_signing_key,
+            device_signing_key,
+            device_kid,
+        }
+    }
+
+    /// Return the root public key as base64url for use in `TC_VERIFIERS` config.
+    #[must_use]
+    pub fn root_pubkey_base64url(&self) -> String {
+        encode_base64url(&self.root_signing_key.verifying_key().to_bytes())
+    }
+
+    /// Build the JSON body for `POST /auth/login`.
+    ///
+    /// The login payload registers a new device key for an existing account.
+    /// The certificate is `root_key.sign(device_pubkey || timestamp_le_i64_bytes)`.
+    #[must_use]
+    pub fn build_login_json(&self) -> String {
+        let timestamp = chrono::Utc::now().timestamp();
+
+        let device_pubkey_bytes = self.device_signing_key.verifying_key().to_bytes();
+        let device_pubkey = encode_base64url(&device_pubkey_bytes);
+
+        // Certificate: root signs (device_pubkey || timestamp as LE i64 bytes)
+        let mut signed_payload = Vec::with_capacity(40);
+        signed_payload.extend_from_slice(&device_pubkey_bytes);
+        signed_payload.extend_from_slice(&timestamp.to_le_bytes());
+        let cert = self.root_signing_key.sign(&signed_payload);
+        let certificate = encode_base64url(&cert.to_bytes());
+
+        format!(
+            r#"{{"username": "{}", "timestamp": {timestamp}, "device": {{"pubkey": "{device_pubkey}", "name": "Sim Device", "certificate": "{certificate}"}}}}"#,
+            self.username
+        )
+    }
+
     /// Produce device-auth headers for an authenticated API request.
     ///
     /// Signs the canonical message `{method}\n{path}\n{timestamp}\n{nonce}\n{body_sha256_hex}`
@@ -308,6 +363,84 @@ mod tests {
             .expect("backup blob must parse as a valid BackupEnvelope");
         assert_eq!(envelope.version(), 1);
         assert_eq!(envelope.salt(), &[0xAA; 16]);
+    }
+
+    #[test]
+    fn verifier_is_deterministic() {
+        let a = SimAccount::verifier();
+        let b = SimAccount::verifier();
+        assert_eq!(a.root_signing_key.to_bytes(), b.root_signing_key.to_bytes());
+        assert_eq!(
+            a.device_signing_key.to_bytes(),
+            b.device_signing_key.to_bytes()
+        );
+        assert_eq!(a.device_kid, b.device_kid);
+        assert_eq!(a.username, "sim_verifier");
+    }
+
+    #[test]
+    fn verifier_keys_differ_from_voter_keys() {
+        let verifier = SimAccount::verifier();
+        let voter = SimAccount::from_seed(0);
+        assert_ne!(
+            verifier.root_signing_key.to_bytes(),
+            voter.root_signing_key.to_bytes()
+        );
+        assert_ne!(
+            verifier.device_signing_key.to_bytes(),
+            voter.device_signing_key.to_bytes()
+        );
+    }
+
+    #[test]
+    fn root_pubkey_base64url_is_stable() {
+        let a = SimAccount::verifier();
+        let b = SimAccount::verifier();
+        assert_eq!(a.root_pubkey_base64url(), b.root_pubkey_base64url());
+        // 32 bytes → 43 base64url chars (no padding)
+        assert_eq!(a.root_pubkey_base64url().len(), 43);
+    }
+
+    #[test]
+    fn login_json_is_valid() {
+        let account = SimAccount::from_seed(0);
+        let json = account.build_login_json();
+        let parsed: serde_json::Value =
+            serde_json::from_str(&json).expect("login JSON must be valid");
+
+        assert_eq!(parsed["username"], "sim_voter_00");
+        assert!(parsed["timestamp"].is_number());
+        assert!(parsed["device"]["pubkey"].is_string());
+        assert_eq!(parsed["device"]["name"], "Sim Device");
+        assert!(parsed["device"]["certificate"].is_string());
+    }
+
+    #[test]
+    fn login_json_certificate_verifies() {
+        let account = SimAccount::from_seed(0);
+        let json = account.build_login_json();
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+
+        let root_pubkey_bytes = account.root_signing_key.verifying_key().to_bytes();
+
+        let device_pubkey_b64 = parsed["device"]["pubkey"].as_str().unwrap();
+        let device_pubkey_bytes = tc_crypto::decode_base64url(device_pubkey_b64).unwrap();
+
+        let timestamp = parsed["timestamp"].as_i64().unwrap();
+        let cert_b64 = parsed["device"]["certificate"].as_str().unwrap();
+        let cert_bytes = tc_crypto::decode_base64url(cert_b64).unwrap();
+
+        // Certificate signs device_pubkey || timestamp (LE i64 bytes)
+        let mut signed_payload = Vec::with_capacity(40);
+        signed_payload.extend_from_slice(&device_pubkey_bytes);
+        signed_payload.extend_from_slice(&timestamp.to_le_bytes());
+
+        tc_crypto::verify_ed25519(
+            &root_pubkey_bytes,
+            &signed_payload,
+            cert_bytes.as_slice().try_into().unwrap(),
+        )
+        .expect("login certificate must verify against root pubkey");
     }
 
     #[test]

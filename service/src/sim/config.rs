@@ -7,8 +7,6 @@ use serde::Deserialize;
 pub struct SimConfig {
     /// Base URL of the `TinyCongress` API (e.g., `http://localhost:4000`)
     pub api_url: String,
-    /// API key for the verifier service
-    pub verifier_api_key: String,
     /// `OpenRouter` API key
     pub openrouter_api_key: String,
     /// `OpenRouter` model identifier (e.g., "anthropic/claude-sonnet-4-6")
@@ -65,7 +63,7 @@ impl SimConfig {
     /// # Errors
     ///
     /// Returns an error if required env vars (`SIM_API_URL`,
-    /// `SIM_VERIFIER_API_KEY`, `SIM_OPENROUTER_API_KEY`) are missing.
+    /// `SIM_OPENROUTER_API_KEY`) are missing.
     pub fn from_env() -> Result<Self, Box<figment::Error>> {
         use figment::{providers::Env, Figment};
         Figment::new()
@@ -84,13 +82,11 @@ mod tests {
     fn defaults_load_when_required_fields_present() {
         figment::Jail::expect_with(|jail| {
             jail.set_env("SIM_API_URL", "http://localhost:4000");
-            jail.set_env("SIM_VERIFIER_API_KEY", "test-verifier-key");
             jail.set_env("SIM_OPENROUTER_API_KEY", "test-openrouter-key");
 
             let config = SimConfig::from_env().expect("should load with required fields set");
 
             assert_eq!(config.api_url, "http://localhost:4000");
-            assert_eq!(config.verifier_api_key, "test-verifier-key");
             assert_eq!(config.openrouter_api_key, "test-openrouter-key");
             assert_eq!(config.openrouter_model, "anthropic/claude-sonnet-4-6");
             assert_eq!(config.target_rooms, 5);
@@ -111,7 +107,6 @@ mod tests {
     #[test]
     fn error_when_api_url_missing() {
         figment::Jail::expect_with(|jail| {
-            jail.set_env("SIM_VERIFIER_API_KEY", "key");
             jail.set_env("SIM_OPENROUTER_API_KEY", "key");
 
             let result = SimConfig::from_env();
@@ -121,22 +116,9 @@ mod tests {
     }
 
     #[test]
-    fn error_when_verifier_api_key_missing() {
-        figment::Jail::expect_with(|jail| {
-            jail.set_env("SIM_API_URL", "http://localhost:4000");
-            jail.set_env("SIM_OPENROUTER_API_KEY", "key");
-
-            let result = SimConfig::from_env();
-            assert!(result.is_err(), "should fail without SIM_VERIFIER_API_KEY");
-            Ok(())
-        });
-    }
-
-    #[test]
     fn error_when_openrouter_api_key_missing() {
         figment::Jail::expect_with(|jail| {
             jail.set_env("SIM_API_URL", "http://localhost:4000");
-            jail.set_env("SIM_VERIFIER_API_KEY", "key");
 
             let result = SimConfig::from_env();
             assert!(
@@ -160,7 +142,6 @@ mod tests {
     fn custom_values_override_defaults() {
         figment::Jail::expect_with(|jail| {
             jail.set_env("SIM_API_URL", "https://api.example.com");
-            jail.set_env("SIM_VERIFIER_API_KEY", "vk");
             jail.set_env("SIM_OPENROUTER_API_KEY", "ok");
             jail.set_env("SIM_OPENROUTER_MODEL", "openai/gpt-4o");
             jail.set_env("SIM_TARGET_ROOMS", "10");

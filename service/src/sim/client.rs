@@ -439,25 +439,50 @@ impl SimClient {
 
     // -- Verifier-authenticated endpoint ----------------------------------
 
-    /// Endorse a user for a topic via the verifier API.
+    /// Log in an existing account to register a device key.
+    ///
+    /// Returns the raw response so the caller can inspect the status code
+    /// (201 for success, 409 for duplicate device key).
     ///
     /// # Errors
     ///
-    /// Returns an error if the HTTP request fails or the response is not 2xx.
-    pub async fn endorse(&self, verifier_api_key: &str, username: &str, topic: &str) -> Result<()> {
-        let path = "/verifiers/endorsements";
-        let body = serde_json::to_vec(&EndorseBody { username, topic })?;
-        let url = format!("{}{path}", self.api_url);
-
+    /// Returns an error if the HTTP request itself fails (network error).
+    pub async fn login(&self, body: &str) -> Result<reqwest::Response> {
+        let url = format!("{}/auth/login", self.api_url);
         let resp = self
             .http
             .post(&url)
             .header("Content-Type", "application/json")
-            .header("Authorization", format!("Bearer {verifier_api_key}"))
-            .body(body)
+            .body(body.to_owned())
             .send()
             .await?;
+        Ok(resp)
+    }
 
+    /// Endorse a user for a topic via the verifier API.
+    ///
+    /// The `verifier` account must have an `authorized_verifier` endorsement
+    /// (bootstrapped by the API server from `TC_VERIFIERS` config).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the HTTP request fails or the response is not 2xx.
+    pub async fn endorse(&self, verifier: &SimAccount, username: &str, topic: &str) -> Result<()> {
+        let path = "/verifiers/endorsements";
+        let body = serde_json::to_vec(&EndorseBody { username, topic })?;
+        let headers = verifier.sign_request("POST", path, &body);
+
+        let mut req = self
+            .http
+            .post(format!("{}{path}", self.api_url))
+            .header("Content-Type", "application/json")
+            .body(body);
+
+        for (key, value) in headers {
+            req = req.header(key, value);
+        }
+
+        let resp = req.send().await?;
         let status = resp.status();
         if !status.is_success() {
             let body = resp.text().await.unwrap_or_default();
@@ -564,6 +589,13 @@ mod tests {
             url,
             "http://localhost:4000/rooms/550e8400-e29b-41d4-a716-446655440000/polls/660e8400-e29b-41d4-a716-446655440000/vote"
         );
+    }
+
+    #[test]
+    fn url_construction_login() {
+        let client = SimClient::new(reqwest::Client::new(), "http://localhost:4000".to_string());
+        let url = format!("{}/auth/login", client.api_url);
+        assert_eq!(url, "http://localhost:4000/auth/login");
     }
 
     #[test]

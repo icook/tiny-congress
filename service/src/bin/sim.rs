@@ -18,6 +18,7 @@ use tinycongress_api::sim::{
 };
 
 #[tokio::main]
+#[allow(clippy::too_many_lines)]
 async fn main() -> Result<(), anyhow::Error> {
     // 1. Load sim config from SIM_* env vars
     let config = SimConfig::from_env().context("failed to load sim config")?;
@@ -44,12 +45,36 @@ async fn main() -> Result<(), anyhow::Error> {
     let http = reqwest::Client::new();
     let client = SimClient::new(http.clone(), config.api_url.clone());
 
-    // 4. Generate deterministic sim accounts
+    // 4. Set up verifier account (login to register device key)
+    let verifier = SimAccount::verifier();
+    tracing::info!(
+        username = %verifier.username,
+        root_pubkey = %verifier.root_pubkey_base64url(),
+        "verifier identity (ensure TC_VERIFIERS includes this public key)"
+    );
+
+    let login_body = verifier.build_login_json();
+    let resp = client.login(&login_body).await?;
+    let login_status = resp.status();
+    if login_status.as_u16() == 201 {
+        tracing::info!("verifier device key registered via login");
+    } else if login_status.as_u16() == 409 {
+        tracing::debug!("verifier device key already registered");
+    } else {
+        let body = resp.text().await.unwrap_or_default();
+        tracing::warn!(
+            status = %login_status,
+            body = %body,
+            "verifier login failed (account may not be bootstrapped yet)"
+        );
+    }
+
+    // 5. Generate deterministic sim accounts
     let mut accounts: Vec<SimAccount> =
         (0..config.voter_count).map(SimAccount::from_seed).collect();
     tracing::info!(count = accounts.len(), "generated sim accounts");
 
-    // 5. Sign up each account, endorse on 201
+    // 6. Sign up each account, endorse on 201
     tracing::info!("signing up accounts...");
     for account in &mut accounts {
         let signup_body = account
@@ -67,13 +92,9 @@ async fn main() -> Result<(), anyhow::Error> {
             account.account_id = Some(signup_resp.account_id);
             tracing::info!(username = %account.username, "created account");
 
-            // Endorse for voting eligibility
+            // Endorse for voting eligibility via verifier device-key signing
             match client
-                .endorse(
-                    &config.verifier_api_key,
-                    &account.username,
-                    "identity_verified",
-                )
+                .endorse(&verifier, &account.username, "identity_verified")
                 .await
             {
                 Ok(()) => {
@@ -83,7 +104,7 @@ async fn main() -> Result<(), anyhow::Error> {
                     tracing::warn!(
                         username = %account.username,
                         error = %e,
-                        "endorsement failed (verifier API may not be available)"
+                        "endorsement failed (verifier may not be bootstrapped)"
                     );
                 }
             }
@@ -100,7 +121,7 @@ async fn main() -> Result<(), anyhow::Error> {
     }
     tracing::info!("account signup complete");
 
-    // 6. Count active rooms via API
+    // 7. Count active rooms via API
     let active_rooms = count_active_rooms(&client).await?;
     tracing::info!(
         active_rooms,
@@ -108,7 +129,7 @@ async fn main() -> Result<(), anyhow::Error> {
         "room count check"
     );
 
-    // 7. If below target, generate and insert content
+    // 8. If below target, generate and insert content
     if active_rooms < config.target_rooms {
         let rooms_needed = config.target_rooms - active_rooms;
         tracing::info!(rooms_needed, "generating new content via LLM...");
@@ -136,7 +157,7 @@ async fn main() -> Result<(), anyhow::Error> {
         tracing::info!("room target met, skipping content generation");
     }
 
-    // 8. Cast simulated votes
+    // 9. Cast simulated votes
     tracing::info!("casting simulated votes...");
     let vote_count = cast_simulated_votes(&client, &accounts, config.votes_per_poll).await?;
     tracing::info!(votes_cast = vote_count, "vote simulation complete");

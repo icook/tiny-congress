@@ -21,6 +21,10 @@ data:
       playground_enabled: {{ .Values.graphql.playgroundEnabled | default false }}
     swagger:
       enabled: {{ .Values.swagger.enabled | default false }}
+{{- if .Values.verifiers }}
+    verifiers:
+{{ .Values.verifiers | toYaml | indent 6 }}
+{{- end }}
 {{- if .Values.idme.enabled }}
     idme:
       authorize_url: {{ .Values.idme.authorizeUrl | default "https://api.idmelabs.com/oauth/authorize" | quote }}
