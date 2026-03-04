@@ -11,6 +11,7 @@ data:
       port: {{ .Values.database.port }}
       name: {{ .Values.database.name | quote }}
       max_connections: {{ .Values.database.maxConnections | default 10 }}
+      auto_reset_on_migration_failure: {{ .Values.database.autoResetOnMigrationFailure | default false }}
     server:
       port: {{ .Values.service.port | default 8080 }}
     logging:

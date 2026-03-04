@@ -78,6 +78,13 @@ pub struct DatabaseConfig {
 
     /// Optional custom migrations directory path.
     pub migrations_dir: Option<String>,
+
+    /// When true, automatically drop and recreate the database if migrations
+    /// fail due to version mismatch (e.g. a different image was deployed
+    /// against an existing DB). Only safe for ephemeral databases like the
+    /// demo environment. Default: false.
+    #[serde(default)]
+    pub auto_reset_on_migration_failure: bool,
 }
 
 impl DatabaseConfig {
@@ -91,6 +98,20 @@ impl DatabaseConfig {
             .host(&self.host)
             .port(self.port)
             .database(&self.name)
+            .username(&self.user)
+            .password(&self.password)
+    }
+
+    /// Build `PgConnectOptions` targeting the `postgres` system database.
+    ///
+    /// Used for administrative operations (DROP/CREATE DATABASE) that cannot
+    /// run against the application database itself.
+    #[must_use]
+    pub fn system_connect_options(&self) -> sqlx_postgres::PgConnectOptions {
+        sqlx_postgres::PgConnectOptions::new()
+            .host(&self.host)
+            .port(self.port)
+            .database("postgres")
             .username(&self.user)
             .password(&self.password)
     }
@@ -316,6 +337,7 @@ impl Default for Config {
                 password: String::new(),
                 max_connections: default_max_connections(),
                 migrations_dir: None,
+                auto_reset_on_migration_failure: false,
             },
             server: ServerConfig {
                 port: default_port(),
@@ -505,6 +527,7 @@ mod tests {
             password: "s3cret".into(),
             max_connections: 10,
             migrations_dir: None,
+            auto_reset_on_migration_failure: false,
         };
         let opts = config.connect_options();
         // PgConnectOptions exposes getters for host, port, and database
@@ -524,6 +547,7 @@ mod tests {
             password: "p@ss:word/ok?".into(),
             max_connections: 10,
             migrations_dir: None,
+            auto_reset_on_migration_failure: false,
         };
         let opts = config.connect_options();
         // PgConnectOptions handles special chars without URL encoding issues.
