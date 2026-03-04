@@ -88,6 +88,11 @@ deploy:
         overrides:
           cors:
             allowedOrigins: "http://localhost:5173,http://127.0.0.1:5173"
+          # Bootstrap sim verifier so the sim worker can endorse accounts.
+          # Key derived from: SHA-256("tc-sim-verifier-root-key-v1") → Ed25519 pubkey
+          verifiers:
+            - name: "sim_verifier"
+              public_key: "ovySo2At7yyERm9siRnjP_txpqBLLRwIjDbH5qVAjG0"
           podSecurityContext:
             runAsNonRoot: false
           securityContext:

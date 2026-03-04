@@ -230,3 +230,26 @@ cargoCache:
   enabled: false
   # Path inside KinD node (mapped from ./service/target via kind-config.yaml)
   hostPath: /cargo-cache
+
+# Simulation worker configuration
+sim:
+  enabled: false
+  schedule: "*/30 * * * *"  # Every 30 minutes
+  apiUrl: ""
+  openrouterApiKey: ""
+  openrouterModel: "anthropic/claude-sonnet-4-6"
+  targetRooms: 5
+  votesPerPoll: 15
+  voterCount: 20
+  logLevel: "info"
+  systemPrompt: >-
+    You are a civic engagement topic generator. Generate realistic local
+    governance topics suitable for community polling. Topics should be
+    specific, actionable, and relevant to a small city or town.
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
