@@ -120,7 +120,6 @@ export function PollPage({ roomId, pollId }: PollPageProps) {
   const isActive = poll.status === 'active';
   const isAuthenticated = Boolean(deviceKid);
   const canVote = isActive && isAuthenticated && isVerified;
-  const hasVoted = (myVotesQuery.data?.length ?? 0) > 0;
 
   return (
     <Stack gap="md" maw={800} mx="auto" mt="xl" px="md">
