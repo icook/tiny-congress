@@ -191,6 +191,19 @@ pub async fn get_backup(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::identity::repo::{
+        mock::MockIdentityRepo, AccountRecord, AccountRepoError, BackupRecord, BackupRepoError,
+    };
+    use axum::{
+        body::{to_bytes, Body},
+        http::{Request, StatusCode},
+        routing::get,
+        Router,
+    };
+    use std::sync::Arc;
+    use tc_crypto::{encode_base64url, Kid};
+    use tower::ServiceExt;
+    use uuid::Uuid;
 
     const TEST_HMAC_KEY: &[u8] = b"test-hmac-key-for-unit-tests";
 
@@ -235,5 +248,153 @@ mod tests {
         assert_eq!(m_cost, 65536);
         assert_eq!(t_cost, 3);
         assert_eq!(p_cost, 1);
+    }
+
+    // ── Handler-level tests ────────────────────────────────────────────────
+
+    fn test_router(repo: MockIdentityRepo) -> Router {
+        Router::new()
+            .route("/auth/backup/{username}", get(get_backup))
+            .layer(axum::extract::Extension(
+                Arc::new(repo) as Arc<dyn crate::identity::repo::IdentityRepo>
+            ))
+            .layer(axum::extract::Extension(SyntheticBackupKey::new(
+                TEST_HMAC_KEY.to_vec(),
+            )))
+    }
+
+    fn backup_request(username: &str) -> Request<Body> {
+        Request::builder()
+            .method("GET")
+            .uri(format!("/auth/backup/{username}"))
+            .body(Body::empty())
+            .expect("request builder")
+    }
+
+    /// Anti-enumeration: unknown username must return 200, not 404.
+    #[tokio::test]
+    async fn test_get_backup_unknown_user_returns_200() {
+        let repo = MockIdentityRepo::new(); // default: account lookup returns NotFound
+        let app = test_router(repo);
+
+        let response = app
+            .oneshot(backup_request("unknown-user"))
+            .await
+            .expect("response");
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = to_bytes(response.into_body(), 1024 * 1024)
+            .await
+            .expect("body");
+        let payload: serde_json::Value = serde_json::from_slice(&body).expect("json");
+        assert!(payload["encrypted_backup"].as_str().is_some());
+        assert!(payload["root_kid"].as_str().is_some());
+    }
+
+    /// Anti-enumeration: account with no backup must return 200 synthetic, not 404.
+    #[tokio::test]
+    async fn test_get_backup_account_without_backup_returns_200_synthetic() {
+        let repo = MockIdentityRepo::new();
+        repo.set_account_by_username_result(Ok(AccountRecord {
+            id: Uuid::new_v4(),
+            username: "alice".to_string(),
+            root_pubkey: encode_base64url(&[1u8; 32]),
+            root_kid: Kid::derive(&[1u8; 32]),
+        }));
+        // backup lookup defaults to NotFound
+        let app = test_router(repo);
+
+        let response = app
+            .oneshot(backup_request("alice"))
+            .await
+            .expect("response");
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = to_bytes(response.into_body(), 1024 * 1024)
+            .await
+            .expect("body");
+        let payload: serde_json::Value = serde_json::from_slice(&body).expect("json");
+        assert!(payload["encrypted_backup"].as_str().is_some());
+    }
+
+    /// Happy path: real backup returned for known user.
+    #[tokio::test]
+    async fn test_get_backup_known_user_with_backup_returns_real_backup() {
+        let root_kid = Kid::derive(&[2u8; 32]);
+        let encrypted_backup = vec![0xAA; 90];
+
+        let repo = MockIdentityRepo::new();
+        repo.set_account_by_username_result(Ok(AccountRecord {
+            id: Uuid::new_v4(),
+            username: "alice".to_string(),
+            root_pubkey: encode_base64url(&[2u8; 32]),
+            root_kid: root_kid.clone(),
+        }));
+        repo.set_get_backup_by_kid_result(Ok(BackupRecord {
+            id: Uuid::new_v4(),
+            account_id: Uuid::new_v4(),
+            kid: root_kid.clone(),
+            encrypted_backup: encrypted_backup.clone(),
+            salt: vec![0; 16],
+            version: 1,
+            created_at: chrono::Utc::now(),
+        }));
+        let app = test_router(repo);
+
+        let response = app
+            .oneshot(backup_request("alice"))
+            .await
+            .expect("response");
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = to_bytes(response.into_body(), 1024 * 1024)
+            .await
+            .expect("body");
+        let payload: serde_json::Value = serde_json::from_slice(&body).expect("json");
+        assert_eq!(
+            payload["encrypted_backup"].as_str().unwrap(),
+            encode_base64url(&encrypted_backup)
+        );
+        assert_eq!(payload["root_kid"].as_str().unwrap(), root_kid.as_str());
+    }
+
+    /// DB error on account lookup returns 500 (not a synthetic backup).
+    #[tokio::test]
+    async fn test_get_backup_account_db_error_returns_500() {
+        let repo = MockIdentityRepo::new();
+        repo.set_account_by_username_result(Err(AccountRepoError::Database(
+            sqlx::Error::Protocol("db error".to_string()),
+        )));
+        let app = test_router(repo);
+
+        let response = app
+            .oneshot(backup_request("alice"))
+            .await
+            .expect("response");
+
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    }
+
+    /// DB error on backup lookup returns 500 (not a synthetic backup).
+    #[tokio::test]
+    async fn test_get_backup_backup_db_error_returns_500() {
+        let repo = MockIdentityRepo::new();
+        repo.set_account_by_username_result(Ok(AccountRecord {
+            id: Uuid::new_v4(),
+            username: "alice".to_string(),
+            root_pubkey: encode_base64url(&[3u8; 32]),
+            root_kid: Kid::derive(&[3u8; 32]),
+        }));
+        repo.set_get_backup_by_kid_result(Err(BackupRepoError::Database(sqlx::Error::Protocol(
+            "db error".to_string(),
+        ))));
+        let app = test_router(repo);
+
+        let response = app
+            .oneshot(backup_request("alice"))
+            .await
+            .expect("response");
+
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
     }
 }
