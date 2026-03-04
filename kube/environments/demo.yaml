@@ -53,7 +53,7 @@ sim:
   enabled: true
   schedule: "*/30 * * * *"
   apiUrl: "http://tc-demo.tiny-congress-demo.svc.cluster.local:8080"
-  openrouterModel: "meta-llama/llama-3.3-70b-instruct:free"
+  openrouterModel: "meta-llama/llama-3.3-70b-instruct"
   targetRooms: 5
   votesPerPoll: 15
   voterCount: 20
