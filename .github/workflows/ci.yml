@@ -376,6 +376,7 @@ jobs:
       postgres: ${{ steps.filter.outputs.postgres }}
       api: ${{ steps.filter.outputs.api }}
       ui: ${{ steps.filter.outputs.ui }}
+      chart: ${{ steps.filter.outputs.chart }}
     steps:
       - uses: actions/checkout@v6
       - uses: dorny/paths-filter@v3
@@ -392,6 +393,8 @@ jobs:
             ui:
               - 'web/**'
               - 'crates/tc-crypto/**'
+            chart:
+              - 'kube/app/**'
 
   # ============================================================
   # JOB 1: Build all container images in parallel
@@ -878,7 +881,7 @@ jobs:
   deploy-gitops:
     name: Update gitops image digests
     if: github.event_name == 'push' && github.ref == 'refs/heads/master'
-    needs: [integration-tests]
+    needs: [integration-tests, detect-changes]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -943,7 +946,10 @@ jobs:
           TC_SHA: ${{ github.sha }}
         run: |
           SOURCE="clusters/sauce/workloads/tiny-congress/source.yaml"
-          if [ "${{ steps.current.outputs.commit }}" = "${TC_SHA}" ]; then
+          CHART_CHANGED="${{ needs.detect-changes.outputs.chart }}"
+          if [ "$CHART_CHANGED" = "false" ] && [ -z "$CHANGED_DIGESTS" ]; then
+            echo "  source commit: no chart or image changes, skipping"
+          elif [ "${{ steps.current.outputs.commit }}" = "${TC_SHA}" ]; then
             echo "  source commit: unchanged, skipping"
           else
             echo "  source commit: ${{ steps.current.outputs.commit }} -> ${TC_SHA}"
