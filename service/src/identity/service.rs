@@ -223,6 +223,51 @@ impl DevicePubkey {
     }
 }
 
+// ─── RootPubkey type ─────────────────────────────────────────────────────────
+
+/// A validated Ed25519 root public key (exactly 32 bytes).
+///
+/// Can only be constructed through [`RootPubkey::from_base64url`], which
+/// decodes and validates the byte length.
+#[derive(Debug, Clone)]
+pub struct RootPubkey([u8; 32]);
+
+/// Error type for root public key validation failures.
+#[derive(Debug, PartialEq, Eq, thiserror::Error)]
+pub enum RootPubkeyError {
+    #[error("Invalid base64url encoding for root_pubkey")]
+    InvalidEncoding,
+    #[error("root_pubkey must be 32 bytes (Ed25519)")]
+    InvalidLength,
+}
+
+impl RootPubkey {
+    /// Decode and validate a base64url-encoded Ed25519 root public key.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`RootPubkeyError`] if decoding fails or length is not 32.
+    pub fn from_base64url(encoded: &str) -> Result<Self, RootPubkeyError> {
+        let bytes = decode_base64url(encoded).map_err(|_| RootPubkeyError::InvalidEncoding)?;
+        let arr: [u8; 32] = bytes
+            .try_into()
+            .map_err(|_| RootPubkeyError::InvalidLength)?;
+        Ok(Self(arr))
+    }
+
+    /// Return the raw 32-byte public key.
+    #[must_use]
+    pub const fn as_bytes(&self) -> &[u8; 32] {
+        &self.0
+    }
+
+    /// Derive the KID for this public key.
+    #[must_use]
+    pub fn kid(&self) -> Kid {
+        Kid::derive(&self.0)
+    }
+}
+
 // ─── CertificateSignature type ──────────────────────────────────────────────
 
 /// A validated Ed25519 certificate signature (exactly 64 bytes).
@@ -350,13 +395,9 @@ impl IdentityService for DefaultIdentityService {
         validate_username(&username).map_err(|e| SignupError::Validation(e.to_string()))?;
 
         // Decode and validate root public key
-        let root_pubkey_bytes = decode_base64url(&req.root_pubkey).map_err(|_| {
-            SignupError::Validation("Invalid base64url encoding for root_pubkey".to_string())
-        })?;
-        let root_pubkey_arr: [u8; 32] = root_pubkey_bytes.as_slice().try_into().map_err(|_| {
-            SignupError::Validation("root_pubkey must be 32 bytes (Ed25519)".to_string())
-        })?;
-        let root_kid = Kid::derive(&root_pubkey_arr);
+        let root_pubkey = RootPubkey::from_base64url(&req.root_pubkey)
+            .map_err(|e| SignupError::Validation(e.to_string()))?;
+        let root_kid = root_pubkey.kid();
 
         // Decode and validate encrypted backup
         let backup_bytes = decode_base64url(&req.backup.encrypted_blob).map_err(|_| {
@@ -387,7 +428,7 @@ impl IdentityService for DefaultIdentityService {
         // feature reuses key material, the message format must be extended (e.g. with
         // account binding or a nonce).
         verify_ed25519(
-            &root_pubkey_arr,
+            root_pubkey.as_bytes(),
             device_pubkey.as_bytes(),
             cert_sig.as_bytes(),
         )
@@ -619,6 +660,56 @@ mod tests {
             CertificateSignature::from_base64url(&encode_base64url(&[1u8; 128])).unwrap_err(),
             CertificateSignatureError::InvalidLength
         );
+    }
+
+    // ── RootPubkey::from_base64url (direct function tests) ────────────────
+
+    #[test]
+    fn test_root_pubkey_valid_32_bytes() {
+        let bytes = [3u8; 32];
+        let result = RootPubkey::from_base64url(&encode_base64url(&bytes));
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().as_bytes(), &bytes);
+    }
+
+    #[test]
+    fn test_root_pubkey_invalid_base64() {
+        assert_eq!(
+            RootPubkey::from_base64url("!!!not-base64!!!").unwrap_err(),
+            RootPubkeyError::InvalidEncoding
+        );
+    }
+
+    #[test]
+    fn test_root_pubkey_empty_string() {
+        // Empty base64url decodes to zero bytes — length check fires, not encoding check.
+        assert_eq!(
+            RootPubkey::from_base64url("").unwrap_err(),
+            RootPubkeyError::InvalidLength
+        );
+    }
+
+    #[test]
+    fn test_root_pubkey_too_short() {
+        assert_eq!(
+            RootPubkey::from_base64url(&encode_base64url(&[1u8; 16])).unwrap_err(),
+            RootPubkeyError::InvalidLength
+        );
+    }
+
+    #[test]
+    fn test_root_pubkey_too_long() {
+        assert_eq!(
+            RootPubkey::from_base64url(&encode_base64url(&[1u8; 64])).unwrap_err(),
+            RootPubkeyError::InvalidLength
+        );
+    }
+
+    #[test]
+    fn test_root_pubkey_kid_is_deterministic() {
+        let bytes = [5u8; 32];
+        let key = RootPubkey::from_base64url(&encode_base64url(&bytes)).unwrap();
+        assert_eq!(key.kid(), Kid::derive(&bytes));
     }
 
     // ── Username validation (direct function tests) ────────────────────────
