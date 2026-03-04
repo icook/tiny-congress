@@ -120,6 +120,7 @@ SECTION
 
 build_prompt() {
     local pending_changes="${1:-}"
+    local ledger_context="${2:-No prior refinement history for this focus area.}"
     local template_file="$SCRIPT_DIR/refine-prompt.md"
     if [[ ! -f "$template_file" ]]; then
         log "ERROR: Prompt template not found at $template_file"
@@ -157,11 +158,13 @@ Find a DIFFERENT improvement instead."
     GUIDANCE_CONTENT="$guidance" \
     ENABLED_TYPES="$types_section" \
     PENDING_CHANGES="$pending_section" \
+    LEDGER_CONTEXT="$ledger_context" \
     perl -0777 -p -e '
         s/\Q{{FOCUS_PATH}}\E/$ENV{FOCUS_PATH}/g;
         s/\Q{{GUIDANCE_CONTENT}}\E/$ENV{GUIDANCE_CONTENT}/g;
         s/\Q{{ENABLED_TYPES}}\E/$ENV{ENABLED_TYPES}/g;
         s/\Q{{PENDING_CHANGES}}\E/$ENV{PENDING_CHANGES}/g;
+        s/\Q{{LEDGER_CONTEXT}}\E/$ENV{LEDGER_CONTEXT}/g;
     ' "$template_file"
 }
 
@@ -371,7 +374,7 @@ get_pending_pr_summary() {
 
 if $DRY_RUN; then
     log "=== DRY RUN: Generated prompt ==="
-    build_prompt "$(get_pending_pr_summary)"
+    build_prompt "$(get_pending_pr_summary)" "$(read_ledger_context)"
     exit 0
 fi
 
@@ -675,9 +678,12 @@ run_iteration() {
     local pending_summary
     pending_summary="$(get_pending_pr_summary)"
 
+    local ledger_context
+    ledger_context="$(read_ledger_context)"
+
     # Build prompt (includes pending PR info so Claude avoids duplicates)
     local prompt
-    prompt="$(build_prompt "$pending_summary")"
+    prompt="$(build_prompt "$pending_summary" "$ledger_context")"
 
     # Run Claude Code in the worktree
     local claude_output
