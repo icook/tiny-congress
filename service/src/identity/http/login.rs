@@ -22,8 +22,8 @@ use uuid::Uuid;
 use super::auth::MAX_TIMESTAMP_SKEW;
 use super::ErrorResponse;
 use crate::identity::repo::{AccountRepoError, DeviceKeyRepoError, IdentityRepo, NonceRepoError};
-use crate::identity::service::{DeviceName, DevicePubkey};
-use tc_crypto::{decode_base64url, verify_ed25519, Kid};
+use crate::identity::service::{CertificateSignature, DeviceName, DevicePubkey};
+use tc_crypto::{verify_ed25519, Kid};
 
 /// Login request payload
 #[derive(Debug, Deserialize)]
@@ -56,7 +56,7 @@ pub struct LoginResponse {
 struct ValidatedLogin {
     device_kid: Kid,
     device_name: DeviceName,
-    cert_bytes: [u8; 64],
+    cert: CertificateSignature,
 }
 
 /// Validate and verify the login request inputs.
@@ -74,23 +74,15 @@ fn validate_login_device(
     let device_name =
         DeviceName::parse(&req.device.name).map_err(|e| super::bad_request(&e.to_string()))?;
 
-    let Ok(cert_bytes) = decode_base64url(&req.device.certificate) else {
-        return Err(super::bad_request(
-            "Invalid base64url encoding for device.certificate",
-        ));
-    };
-    let Ok(cert_arr): Result<[u8; 64], _> = cert_bytes.as_slice().try_into() else {
-        return Err(super::bad_request(
-            "device.certificate must be 64 bytes (Ed25519 signature)",
-        ));
-    };
+    let cert_sig = CertificateSignature::from_base64url(&req.device.certificate)
+        .map_err(|e| super::bad_request(&e.to_string()))?;
 
     // The certificate must sign device_pubkey || timestamp (LE i64 bytes)
     let mut signed_payload = Vec::with_capacity(40);
     signed_payload.extend_from_slice(device_pubkey.as_bytes());
     signed_payload.extend_from_slice(&req.timestamp.to_le_bytes());
 
-    if verify_ed25519(root_pubkey_arr, &signed_payload, &cert_arr).is_err() {
+    if verify_ed25519(root_pubkey_arr, &signed_payload, cert_sig.as_bytes()).is_err() {
         // Return 401 with generic message — must be indistinguishable from
         // AccountNotFound to prevent username enumeration.
         return Err(super::unauthorized("Invalid credentials"));
@@ -101,7 +93,7 @@ fn validate_login_device(
     Ok(ValidatedLogin {
         device_kid,
         device_name,
-        cert_bytes: cert_arr,
+        cert: cert_sig,
     })
 }
 
@@ -149,7 +141,7 @@ pub async fn login(
     // Record nonce to prevent replay within the timestamp window.
     // Nonce cleanup is handled by the background sweep in main.rs
     // (spawn_nonce_cleanup), using MAX_TIMESTAMP_SKEW as the TTL.
-    let nonce_hash: [u8; 32] = Sha256::digest(validated.cert_bytes).into();
+    let nonce_hash: [u8; 32] = Sha256::digest(validated.cert.as_bytes()).into();
     if let Err(e) = repo.check_and_record_nonce(&nonce_hash).await {
         return match e {
             NonceRepoError::Replay => super::bad_request("Request replay detected"),
@@ -171,7 +163,7 @@ pub async fn login(
             &validated.device_kid,
             &req.device.pubkey,
             validated.device_name.as_str(),
-            &validated.cert_bytes,
+            validated.cert.as_bytes(),
         )
         .await
     {

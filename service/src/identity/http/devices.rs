@@ -18,8 +18,8 @@ use uuid::Uuid;
 use super::auth::AuthenticatedDevice;
 use super::ErrorResponse;
 use crate::identity::repo::{AccountRepoError, DeviceKeyRecord, DeviceKeyRepoError, IdentityRepo};
-use crate::identity::service::{DeviceName, DevicePubkey};
-use tc_crypto::{decode_base64url, verify_ed25519, Kid};
+use crate::identity::service::{CertificateSignature, DeviceName, DevicePubkey};
+use tc_crypto::{verify_ed25519, Kid};
 
 /// Device info returned in API responses (omits certificate and raw pubkey)
 #[derive(Debug, Serialize)]
@@ -104,7 +104,7 @@ pub async fn add_device(
             &validated.device_kid,
             &req.pubkey,
             validated.device_name.as_str(),
-            &validated.cert_bytes,
+            validated.cert.as_bytes(),
         )
         .await
     {
@@ -141,7 +141,7 @@ pub async fn add_device(
 struct ValidatedAddDevice {
     device_kid: Kid,
     device_name: DeviceName,
-    cert_bytes: [u8; 64],
+    cert: CertificateSignature,
 }
 
 /// Validate and verify the add-device request inputs.
@@ -157,16 +157,8 @@ async fn validate_add_device_request(
     let device_name =
         DeviceName::parse(&req.name).map_err(|e| super::bad_request(&e.to_string()))?;
 
-    let Ok(cert_bytes) = decode_base64url(&req.certificate) else {
-        return Err(super::bad_request(
-            "Invalid base64url encoding for certificate",
-        ));
-    };
-    let Ok(cert_arr): Result<[u8; 64], _> = cert_bytes.as_slice().try_into() else {
-        return Err(super::bad_request(
-            "certificate must be 64 bytes (Ed25519 signature)",
-        ));
-    };
+    let cert_sig = CertificateSignature::from_base64url(&req.certificate)
+        .map_err(|e| super::bad_request(&e.to_string()))?;
 
     // Look up the account to get the root pubkey for certificate verification
     let account = match repo.get_account_by_id(account_id).await {
@@ -183,7 +175,13 @@ async fn validate_add_device_request(
 
     let root_pubkey_arr = super::decode_account_root_pubkey(&account)?;
 
-    if verify_ed25519(&root_pubkey_arr, device_pubkey.as_bytes(), &cert_arr).is_err() {
+    if verify_ed25519(
+        &root_pubkey_arr,
+        device_pubkey.as_bytes(),
+        cert_sig.as_bytes(),
+    )
+    .is_err()
+    {
         return Err(super::bad_request("Invalid device certificate"));
     }
 
@@ -192,7 +190,7 @@ async fn validate_add_device_request(
     Ok(ValidatedAddDevice {
         device_kid,
         device_name,
-        cert_bytes: cert_arr,
+        cert: cert_sig,
     })
 }
 
