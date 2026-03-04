@@ -790,4 +790,114 @@ mod tests {
             other => panic!("expected Internal, got: {other:?}"),
         }
     }
+
+    #[tokio::test]
+    async fn test_signup_account_not_found_maps_to_internal() {
+        // AccountRepoError::NotFound is unreachable from the create path —
+        // it maps to Internal rather than silently succeeding.
+        let repo = MockIdentityRepo::new();
+        repo.set_signup_result(Err(CreateSignupError::Account(AccountRepoError::NotFound)));
+        let svc = DefaultIdentityService::new(Arc::new(repo));
+        let err = svc.signup(&valid_signup_request()).await.unwrap_err();
+        assert!(matches!(err, SignupError::Internal(_)));
+    }
+
+    #[tokio::test]
+    async fn test_signup_backup_duplicate_kid_maps_to_duplicate_key() {
+        // BackupRepoError::DuplicateKid means the root pubkey is already registered —
+        // the correct client-visible error is DuplicateKey, not an internal error.
+        let repo = MockIdentityRepo::new();
+        repo.set_signup_result(Err(CreateSignupError::Backup(BackupRepoError::DuplicateKid)));
+        let svc = DefaultIdentityService::new(Arc::new(repo));
+        let err = svc.signup(&valid_signup_request()).await.unwrap_err();
+        assert!(matches!(err, SignupError::DuplicateKey));
+    }
+
+    #[tokio::test]
+    async fn test_signup_backup_duplicate_account_maps_to_internal() {
+        // DuplicateAccount on backup create during signup is a programming error —
+        // the account was just inserted in the same transaction.
+        let repo = MockIdentityRepo::new();
+        repo.set_signup_result(Err(CreateSignupError::Backup(
+            BackupRepoError::DuplicateAccount,
+        )));
+        let svc = DefaultIdentityService::new(Arc::new(repo));
+        let err = svc.signup(&valid_signup_request()).await.unwrap_err();
+        assert!(matches!(err, SignupError::Internal(_)));
+    }
+
+    #[tokio::test]
+    async fn test_signup_backup_database_error_maps_to_internal_without_leaking() {
+        let repo = MockIdentityRepo::new();
+        repo.set_signup_result(Err(CreateSignupError::Backup(BackupRepoError::Database(
+            sqlx::Error::Protocol("secret@backup-host:5432".to_string()),
+        ))));
+        let svc = DefaultIdentityService::new(Arc::new(repo));
+        let err = svc.signup(&valid_signup_request()).await.unwrap_err();
+        match &err {
+            SignupError::Internal(msg) => assert!(!msg.contains("secret")),
+            other => panic!("expected Internal, got: {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_signup_backup_not_found_maps_to_internal() {
+        let repo = MockIdentityRepo::new();
+        repo.set_signup_result(Err(CreateSignupError::Backup(BackupRepoError::NotFound)));
+        let svc = DefaultIdentityService::new(Arc::new(repo));
+        let err = svc.signup(&valid_signup_request()).await.unwrap_err();
+        assert!(matches!(err, SignupError::Internal(_)));
+    }
+
+    #[tokio::test]
+    async fn test_signup_device_key_not_found_maps_to_internal() {
+        let repo = MockIdentityRepo::new();
+        repo.set_signup_result(Err(CreateSignupError::DeviceKey(
+            DeviceKeyRepoError::NotFound,
+        )));
+        let svc = DefaultIdentityService::new(Arc::new(repo));
+        let err = svc.signup(&valid_signup_request()).await.unwrap_err();
+        assert!(matches!(err, SignupError::Internal(_)));
+    }
+
+    #[tokio::test]
+    async fn test_signup_device_key_already_revoked_maps_to_internal() {
+        let repo = MockIdentityRepo::new();
+        repo.set_signup_result(Err(CreateSignupError::DeviceKey(
+            DeviceKeyRepoError::AlreadyRevoked,
+        )));
+        let svc = DefaultIdentityService::new(Arc::new(repo));
+        let err = svc.signup(&valid_signup_request()).await.unwrap_err();
+        assert!(matches!(err, SignupError::Internal(_)));
+    }
+
+    #[tokio::test]
+    async fn test_signup_device_key_database_error_maps_to_internal_without_leaking() {
+        let repo = MockIdentityRepo::new();
+        repo.set_signup_result(Err(CreateSignupError::DeviceKey(
+            DeviceKeyRepoError::Database(sqlx::Error::Protocol(
+                "secret@device-host:5432".to_string(),
+            )),
+        )));
+        let svc = DefaultIdentityService::new(Arc::new(repo));
+        let err = svc.signup(&valid_signup_request()).await.unwrap_err();
+        match &err {
+            SignupError::Internal(msg) => assert!(!msg.contains("secret")),
+            other => panic!("expected Internal, got: {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_signup_transaction_error_maps_to_internal_without_leaking() {
+        let repo = MockIdentityRepo::new();
+        repo.set_signup_result(Err(CreateSignupError::Transaction(sqlx::Error::Protocol(
+            "secret@tx-host:5432".to_string(),
+        ))));
+        let svc = DefaultIdentityService::new(Arc::new(repo));
+        let err = svc.signup(&valid_signup_request()).await.unwrap_err();
+        match &err {
+            SignupError::Internal(msg) => assert!(!msg.contains("secret")),
+            other => panic!("expected Internal, got: {other:?}"),
+        }
+    }
 }
