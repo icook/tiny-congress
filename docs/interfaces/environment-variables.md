@@ -117,6 +117,25 @@ Examples:
 TC_SWAGGER__ENABLED=true
 ```
 
+### Verifier Bootstrap
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `TC_VERIFIERS` | No | `[]` | JSON array of platform verifiers to bootstrap at startup |
+
+Each entry creates an account (if missing) and grants the `authorized_verifier` endorsement with a NULL issuer (genesis). The bootstrap is idempotent — safe to re-run.
+
+```bash
+# Single verifier
+TC_VERIFIERS='[{"name":"sim_verifier","public_key":"ovySo2At7yyERm9siRnjP_txpqBLLRwIjDbH5qVAjG0"}]'
+```
+
+Each entry:
+- `name`: Username for the verifier account
+- `public_key`: Base64url-encoded Ed25519 root public key
+
+Also configurable via `config.yaml` or Helm values (see Kubernetes section).
+
 ### Build Info (unchanged)
 
 | Variable | Default | Description |
@@ -131,6 +150,28 @@ TC_SWAGGER__ENABLED=true
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `EXPORT_LCOV_BASE64` | `1` | Export coverage as base64 for CI artifacts |
+
+## Simulation Worker (`sim` binary)
+
+The sim worker is a separate binary that populates rooms with LLM-generated content and simulated votes via the HTTP API. It uses `SIM_`-prefixed env vars loaded through figment (same pattern as the API, but independent config).
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `SIM_API_URL` | Yes | - | Base URL of the TinyCongress API (e.g., `http://localhost:8080`) |
+| `SIM_OPENROUTER_API_KEY` | Yes | - | OpenRouter API key for LLM content generation |
+| `SIM_OPENROUTER_MODEL` | No | `anthropic/claude-sonnet-4-6` | OpenRouter model identifier |
+| `SIM_TARGET_ROOMS` | No | `5` | Target number of open rooms with active polls |
+| `SIM_VOTES_PER_POLL` | No | `15` | Number of synthetic votes to cast per poll |
+| `SIM_VOTER_COUNT` | No | `20` | Number of synthetic voter accounts to create |
+| `SIM_SYSTEM_PROMPT` | No | *(civic engagement prompt)* | System prompt for LLM topic generation |
+| `SIM_LOG_LEVEL` | No | `info` | Log level filter (`debug`, `info`, `warn`, `error`) |
+
+The sim creates a deterministic verifier identity and logs its root public key at startup. This key must be included in the API server's `TC_VERIFIERS` config for endorsements to work.
+
+```bash
+# Minimal local run (skips LLM content generation)
+SIM_API_URL=http://localhost:8080 SIM_OPENROUTER_API_KEY=dummy SIM_TARGET_ROOMS=0 cargo run --bin sim
+```
 
 ## Frontend (React/Vite)
 
@@ -208,6 +249,10 @@ database:
 | `cors.allowedOrigins` | `""` | `cors.allowed_origins` in ConfigMap |
 | `graphql.playgroundEnabled` | `false` | `graphql.playground_enabled` in ConfigMap |
 | `swagger.enabled` | `false` | `swagger.enabled` in ConfigMap |
+| `verifiers` | `[]` | `verifiers` list in ConfigMap (name + public_key per entry) |
+| `sim.enabled` | `false` | Deploy sim CronJob |
+| `sim.apiUrl` | `""` | `SIM_API_URL` in sim ConfigMap |
+| `sim.openrouterApiKey` | `""` | `SIM_OPENROUTER_API_KEY` in sim Secret |
 
 ## Local Development
 
@@ -271,6 +316,8 @@ This is handled automatically by `dockerfiles/Dockerfile.postgres`.
 - `service/src/config.rs` - Configuration struct and loading logic
 - `service/config.yaml.example` - Example YAML configuration
 - `service/src/main.rs` - Backend env var usage
+- `service/src/sim/config.rs` - Sim worker configuration
+- `service/src/reputation/bootstrap.rs` - Verifier bootstrap logic
 - `kube/app/templates/deployment.yaml` - K8s configuration
 - `dockerfiles/Dockerfile.postgres` - Database setup
 - ADR-003: pgmq job queue
