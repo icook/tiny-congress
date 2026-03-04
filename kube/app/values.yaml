@@ -167,6 +167,9 @@ database:
   password: postgres
   # Maximum connections in pool
   maxConnections: 10
+  # Auto-reset database on migration version mismatch.
+  # Only safe for ephemeral databases (e.g. demo environment).
+  autoResetOnMigrationFailure: false
 
 # Logging configuration
 logging:
