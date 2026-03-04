@@ -704,6 +704,39 @@ mod tests {
         assert_eq!(response.status(), StatusCode::CONFLICT);
     }
 
+    /// Corrupted root pubkey in account record must return 500.
+    ///
+    /// If the root_pubkey stored in the database is malformed,
+    /// `decode_account_root_pubkey` returns an internal error. The login handler
+    /// must surface this as 500 rather than panicking or leaking corruption details.
+    #[tokio::test]
+    async fn test_login_corrupted_root_pubkey_returns_internal() {
+        let (req, _) = make_valid_components();
+
+        let repo = MockIdentityRepo::new();
+        repo.set_account_by_username_result(Ok(AccountRecord {
+            id: Uuid::new_v4(),
+            username: req.username.clone(),
+            root_pubkey: "!!!corrupted-not-base64!!!".to_string(),
+            root_kid: Kid::derive(&[0u8; 32]),
+        }));
+        let app = test_login_router(repo);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/auth/login")
+                    .header("content-type", "application/json")
+                    .body(Body::from(login_body(&req)))
+                    .expect("request builder"),
+            )
+            .await
+            .expect("response");
+
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    }
+
     #[tokio::test]
     async fn test_login_account_database_error_returns_internal() {
         let repo = MockIdentityRepo::new();
