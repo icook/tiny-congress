@@ -111,6 +111,86 @@ These are tempting but won't help the demo land and will eat your remaining days
 
 ---
 
+## Parallel Workstreams
+
+These workstreams are **independent of each other** and can be worked on by separate Claude sessions simultaneously. Each is tracked as a GitHub issue labeled `workstream/demo`.
+
+**How to claim a workstream:** Run `gh issue list --label workstream/demo` and pick one not labeled `status/in-progress`. Then assign it and add the label:
+
+```bash
+gh issue edit <NUMBER> --add-label status/in-progress
+```
+
+When done, close the issue and open a PR.
+
+### WS-V: Verification Flow *(in progress — separate thread)*
+
+Owned by the demo-verification-flow plan. Covers:
+- Verification flow with clear instructions
+- Verification success is obvious (badge, confirmation)
+- Eligibility gating on poll page ("You need to verify first")
+- Navbar verification badge
+- Settings verification section
+
+**Files touched:** `service/src/sim/`, `service/src/bin/demo_verifier.rs`, `web/src/pages/Poll.page.tsx` (eligibility only), `web/src/components/Navbar/`, `web/src/pages/Settings.page.tsx`, `kube/`
+
+### WS-A: Slider & Voting UX — [#450](https://github.com/icook/tiny-congress/issues/450)
+
+Human-readable slider labels, vote submission feedback, voted/not-voted visual state.
+
+**Current state:** Sliders show generic "Not at all" / "Extremely" marks. No confirmation after voting. No visual distinction between voted and not-voted.
+
+**Checklist items:**
+- [ ] Slider endpoints use dimension-specific labels from API data (min_label / max_label)
+- [ ] Vote submission shows success toast or confirmation message
+- [ ] Visual distinction between "haven't voted" and "voted" state
+- [ ] "Update Vote" flow feels natural (not a duplicate)
+
+**Files:** `web/src/pages/Poll.page.tsx` (VoteSlider component, vote submission handler)
+
+### WS-B: Results Visualization — [#451](https://github.com/icook/tiny-congress/issues/451)
+
+Make results interpretable and engaging — the "aha moment" of the demo.
+
+**Current state:** Progress bars showing mean + stats table (mean/median/stddev). No auto-refresh. No distribution visualization.
+
+**Checklist items:**
+- [ ] Results are interpretable without explanation (labels, dimension names, vote count)
+- [ ] Distribution visualization (dot plot, histogram, or violin per dimension) — not just averages
+- [ ] Results auto-refresh on an interval (polling, not websockets)
+- [ ] "What happens next" message after voting that leads into results
+
+**Files:** `web/src/pages/Poll.page.tsx` (ResultsTable), possibly new chart component
+
+### WS-C: Navigation & Post-Auth Flow — [#452](https://github.com/icook/tiny-congress/issues/452)
+
+After login/verification, users should land somewhere useful — not a stub dashboard.
+
+**Current state:** Dashboard is a stub. Navbar shows 4+ links to empty stubs (Analytics, Releases, Conversations). After login, no redirect to rooms.
+
+**Checklist items:**
+- [ ] After login, redirect to /rooms (or the demo room directly)
+- [ ] Remove or hide navbar links to stub pages (Dashboard, Analytics, Releases, Conversations)
+- [ ] Landing page → signup → rooms flow has no dead ends
+- [ ] Error states on signup/login show a message and a way forward
+
+**Files:** `web/src/Router.tsx`, `web/src/components/Navbar/Navbar.tsx`, `web/src/pages/Login.page.tsx`, `web/src/pages/Signup.page.tsx`
+
+### WS-D: Demo Data & Poll Topics — [#453](https://github.com/icook/tiny-congress/issues/453)
+
+Ensure seeded content is compelling and approachable for non-wonky friends/family.
+
+**Current state:** Sim generates LLM-authored civic governance topics. May be too policy-focused. Topics need to be things "your aunt cares about."
+
+**Checklist items:**
+- [ ] At least one pre-seeded room with a universally relatable topic
+- [ ] 2-3 polls per room with 3-5 dimensions each, human-readable labels
+- [ ] Enough seeded votes that results look populated (not "1 vote")
+
+**Files:** `service/src/sim/config.rs`, `service/src/sim/llm.rs`, `service/src/sim/votes.rs`
+
+---
+
 ## Suggested Timeline
 
 | Window | Focus |
