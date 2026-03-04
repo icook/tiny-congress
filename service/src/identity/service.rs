@@ -807,7 +807,9 @@ mod tests {
         // BackupRepoError::DuplicateKid means the root pubkey is already registered —
         // the correct client-visible error is DuplicateKey, not an internal error.
         let repo = MockIdentityRepo::new();
-        repo.set_signup_result(Err(CreateSignupError::Backup(BackupRepoError::DuplicateKid)));
+        repo.set_signup_result(Err(CreateSignupError::Backup(
+            BackupRepoError::DuplicateKid,
+        )));
         let svc = DefaultIdentityService::new(Arc::new(repo));
         let err = svc.signup(&valid_signup_request()).await.unwrap_err();
         assert!(matches!(err, SignupError::DuplicateKey));
