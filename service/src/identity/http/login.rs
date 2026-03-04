@@ -202,7 +202,7 @@ pub async fn login(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::identity::repo::mock::MockIdentityRepo;
+    use crate::identity::repo::{mock::MockIdentityRepo, AccountRecord, DeviceKeyRepoError};
     use axum::{
         body::{to_bytes, Body},
         http::{Request, StatusCode},
@@ -212,8 +212,9 @@ mod tests {
     use ed25519_dalek::{Signer, SigningKey};
     use rand::rngs::OsRng;
     use std::sync::Arc;
-    use tc_crypto::encode_base64url;
+    use tc_crypto::{encode_base64url, Kid};
     use tower::ServiceExt;
+    use uuid::Uuid;
 
     /// Build a valid login request and matching root pubkey.
     ///
@@ -387,5 +388,200 @@ mod tests {
         let body_bytes = to_bytes(response.into_body(), 1024).await.expect("body");
         let payload: serde_json::Value = serde_json::from_slice(&body_bytes).expect("json");
         assert!(payload["error"].as_str().unwrap().contains("too long"));
+    }
+
+    fn login_body(req: &LoginRequest) -> String {
+        serde_json::json!({
+            "username": req.username,
+            "timestamp": req.timestamp,
+            "device": {
+                "pubkey": req.device.pubkey,
+                "name": req.device.name,
+                "certificate": req.device.certificate
+            }
+        })
+        .to_string()
+    }
+
+    // ── Anti-enumeration invariant tests ────────────────────────────────────
+
+    /// Anti-enumeration: unknown username must return 401, not 404.
+    ///
+    /// The response must be indistinguishable from an invalid-certificate
+    /// response so attackers cannot enumerate registered usernames.
+    #[tokio::test]
+    async fn test_login_unknown_username_returns_401() {
+        let repo = MockIdentityRepo::new(); // default: get_account_by_username returns NotFound
+        let app = test_login_router(repo);
+
+        let (req, _) = make_valid_components();
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/auth/login")
+                    .header("content-type", "application/json")
+                    .body(Body::from(login_body(&req)))
+                    .expect("request builder"),
+            )
+            .await
+            .expect("response");
+
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        let body_bytes = to_bytes(response.into_body(), 1024).await.expect("body");
+        let payload: serde_json::Value = serde_json::from_slice(&body_bytes).expect("json");
+        assert_eq!(payload["error"].as_str().unwrap(), "Invalid credentials");
+    }
+
+    /// Anti-enumeration: invalid certificate for a known user must return the
+    /// same 401 message as an unknown username.
+    ///
+    /// If the messages differ an attacker could distinguish registered usernames
+    /// from unregistered ones without possessing any key material.
+    #[tokio::test]
+    async fn test_login_invalid_cert_returns_same_401_as_unknown_user() {
+        let root_key = SigningKey::generate(&mut OsRng);
+        let root_pubkey = root_key.verifying_key().to_bytes();
+
+        let repo = MockIdentityRepo::new();
+        repo.set_account_by_username_result(Ok(AccountRecord {
+            id: Uuid::new_v4(),
+            username: "alice".to_string(),
+            root_pubkey: encode_base64url(&root_pubkey),
+            root_kid: Kid::derive(&root_pubkey),
+        }));
+        let app = test_login_router(repo);
+
+        let timestamp = chrono::Utc::now().timestamp();
+        let body = serde_json::json!({
+            "username": "alice",
+            "timestamp": timestamp,
+            "device": {
+                "pubkey": encode_base64url(&[1u8; 32]),
+                "name": "My Device",
+                "certificate": encode_base64url(&[0xFFu8; 64]) // valid length, wrong signature
+            }
+        })
+        .to_string();
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/auth/login")
+                    .header("content-type", "application/json")
+                    .body(Body::from(body))
+                    .expect("request builder"),
+            )
+            .await
+            .expect("response");
+
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        let body_bytes = to_bytes(response.into_body(), 1024).await.expect("body");
+        let payload: serde_json::Value = serde_json::from_slice(&body_bytes).expect("json");
+        assert_eq!(payload["error"].as_str().unwrap(), "Invalid credentials");
+    }
+
+    // ── Other handler-level paths ────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn test_login_expired_timestamp_returns_bad_request() {
+        let repo = MockIdentityRepo::new();
+        let app = test_login_router(repo);
+
+        let expired = chrono::Utc::now().timestamp() - (MAX_TIMESTAMP_SKEW + 1);
+        let body = serde_json::json!({
+            "username": "alice",
+            "timestamp": expired,
+            "device": {
+                "pubkey": encode_base64url(&[0u8; 32]),
+                "name": "test",
+                "certificate": encode_base64url(&[0u8; 64])
+            }
+        })
+        .to_string();
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/auth/login")
+                    .header("content-type", "application/json")
+                    .body(Body::from(body))
+                    .expect("request builder"),
+            )
+            .await
+            .expect("response");
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn test_login_valid_returns_created() {
+        let (req, root_pubkey) = make_valid_components();
+
+        let account_id = Uuid::new_v4();
+        let root_kid = Kid::derive(&root_pubkey);
+
+        let repo = MockIdentityRepo::new();
+        repo.set_account_by_username_result(Ok(AccountRecord {
+            id: account_id,
+            username: req.username.clone(),
+            root_pubkey: encode_base64url(&root_pubkey),
+            root_kid: root_kid.clone(),
+        }));
+        let app = test_login_router(repo);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/auth/login")
+                    .header("content-type", "application/json")
+                    .body(Body::from(login_body(&req)))
+                    .expect("request builder"),
+            )
+            .await
+            .expect("response");
+
+        assert_eq!(response.status(), StatusCode::CREATED);
+        let body_bytes = to_bytes(response.into_body(), 1024 * 1024)
+            .await
+            .expect("body");
+        let payload: serde_json::Value = serde_json::from_slice(&body_bytes).expect("json");
+        assert_eq!(
+            payload["account_id"].as_str().unwrap(),
+            account_id.to_string()
+        );
+        assert_eq!(payload["root_kid"].as_str().unwrap(), root_kid.as_str());
+    }
+
+    #[tokio::test]
+    async fn test_login_duplicate_device_key_returns_conflict() {
+        let (req, root_pubkey) = make_valid_components();
+
+        let repo = MockIdentityRepo::new();
+        repo.set_account_by_username_result(Ok(AccountRecord {
+            id: Uuid::new_v4(),
+            username: req.username.clone(),
+            root_pubkey: encode_base64url(&root_pubkey),
+            root_kid: Kid::derive(&root_pubkey),
+        }));
+        repo.set_create_device_key_error(DeviceKeyRepoError::DuplicateKid);
+        let app = test_login_router(repo);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/auth/login")
+                    .header("content-type", "application/json")
+                    .body(Body::from(login_body(&req)))
+                    .expect("request builder"),
+            )
+            .await
+            .expect("response");
+
+        assert_eq!(response.status(), StatusCode::CONFLICT);
     }
 }
