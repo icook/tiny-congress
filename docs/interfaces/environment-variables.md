@@ -55,6 +55,14 @@ TC_CORS__ALLOWED_ORIGINS=https://app.example.com
 TC_CORS__ALLOWED_ORIGINS=*
 ```
 
+### Identity & Security
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `TC_SYNTHETIC_BACKUP_KEY` | Yes | - | HMAC key for generating synthetic backup envelopes (anti-enumeration). Minimum 32 bytes. Must remain stable for the lifetime of a deployment — changing it alters synthetic responses, which can leak which usernames are real. |
+
+**Security note:** This key prevents username enumeration via the backup endpoint. Generate with `openssl rand -base64 48` or equivalent. In Kubernetes, set via `syntheticBackupKey` in Helm values or a sealed secret.
+
 ### Security Headers Configuration
 
 | Variable | Required | Default | Description |
@@ -252,6 +260,7 @@ database:
 | `cors.allowedOrigins` | `""` | `cors.allowed_origins` in ConfigMap |
 | `graphql.playgroundEnabled` | `false` | `graphql.playground_enabled` in ConfigMap |
 | `swagger.enabled` | `false` | `swagger.enabled` in ConfigMap |
+| `syntheticBackupKey` | `""` | `synthetic-backup-key` in app Secret (required) |
 
 ## Local Development
 

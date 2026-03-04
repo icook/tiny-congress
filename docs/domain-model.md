@@ -98,6 +98,20 @@ The envelope is validated at parse time (`BackupEnvelope::parse`). Weak KDF para
 
 **Not yet built:** Account recovery (helpers approve recovery via signed envelopes). Concept described in [signed-envelope-spec.md](interfaces/signed-envelope-spec.md) but no code exists.
 
+#### Anti-enumeration: synthetic backups
+
+`GET /auth/backup/{username}` returns `200 OK` for every username — real or fake. For unknown users (or users without a backup), the server generates a **synthetic backup** that is indistinguishable from a real one until ChaCha20-Poly1305 decryption fails, which looks identical to a wrong-password attempt.
+
+Synthetic backups are derived deterministically using HMAC-SHA256 keyed by a server-side secret (`TC_SYNTHETIC_BACKUP_KEY`, minimum 32 bytes). This ensures:
+
+- **Same username → same response** — prevents probing via response diffing across requests.
+- **Valid envelope structure** — passes `BackupEnvelope::parse()` so the client cannot distinguish real from synthetic at the format level.
+- **Unpredictable without the key** — external observers cannot precompute expected responses for a given username.
+
+The HMAC key must remain stable for the lifetime of a deployment. If it changes, synthetic responses change, allowing an attacker to distinguish real backups (which don't change) from synthetic ones (which would).
+
+See `service/src/identity/http/backup.rs` for the implementation.
+
 ### Key Identifier (KID)
 
 A stable, short identifier derived from a public key.
