@@ -74,6 +74,26 @@ impl AuthenticatedDevice {
     }
 }
 
+/// Validate a nonce value from the X-Nonce header.
+///
+/// Nonces must be non-empty, at most [`MAX_NONCE_LENGTH`] bytes, and contain
+/// no ASCII control characters. Control characters (especially `\n`) are
+/// rejected because the canonical message uses `\n` as a field delimiter —
+/// a nonce containing `\n` would alter the field structure of the signed payload,
+/// enabling canonical message injection attacks.
+fn validate_nonce(nonce: &str) -> Result<(), &'static str> {
+    if nonce.is_empty() {
+        return Err("X-Nonce must not be empty");
+    }
+    if nonce.len() > MAX_NONCE_LENGTH {
+        return Err("X-Nonce too long");
+    }
+    if nonce.bytes().any(|b| b.is_ascii_control()) {
+        return Err("X-Nonce contains invalid characters");
+    }
+    Ok(())
+}
+
 fn auth_error(msg: &str) -> Response {
     (
         StatusCode::UNAUTHORIZED,
@@ -139,14 +159,8 @@ impl<S: Send + Sync> FromRequest<S> for AuthenticatedDevice {
         // Control characters (especially \n) must be rejected because the
         // canonical message uses \n as a field delimiter — a nonce containing
         // \n would alter the field structure of the signed payload.
-        if nonce.is_empty() {
-            return Err(auth_error("X-Nonce must not be empty"));
-        }
-        if nonce.len() > MAX_NONCE_LENGTH {
-            return Err(auth_error("X-Nonce too long"));
-        }
-        if nonce.bytes().any(|b| b.is_ascii_control()) {
-            return Err(auth_error("X-Nonce contains invalid characters"));
+        if let Err(msg) = validate_nonce(&nonce) {
+            return Err(auth_error(msg));
         }
 
         // Parse KID
@@ -263,6 +277,57 @@ impl<S: Send + Sync> FromRequest<S> for AuthenticatedDevice {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // ── Nonce validation ────────────────────────────────────────────────────
+
+    #[test]
+    fn test_validate_nonce_valid() {
+        assert!(validate_nonce("some-nonce-123").is_ok());
+    }
+
+    #[test]
+    fn test_validate_nonce_empty_rejected() {
+        assert_eq!(validate_nonce(""), Err("X-Nonce must not be empty"));
+    }
+
+    #[test]
+    fn test_validate_nonce_max_length_accepted() {
+        let nonce = "a".repeat(MAX_NONCE_LENGTH);
+        assert!(validate_nonce(&nonce).is_ok());
+    }
+
+    #[test]
+    fn test_validate_nonce_over_max_length_rejected() {
+        let nonce = "a".repeat(MAX_NONCE_LENGTH + 1);
+        assert_eq!(validate_nonce(&nonce), Err("X-Nonce too long"));
+    }
+
+    #[test]
+    fn test_validate_nonce_newline_rejected() {
+        // \n in nonce would inject a field into the canonical message
+        assert_eq!(
+            validate_nonce("nonce\ninjected"),
+            Err("X-Nonce contains invalid characters")
+        );
+    }
+
+    #[test]
+    fn test_validate_nonce_null_byte_rejected() {
+        assert_eq!(
+            validate_nonce("nonce\x00value"),
+            Err("X-Nonce contains invalid characters")
+        );
+    }
+
+    #[test]
+    fn test_validate_nonce_carriage_return_rejected() {
+        assert_eq!(
+            validate_nonce("nonce\r\nvalue"),
+            Err("X-Nonce contains invalid characters")
+        );
+    }
+
+    // ── KID parsing ────────────────────────────────────────────────────────
 
     #[test]
     fn test_kid_parse_valid() {
