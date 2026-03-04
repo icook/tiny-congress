@@ -1,0 +1,64 @@
+# Demo environment values for the sauce cluster (ibcook.com).
+#
+# Validated in CI: `helm template tc-demo kube/app -f kube/environments/demo.yaml`
+# Applied by Flux via HelmRelease valuesFiles (homelab-gitops).
+#
+# Secrets (sim.openrouterApiKey) are NOT in this file — they're provided
+# via SOPS-encrypted valuesFrom in the HelmRelease.
+
+replicaCount: 1
+
+frontend:
+  environment: "demo"
+  replicaCount: 1
+  apiUrl: "https://tc-api-demo.ibcook.com"
+  service:
+    port: 80
+    targetPort: 8080
+
+cors:
+  allowedOrigins: "https://tiny-congress-demo.ibcook.com"
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
+
+postgres:
+  persistence:
+    enabled: true
+
+# Auto-reset database when migrations change — acceptable for demo,
+# never for production.
+database:
+  autoResetOnMigrationFailure: true
+
+# HMAC key for synthetic backup envelopes. In-cluster, lookup() reuses
+# the existing Secret; this value is only used on first deploy or in CI.
+syntheticBackupKey: "demo-synthetic-backup-key-not-for-production"
+
+serviceAccount:
+  create: true
+
+# Bootstrap the sim verifier so the sim worker can endorse accounts.
+# Key derived from: SHA-256("tc-sim-verifier-root-key-v1") -> Ed25519 pubkey
+verifiers:
+  - name: "sim_verifier"
+    public_key: "ovySo2At7yyERm9siRnjP_txpqBLLRwIjDbH5qVAjG0"
+
+sim:
+  enabled: true
+  schedule: "*/30 * * * *"
+  apiUrl: "http://tc-demo.tiny-congress-demo.svc.cluster.local:8080"
+  openrouterModel: "meta-llama/llama-3.3-70b-instruct:free"
+  targetRooms: 5
+  votesPerPoll: 15
+  voterCount: 20
+  systemPrompt: >-
+    You are a civic engagement topic generator. Generate realistic local
+    governance topics suitable for community polling. Topics should be
+    specific, actionable, and relevant to a small city or town. Examples:
+    zoning changes, park improvements, transit priorities, budget allocation.
