@@ -648,8 +648,8 @@ async fn test_login_empty_username() {
         .expect("body");
     let body_str = String::from_utf8(body_bytes.to_vec()).expect("utf8");
     assert!(
-        body_str.contains("Username is required"),
-        "Expected username required error, got: {body_str}"
+        body_str.contains("cannot be empty"),
+        "Expected username empty error, got: {body_str}"
     );
 }
 

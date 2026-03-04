@@ -17,6 +17,7 @@ use sha2::Sha256;
 use tc_crypto::Kid;
 
 use crate::identity::repo::{AccountRepoError, BackupRepoError, IdentityRepo};
+use crate::identity::service::validate_username;
 
 type HmacSha256 = Hmac<Sha256>;
 
@@ -128,11 +129,8 @@ pub async fn get_backup(
     Path(username): Path<String>,
 ) -> impl IntoResponse {
     let username = username.trim();
-    if username.is_empty() {
-        return super::bad_request("Username cannot be empty");
-    }
-    if username.len() > crate::identity::service::MAX_USERNAME_LEN {
-        return super::bad_request("Username too long");
+    if let Err(e) = validate_username(username) {
+        return super::bad_request(&e.to_string());
     }
 
     // Always perform the account lookup.
