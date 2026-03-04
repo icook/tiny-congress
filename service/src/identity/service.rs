@@ -86,28 +86,18 @@ const RESERVED_USERNAMES: &[&str] = &[
 ];
 
 /// Structured error type for username validation failures.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, thiserror::Error)]
 pub enum UsernameError {
+    #[error("Username cannot be empty")]
     Empty,
+    #[error("Username must be at least 3 characters")]
     TooShort,
+    #[error("Username too long")]
     TooLong,
+    #[error("Username may only contain letters, numbers, hyphens, and underscores")]
     InvalidCharacters,
+    #[error("This username is reserved")]
     Reserved,
-}
-
-impl std::fmt::Display for UsernameError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Empty => write!(f, "Username cannot be empty"),
-            Self::TooShort => write!(f, "Username must be at least 3 characters"),
-            Self::TooLong => write!(f, "Username too long"),
-            Self::InvalidCharacters => write!(
-                f,
-                "Username may only contain letters, numbers, hyphens, and underscores"
-            ),
-            Self::Reserved => write!(f, "This username is reserved"),
-        }
-    }
 }
 
 /// Validate a username, returning a structured error if invalid.
@@ -148,19 +138,12 @@ pub fn validate_username(username: &str) -> Result<(), UsernameError> {
 pub struct DeviceName(String);
 
 /// Error type for device name validation failures.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, thiserror::Error)]
 pub enum DeviceNameError {
+    #[error("Device name cannot be empty")]
     Empty,
+    #[error("Device name too long")]
     TooLong,
-}
-
-impl std::fmt::Display for DeviceNameError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Empty => write!(f, "Device name cannot be empty"),
-            Self::TooLong => write!(f, "Device name too long"),
-        }
-    }
 }
 
 impl DeviceName {
@@ -199,19 +182,12 @@ impl DeviceName {
 pub struct DevicePubkey([u8; 32]);
 
 /// Error type for device public key validation failures.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, thiserror::Error)]
 pub enum DevicePubkeyError {
+    #[error("Invalid base64url encoding for device pubkey")]
     InvalidEncoding,
+    #[error("Device pubkey must be 32 bytes (Ed25519)")]
     InvalidLength,
-}
-
-impl std::fmt::Display for DevicePubkeyError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::InvalidEncoding => write!(f, "Invalid base64url encoding for device pubkey"),
-            Self::InvalidLength => write!(f, "Device pubkey must be 32 bytes (Ed25519)"),
-        }
-    }
 }
 
 impl DevicePubkey {
