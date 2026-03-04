@@ -1,29 +1,22 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# One-time script to seed refine-ledger.toml from existing merged refinement PRs.
+# One-time script to seed refine-ledger.json from existing merged refinement PRs.
 # Usage: ./scripts/seed-ledger.sh
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-LEDGER="$REPO_ROOT/refine-ledger.toml"
+LEDGER="$REPO_ROOT/refine-ledger.json"
 FOCUS_PATH="service/src/identity/"
 
 echo "Seeding ledger from merged refinement PRs..."
 
-# Initialize ledger
-cat > "$LEDGER" << 'INIT'
-# Auto-maintained by refine.sh — manual edits are fine for overrides
-INIT
-
 area_key="$FOCUS_PATH"
 now="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 
-yq -i -p toml -o toml ".areas.\"$area_key\".status = \"active\"" "$LEDGER"
-yq -i -p toml -o toml ".areas.\"$area_key\".total_prs = 0" "$LEDGER"
-yq -i -p toml -o toml ".areas.\"$area_key\".total_skips = 0" "$LEDGER"
-yq -i -p toml -o toml ".areas.\"$area_key\".consecutive_idle = 0" "$LEDGER"
-yq -i -p toml -o toml ".areas.\"$area_key\".last_run = \"$now\"" "$LEDGER"
-yq -i -p toml -o toml ".areas.\"$area_key\".graduated_at = \"\"" "$LEDGER"
+# Initialize ledger with empty area
+local_tmp="$(jq -n --arg key "$area_key" --arg now "$now" \
+    '{areas: {($key): {status: "active", total_prs: 0, total_skips: 0, consecutive_idle: 0, last_run: $now, graduated_at: "", history: [], skipped: []}}}')"
+echo "$local_tmp" > "$LEDGER"
 
 # Fetch merged refinement PRs
 pr_count=0
@@ -37,18 +30,20 @@ while IFS=$'\t' read -r number title; do
         *cleanup*|*dead*|*unused*|*simplif*) type="code_cleanup" ;;
     esac
 
-    # Sanitize title for TOML (escape quotes)
-    safe_title="$(echo "$title" | sed 's/"/\\"/g' | cut -c1-120)"
-
-    yq -i -p toml -o toml \
-        ".areas.\"$area_key\".history += [{\"pr\": $number, \"type\": \"$type\", \"impact\": \"medium\", \"summary\": \"$safe_title\"}]" \
-        "$LEDGER"
+    local_tmp="$(jq --arg key "$area_key" \
+        --argjson pr "$number" \
+        --arg type "$type" \
+        --arg summary "$title" \
+        '.areas[$key].history += [{pr: $pr, type: $type, impact: "medium", summary: $summary}]' \
+        "$LEDGER")"
+    echo "$local_tmp" > "$LEDGER"
     pr_count=$((pr_count + 1))
 done < <(gh pr list --label "refinement" --state merged \
     --json number,title \
     --jq '.[] | [.number, .title] | @tsv')
 
-yq -i -p toml -o toml ".areas.\"$area_key\".total_prs = $pr_count" "$LEDGER"
+local_tmp="$(jq --arg key "$area_key" --argjson count "$pr_count" '.areas[$key].total_prs = $count' "$LEDGER")"
+echo "$local_tmp" > "$LEDGER"
 
 echo "Seeded $pr_count PRs into $LEDGER"
 echo "Review the file and commit when satisfied."

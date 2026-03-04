@@ -37,7 +37,7 @@ IDLE_LIMIT="$(require_config '.behavior.idle_limit')"
 MIN_IMPACT="$(read_config '.behavior.min_impact')"
 [[ -z "$MIN_IMPACT" || "$MIN_IMPACT" == "null" ]] && MIN_IMPACT="medium"
 
-LEDGER="$REPO_ROOT/refine-ledger.toml"
+LEDGER="$REPO_ROOT/refine-ledger.json"
 
 # CI auto-fix config (optional — defaults to disabled)
 CI_AUTO_FIX="$(read_config '.ci.auto_fix')"
@@ -180,7 +180,7 @@ read_ledger_context() {
 
     local area_key="$FOCUS_PATH"
     local status
-    status="$(yq -p toml -oy ".areas.\"${area_key}\".status" "$LEDGER" 2>/dev/null || echo "")"
+    status="$(jq -r --arg key "$area_key" '.areas[$key].status // empty' "$LEDGER" 2>/dev/null || echo "")"
 
     if [[ -z "$status" || "$status" == "null" ]]; then
         echo "No prior refinement history for this focus area."
@@ -188,10 +188,10 @@ read_ledger_context() {
     fi
 
     local total_prs total_skips consecutive_idle last_run
-    total_prs="$(yq -p toml -oy ".areas.\"${area_key}\".total_prs" "$LEDGER" 2>/dev/null || echo "0")"
-    total_skips="$(yq -p toml -oy ".areas.\"${area_key}\".total_skips" "$LEDGER" 2>/dev/null || echo "0")"
-    consecutive_idle="$(yq -p toml -oy ".areas.\"${area_key}\".consecutive_idle" "$LEDGER" 2>/dev/null || echo "0")"
-    last_run="$(yq -p toml -oy ".areas.\"${area_key}\".last_run" "$LEDGER" 2>/dev/null || echo "")"
+    total_prs="$(jq -r --arg key "$area_key" '.areas[$key].total_prs // 0' "$LEDGER" 2>/dev/null || echo "0")"
+    total_skips="$(jq -r --arg key "$area_key" '.areas[$key].total_skips // 0' "$LEDGER" 2>/dev/null || echo "0")"
+    consecutive_idle="$(jq -r --arg key "$area_key" '.areas[$key].consecutive_idle // 0' "$LEDGER" 2>/dev/null || echo "0")"
+    last_run="$(jq -r --arg key "$area_key" '.areas[$key].last_run // ""' "$LEDGER" 2>/dev/null || echo "")"
 
     local context="## Refinement Ledger — \`${area_key}\`
 
@@ -201,7 +201,7 @@ read_ledger_context() {
 "
 
     local history_count
-    history_count="$(yq -p toml -oy ".areas.\"${area_key}\".history | length" "$LEDGER" 2>/dev/null || echo "0")"
+    history_count="$(jq -r --arg key "$area_key" '.areas[$key].history | length' "$LEDGER" 2>/dev/null || echo "0")"
 
     if [[ "$history_count" -gt 0 ]]; then
         local start=0
@@ -211,10 +211,10 @@ read_ledger_context() {
         local i
         for ((i = start; i < history_count; i++)); do
             local pr type impact summary
-            pr="$(yq -p toml -oy ".areas.\"${area_key}\".history[$i].pr" "$LEDGER" 2>/dev/null || echo "")"
-            type="$(yq -p toml -oy ".areas.\"${area_key}\".history[$i].type" "$LEDGER" 2>/dev/null || echo "")"
-            impact="$(yq -p toml -oy ".areas.\"${area_key}\".history[$i].impact" "$LEDGER" 2>/dev/null || echo "")"
-            summary="$(yq -p toml -oy ".areas.\"${area_key}\".history[$i].summary" "$LEDGER" 2>/dev/null || echo "")"
+            pr="$(jq -r --arg key "$area_key" --argjson i "$i" '.areas[$key].history[$i].pr // ""' "$LEDGER" 2>/dev/null || echo "")"
+            type="$(jq -r --arg key "$area_key" --argjson i "$i" '.areas[$key].history[$i].type // ""' "$LEDGER" 2>/dev/null || echo "")"
+            impact="$(jq -r --arg key "$area_key" --argjson i "$i" '.areas[$key].history[$i].impact // ""' "$LEDGER" 2>/dev/null || echo "")"
+            summary="$(jq -r --arg key "$area_key" --argjson i "$i" '.areas[$key].history[$i].summary // ""' "$LEDGER" 2>/dev/null || echo "")"
             context+="- PR #${pr} [${type}/${impact}]: ${summary}"$'\n'
         done
     else
@@ -224,16 +224,16 @@ read_ledger_context() {
     context+=$'\n'"### Skipped items"$'\n'
 
     local skipped_count
-    skipped_count="$(yq -p toml -oy ".areas.\"${area_key}\".skipped | length" "$LEDGER" 2>/dev/null || echo "0")"
+    skipped_count="$(jq -r --arg key "$area_key" '.areas[$key].skipped | length' "$LEDGER" 2>/dev/null || echo "0")"
 
     if [[ "$skipped_count" -gt 0 ]]; then
         local i
         for ((i = 0; i < skipped_count; i++)); do
             local type summary reason date
-            type="$(yq -p toml -oy ".areas.\"${area_key}\".skipped[$i].type" "$LEDGER" 2>/dev/null || echo "")"
-            summary="$(yq -p toml -oy ".areas.\"${area_key}\".skipped[$i].summary" "$LEDGER" 2>/dev/null || echo "")"
-            reason="$(yq -p toml -oy ".areas.\"${area_key}\".skipped[$i].reason" "$LEDGER" 2>/dev/null || echo "")"
-            date="$(yq -p toml -oy ".areas.\"${area_key}\".skipped[$i].date" "$LEDGER" 2>/dev/null || echo "")"
+            type="$(jq -r --arg key "$area_key" --argjson i "$i" '.areas[$key].skipped[$i].type // ""' "$LEDGER" 2>/dev/null || echo "")"
+            summary="$(jq -r --arg key "$area_key" --argjson i "$i" '.areas[$key].skipped[$i].summary // ""' "$LEDGER" 2>/dev/null || echo "")"
+            reason="$(jq -r --arg key "$area_key" --argjson i "$i" '.areas[$key].skipped[$i].reason // ""' "$LEDGER" 2>/dev/null || echo "")"
+            date="$(jq -r --arg key "$area_key" --argjson i "$i" '.areas[$key].skipped[$i].date // ""' "$LEDGER" 2>/dev/null || echo "")"
             context+="- [${type}] ${summary} — _${reason}_ (${date})"$'\n'
         done
     else
@@ -260,56 +260,61 @@ update_ledger() {
     today="$(date -u '+%Y-%m-%d')"
 
     # Initialize the area in the ledger if it doesn't exist
-    if [[ ! -f "$LEDGER" ]] || [[ "$(yq -p toml -oy ".areas.\"${area_key}\".status" "$LEDGER" 2>/dev/null || echo "")" == "" ]] || [[ "$(yq -p toml -oy ".areas.\"${area_key}\".status" "$LEDGER" 2>/dev/null || echo "")" == "null" ]]; then
-        # Create initial structure
+    local area_status=""
+    if [[ -f "$LEDGER" ]]; then
+        area_status="$(jq -r --arg key "$area_key" '.areas[$key].status // empty' "$LEDGER" 2>/dev/null || echo "")"
+    fi
+
+    if [[ ! -f "$LEDGER" ]] || [[ -z "$area_status" ]]; then
         if [[ ! -f "$LEDGER" ]]; then
-            cat > "$LEDGER" <<EOF
-[areas."${area_key}"]
-status = "active"
-total_prs = 0
-total_skips = 0
-consecutive_idle = 0
-last_run = ""
-graduated_at = ""
-EOF
+            local tmp
+            tmp="$(jq -n --arg key "$area_key" '{areas: {($key): {status: "active", total_prs: 0, total_skips: 0, consecutive_idle: 0, last_run: "", graduated_at: "", history: [], skipped: []}}}')"
+            echo "$tmp" > "$LEDGER"
         else
-            yq -i -p toml -o toml ".areas.\"${area_key}\".status = \"active\"" "$LEDGER"
-            yq -i -p toml -o toml ".areas.\"${area_key}\".total_prs = 0" "$LEDGER"
-            yq -i -p toml -o toml ".areas.\"${area_key}\".total_skips = 0" "$LEDGER"
-            yq -i -p toml -o toml ".areas.\"${area_key}\".consecutive_idle = 0" "$LEDGER"
-            yq -i -p toml -o toml ".areas.\"${area_key}\".last_run = \"\"" "$LEDGER"
-            yq -i -p toml -o toml ".areas.\"${area_key}\".graduated_at = \"\"" "$LEDGER"
+            local tmp
+            tmp="$(jq --arg key "$area_key" '.areas[$key] = {status: "active", total_prs: 0, total_skips: 0, consecutive_idle: 0, last_run: "", graduated_at: "", history: [], skipped: []}' "$LEDGER")"
+            echo "$tmp" > "$LEDGER"
         fi
     fi
 
     # Update last_run timestamp
-    yq -i -p toml -o toml ".areas.\"${area_key}\".last_run = \"${now}\"" "$LEDGER"
+    local tmp
+    tmp="$(jq --arg key "$area_key" --arg now "$now" '.areas[$key].last_run = $now' "$LEDGER")"
+    echo "$tmp" > "$LEDGER"
 
     case "$action" in
         change)
-            # Increment total_prs, reset consecutive_idle
-            local current_prs
-            current_prs="$(yq -p toml -oy ".areas.\"${area_key}\".total_prs" "$LEDGER" 2>/dev/null || echo "0")"
-            yq -i -p toml -o toml ".areas.\"${area_key}\".total_prs = $((current_prs + 1))" "$LEDGER"
-            yq -i -p toml -o toml ".areas.\"${area_key}\".consecutive_idle = 0" "$LEDGER"
-
-            # Append to history
-            yq -i -p toml -o toml ".areas.\"${area_key}\".history += [{\"pr\": ${pr_number:-0}, \"type\": \"${finding_type}\", \"impact\": \"${impact}\", \"summary\": \"${summary}\"}]" "$LEDGER"
+            # Increment total_prs, reset consecutive_idle, append to history
+            local tmp
+            tmp="$(jq --arg key "$area_key" \
+                --argjson pr "${pr_number:-0}" \
+                --arg type "$finding_type" \
+                --arg impact "$impact" \
+                --arg summary "$summary" \
+                '.areas[$key].total_prs += 1 |
+                 .areas[$key].consecutive_idle = 0 |
+                 .areas[$key].history += [{pr: $pr, type: $type, impact: $impact, summary: $summary}]' \
+                "$LEDGER")"
+            echo "$tmp" > "$LEDGER"
             ;;
         skip)
-            # Increment total_skips
-            local current_skips
-            current_skips="$(yq -p toml -oy ".areas.\"${area_key}\".total_skips" "$LEDGER" 2>/dev/null || echo "0")"
-            yq -i -p toml -o toml ".areas.\"${area_key}\".total_skips = $((current_skips + 1))" "$LEDGER"
-
-            # Append to skipped
-            yq -i -p toml -o toml ".areas.\"${area_key}\".skipped += [{\"type\": \"${finding_type}\", \"summary\": \"${summary}\", \"reason\": \"${skip_reason}\", \"date\": \"${today}\"}]" "$LEDGER"
+            # Increment total_skips, append to skipped
+            local tmp
+            tmp="$(jq --arg key "$area_key" \
+                --arg type "$finding_type" \
+                --arg summary "$summary" \
+                --arg reason "$skip_reason" \
+                --arg date "$today" \
+                '.areas[$key].total_skips += 1 |
+                 .areas[$key].skipped += [{type: $type, summary: $summary, reason: $reason, date: $date}]' \
+                "$LEDGER")"
+            echo "$tmp" > "$LEDGER"
             ;;
         clean)
             # Increment consecutive_idle
-            local current_idle
-            current_idle="$(yq -p toml -oy ".areas.\"${area_key}\".consecutive_idle" "$LEDGER" 2>/dev/null || echo "0")"
-            yq -i -p toml -o toml ".areas.\"${area_key}\".consecutive_idle = $((current_idle + 1))" "$LEDGER"
+            local tmp
+            tmp="$(jq --arg key "$area_key" '.areas[$key].consecutive_idle += 1' "$LEDGER")"
+            echo "$tmp" > "$LEDGER"
             ;;
     esac
 }
@@ -320,8 +325,11 @@ graduate_area() {
     local now
     now="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 
-    yq -i -p toml -o toml ".areas.\"${area_key}\".status = \"graduated\"" "$LEDGER"
-    yq -i -p toml -o toml ".areas.\"${area_key}\".graduated_at = \"${now}\"" "$LEDGER"
+    local tmp
+    tmp="$(jq --arg key "$area_key" --arg now "$now" \
+        '.areas[$key].status = "graduated" | .areas[$key].graduated_at = $now' \
+        "$LEDGER")"
+    echo "$tmp" > "$LEDGER"
     log "Area '$area_key' graduated at $now"
 }
 
@@ -332,10 +340,10 @@ commit_ledger() {
     fi
 
     # Check if ledger has actual changes
-    if ! git -C "$REPO_ROOT" diff --quiet -- "refine-ledger.toml" 2>/dev/null || \
-       ! git -C "$REPO_ROOT" diff --cached --quiet -- "refine-ledger.toml" 2>/dev/null || \
-       [[ -n "$(git -C "$REPO_ROOT" ls-files --others --exclude-standard -- "refine-ledger.toml" 2>/dev/null)" ]]; then
-        git -C "$REPO_ROOT" add "refine-ledger.toml"
+    if ! git -C "$REPO_ROOT" diff --quiet -- "refine-ledger.json" 2>/dev/null || \
+       ! git -C "$REPO_ROOT" diff --cached --quiet -- "refine-ledger.json" 2>/dev/null || \
+       [[ -n "$(git -C "$REPO_ROOT" ls-files --others --exclude-standard -- "refine-ledger.json" 2>/dev/null)" ]]; then
+        git -C "$REPO_ROOT" add "refine-ledger.json"
         git -C "$REPO_ROOT" commit --quiet -m "refine: update ledger for ${FOCUS_PATH}"
         git -C "$REPO_ROOT" push --quiet origin master
         log "Ledger committed and pushed to master"
@@ -375,10 +383,9 @@ get_pending_pr_summary() {
 if $DRY_RUN; then
     # Check graduated status even in dry-run
     if [[ -f "$LEDGER" ]]; then
-        local_area_key="$(echo "$FOCUS_PATH" | sed 's/\./\\./g')"
-        local_status="$(yq -p toml -oy ".areas.\"$local_area_key\".status" "$LEDGER" 2>/dev/null || echo "null")"
+        local_status="$(jq -r --arg key "$FOCUS_PATH" '.areas[$key].status // "null"' "$LEDGER" 2>/dev/null || echo "null")"
         if [[ "$local_status" == "graduated" ]]; then
-            log "Focus area $FOCUS_PATH is graduated. Set status to 'active' in refine-ledger.toml to re-run."
+            log "Focus area $FOCUS_PATH is graduated. Set status to 'active' in refine-ledger.json to re-run."
             exit 0
         fi
     fi
@@ -852,12 +859,10 @@ main() {
 
     # Check if focus area is graduated
     if [[ -f "$LEDGER" ]]; then
-        local area_key
-        area_key="$(echo "$FOCUS_PATH" | sed 's/\./\\./g')"
         local area_status
-        area_status="$(yq -p toml -oy ".areas.\"$area_key\".status" "$LEDGER" 2>/dev/null || echo "null")"
+        area_status="$(jq -r --arg key "$FOCUS_PATH" '.areas[$key].status // "null"' "$LEDGER" 2>/dev/null || echo "null")"
         if [[ "$area_status" == "graduated" ]]; then
-            log "Focus area $FOCUS_PATH is graduated. Set status to 'active' in refine-ledger.toml to re-run."
+            log "Focus area $FOCUS_PATH is graduated. Set status to 'active' in refine-ledger.json to re-run."
             exit 0
         fi
     fi
