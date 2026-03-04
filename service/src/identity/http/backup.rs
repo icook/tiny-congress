@@ -131,6 +131,9 @@ pub async fn get_backup(
     if username.is_empty() {
         return super::bad_request("Username cannot be empty");
     }
+    if username.len() > crate::identity::service::MAX_USERNAME_LEN {
+        return super::bad_request("Username too long");
+    }
 
     // Always perform the account lookup.
     let account_result = repo.get_account_by_username(username).await;
@@ -269,6 +272,20 @@ mod tests {
             .uri(format!("/auth/backup/{username}"))
             .body(Body::empty())
             .expect("request builder")
+    }
+
+    #[tokio::test]
+    async fn test_get_backup_too_long_username_returns_bad_request() {
+        let repo = MockIdentityRepo::new();
+        let app = test_router(repo);
+
+        let username = "a".repeat(65);
+        let response = app
+            .oneshot(backup_request(&username))
+            .await
+            .expect("response");
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     }
 
     /// Anti-enumeration: unknown username must return 200, not 404.
