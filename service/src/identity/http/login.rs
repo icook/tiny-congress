@@ -195,3 +195,141 @@ pub async fn login(
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::http::StatusCode;
+    use ed25519_dalek::{Signer, SigningKey};
+    use rand::rngs::OsRng;
+    use tc_crypto::encode_base64url;
+
+    /// Build a valid login request and matching root pubkey.
+    ///
+    /// The certificate signs `device_pubkey || timestamp` with the root key,
+    /// matching the format expected by `validate_login_device`.
+    fn make_valid_components() -> (LoginRequest, [u8; 32]) {
+        let root_key = SigningKey::generate(&mut OsRng);
+        let root_pubkey = root_key.verifying_key().to_bytes();
+
+        let device_key = SigningKey::generate(&mut OsRng);
+        let device_pubkey = device_key.verifying_key().to_bytes();
+
+        let timestamp = chrono::Utc::now().timestamp();
+
+        let mut msg = Vec::with_capacity(40);
+        msg.extend_from_slice(&device_pubkey);
+        msg.extend_from_slice(&timestamp.to_le_bytes());
+        let sig = root_key.sign(&msg);
+
+        let req = LoginRequest {
+            username: "alice".to_string(),
+            timestamp,
+            device: LoginDevice {
+                pubkey: encode_base64url(&device_pubkey),
+                name: "My Device".to_string(),
+                certificate: encode_base64url(&sig.to_bytes()),
+            },
+        };
+
+        (req, root_pubkey)
+    }
+
+    #[test]
+    fn test_validate_login_device_valid() {
+        let (req, root_pubkey) = make_valid_components();
+        let result = validate_login_device(&req, &root_pubkey);
+        assert!(result.is_ok());
+        let validated = result.unwrap();
+        let expected_kid = DevicePubkey::from_base64url(&req.device.pubkey)
+            .unwrap()
+            .kid();
+        assert_eq!(validated.device_kid, expected_kid);
+        assert_eq!(validated.device_name.as_str(), "My Device");
+    }
+
+    #[test]
+    fn test_validate_login_device_invalid_pubkey_encoding() {
+        let (mut req, root_pubkey) = make_valid_components();
+        req.device.pubkey = "!!!not-base64!!!".to_string();
+        let err = validate_login_device(&req, &root_pubkey)
+            .err()
+            .expect("expected validation error");
+        assert_eq!(err.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[test]
+    fn test_validate_login_device_invalid_pubkey_length() {
+        let (mut req, root_pubkey) = make_valid_components();
+        req.device.pubkey = encode_base64url(&[1u8; 16]); // 16 bytes, not 32
+        let err = validate_login_device(&req, &root_pubkey)
+            .err()
+            .expect("expected validation error");
+        assert_eq!(err.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[test]
+    fn test_validate_login_device_empty_name() {
+        let (mut req, root_pubkey) = make_valid_components();
+        req.device.name = String::new();
+        let err = validate_login_device(&req, &root_pubkey)
+            .err()
+            .expect("expected validation error");
+        assert_eq!(err.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[test]
+    fn test_validate_login_device_invalid_cert_length() {
+        let (mut req, root_pubkey) = make_valid_components();
+        req.device.certificate = encode_base64url(&[0u8; 32]); // 32 bytes, not 64
+        let err = validate_login_device(&req, &root_pubkey)
+            .err()
+            .expect("expected validation error");
+        assert_eq!(err.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[test]
+    fn test_validate_login_device_wrong_signature() {
+        let (mut req, root_pubkey) = make_valid_components();
+        req.device.certificate = encode_base64url(&[0xFFu8; 64]); // bytes don't form a valid sig
+        let err = validate_login_device(&req, &root_pubkey)
+            .err()
+            .expect("expected validation error");
+        assert_eq!(err.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[test]
+    fn test_validate_login_device_cert_signed_with_wrong_timestamp() {
+        // Certificate is valid but was signed for a different timestamp —
+        // the signature covers device_pubkey || timestamp, so the timestamp
+        // mismatch must cause verification to fail.
+        let root_key = SigningKey::generate(&mut OsRng);
+        let root_pubkey = root_key.verifying_key().to_bytes();
+
+        let device_key = SigningKey::generate(&mut OsRng);
+        let device_pubkey = device_key.verifying_key().to_bytes();
+
+        let real_timestamp = chrono::Utc::now().timestamp();
+        let signed_timestamp = real_timestamp - 100; // what the sig actually covers
+
+        let mut msg = Vec::with_capacity(40);
+        msg.extend_from_slice(&device_pubkey);
+        msg.extend_from_slice(&signed_timestamp.to_le_bytes());
+        let sig = root_key.sign(&msg);
+
+        let req = LoginRequest {
+            username: "alice".to_string(),
+            timestamp: real_timestamp, // differs from what was signed
+            device: LoginDevice {
+                pubkey: encode_base64url(&device_pubkey),
+                name: "My Device".to_string(),
+                certificate: encode_base64url(&sig.to_bytes()),
+            },
+        };
+
+        let err = validate_login_device(&req, &root_pubkey)
+            .err()
+            .expect("expected validation error");
+        assert_eq!(err.status(), StatusCode::UNAUTHORIZED);
+    }
+}
