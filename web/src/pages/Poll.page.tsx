@@ -3,7 +3,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { IconAlertTriangle, IconCheck, IconLock } from '@tabler/icons-react';
+import { IconAlertTriangle, IconCheck, IconLock, IconShieldOff } from '@tabler/icons-react';
 import { Link } from '@tanstack/react-router';
 import {
   Alert,
@@ -27,6 +27,7 @@ import {
   type Dimension,
   type DimensionVote,
 } from '@/features/rooms';
+import { buildVerifierUrl, useVerificationStatus } from '@/features/verification';
 import { useCrypto } from '@/providers/CryptoProvider';
 import { useDevice } from '@/providers/DeviceProvider';
 
@@ -43,6 +44,8 @@ export function PollPage({ roomId, pollId }: PollPageProps) {
   const resultsQuery = usePollResults(roomId, pollId);
   const myVotesQuery = useMyVotes(roomId, pollId, deviceKid, privateKey, crypto);
   const voteMutation = useCastVote(roomId, pollId, deviceKid, privateKey, crypto);
+  const verificationQuery = useVerificationStatus(deviceKid, privateKey, crypto);
+  const isVerified = verificationQuery.data?.isVerified ?? false;
 
   const [votes, setVotes] = useState<Record<string, number>>({});
   const [hasInitialized, setHasInitialized] = useState(false);
@@ -102,7 +105,7 @@ export function PollPage({ roomId, pollId }: PollPageProps) {
   const { poll, dimensions } = detailQuery.data;
   const isActive = poll.status === 'active';
   const isAuthenticated = Boolean(deviceKid);
-  const canVote = isActive && isAuthenticated;
+  const canVote = isActive && isAuthenticated && isVerified;
   const hasVoted = (myVotesQuery.data?.length ?? 0) > 0;
 
   return (
@@ -142,6 +145,23 @@ export function PollPage({ roomId, pollId }: PollPageProps) {
             {!isAuthenticated ? (
               <Alert icon={<IconLock size={16} />} color="yellow">
                 Sign up or log in to vote on this poll.
+              </Alert>
+            ) : null}
+
+            {isAuthenticated && !isVerified ? (
+              <Alert icon={<IconShieldOff size={16} />} color="yellow">
+                You need to verify your identity to vote in this room.
+                {(() => {
+                  const url = buildVerifierUrl('');
+                  if (url) {
+                    return (
+                      <Button component="a" href={url} size="xs" variant="light" mt="xs">
+                        Verify Now
+                      </Button>
+                    );
+                  }
+                  return null;
+                })()}
               </Alert>
             ) : null}
 

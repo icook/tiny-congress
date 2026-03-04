@@ -19,6 +19,7 @@ import { RoomsPage } from './pages/Rooms.page';
 import { SettingsPage } from './pages/Settings.page';
 import { SignupPage } from './pages/Signup.page';
 import { ThreadedConversationPage } from './pages/ThreadedConversation.page';
+import { VerifyCallbackPage } from './pages/VerifyCallback.page';
 import { useDevice } from './providers/DeviceProvider';
 
 interface RouterContext {
@@ -99,6 +100,19 @@ const settingsRoute = createRoute({
   component: SettingsPage,
 });
 
+const verifyCallbackRoute = createRoute({
+  getParentRoute: () => authRequiredLayout,
+  path: 'verify/callback',
+  component: VerifyCallbackPage,
+  validateSearch: (
+    search: Record<string, unknown>
+  ): { verification?: string; method?: string; message?: string } => ({
+    verification: typeof search.verification === 'string' ? search.verification : undefined,
+    method: typeof search.method === 'string' ? search.method : undefined,
+    message: typeof search.message === 'string' ? search.message : undefined,
+  }),
+});
+
 const roomsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: 'rooms',
@@ -119,6 +133,7 @@ const routeTree = rootRoute.addChildren([
   guestOnlyLayout.addChildren([signupRoute, loginRoute]),
   authRequiredLayout.addChildren([
     settingsRoute,
+    verifyCallbackRoute,
     createPlaceholderRoute(authRequiredLayout, 'account', 'Account', 'Account page content'),
     createPlaceholderRoute(authRequiredLayout, 'security', 'Security', 'Security page content'),
   ]),

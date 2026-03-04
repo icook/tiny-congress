@@ -9,11 +9,14 @@ import {
   IconLogout,
   IconMessages,
   IconSettings,
+  IconShieldCheck,
   IconUserPlus,
 } from '@tabler/icons-react';
 import { Link, useNavigate, useRouterState } from '@tanstack/react-router';
-import { Box, NavLink, Stack, useComputedColorScheme, useMantineTheme } from '@mantine/core';
-import { useDevice } from '../../providers/DeviceProvider';
+import { Badge, Box, NavLink, Stack, useComputedColorScheme, useMantineTheme } from '@mantine/core';
+import { buildVerifierUrl, useVerificationStatus } from '@/features/verification';
+import { useCrypto } from '@/providers/CryptoProvider';
+import { useDevice } from '@/providers/DeviceProvider';
 
 const navLinks = [
   { icon: IconHome2, label: 'Home', path: '/' },
@@ -33,13 +36,16 @@ const guestLinks = [
 const authedLinks = [{ icon: IconSettings, label: 'Settings', path: '/settings' }];
 
 export function Navbar() {
-  const { deviceKid, clearDevice } = useDevice();
+  const { deviceKid, privateKey, clearDevice } = useDevice();
   const navigate = useNavigate();
   const currentPath = useRouterState({
     select: (state) => state.location.pathname,
   });
   const theme = useMantineTheme();
   const colorScheme = useComputedColorScheme();
+  const { crypto } = useCrypto();
+  const verificationQuery = useVerificationStatus(deviceKid, privateKey, crypto);
+  const isVerified = verificationQuery.data?.isVerified ?? false;
   const isAuthenticated = Boolean(deviceKid);
 
   const authLinks = isAuthenticated ? authedLinks : guestLinks;
@@ -90,6 +96,37 @@ export function Navbar() {
               fw={500}
             />
           ))}
+          {isAuthenticated ? (
+            isVerified ? (
+              <Badge
+                color="green"
+                leftSection={<IconShieldCheck size={14} />}
+                variant="light"
+                mt="xs"
+              >
+                Verified
+              </Badge>
+            ) : (
+              (() => {
+                const url = buildVerifierUrl('');
+                if (url) {
+                  return (
+                    <Badge
+                      component="a"
+                      href={url}
+                      color="yellow"
+                      variant="light"
+                      mt="xs"
+                      style={{ cursor: 'pointer', textDecoration: 'none' }}
+                    >
+                      Unverified
+                    </Badge>
+                  );
+                }
+                return null;
+              })()
+            )
+          ) : null}
           {isAuthenticated ? (
             <NavLink
               label="Logout"
