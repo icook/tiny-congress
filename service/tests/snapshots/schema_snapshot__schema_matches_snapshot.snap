@@ -60,7 +60,9 @@ CREATE TABLE rooms__poll_dimensions (
     description TEXT,
     min_value FLOAT4 NOT NULL DEFAULT 0.0,
     max_value FLOAT4 NOT NULL DEFAULT 1.0,
-    sort_order INT4 NOT NULL DEFAULT 0);
+    sort_order INT4 NOT NULL DEFAULT 0,
+    min_label TEXT,
+    max_label TEXT);
 
 CREATE TABLE rooms__polls (
     id UUID NOT NULL DEFAULT gen_random_uuid(),
