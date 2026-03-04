@@ -595,6 +595,41 @@ mod tests {
 
     // ── revoke_device error paths ────────────────────────────────────────────
 
+    /// Self-revoke must return 422 — a device cannot revoke its own KID.
+    ///
+    /// If this check were absent, an authenticated device could accidentally
+    /// revoke itself and lose access. The check must fire before any repo call.
+    #[tokio::test]
+    async fn test_revoke_device_self_revoke_returns_unprocessable() {
+        use axum::body::to_bytes;
+        use axum::response::IntoResponse;
+        use axum::{extract::Extension, extract::Path};
+
+        let account_id = Uuid::new_v4();
+        let auth_kid = Kid::derive(&[0xAAu8; 32]);
+
+        // Repo is not called — the self-revoke check fires first.
+        let repo = std::sync::Arc::new(MockIdentityRepo::new());
+        let auth =
+            AuthenticatedDevice::for_test(account_id, auth_kid.clone(), axum::body::Bytes::new());
+
+        let response = revoke_device(
+            Extension(repo as std::sync::Arc<dyn crate::identity::repo::IdentityRepo>),
+            Path(auth_kid.as_str().to_string()),
+            auth,
+        )
+        .await
+        .into_response();
+
+        assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+        let body = to_bytes(response.into_body(), 1024).await.expect("body");
+        let payload: serde_json::Value = serde_json::from_slice(&body).expect("json");
+        assert_eq!(
+            payload["error"].as_str().unwrap(),
+            "Cannot revoke the device making this request"
+        );
+    }
+
     /// Build an `AuthenticatedDevice` and a repo where `get_owned_device` succeeds
     /// (so we reach the `revoke_device_key` call), then inject an error there.
     fn setup_revoke_preconditions(
