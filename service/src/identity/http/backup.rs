@@ -97,6 +97,23 @@ fn synthetic_backup(username: &str, hmac_key: &[u8]) -> (Vec<u8>, Kid) {
     (envelope, kid)
 }
 
+/// Build the 200 OK response containing a synthetic backup envelope.
+///
+/// Called for both "account not found" and "account found but no backup" cases.
+/// A single function ensures both code paths produce structurally identical
+/// responses, preserving the enumeration-protection guarantee.
+fn synthetic_backup_response(username: &str, hmac_key: &[u8]) -> axum::response::Response {
+    let (fake_backup, fake_kid) = synthetic_backup(username, hmac_key);
+    (
+        StatusCode::OK,
+        Json(BackupResponse {
+            encrypted_backup: tc_crypto::encode_base64url(&fake_backup),
+            root_kid: fake_kid,
+        }),
+    )
+        .into_response()
+}
+
 /// GET /auth/backup/{username} -- fetch encrypted backup for login.
 ///
 /// Returns 200 with an encrypted backup envelope for both real and unknown
@@ -131,15 +148,7 @@ pub async fn get_backup(
     let account = match account_result {
         Ok(a) => a,
         Err(AccountRepoError::NotFound) => {
-            let (fake_backup, fake_kid) = synthetic_backup(username, hmac_key.as_bytes());
-            return (
-                StatusCode::OK,
-                Json(BackupResponse {
-                    encrypted_backup: tc_crypto::encode_base64url(&fake_backup),
-                    root_kid: fake_kid,
-                }),
-            )
-                .into_response();
+            return synthetic_backup_response(username, hmac_key.as_bytes());
         }
         Err(AccountRepoError::Database(e)) => {
             tracing::error!("Failed to look up account: {e}");
@@ -166,15 +175,7 @@ pub async fn get_backup(
         Err(BackupRepoError::NotFound) => {
             // Account exists but has no backup — return synthetic to avoid
             // leaking that the account exists without a backup.
-            let (fake_backup, fake_kid) = synthetic_backup(username, hmac_key.as_bytes());
-            (
-                StatusCode::OK,
-                Json(BackupResponse {
-                    encrypted_backup: tc_crypto::encode_base64url(&fake_backup),
-                    root_kid: fake_kid,
-                }),
-            )
-                .into_response()
+            synthetic_backup_response(username, hmac_key.as_bytes())
         }
         Err(BackupRepoError::Database(e)) => {
             tracing::error!("Failed to fetch backup: {e}");
