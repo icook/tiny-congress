@@ -22,7 +22,7 @@ use uuid::Uuid;
 use super::auth::MAX_TIMESTAMP_SKEW;
 use super::ErrorResponse;
 use crate::identity::repo::{AccountRepoError, DeviceKeyRepoError, IdentityRepo, NonceRepoError};
-use crate::identity::service::{CertificateSignature, DeviceName, DevicePubkey};
+use crate::identity::service::{validate_username, CertificateSignature, DeviceName, DevicePubkey};
 use tc_crypto::{verify_ed25519, Kid};
 
 /// Login request payload
@@ -110,11 +110,8 @@ pub async fn login(
 
     // Validate username
     let username = req.username.trim();
-    if username.is_empty() {
-        return super::bad_request("Username is required");
-    }
-    if username.len() > crate::identity::service::MAX_USERNAME_LEN {
-        return super::bad_request("Username too long");
+    if let Err(e) = validate_username(username) {
+        return super::bad_request(&e.to_string());
     }
 
     // Look up the account by username
@@ -395,7 +392,7 @@ mod tests {
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
         let body_bytes = to_bytes(response.into_body(), 1024).await.expect("body");
         let payload: serde_json::Value = serde_json::from_slice(&body_bytes).expect("json");
-        assert!(payload["error"].as_str().unwrap().contains("required"));
+        assert!(payload["error"].as_str().unwrap().contains("empty"));
     }
 
     #[tokio::test]
