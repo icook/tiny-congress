@@ -68,6 +68,24 @@ pub struct DimensionStatsResponse {
 }
 
 #[derive(Debug, Serialize)]
+pub struct BucketResponse {
+    pub label: String,
+    pub count: i64,
+}
+
+#[derive(Debug, Serialize)]
+pub struct DimensionDistributionResponse {
+    pub dimension_id: Uuid,
+    pub dimension_name: String,
+    pub buckets: Vec<BucketResponse>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct PollDistributionResponse {
+    pub dimensions: Vec<DimensionDistributionResponse>,
+}
+
+#[derive(Debug, Serialize)]
 pub struct VoteResponse {
     pub dimension_id: Uuid,
     pub value: f32,
@@ -130,6 +148,10 @@ pub fn router() -> Router {
         // Vote + results
         .route("/rooms/{room_id}/polls/{poll_id}/vote", post(cast_vote))
         .route("/rooms/{room_id}/polls/{poll_id}/results", get(get_results))
+        .route(
+            "/rooms/{room_id}/polls/{poll_id}/results/distribution",
+            get(get_distribution),
+        )
         .route("/rooms/{room_id}/polls/{poll_id}/my-votes", get(my_votes))
 }
 
@@ -341,6 +363,42 @@ async fn get_results(
                     })
                     .collect(),
                 voter_count: results.voter_count,
+            };
+            (StatusCode::OK, Json(response)).into_response()
+        }
+        Err(e) => poll_error_response(e),
+    }
+}
+
+async fn get_distribution(
+    Extension(service): Extension<Arc<dyn RoomsService>>,
+    Path((_room_id, poll_id)): Path<(Uuid, Uuid)>,
+) -> impl IntoResponse {
+    match service.get_poll_distribution(poll_id).await {
+        Ok(dist) => {
+            let num_buckets = 10usize;
+            let response = PollDistributionResponse {
+                dimensions: dist
+                    .dimensions
+                    .into_iter()
+                    .map(|d| DimensionDistributionResponse {
+                        dimension_id: d.dimension_id,
+                        dimension_name: d.dimension_name,
+                        buckets: d
+                            .buckets
+                            .into_iter()
+                            .enumerate()
+                            .map(|(i, b)| {
+                                let pct_start = (i * 100) / num_buckets;
+                                let pct_end = ((i + 1) * 100) / num_buckets;
+                                BucketResponse {
+                                    label: format!("{pct_start}–{pct_end}%"),
+                                    count: b.count,
+                                }
+                            })
+                            .collect(),
+                    })
+                    .collect(),
             };
             (StatusCode::OK, Json(response)).into_response()
         }
