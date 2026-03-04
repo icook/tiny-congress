@@ -373,6 +373,15 @@ get_pending_pr_summary() {
 }
 
 if $DRY_RUN; then
+    # Check graduated status even in dry-run
+    if [[ -f "$LEDGER" ]]; then
+        local_area_key="$(echo "$FOCUS_PATH" | sed 's/\./\\./g')"
+        local_status="$(yq -p toml -oy ".areas.\"$local_area_key\".status" "$LEDGER" 2>/dev/null || echo "null")"
+        if [[ "$local_status" == "graduated" ]]; then
+            log "Focus area $FOCUS_PATH is graduated. Set status to 'active' in refine-ledger.toml to re-run."
+            exit 0
+        fi
+    fi
     log "=== DRY RUN: Generated prompt ==="
     build_prompt "$(get_pending_pr_summary)" "$(read_ledger_context)"
     exit 0
