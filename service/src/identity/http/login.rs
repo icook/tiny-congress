@@ -113,6 +113,9 @@ pub async fn login(
     if username.is_empty() {
         return super::bad_request("Username is required");
     }
+    if username.len() > crate::identity::service::MAX_USERNAME_LEN {
+        return super::bad_request("Username too long");
+    }
 
     // Look up the account by username
     let account = match repo.get_account_by_username(username).await {
@@ -199,10 +202,18 @@ pub async fn login(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axum::http::StatusCode;
+    use crate::identity::repo::mock::MockIdentityRepo;
+    use axum::{
+        body::{to_bytes, Body},
+        http::{Request, StatusCode},
+        routing::post,
+        Router,
+    };
     use ed25519_dalek::{Signer, SigningKey};
     use rand::rngs::OsRng;
+    use std::sync::Arc;
     use tc_crypto::encode_base64url;
+    use tower::ServiceExt;
 
     /// Build a valid login request and matching root pubkey.
     ///
@@ -331,5 +342,50 @@ mod tests {
             .err()
             .expect("expected validation error");
         assert_eq!(err.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    // ── Handler-level tests ─────────────────────────────────────────────────
+
+    fn test_login_router(repo: MockIdentityRepo) -> Router {
+        Router::new()
+            .route("/auth/login", post(login))
+            .layer(axum::extract::Extension(
+                Arc::new(repo) as Arc<dyn crate::identity::repo::IdentityRepo>
+            ))
+    }
+
+    #[tokio::test]
+    async fn test_login_too_long_username_returns_bad_request() {
+        let repo = MockIdentityRepo::new();
+        let app = test_login_router(repo);
+
+        let long_username = "a".repeat(65);
+        let body = serde_json::json!({
+            "username": long_username,
+            "timestamp": chrono::Utc::now().timestamp(),
+            "device": {
+                "pubkey": encode_base64url(&[0u8; 32]),
+                "name": "test",
+                "certificate": encode_base64url(&[0u8; 64])
+            }
+        })
+        .to_string();
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/auth/login")
+                    .header("content-type", "application/json")
+                    .body(Body::from(body))
+                    .expect("request builder"),
+            )
+            .await
+            .expect("response");
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        let body_bytes = to_bytes(response.into_body(), 1024).await.expect("body");
+        let payload: serde_json::Value = serde_json::from_slice(&body_bytes).expect("json");
+        assert!(payload["error"].as_str().unwrap().contains("too long"));
     }
 }

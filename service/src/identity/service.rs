@@ -66,6 +66,12 @@ pub enum SignupError {
 
 // ─── Validation helpers ──────────────────────────────────────────────────────
 
+/// Maximum byte length of a valid username.
+///
+/// Used both in signup validation and at the login/backup endpoints to reject
+/// obviously invalid input before hitting the database.
+pub const MAX_USERNAME_LEN: usize = 64;
+
 const RESERVED_USERNAMES: &[&str] = &[
     "admin",
     "administrator",
@@ -113,7 +119,7 @@ pub fn validate_username(username: &str) -> Result<(), UsernameError> {
     if username.len() < 3 {
         return Err(UsernameError::TooShort);
     }
-    if username.len() > 64 {
+    if username.len() > MAX_USERNAME_LEN {
         return Err(UsernameError::TooLong);
     }
     if !username
