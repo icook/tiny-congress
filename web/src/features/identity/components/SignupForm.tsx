@@ -9,7 +9,6 @@ import {
   Alert,
   Button,
   Card,
-  Code,
   Group,
   PasswordInput,
   Stack,
@@ -59,20 +58,18 @@ export function SignupForm({
           Your account has been created successfully.
         </Alert>
 
-        <Card shadow="sm" padding="lg" radius="md" withBorder>
-          <Stack gap="sm">
-            <Text fw={500}>Account Details</Text>
-            <Text size="sm">
-              <strong>Account ID:</strong> <Code>{successData.account_id}</Code>
-            </Text>
-            <Text size="sm">
-              <strong>Root Key ID:</strong> <Code>{successData.root_kid}</Code>
-            </Text>
-            <Text size="sm">
-              <strong>Device Key ID:</strong> <Code>{successData.device_kid}</Code>
-            </Text>
-          </Stack>
-        </Card>
+        <Stack gap="sm">
+          <Title order={3}>What&apos;s next?</Title>
+          <Text size="sm">You&apos;re all set! Start exploring rooms and voting on polls.</Text>
+          <Group mt="xs">
+            <Button component={Link} to="/rooms">
+              Browse Rooms
+            </Button>
+            <Button component={Link} to="/settings" variant="outline">
+              View Settings
+            </Button>
+          </Group>
+        </Stack>
 
         <Text size="xs" c="dimmed" ta="center">
           Your keys were generated locally and stored in this browser session.

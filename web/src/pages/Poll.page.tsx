@@ -153,7 +153,7 @@ export function PollPage({ roomId, pollId }: PollPageProps) {
 
             {voteMutation.isSuccess ? (
               <Alert icon={<IconCheck size={16} />} color="green">
-                Vote submitted successfully!
+                Vote submitted! See the results below.
               </Alert>
             ) : null}
 
@@ -247,9 +247,15 @@ function VoteSlider({
         max={dimension.max_value}
         step={0.01}
         disabled={disabled}
+        label={(val) => {
+          const pct = Math.round(
+            ((val - dimension.min_value) / (dimension.max_value - dimension.min_value)) * 100
+          );
+          return `${String(pct)}%`;
+        }}
         marks={[
-          { value: dimension.min_value, label: String(dimension.min_value) },
-          { value: dimension.max_value, label: String(dimension.max_value) },
+          { value: dimension.min_value, label: 'Not at all' },
+          { value: dimension.max_value, label: 'Extremely' },
         ]}
       />
     </div>

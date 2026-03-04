@@ -101,8 +101,8 @@ describe('SignupPage', () => {
     // Should store device credentials (non-extractable CryptoKey)
     expect(mockSetDevice).toHaveBeenCalledWith('dev-456', mockCryptoKey);
 
-    expect(await screen.findByText(/Account ID:/i)).toBeInTheDocument();
-    expect(screen.getByText(/abc/)).toBeInTheDocument();
+    expect(await screen.findByText(/What's next/i)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /browse rooms/i })).toHaveAttribute('href', '/rooms');
   });
 
   test('shows an error message when signup fails', async () => {
