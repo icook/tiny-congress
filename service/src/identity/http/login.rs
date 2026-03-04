@@ -202,7 +202,9 @@ pub async fn login(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::identity::repo::{mock::MockIdentityRepo, AccountRecord, DeviceKeyRepoError};
+    use crate::identity::repo::{
+        mock::MockIdentityRepo, AccountRecord, DeviceKeyRepoError, NonceRepoError,
+    };
     use axum::{
         body::{to_bytes, Body},
         http::{Request, StatusCode},
@@ -554,6 +556,75 @@ mod tests {
             account_id.to_string()
         );
         assert_eq!(payload["root_kid"].as_str().unwrap(), root_kid.as_str());
+    }
+
+    /// Nonce replay must return 400 — replaying a valid request within the
+    /// timestamp window is rejected before device key creation.
+    #[tokio::test]
+    async fn test_login_nonce_replay_returns_bad_request() {
+        let (req, root_pubkey) = make_valid_components();
+
+        let repo = MockIdentityRepo::new();
+        repo.set_account_by_username_result(Ok(AccountRecord {
+            id: Uuid::new_v4(),
+            username: req.username.clone(),
+            root_pubkey: encode_base64url(&root_pubkey),
+            root_kid: Kid::derive(&root_pubkey),
+        }));
+        repo.set_nonce_result(Err(NonceRepoError::Replay));
+        let app = test_login_router(repo);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/auth/login")
+                    .header("content-type", "application/json")
+                    .body(Body::from(login_body(&req)))
+                    .expect("request builder"),
+            )
+            .await
+            .expect("response");
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        let body_bytes = to_bytes(response.into_body(), 1024).await.expect("body");
+        let payload: serde_json::Value = serde_json::from_slice(&body_bytes).expect("json");
+        assert_eq!(
+            payload["error"].as_str().unwrap(),
+            "Request replay detected"
+        );
+    }
+
+    /// Nonce DB error must return 500 without leaking internal details.
+    #[tokio::test]
+    async fn test_login_nonce_database_error_returns_internal() {
+        let (req, root_pubkey) = make_valid_components();
+
+        let repo = MockIdentityRepo::new();
+        repo.set_account_by_username_result(Ok(AccountRecord {
+            id: Uuid::new_v4(),
+            username: req.username.clone(),
+            root_pubkey: encode_base64url(&root_pubkey),
+            root_kid: Kid::derive(&root_pubkey),
+        }));
+        repo.set_nonce_result(Err(NonceRepoError::Database(sqlx::Error::Protocol(
+            "db error".to_string(),
+        ))));
+        let app = test_login_router(repo);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/auth/login")
+                    .header("content-type", "application/json")
+                    .body(Body::from(login_body(&req)))
+                    .expect("request builder"),
+            )
+            .await
+            .expect("response");
+
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
     }
 
     #[tokio::test]
