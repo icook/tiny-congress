@@ -253,6 +253,24 @@ mod tests {
         assert_eq!(p_cost, 1);
     }
 
+    /// The synthetic backup must pass `BackupEnvelope::parse` successfully.
+    ///
+    /// The anti-enumeration guarantee requires that the synthetic backup be
+    /// indistinguishable from a real backup until ChaCha20-Poly1305 decryption
+    /// fails (wrong password). If `BackupEnvelope::parse` rejects the synthetic
+    /// envelope, the client could distinguish "unknown user" from "wrong password"
+    /// at the parse step — breaking enumeration protection. This test enforces
+    /// that invariant so that tightened envelope validation rules don't silently
+    /// break it.
+    #[test]
+    fn synthetic_backup_is_parseable_as_valid_envelope() {
+        let (backup_bytes, _kid) = synthetic_backup("testuser", TEST_HMAC_KEY);
+        assert!(
+            tc_crypto::BackupEnvelope::parse(backup_bytes).is_ok(),
+            "synthetic backup must pass envelope parsing to preserve anti-enumeration invariant"
+        );
+    }
+
     // ── Handler-level tests ────────────────────────────────────────────────
 
     fn test_router(repo: MockIdentityRepo) -> Router {
