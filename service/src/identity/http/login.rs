@@ -186,6 +186,13 @@ pub async fn login(
             }),
         )
             .into_response(),
+        Err(DeviceKeyRepoError::MaxDevicesReached) => (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            Json(ErrorResponse {
+                error: "Maximum device limit reached".to_string(),
+            }),
+        )
+            .into_response(),
         Err(e) => {
             tracing::error!("Login device creation failed: {e}");
             (
@@ -654,5 +661,40 @@ mod tests {
             .expect("response");
 
         assert_eq!(response.status(), StatusCode::CONFLICT);
+    }
+
+    #[tokio::test]
+    async fn test_login_max_devices_returns_unprocessable() {
+        let (req, root_pubkey) = make_valid_components();
+
+        let repo = MockIdentityRepo::new();
+        repo.set_account_by_username_result(Ok(AccountRecord {
+            id: Uuid::new_v4(),
+            username: req.username.clone(),
+            root_pubkey: encode_base64url(&root_pubkey),
+            root_kid: Kid::derive(&root_pubkey),
+        }));
+        repo.set_create_device_key_error(DeviceKeyRepoError::MaxDevicesReached);
+        let app = test_login_router(repo);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/auth/login")
+                    .header("content-type", "application/json")
+                    .body(Body::from(login_body(&req)))
+                    .expect("request builder"),
+            )
+            .await
+            .expect("response");
+
+        assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+        let body_bytes = to_bytes(response.into_body(), 1024).await.expect("body");
+        let payload: serde_json::Value = serde_json::from_slice(&body_bytes).expect("json");
+        assert_eq!(
+            payload["error"].as_str().unwrap(),
+            "Maximum device limit reached"
+        );
     }
 }
