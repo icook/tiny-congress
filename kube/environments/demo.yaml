@@ -12,6 +12,7 @@ frontend:
   environment: "demo"
   replicaCount: 1
   apiUrl: "https://tc-api-demo.ibcook.com"
+  demoVerifierUrl: "https://tc-verify-demo.ibcook.com"
   service:
     port: 80
     targetPort: 8080
@@ -48,6 +49,8 @@ serviceAccount:
 verifiers:
   - name: "sim_verifier"
     public_key: "ovySo2At7yyERm9siRnjP_txpqBLLRwIjDbH5qVAjG0"
+  - name: "demo_verifier"
+    public_key: "TE6tpZpkJEPqjGR6h7LDvN2vXkSz5FT6nUnZMGNxZpo"
 
 sim:
   enabled: true
@@ -62,3 +65,10 @@ sim:
     governance topics suitable for community polling. Topics should be
     specific, actionable, and relevant to a small city or town. Examples:
     zoning changes, park improvements, transit priorities, budget allocation.
+
+demoVerifier:
+  enabled: true
+  apiUrl: "http://tc-demo.tiny-congress-demo.svc.cluster.local:8080"
+  allowedCallback: "https://tiny-congress-demo.ibcook.com"
+  ingress:
+    host: "tc-verify-demo.ibcook.com"
