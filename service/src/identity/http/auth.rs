@@ -290,6 +290,170 @@ impl<S: Send + Sync> FromRequest<S> for AuthenticatedDevice {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::identity::repo::{mock::MockIdentityRepo, DeviceKeyRecord};
+    use axum::{body::Body, http::Request, routing::get, Router};
+    use chrono::Utc;
+    use ed25519_dalek::{Signer, SigningKey};
+    use rand::rngs::OsRng;
+    use tc_crypto::{encode_base64url, Kid};
+    use tower::ServiceExt;
+    use uuid::Uuid;
+
+    // ── AuthenticatedDevice extractor integration tests ─────────────────────
+
+    fn make_auth_router(repo: MockIdentityRepo) -> Router {
+        async fn ok_handler(_auth: AuthenticatedDevice) -> StatusCode {
+            StatusCode::OK
+        }
+        Router::new()
+            .route("/test", get(ok_handler))
+            .layer(axum::extract::Extension(
+                Arc::new(repo) as Arc<dyn IdentityRepo>,
+            ))
+    }
+
+    fn make_device_record(pubkey_bytes: &[u8; 32], revoked: bool) -> DeviceKeyRecord {
+        DeviceKeyRecord {
+            id: Uuid::new_v4(),
+            account_id: Uuid::new_v4(),
+            device_kid: Kid::derive(pubkey_bytes),
+            device_pubkey: encode_base64url(pubkey_bytes),
+            device_name: "Test Device".to_string(),
+            certificate: vec![],
+            last_used_at: None,
+            revoked_at: if revoked { Some(Utc::now()) } else { None },
+            created_at: Utc::now(),
+        }
+    }
+
+    fn sign_canonical(
+        signing_key: &SigningKey,
+        method: &str,
+        path: &str,
+        timestamp: i64,
+        nonce: &str,
+        body: &[u8],
+    ) -> String {
+        use sha2::{Digest, Sha256};
+        let body_hash = Sha256::digest(body);
+        let body_hash_hex = format!("{body_hash:x}");
+        let canonical = format!("{method}\n{path}\n{timestamp}\n{nonce}\n{body_hash_hex}");
+        encode_base64url(&signing_key.sign(canonical.as_bytes()).to_bytes())
+    }
+
+    fn build_auth_request(kid: &str, signature: &str, timestamp: i64, nonce: &str) -> Request<Body> {
+        Request::builder()
+            .method("GET")
+            .uri("/test")
+            .header("X-Device-Kid", kid)
+            .header("X-Signature", signature)
+            .header("X-Timestamp", timestamp.to_string())
+            .header("X-Nonce", nonce)
+            .body(Body::empty())
+            .expect("request builder")
+    }
+
+    #[tokio::test]
+    async fn test_from_request_missing_kid_header_returns_unauthorized() {
+        let repo = MockIdentityRepo::new();
+        let app = make_auth_router(repo);
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/test")
+                    .body(Body::empty())
+                    .expect("request builder"),
+            )
+            .await
+            .expect("response");
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn test_from_request_expired_timestamp_returns_unauthorized() {
+        let repo = MockIdentityRepo::new();
+        let app = make_auth_router(repo);
+        let expired = Utc::now().timestamp() - (MAX_TIMESTAMP_SKEW + 1);
+        let response = app
+            .oneshot(build_auth_request(
+                "cs1uhCLEB_ttCYaQ8RMLfQ",
+                &encode_base64url(&[0u8; 64]),
+                expired,
+                "nonce",
+            ))
+            .await
+            .expect("response");
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn test_from_request_invalid_signature_returns_unauthorized() {
+        let signing_key = SigningKey::generate(&mut OsRng);
+        let pubkey = signing_key.verifying_key().to_bytes();
+        let record = make_device_record(&pubkey, false);
+        let kid = record.device_kid.clone();
+
+        let repo = MockIdentityRepo::new();
+        repo.set_get_device_key_by_kid_result(Ok(record));
+        let app = make_auth_router(repo);
+
+        let timestamp = Utc::now().timestamp();
+        // Valid 64-byte format but wrong signature bytes
+        let bad_sig = encode_base64url(&[0u8; 64]);
+        let response = app
+            .oneshot(build_auth_request(kid.as_str(), &bad_sig, timestamp, "nonce"))
+            .await
+            .expect("response");
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    /// Revocation check must fire after signature verification, returning 403.
+    ///
+    /// Security invariant: verifying the signature first ensures an unauthenticated
+    /// caller cannot distinguish revoked (403) from active (401) devices without
+    /// possessing the private key.
+    #[tokio::test]
+    async fn test_from_request_revoked_device_returns_forbidden() {
+        let signing_key = SigningKey::generate(&mut OsRng);
+        let pubkey = signing_key.verifying_key().to_bytes();
+        let record = make_device_record(&pubkey, true); // revoked
+        let kid = record.device_kid.clone();
+
+        let repo = MockIdentityRepo::new();
+        repo.set_get_device_key_by_kid_result(Ok(record));
+        let app = make_auth_router(repo);
+
+        let timestamp = Utc::now().timestamp();
+        let nonce = "nonce-revoked-test";
+        let signature = sign_canonical(&signing_key, "GET", "/test", timestamp, nonce, b"");
+        let response = app
+            .oneshot(build_auth_request(kid.as_str(), &signature, timestamp, nonce))
+            .await
+            .expect("response");
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    }
+
+    #[tokio::test]
+    async fn test_from_request_valid_request_returns_ok() {
+        let signing_key = SigningKey::generate(&mut OsRng);
+        let pubkey = signing_key.verifying_key().to_bytes();
+        let record = make_device_record(&pubkey, false);
+        let kid = record.device_kid.clone();
+
+        let repo = MockIdentityRepo::new();
+        repo.set_get_device_key_by_kid_result(Ok(record));
+        let app = make_auth_router(repo);
+
+        let timestamp = Utc::now().timestamp();
+        let nonce = "nonce-valid-test";
+        let signature = sign_canonical(&signing_key, "GET", "/test", timestamp, nonce, b"");
+        let response = app
+            .oneshot(build_auth_request(kid.as_str(), &signature, timestamp, nonce))
+            .await
+            .expect("response");
+        assert_eq!(response.status(), StatusCode::OK);
+    }
 
     // ── Nonce validation ────────────────────────────────────────────────────
 
