@@ -481,6 +481,142 @@ mod tests {
             .expect("expected error");
         assert_eq!(err.status(), StatusCode::INTERNAL_SERVER_ERROR);
     }
+
+    // ── revoke_device error paths ────────────────────────────────────────────
+
+    /// Build an `AuthenticatedDevice` and a repo where `get_owned_device` succeeds
+    /// (so we reach the `revoke_device_key` call), then inject an error there.
+    fn setup_revoke_preconditions(
+        account_id: Uuid,
+        target_kid: &Kid,
+    ) -> (std::sync::Arc<MockIdentityRepo>, AuthenticatedDevice) {
+        // auth device has a different KID so the "cannot revoke self" check passes
+        let auth_kid = Kid::derive(&[0xAAu8; 32]);
+        let record = make_device_record(account_id);
+
+        let repo = std::sync::Arc::new(MockIdentityRepo::new());
+        // `get_owned_device` calls `get_device_key_by_kid` — return a record owned by this account
+        repo.set_get_device_key_by_kid_result(Ok(record));
+
+        let auth = AuthenticatedDevice::for_test(account_id, auth_kid, axum::body::Bytes::new());
+        let _ = target_kid; // used by caller for the Path argument
+        (repo, auth)
+    }
+
+    #[tokio::test]
+    async fn test_revoke_device_already_revoked_returns_conflict() {
+        use axum::response::IntoResponse;
+        use axum::{body::to_bytes, extract::Extension, extract::Path};
+
+        let account_id = Uuid::new_v4();
+        let target_kid = Kid::derive(&[0xBBu8; 32]);
+        let (repo, auth) = setup_revoke_preconditions(account_id, &target_kid);
+        repo.set_revoke_device_key_result(Err(DeviceKeyRepoError::AlreadyRevoked));
+
+        let response = revoke_device(
+            Extension(repo as std::sync::Arc<dyn crate::identity::repo::IdentityRepo>),
+            Path(target_kid.as_str().to_string()),
+            auth,
+        )
+        .await
+        .into_response();
+
+        assert_eq!(response.status(), StatusCode::CONFLICT);
+        let body = to_bytes(response.into_body(), 1024).await.expect("body");
+        let payload: serde_json::Value = serde_json::from_slice(&body).expect("json");
+        assert_eq!(payload["error"].as_str().unwrap(), "Device already revoked");
+    }
+
+    #[tokio::test]
+    async fn test_revoke_device_db_error_returns_internal() {
+        use axum::response::IntoResponse;
+        use axum::{extract::Extension, extract::Path};
+
+        let account_id = Uuid::new_v4();
+        let target_kid = Kid::derive(&[0xBBu8; 32]);
+        let (repo, auth) = setup_revoke_preconditions(account_id, &target_kid);
+        repo.set_revoke_device_key_result(Err(DeviceKeyRepoError::Database(
+            sqlx::Error::Protocol("db error".to_string()),
+        )));
+
+        let response = revoke_device(
+            Extension(repo as std::sync::Arc<dyn crate::identity::repo::IdentityRepo>),
+            Path(target_kid.as_str().to_string()),
+            auth,
+        )
+        .await
+        .into_response();
+
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    }
+
+    // ── rename_device error paths ────────────────────────────────────────────
+
+    fn setup_rename_preconditions(
+        account_id: Uuid,
+        target_kid: &Kid,
+    ) -> (std::sync::Arc<MockIdentityRepo>, AuthenticatedDevice) {
+        let auth_kid = Kid::derive(&[0xAAu8; 32]);
+        let record = make_device_record(account_id);
+
+        let repo = std::sync::Arc::new(MockIdentityRepo::new());
+        repo.set_get_device_key_by_kid_result(Ok(record));
+
+        let body = axum::body::Bytes::from(r#"{"name":"Renamed Device"}"#);
+        let auth = AuthenticatedDevice::for_test(account_id, auth_kid, body);
+        let _ = target_kid;
+        (repo, auth)
+    }
+
+    #[tokio::test]
+    async fn test_rename_device_already_revoked_returns_conflict() {
+        use axum::response::IntoResponse;
+        use axum::{body::to_bytes, extract::Extension, extract::Path};
+
+        let account_id = Uuid::new_v4();
+        let target_kid = Kid::derive(&[0xCCu8; 32]);
+        let (repo, auth) = setup_rename_preconditions(account_id, &target_kid);
+        repo.set_rename_device_key_result(Err(DeviceKeyRepoError::AlreadyRevoked));
+
+        let response = rename_device(
+            Extension(repo as std::sync::Arc<dyn crate::identity::repo::IdentityRepo>),
+            Path(target_kid.as_str().to_string()),
+            auth,
+        )
+        .await
+        .into_response();
+
+        assert_eq!(response.status(), StatusCode::CONFLICT);
+        let body = to_bytes(response.into_body(), 1024).await.expect("body");
+        let payload: serde_json::Value = serde_json::from_slice(&body).expect("json");
+        assert_eq!(
+            payload["error"].as_str().unwrap(),
+            "Cannot rename a revoked device"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_rename_device_db_error_returns_internal() {
+        use axum::response::IntoResponse;
+        use axum::{extract::Extension, extract::Path};
+
+        let account_id = Uuid::new_v4();
+        let target_kid = Kid::derive(&[0xCCu8; 32]);
+        let (repo, auth) = setup_rename_preconditions(account_id, &target_kid);
+        repo.set_rename_device_key_result(Err(DeviceKeyRepoError::Database(
+            sqlx::Error::Protocol("db error".to_string()),
+        )));
+
+        let response = rename_device(
+            Extension(repo as std::sync::Arc<dyn crate::identity::repo::IdentityRepo>),
+            Path(target_kid.as_str().to_string()),
+            auth,
+        )
+        .await
+        .into_response();
+
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    }
 }
 
 /// Verify a device exists and belongs to the given account.

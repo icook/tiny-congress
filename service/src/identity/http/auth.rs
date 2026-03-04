@@ -72,6 +72,19 @@ impl AuthenticatedDevice {
         serde_json::from_slice(&self.body_bytes)
             .map_err(|e| super::bad_request(&format!("Invalid JSON body: {e}")))
     }
+
+    /// Construct an `AuthenticatedDevice` for use in unit tests.
+    ///
+    /// Skips all authentication checks. For testing handler logic after
+    /// authentication has conceptually succeeded.
+    #[cfg(test)]
+    pub fn for_test(account_id: Uuid, device_kid: Kid, body: Bytes) -> Self {
+        Self {
+            account_id,
+            device_kid,
+            body_bytes: body,
+        }
+    }
 }
 
 /// Validate a nonce value from the X-Nonce header.
