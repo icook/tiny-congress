@@ -20,8 +20,8 @@ test('rooms page loads and shows empty state', async ({ page }) => {
 test('rooms page is accessible from navbar', async ({ page }) => {
   await page.goto('/');
 
-  // Navbar should have a Rooms link
-  const roomsLink = page.getByRole('link', { name: /Rooms/i });
+  // Navbar should have a Rooms link (use exact match to avoid the "Browse Rooms" CTA)
+  const roomsLink = page.getByRole('link', { name: /^Rooms$/i });
   await expect(roomsLink).toBeVisible();
 
   // Click it
