@@ -1,58 +1,47 @@
 # TinyCongress
 
-This is a non-functional WIP monorepo for a web community.
+A community governance platform where verified people vote on issues that matter — with more nuance than yes/no.
 
-**Website**: [tinycongress.com](https://tinycongress.com) | **Landing Page Repo**: [tiny-congress-landing](https://github.com/icook/tiny-congress-landing)
+Users generate Ed25519 key pairs client-side; the server never sees private keys. Multi-dimensional polls let communities express the *shape* of their opinion, not just a binary position.
 
-## Core Components
+**Demo**: [tiny-congress-demo.ibcook.com](https://tiny-congress-demo.ibcook.com) | **Website**: [tinycongress.com](https://tinycongress.com)
 
-- `/web/`
-    - A simple React UI will offer allow users to create accounts, manage keys and participate in polling rooms. Mantine UI has been picked for the component library.
-- `/service/`
-    - A Rust based graphql API implements polling room runtime and CRUD endpoints. axum, tokio, and sqlx.
+## How It Works
 
-# Dev
+1. **Sign up** — create an account with a username and backup password. Keys are generated in your browser.
+2. **Enter a room** — browse open rooms with active polls on topics that matter to your community.
+3. **Vote on dimensions** — instead of yes/no, rate each dimension (importance, urgency, feasibility) on a slider.
+4. **See results** — watch the collective picture emerge as more people vote.
 
-[Skaffold](https://skaffold.dev/) manages:
+## Architecture
 
-- Local dev cluster with hot reload
-- CI cluster setup test running
-- Production image building
+| Component | Stack | Purpose |
+|-----------|-------|---------|
+| `web/` | React, Mantine, Vite, TanStack Router | Client-side UI and crypto (via `tc-crypto` WASM) |
+| `service/` | Rust, axum, sqlx, PostgreSQL | API, polling runtime, identity management |
+| `crates/tc-crypto/` | Rust (native + WASM) | Shared cryptographic operations |
+| `kube/` | Helm, Skaffold, KinD | Kubernetes deployment and CI |
 
-# macOS Developer Setup
+**Trust model**: the server is a dumb witness, not a trusted authority. Crypto operations happen in the browser. See [docs/domain-model.md](docs/domain-model.md) for details.
 
-This guide gets you from a clean macOS to running TinyCongress locally.
-
-## Prerequisites
-
-- macOS 13+ (Apple Silicon or Intel)
-- Admin user
-
-## Install Homebrew
+## Development
 
 ```bash
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-# Follow on-screen PATH instructions (usually add to ~/.profile)
+# Run all tests (no cluster required)
+just test
+
+# Run linting
+just lint
+
+# Full CI suite (requires KinD cluster)
+just test-ci
+
+# Frontend dev server only
+just dev-frontend
 ```
 
-## Core tooling
+Run `just --list` for all available commands. See [docs/README.md](docs/README.md) for playbooks, interfaces, ADRs, and full documentation.
 
-```bash
-brew install git gnupg jq shellcheck
-brew install --cask docker
-brew install kubectl minikube skaffold
-```
+## Status
 
-- Open Docker Desktop once to finalize installation.
-
-## Start dev cluster
-
-```bash
-minikube start
-skaffold dev --port-forward
-```
-
-# Documentation
-
-See [docs/README.md](docs/README.md) for playbooks, interfaces, ADRs, and documentation placement rules.
-
+Pre-launch. Building toward a friends-and-family demo. Core flow (signup, rooms, voting, results) is functional. See `objectives.md` for the current readiness checklist.
