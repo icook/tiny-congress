@@ -292,6 +292,30 @@ mod tests {
             .expect("request builder")
     }
 
+    /// Whitespace-only usernames trim to empty and must be rejected before any DB lookup.
+    #[tokio::test]
+    async fn test_get_backup_whitespace_username_returns_bad_request() {
+        let repo = MockIdentityRepo::new();
+        let app = test_router(repo);
+
+        // %20 decodes to a space; trim() makes it empty, triggering the early check.
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/auth/backup/%20")
+                    .body(Body::empty())
+                    .expect("request builder"),
+            )
+            .await
+            .expect("response");
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        let body = to_bytes(response.into_body(), 1024).await.expect("body");
+        let payload: serde_json::Value = serde_json::from_slice(&body).expect("json");
+        assert!(payload["error"].as_str().unwrap().contains("empty"));
+    }
+
     #[tokio::test]
     async fn test_get_backup_too_long_username_returns_bad_request() {
         let repo = MockIdentityRepo::new();
