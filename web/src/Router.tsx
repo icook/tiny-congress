@@ -41,7 +41,7 @@ const aboutRoute = createRoute({
 });
 
 // Layout route for guest-only pages (login, signup)
-// Redirects authenticated users to /settings
+// Redirects authenticated users to /rooms
 const guestOnlyLayout = createRoute({
   getParentRoute: () => rootRoute,
   id: 'guest-only',
