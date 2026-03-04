@@ -84,12 +84,56 @@ Use `SCREAMING_SNAKE_CASE` for error codes. Domain-specific codes (e.g., `DUPLIC
 - Making optional fields required
 - Changing argument types
 
-## Health endpoints
+## REST endpoint reference
 
-| Endpoint | Purpose | Expected response |
-|----------|---------|-------------------|
-| `GET /health` | Liveness | `200 OK` |
-| `GET /ready` | Readiness (DB connected) | `200 OK` or `503` |
+For full request/response schemas and error codes, see [domain-model.md](../domain-model.md).
+
+### Identity (`/auth/*`)
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| POST | `/auth/signup` | No | Create account with root key, device key, and backup |
+| GET | `/auth/backup/{username}` | No | Retrieve encrypted backup envelope (anti-enumeration) |
+| POST | `/auth/login` | No | Authenticate and register new device key |
+| GET | `/auth/devices` | Yes | List all device keys for account |
+| POST | `/auth/devices` | Yes | Add a device key |
+| DELETE | `/auth/devices/{kid}` | Yes | Revoke a device key |
+| PATCH | `/auth/devices/{kid}` | Yes | Rename a device key |
+
+### Reputation (`/me/*`, `/endorsements/*`, `/verifiers/*`)
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/me/endorsements` | Yes | List caller's endorsements |
+| GET | `/endorsements/check` | No | Check endorsement (`?subject_id=&topic=`) |
+| POST | `/verifiers/endorsements` | Yes (verifier) | Create endorsement for a user |
+| GET | `/auth/idme/authorize` | Yes | Get ID.me OAuth redirect URL |
+| GET | `/auth/idme/callback` | No | ID.me OAuth callback (browser redirect) |
+
+### Rooms (`/rooms/*`)
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/rooms` | No | List open rooms |
+| POST | `/rooms` | Yes | Create a room |
+| GET | `/rooms/{room_id}` | No | Get room details |
+| GET | `/rooms/{room_id}/polls` | No | List polls in room |
+| POST | `/rooms/{room_id}/polls` | Yes | Create a poll |
+| GET | `/rooms/{room_id}/polls/{poll_id}` | No | Get poll with dimensions |
+| POST | `/rooms/{room_id}/polls/{poll_id}/status` | Yes | Update poll status |
+| POST | `/rooms/{room_id}/polls/{poll_id}/dimensions` | Yes | Add dimension to poll |
+| POST | `/rooms/{room_id}/polls/{poll_id}/vote` | Yes | Cast votes (eligibility-gated) |
+| GET | `/rooms/{room_id}/polls/{poll_id}/results` | No | Get aggregate results |
+| GET | `/rooms/{room_id}/polls/{poll_id}/my-votes` | Yes | Get caller's votes |
+
+### Other
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/api/v1/build-info` | No | Build version, git SHA, timestamp |
+| GET | `/health` | No | Liveness probe (`200 OK`) |
+| GET | `/ready` | No | Readiness probe (`200 OK` or `503`) |
+| POST | `/graphql` | No | GraphQL endpoint |
 
 ## Rate limiting
 
