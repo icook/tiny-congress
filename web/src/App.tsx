@@ -1,6 +1,8 @@
 import '@mantine/core/styles.css';
+import '@mantine/notifications/styles.css';
 
 import { MantineProvider } from '@mantine/core';
+import { Notifications } from '@mantine/notifications';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { CryptoProvider } from './providers/CryptoProvider';
 import { DeviceProvider } from './providers/DeviceProvider';
@@ -15,6 +17,7 @@ export default function App() {
         <DeviceProvider>
           <QueryProvider>
             <MantineProvider theme={mantineTheme} defaultColorScheme="dark">
+              <Notifications />
               <Router />
             </MantineProvider>
           </QueryProvider>

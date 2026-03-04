@@ -18,6 +18,7 @@ import {
   Text,
   Title,
 } from '@mantine/core';
+import { notifications } from '@mantine/notifications';
 import {
   useCastVote,
   useMyVotes,
@@ -66,6 +67,8 @@ export function PollPage({ roomId, pollId }: PollPageProps) {
     setHasInitialized(true);
   }, [detailQuery.data, myVotesQuery.data, hasInitialized]);
 
+  const hasVoted = (myVotesQuery.data?.length ?? 0) > 0;
+
   const handleVoteChange = useCallback((dimensionId: string, value: number) => {
     setVotes((prev) => ({ ...prev, [dimensionId]: value }));
   }, []);
@@ -78,8 +81,18 @@ export function PollPage({ roomId, pollId }: PollPageProps) {
       dimension_id: dim.id,
       value: votes[dim.id] ?? (dim.min_value + dim.max_value) / 2,
     }));
-    voteMutation.mutate(dimensionVotes);
-  }, [detailQuery.data, votes, voteMutation]);
+    voteMutation.mutate(dimensionVotes, {
+      onSuccess: () => {
+        notifications.show({
+          title: hasVoted ? 'Vote updated' : 'Vote submitted!',
+          message: "Thanks! Here's what the community thinks:",
+          color: 'green',
+          icon: <IconCheck size={16} />,
+          autoClose: 3000,
+        });
+      },
+    });
+  }, [detailQuery.data, votes, voteMutation, hasVoted]);
 
   if (detailQuery.isLoading || deviceLoading) {
     return (
@@ -110,7 +123,7 @@ export function PollPage({ roomId, pollId }: PollPageProps) {
   const hasVoted = (myVotesQuery.data?.length ?? 0) > 0;
 
   return (
-    <Stack gap="md" maw={800} mx="auto" mt="xl">
+    <Stack gap="md" maw={800} mx="auto" mt="xl" px="md">
       <Group>
         <Text component={Link} to="/rooms" size="sm" c="dimmed" style={{ textDecoration: 'none' }}>
           Rooms
@@ -139,9 +152,24 @@ export function PollPage({ roomId, pollId }: PollPageProps) {
 
       {/* Voting section */}
       {isActive ? (
-        <Card shadow="sm" padding="lg" radius="md" withBorder>
+        <Card
+          shadow="sm"
+          padding="lg"
+          radius="md"
+          withBorder
+          style={
+            hasVoted ? { borderColor: 'var(--mantine-color-green-4)', borderWidth: 2 } : undefined
+          }
+        >
           <Stack gap="md">
-            <Title order={4}>Cast Your Vote</Title>
+            <Group justify="space-between">
+              <Title order={4}>{hasVoted ? 'Your Vote' : 'Cast Your Vote'}</Title>
+              {hasVoted ? (
+                <Badge color="green" variant="light" leftSection={<IconCheck size={12} />}>
+                  Voted
+                </Badge>
+              ) : null}
+            </Group>
 
             {!isAuthenticated ? (
               <Alert icon={<IconLock size={16} />} color="yellow">
@@ -263,24 +291,29 @@ function VoteSlider({
           {dimension.description}
         </Text>
       ) : null}
-      <Slider
-        value={value}
-        onChange={onChange}
-        min={dimension.min_value}
-        max={dimension.max_value}
-        step={0.01}
-        disabled={disabled}
-        label={(val) => {
-          const pct = Math.round(
-            ((val - dimension.min_value) / (dimension.max_value - dimension.min_value)) * 100
-          );
-          return `${String(pct)}%`;
-        }}
-        marks={[
-          { value: dimension.min_value, label: 'Not at all' },
-          { value: dimension.max_value, label: 'Extremely' },
-        ]}
-      />
+      <div style={{ paddingBottom: 8 }}>
+        <Slider
+          value={value}
+          onChange={onChange}
+          min={dimension.min_value}
+          max={dimension.max_value}
+          step={0.01}
+          disabled={disabled}
+          size="lg"
+          thumbSize={26}
+          label={(val) => {
+            const pct = Math.round(
+              ((val - dimension.min_value) / (dimension.max_value - dimension.min_value)) * 100
+            );
+            return `${String(pct)}%`;
+          }}
+          marks={[
+            { value: dimension.min_value, label: dimension.min_label ?? 'Low' },
+            { value: dimension.max_value, label: dimension.max_label ?? 'High' },
+          ]}
+          styles={{ markLabel: { fontSize: 'var(--mantine-font-size-xs)' } }}
+        />
+      </div>
     </div>
   );
 }
