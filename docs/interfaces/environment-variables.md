@@ -123,6 +123,29 @@ TC_SWAGGER__ENABLED=true
 |----------|----------|---------|-------------|
 | `TC_VERIFIERS` | No | `[]` | JSON array of verifier configs bootstrapped at startup (see ADR-008) |
 
+### Anti-Enumeration Key
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `TC_SYNTHETIC_BACKUP_KEY` | Yes | - | HMAC key for generating synthetic backup envelopes (anti-enumeration). Must be at least 32 bytes. |
+
+**Security note:** This key ensures that `GET /auth/backup/{username}` returns indistinguishable responses for real and non-existent accounts. Without it, the server refuses to start. See [domain-model.md](../domain-model.md#login-flow) for how synthetic backups work.
+
+### ID.me OAuth Configuration
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `TC_IDME__CLIENT_ID` | Yes* | - | ID.me OAuth client ID |
+| `TC_IDME__CLIENT_SECRET` | Yes* | - | ID.me OAuth client secret |
+| `TC_IDME__REDIRECT_URI` | Yes* | - | OAuth callback URL (must match ID.me app config) |
+| `TC_IDME__STATE_SECRET` | Yes* | - | HMAC key for signing OAuth state (anti-CSRF), ≥32 bytes |
+| `TC_IDME__FRONTEND_CALLBACK_URL` | Yes* | - | Frontend URL to redirect after verification |
+| `TC_IDME__AUTHORIZE_URL` | No | `https://api.idmelabs.com/oauth/authorize` | ID.me authorize endpoint |
+| `TC_IDME__TOKEN_URL` | No | `https://api.idmelabs.com/oauth/token` | ID.me token endpoint |
+| `TC_IDME__USERINFO_URL` | No | `https://api.idmelabs.com/api/public/v3/userinfo` | ID.me userinfo endpoint |
+
+\* The entire `idme` section is optional — if omitted, identity verification is disabled. But if any `TC_IDME__*` variable is set, all required fields must be present.
+
 ### Simulation Worker (`SIM_*` prefix)
 
 The simulation worker (`service/src/bin/sim.rs`) uses its own env var prefix. These are only needed when running the sim worker.
