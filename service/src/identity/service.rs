@@ -830,6 +830,24 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_signup_whitespace_only_username() {
+        // The service trims the username before validating. A whitespace-only
+        // username should produce "empty" (not "invalid characters") because
+        // trim collapses it to "" before validate_username runs.
+        let svc = service_with_mock_repo();
+        let mut req = valid_signup_request();
+        req.username = "   ".to_string();
+        let err = svc.signup(&req).await.unwrap_err();
+        match &err {
+            SignupError::Validation(msg) => assert!(
+                msg.contains("empty"),
+                "expected 'empty' in message, got: {msg}"
+            ),
+            other => panic!("expected Validation, got: {other:?}"),
+        }
+    }
+
+    #[tokio::test]
     async fn test_signup_invalid_root_pubkey() {
         let svc = service_with_mock_repo();
         let mut req = valid_signup_request();
