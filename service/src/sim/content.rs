@@ -114,6 +114,8 @@ pub async fn insert_sim_content(
                         dim.min,
                         dim.max,
                         sort_order,
+                        dim.min_label.as_deref(),
+                        dim.max_label.as_deref(),
                     )
                     .await?;
 

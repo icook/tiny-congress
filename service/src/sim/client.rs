@@ -97,6 +97,10 @@ struct AddDimensionBody<'a> {
     min_value: f32,
     max_value: f32,
     sort_order: i32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    min_label: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    max_label: Option<&'a str>,
 }
 
 #[derive(Serialize)]
@@ -336,6 +340,8 @@ impl SimClient {
         min: f32,
         max: f32,
         order: i32,
+        min_label: Option<&str>,
+        max_label: Option<&str>,
     ) -> Result<DimensionResponse> {
         let path = format!("/rooms/{room_id}/polls/{poll_id}/dimensions");
         let body = serde_json::to_vec(&AddDimensionBody {
@@ -344,6 +350,8 @@ impl SimClient {
             min_value: min,
             max_value: max,
             sort_order: order,
+            min_label,
+            max_label,
         })?;
         let headers = account.sign_request("POST", &path, &body);
 
@@ -703,6 +711,8 @@ mod tests {
             min_value: 0.0,
             max_value: 10.0,
             sort_order: 1,
+            min_label: Some("Not important"),
+            max_label: Some("Very important"),
         };
         let json: serde_json::Value =
             serde_json::from_slice(&serde_json::to_vec(&body).unwrap()).unwrap();
