@@ -345,6 +345,11 @@ commit_ledger() {
        [[ -n "$(git -C "$REPO_ROOT" ls-files --others --exclude-standard -- "refine-ledger.json" 2>/dev/null)" ]]; then
         git -C "$REPO_ROOT" add "refine-ledger.json"
         git -C "$REPO_ROOT" commit --quiet -m "refine: update ledger for ${FOCUS_PATH}"
+        # Pull-rebase before push — another iteration may have pushed since we last pulled
+        git -C "$REPO_ROOT" pull --rebase --quiet origin master || {
+            log "WARNING: ledger pull-rebase failed, skipping push"
+            return 0
+        }
         git -C "$REPO_ROOT" push --quiet origin master
         log "Ledger committed and pushed to master"
     fi
