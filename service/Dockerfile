@@ -32,7 +32,7 @@ COPY crates ./crates
 ENV SQLX_OFFLINE=true
 RUN --mount=type=cache,target=/usr/local/cargo/registry,id=cargo-registry \
     --mount=type=cache,target=/usr/local/cargo/git,id=cargo-git \
-    cargo build --release -p tinycongress-api --bin tinycongress-api --bin sim
+    cargo build --release -p tinycongress-api --bin tinycongress-api --bin sim --bin demo_verifier
 
 FROM debian:bookworm-slim
 
@@ -45,6 +45,7 @@ RUN apt-get update \
 
 COPY --from=builder /usr/src/app/target/release/tinycongress-api /usr/local/bin/
 COPY --from=builder /usr/src/app/target/release/sim /usr/local/bin/
+COPY --from=builder /usr/src/app/target/release/demo_verifier /usr/local/bin/
 COPY --from=builder /usr/src/app/service/migrations /usr/local/migrations
 
 # Build metadata (injected by CI via --build-arg)
