@@ -376,6 +376,18 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_validate_add_device_request_name_too_long() {
+        let (mut req, account) = make_valid_components();
+        req.name = "a".repeat(129); // exceeds 128-char DeviceName limit
+        let repo = MockIdentityRepo::new();
+        let err = validate_add_device_request(&repo, account.id, &req)
+            .await
+            .err()
+            .expect("expected error");
+        assert_eq!(err.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
     async fn test_validate_add_device_request_invalid_cert_length() {
         let (mut req, account) = make_valid_components();
         req.certificate = encode_base64url(&[0u8; 32]); // 32 bytes, not 64
