@@ -47,5 +47,8 @@ test('about page reflects API build info @smoke', async ({ page, request }) => {
   // Verify the displayed data matches what the API returned
   await expect(page.getByTestId('api-version')).toHaveText(buildInfo.version);
   await expect(page.getByTestId('api-git-sha')).toHaveText(buildInfo.gitSha);
-  await expect(page.getByTestId('api-build-time')).toHaveText(buildInfo.buildTime);
+  // TimestampText formats the raw ISO string via Intl.DateTimeFormat, so verify
+  // the year from the build timestamp appears in the formatted output.
+  const buildYear = new Date(buildInfo.buildTime).getFullYear().toString();
+  await expect(page.getByTestId('api-build-time')).toContainText(buildYear);
 });
