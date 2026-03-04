@@ -372,6 +372,7 @@ pub mod mock {
     pub struct MockIdentityRepo {
         pub signup_result: Mutex<Option<Result<SignupResult, CreateSignupError>>>,
         pub account_by_username_result: Mutex<Option<Result<AccountRecord, AccountRepoError>>>,
+        pub account_by_id_result: Mutex<Option<Result<AccountRecord, AccountRepoError>>>,
         pub create_device_key_error: Mutex<Option<DeviceKeyRepoError>>,
     }
 
@@ -381,6 +382,7 @@ pub mod mock {
             Self {
                 signup_result: Mutex::new(None),
                 account_by_username_result: Mutex::new(None),
+                account_by_id_result: Mutex::new(None),
                 create_device_key_error: Mutex::new(None),
             }
         }
@@ -407,6 +409,15 @@ pub mod mock {
                 .account_by_username_result
                 .lock()
                 .expect("lock poisoned") = Some(result);
+        }
+
+        /// Set the result that [`IdentityRepo::get_account_by_id`] will return.
+        ///
+        /// # Panics
+        ///
+        /// Panics if the internal mutex is poisoned.
+        pub fn set_account_by_id_result(&self, result: Result<AccountRecord, AccountRepoError>) {
+            *self.account_by_id_result.lock().expect("lock poisoned") = Some(result);
         }
 
         /// Set an error that [`IdentityRepo::create_device_key`] will return.
@@ -443,7 +454,11 @@ pub mod mock {
             &self,
             _account_id: Uuid,
         ) -> Result<AccountRecord, AccountRepoError> {
-            Err(AccountRepoError::NotFound)
+            self.account_by_id_result
+                .lock()
+                .expect("lock poisoned")
+                .take()
+                .unwrap_or(Err(AccountRepoError::NotFound))
         }
 
         async fn get_account_by_username(

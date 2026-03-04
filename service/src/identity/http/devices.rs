@@ -280,6 +280,136 @@ pub async fn rename_device(
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::identity::repo::mock::MockIdentityRepo;
+    use crate::identity::repo::AccountRecord;
+    use axum::http::StatusCode;
+    use ed25519_dalek::{Signer, SigningKey};
+    use rand::rngs::OsRng;
+    use tc_crypto::{encode_base64url, Kid};
+
+    /// Build a valid add-device request and a matching account record.
+    ///
+    /// The certificate signs the raw 32-byte device pubkey with the root key,
+    /// matching the format expected by `validate_add_device_request`.
+    fn make_valid_components() -> (AddDeviceRequest, AccountRecord) {
+        let root_key = SigningKey::generate(&mut OsRng);
+        let root_pubkey = root_key.verifying_key().to_bytes();
+
+        let device_key = SigningKey::generate(&mut OsRng);
+        let device_pubkey = device_key.verifying_key().to_bytes();
+
+        let sig = root_key.sign(&device_pubkey);
+
+        let account = AccountRecord {
+            id: Uuid::new_v4(),
+            username: "alice".to_string(),
+            root_pubkey: encode_base64url(&root_pubkey),
+            root_kid: Kid::derive(&root_pubkey),
+        };
+
+        let req = AddDeviceRequest {
+            pubkey: encode_base64url(&device_pubkey),
+            name: "New Device".to_string(),
+            certificate: encode_base64url(&sig.to_bytes()),
+        };
+
+        (req, account)
+    }
+
+    fn mock_with_account(account: AccountRecord) -> MockIdentityRepo {
+        let repo = MockIdentityRepo::new();
+        repo.set_account_by_id_result(Ok(account));
+        repo
+    }
+
+    #[tokio::test]
+    async fn test_validate_add_device_request_valid() {
+        let (req, account) = make_valid_components();
+        let expected_kid = DevicePubkey::from_base64url(&req.pubkey).unwrap().kid();
+        let repo = mock_with_account(account.clone());
+        let result = validate_add_device_request(&repo, account.id, &req).await;
+        assert!(result.is_ok());
+        let validated = result.unwrap();
+        assert_eq!(validated.device_kid, expected_kid);
+        assert_eq!(validated.device_name.as_str(), "New Device");
+    }
+
+    #[tokio::test]
+    async fn test_validate_add_device_request_invalid_pubkey_encoding() {
+        let (mut req, account) = make_valid_components();
+        req.pubkey = "!!!not-base64!!!".to_string();
+        let repo = MockIdentityRepo::new(); // not called — validation fails early
+        let err = validate_add_device_request(&repo, account.id, &req)
+            .await
+            .err()
+            .expect("expected error");
+        assert_eq!(err.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn test_validate_add_device_request_invalid_pubkey_length() {
+        let (mut req, account) = make_valid_components();
+        req.pubkey = encode_base64url(&[1u8; 16]); // 16 bytes, not 32
+        let repo = MockIdentityRepo::new();
+        let err = validate_add_device_request(&repo, account.id, &req)
+            .await
+            .err()
+            .expect("expected error");
+        assert_eq!(err.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn test_validate_add_device_request_empty_name() {
+        let (mut req, account) = make_valid_components();
+        req.name = String::new();
+        let repo = MockIdentityRepo::new();
+        let err = validate_add_device_request(&repo, account.id, &req)
+            .await
+            .err()
+            .expect("expected error");
+        assert_eq!(err.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn test_validate_add_device_request_invalid_cert_length() {
+        let (mut req, account) = make_valid_components();
+        req.certificate = encode_base64url(&[0u8; 32]); // 32 bytes, not 64
+        let repo = MockIdentityRepo::new();
+        let err = validate_add_device_request(&repo, account.id, &req)
+            .await
+            .err()
+            .expect("expected error");
+        assert_eq!(err.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn test_validate_add_device_request_wrong_signature() {
+        let (mut req, account) = make_valid_components();
+        req.certificate = encode_base64url(&[0xFFu8; 64]); // valid length, wrong bytes
+        let repo = mock_with_account(account.clone());
+        let err = validate_add_device_request(&repo, account.id, &req)
+            .await
+            .err()
+            .expect("expected error");
+        assert_eq!(err.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn test_validate_add_device_request_account_not_found() {
+        // Post-auth account lookup fails → internal error (server-side invariant violation)
+        let (req, account) = make_valid_components();
+        let repo = MockIdentityRepo::new(); // default: get_account_by_id returns NotFound
+        let err = validate_add_device_request(&repo, account.id, &req)
+            .await
+            .err()
+            .expect("expected error");
+        assert_eq!(err.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    }
+}
+
 /// Verify a device exists and belongs to the given account.
 #[allow(clippy::result_large_err)]
 async fn get_owned_device(
