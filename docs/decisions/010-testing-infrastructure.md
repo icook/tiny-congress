@@ -207,7 +207,7 @@ assert_eq!(response.status(), StatusCode::CREATED);
 - Rejected for speed: migrations take ~100–300ms vs. ~15–30ms for template cloning. With dozens of isolated DB tests, this adds up.
 
 ## References
-- [ADR-009: Repo/Service/HTTP Architecture](009-repo-service-http-architecture.md) — the layers this infrastructure tests
+- [ADR-016: Repo/Service/HTTP Architecture](016-repo-service-http-architecture.md) — the layers this infrastructure tests
 - [PR #208: Testing infrastructure](https://github.com/icook/tiny-congress/pull/208) — initial implementation
 - [PR #225: Test isolation tiers](https://github.com/icook/tiny-congress/pull/225) — template DB and isolated_db
 - `service/tests/common/mod.rs` — TestDb, test_transaction, isolated_db, empty_db

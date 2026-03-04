@@ -1,4 +1,4 @@
-# ADR-008: Root Key / Device Key Identity Model with Encrypted Server Backup
+# ADR-015: Root Key / Device Key Identity Model with Encrypted Server Backup
 
 ## Status
 Accepted

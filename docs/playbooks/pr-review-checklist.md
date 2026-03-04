@@ -93,5 +93,3 @@ agent_compliance:
 
 ## See also
 - AGENTS.md § Prohibited Actions
-- AGENTS.md § Agent Acknowledgement Contract
-- `.github/scripts/check-agent-compliance.sh`

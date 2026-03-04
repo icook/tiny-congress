@@ -416,14 +416,18 @@ Use the `# Errors` section to document when each error variant is returned.
 
 > **See also:** [Backend Testing Patterns](../playbooks/backend-test-patterns.md) for comprehensive testing guidance including database tests, mocking, and test infrastructure.
 
-### Use `#[sqlx::test]` for DB Tests
+### Use `#[shared_runtime_test]` for DB Tests
+
+Tests use `isolated_db()` for database isolation via testcontainers:
 
 ```rust
-#[sqlx::test]
-async fn test_create_account(pool: PgPool) {
-    // Pool is automatically set up with migrations
-    let result = create_account(&pool, valid_request()).await;
-    assert!(result.is_ok());
+#[shared_runtime_test]
+async fn test_create_account() {
+    let db = isolated_db().await;
+    let app = TestAppBuilder::new()
+        .with_identity_pool(db.pool().clone())
+        .build();
+    // ...
 }
 ```
 
@@ -432,12 +436,14 @@ async fn test_create_account(pool: PgPool) {
 Always test that errors are returned correctly:
 
 ```rust
-#[sqlx::test]
-async fn test_duplicate_username_rejected(pool: PgPool) {
-    create_account(&pool, request_with_username("alice")).await.unwrap();
-
-    let result = create_account(&pool, request_with_username("alice")).await;
-    assert!(matches!(result, Err(AccountError::DuplicateUsername)));
+#[shared_runtime_test]
+async fn test_duplicate_username_rejected() {
+    let db = isolated_db().await;
+    let app = TestAppBuilder::new()
+        .with_identity_pool(db.pool().clone())
+        .build();
+    // Create first account, then attempt duplicate...
+    assert_eq!(response.status(), StatusCode::CONFLICT);
 }
 ```
 

@@ -31,10 +31,10 @@ You are extending the TinyCongress UI. Follow these instructions literally.
 
 Always validate external data (API responses) with Zod:
 
-- Define schemas in `web/src/api/schemas.ts`
+- Define schemas in `web/src/api/generated/graphql.ts`
 - Use `z.infer<typeof schema>` for TypeScript types
 - Call `.parse()` on API responses to validate at runtime
-- Example reference: `web/src/api/buildInfo.ts` and `web/src/api/schemas.ts`
+- Example reference: `web/src/api/buildInfo.ts` and `web/src/api/generated/graphql.ts`
 
 ```typescript
 // In schemas.ts
@@ -56,7 +56,7 @@ return result;
 - Tokens/theme defaults: `web/src/theme/mantineTheme.ts`
 - Policy and examples: `STYLE_GUIDE.md`
 - Navigation reference: `web/src/components/Navbar/Navbar.tsx`
-- Data validation: `web/src/api/schemas.ts`, `web/src/api/buildInfo.ts`
+- Data validation: `web/src/api/generated/graphql.ts`, `web/src/api/buildInfo.ts`
 
 ## If you think you need CSS
 

@@ -44,9 +44,9 @@ Misconfiguration should fail visibly at startup, not silently degrade security a
 let origins = config.cors.allowed_origins.unwrap_or(vec!["*".into()]);
 
 // GOOD: Fail-fast with clear error
-if config.database.url.is_empty() {
+if self.database.user.is_empty() {
     return Err(ConfigError::Validation(
-        "database.url is required. Set TC_DATABASE__URL environment variable.".into(),
+        "database.user is required. Set TC_DATABASE__USER environment variable or configure in config.yaml.".into(),
     ));
 }
 ```

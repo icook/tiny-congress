@@ -75,6 +75,13 @@ Architecture Decision Records explaining why we chose specific approaches:
 | [007-rest-endpoint-generation.md](decisions/007-rest-endpoint-generation.md) | REST endpoint generation strategy (Proposed) |
 | [008-account-based-verifiers.md](decisions/008-account-based-verifiers.md) | Verifiers as regular accounts with config bootstrap |
 | [009-sim-as-api-client.md](decisions/009-sim-as-api-client.md) | Simulation worker as pure HTTP API client |
+| [010-testing-infrastructure.md](decisions/010-testing-infrastructure.md) | Testing infrastructure and patterns |
+| [011-figment-layered-configuration.md](decisions/011-figment-layered-configuration.md) | Figment for layered configuration |
+| [012-dual-api-surface.md](decisions/012-dual-api-surface.md) | Dual API surface (GraphQL + REST) |
+| [013-frontend-architecture.md](decisions/013-frontend-architecture.md) | Frontend architecture patterns |
+| [014-ci-pipeline.md](decisions/014-ci-pipeline.md) | CI pipeline design |
+| [015-identity-model.md](decisions/015-identity-model.md) | Identity entity model and trust boundaries |
+| [016-repo-service-http-architecture.md](decisions/016-repo-service-http-architecture.md) | Repo → Service → HTTP layered architecture |
 
 ## Checklists
 

@@ -117,6 +117,27 @@ Examples:
 TC_SWAGGER__ENABLED=true
 ```
 
+### Verifier Bootstrap
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `TC_VERIFIERS` | No | `[]` | JSON array of verifier configs bootstrapped at startup (see ADR-008) |
+
+### Simulation Worker (`SIM_*` prefix)
+
+The simulation worker (`service/src/bin/sim.rs`) uses its own env var prefix. These are only needed when running the sim worker.
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `SIM_API_URL` | Yes | - | Base URL of the TinyCongress API |
+| `SIM_OPENROUTER_API_KEY` | Yes | - | OpenRouter API key for LLM topic generation |
+| `SIM_OPENROUTER_MODEL` | No | `anthropic/claude-sonnet-4-6` | OpenRouter model identifier |
+| `SIM_TARGET_ROOMS` | No | `5` | Target number of open rooms with active polls |
+| `SIM_VOTES_PER_POLL` | No | `15` | Number of synthetic votes per poll |
+| `SIM_VOTER_COUNT` | No | `20` | Number of synthetic voter accounts |
+| `SIM_SYSTEM_PROMPT` | No | (built-in civic prompt) | System prompt for LLM topic generation |
+| `SIM_LOG_LEVEL` | No | `info` | Log level filter |
+
 ### Build Info (unchanged)
 
 | Variable | Default | Description |

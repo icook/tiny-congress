@@ -7,7 +7,17 @@
 **Headers:**
 ```
 Content-Type: application/json
-Authorization: Bearer <token>  # When authenticated
+```
+
+### REST endpoint authentication (device-key signing)
+
+Authenticated REST endpoints use Ed25519 request signing instead of bearer tokens:
+
+```
+X-Device-Kid: <base64url KID of device key>
+X-Signature: <base64url Ed25519 signature of request body>
+X-Timestamp: <ISO 8601 timestamp>
+X-Nonce: <unique request nonce>
 ```
 
 ## Response format
@@ -52,25 +62,6 @@ Authorization: Bearer <token>  # When authenticated
 
 Use `SCREAMING_SNAKE_CASE` for error codes. Domain-specific codes (e.g., `DUPLICATE_USERNAME`, `INVALID_SIGNATURE`) extend these base codes.
 
-## Pagination
-
-Use cursor-based pagination for lists:
-
-```graphql
-query {
-  items(first: 10, after: "cursor123") {
-    edges {
-      node { id, name }
-      cursor
-    }
-    pageInfo {
-      hasNextPage
-      endCursor
-    }
-  }
-}
-```
-
 ## Nullability rules
 
 - IDs are never null
@@ -102,9 +93,4 @@ query {
 
 ## Rate limiting
 
-- Default: 100 requests/minute per IP
-- Authenticated: 1000 requests/minute per user
-- Headers returned:
-  - `X-RateLimit-Limit`
-  - `X-RateLimit-Remaining`
-  - `X-RateLimit-Reset`
+**Not yet implemented.** Rate limiting is planned but no code exists. When built, it should follow the secure defaults policy (enabled with conservative limits by default).

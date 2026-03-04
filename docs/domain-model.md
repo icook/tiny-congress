@@ -20,7 +20,7 @@ An account is the root identity in the system. It's anchored to a username and a
 
 The root key is the highest-privilege credential. It's meant for cold storage — used only to delegate device keys and (future) sign recovery policies. Day-to-day operations use device keys instead.
 
-**Not yet built:** Authentication (login), GDPR account deletion. No code exists for these — don't scaffold prematurely.
+**Not yet built:** GDPR account deletion. No code exists — don't scaffold prematurely.
 
 **Username rules:**
 - 3–64 characters, ASCII `[a-zA-Z0-9_-]` only

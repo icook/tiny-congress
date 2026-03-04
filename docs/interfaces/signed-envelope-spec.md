@@ -5,7 +5,7 @@ Cryptographic envelope format for authenticated identity mutations.
 > **Implementation status:** This spec is a design target. The envelope format and sigchain
 > are **not yet implemented**. The current system uses direct Ed25519 signatures for device
 > certificates and nonce-based HTTP request signing for authenticated endpoints. See
-> [ADR-008](../decisions/008-identity-model.md) for what is implemented today.
+> [ADR-015](../decisions/015-identity-model.md) for what is implemented today.
 
 ## Overview
 
@@ -59,7 +59,7 @@ kid = base64url_no_pad(SHA-256(public_key)[0:16])
 - Output: 22-character base64url string (no padding)
 - Implemented in: `crates/tc-crypto/src/kid.rs` (`Kid::derive`)
 
-The `Kid` newtype enforces these invariants at the type level — it cannot be constructed without validation. See [ADR-008](../decisions/008-identity-model.md) for design rationale.
+The `Kid` newtype enforces these invariants at the type level — it cannot be constructed without validation. See [ADR-015](../decisions/015-identity-model.md) for design rationale.
 
 ### Signature Algorithm
 
@@ -129,7 +129,7 @@ The sigchain provides replay protection for identity mutations — an envelope w
 
 The system currently uses two authentication mechanisms, neither of which involves the signed envelope format:
 
-1. **Device certificates** (at signup): The root key signs the raw 32-byte device public key. This direct signature serves as the certificate. Replay is prevented by DB uniqueness constraints on `device_kid`. See [ADR-008](../decisions/008-identity-model.md).
+1. **Device certificates** (at signup): The root key signs the raw 32-byte device public key. This direct signature serves as the certificate. Replay is prevented by DB uniqueness constraints on `device_kid`. See [ADR-015](../decisions/015-identity-model.md).
 
 2. **Nonce-based HTTP request signing** (for authenticated endpoints): Each request includes `X-Device-Kid`, `X-Signature`, `X-Timestamp`, and `X-Nonce` headers. The device key signs the request, and the nonce prevents replay. This mechanism is correct for read-only operations and will remain even after sigchain is introduced.
 
