@@ -377,6 +377,7 @@ pub mod mock {
         pub get_device_key_by_kid_result:
             Mutex<Option<Result<DeviceKeyRecord, DeviceKeyRepoError>>>,
         pub get_backup_by_kid_result: Mutex<Option<Result<BackupRecord, BackupRepoError>>>,
+        pub nonce_result: Mutex<Option<Result<(), NonceRepoError>>>,
     }
 
     impl MockIdentityRepo {
@@ -389,6 +390,7 @@ pub mod mock {
                 create_device_key_error: Mutex::new(None),
                 get_device_key_by_kid_result: Mutex::new(None),
                 get_backup_by_kid_result: Mutex::new(None),
+                nonce_result: Mutex::new(None),
             }
         }
 
@@ -456,6 +458,15 @@ pub mod mock {
         /// Panics if the internal mutex is poisoned.
         pub fn set_get_backup_by_kid_result(&self, result: Result<BackupRecord, BackupRepoError>) {
             *self.get_backup_by_kid_result.lock().expect("lock poisoned") = Some(result);
+        }
+
+        /// Set the result that [`IdentityRepo::check_and_record_nonce`] will return.
+        ///
+        /// # Panics
+        ///
+        /// Panics if the internal mutex is poisoned.
+        pub fn set_nonce_result(&self, result: Result<(), NonceRepoError>) {
+            *self.nonce_result.lock().expect("lock poisoned") = Some(result);
         }
     }
 
@@ -586,7 +597,11 @@ pub mod mock {
         }
 
         async fn check_and_record_nonce(&self, _nonce_hash: &[u8]) -> Result<(), NonceRepoError> {
-            Ok(())
+            self.nonce_result
+                .lock()
+                .expect("lock poisoned")
+                .take()
+                .unwrap_or(Ok(()))
         }
 
         async fn cleanup_expired_nonces(&self, _max_age_secs: i64) -> Result<u64, NonceRepoError> {
