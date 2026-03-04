@@ -243,7 +243,9 @@ impl RootPubkey {
     /// Returns [`RootPubkeyError`] if decoding fails or length is not 32.
     pub fn from_base64url(encoded: &str) -> Result<Self, RootPubkeyError> {
         let bytes = decode_base64url(encoded).map_err(|_| RootPubkeyError::InvalidEncoding)?;
-        let arr: [u8; 32] = bytes.try_into().map_err(|_| RootPubkeyError::InvalidLength)?;
+        let arr: [u8; 32] = bytes
+            .try_into()
+            .map_err(|_| RootPubkeyError::InvalidLength)?;
         Ok(Self(arr))
     }
 
