@@ -38,6 +38,7 @@ pub trait RoomsRepo: Send + Sync {
     async fn update_poll_status(&self, poll_id: Uuid, status: &str) -> Result<(), PollRepoError>;
 
     // Dimension operations
+    #[allow(clippy::too_many_arguments)]
     async fn create_dimension(
         &self,
         poll_id: Uuid,
@@ -46,6 +47,8 @@ pub trait RoomsRepo: Send + Sync {
         min_value: f32,
         max_value: f32,
         sort_order: i32,
+        min_label: Option<&str>,
+        max_label: Option<&str>,
     ) -> Result<DimensionRecord, PollRepoError>;
     async fn list_dimensions(&self, poll_id: Uuid) -> Result<Vec<DimensionRecord>, PollRepoError>;
 
@@ -141,6 +144,8 @@ impl RoomsRepo for PgRoomsRepo {
         min_value: f32,
         max_value: f32,
         sort_order: i32,
+        min_label: Option<&str>,
+        max_label: Option<&str>,
     ) -> Result<DimensionRecord, PollRepoError> {
         polls::create_dimension(
             &self.pool,
@@ -150,6 +155,8 @@ impl RoomsRepo for PgRoomsRepo {
             min_value,
             max_value,
             sort_order,
+            min_label,
+            max_label,
         )
         .await
     }

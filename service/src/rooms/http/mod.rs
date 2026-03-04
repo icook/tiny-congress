@@ -46,6 +46,8 @@ pub struct DimensionResponse {
     pub min_value: f32,
     pub max_value: f32,
     pub sort_order: i32,
+    pub min_label: Option<String>,
+    pub max_label: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -122,6 +124,8 @@ pub struct CreateDimensionRequest {
     pub max_value: f32,
     #[serde(default)]
     pub sort_order: i32,
+    pub min_label: Option<String>,
+    pub max_label: Option<String>,
 }
 
 const fn default_max_value() -> f32 {
@@ -302,6 +306,8 @@ async fn add_dimension(
             req.min_value,
             req.max_value,
             req.sort_order,
+            req.min_label.as_deref(),
+            req.max_label.as_deref(),
         )
         .await
     {
@@ -459,6 +465,8 @@ fn dim_to_response(d: super::repo::DimensionRecord) -> DimensionResponse {
         min_value: d.min_value,
         max_value: d.max_value,
         sort_order: d.sort_order,
+        min_label: d.min_label,
+        max_label: d.max_label,
     }
 }
 
