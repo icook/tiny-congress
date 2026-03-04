@@ -252,7 +252,9 @@ async fn test_create_poll_and_add_dimension() {
         "description": "How effective is this approach?",
         "min_value": 0.0,
         "max_value": 10.0,
-        "sort_order": 0
+        "sort_order": 0,
+        "min_label": "Not effective",
+        "max_label": "Highly effective"
     })
     .to_string();
     let req = build_authed_request(
@@ -266,6 +268,8 @@ async fn test_create_poll_and_add_dimension() {
     assert_eq!(response.status(), StatusCode::CREATED);
     let dim = json_body(response).await;
     assert_eq!(dim["name"], "Effectiveness");
+    assert_eq!(dim["min_label"], "Not effective");
+    assert_eq!(dim["max_label"], "Highly effective");
 
     // Get poll detail (includes dimensions)
     let response = app
@@ -281,6 +285,8 @@ async fn test_create_poll_and_add_dimension() {
     let detail = json_body(response).await;
     assert_eq!(detail["poll"]["id"], poll_id);
     assert_eq!(detail["dimensions"].as_array().expect("dims").len(), 1);
+    assert_eq!(detail["dimensions"][0]["min_label"], "Not effective");
+    assert_eq!(detail["dimensions"][0]["max_label"], "Highly effective");
 }
 
 #[shared_runtime_test]
