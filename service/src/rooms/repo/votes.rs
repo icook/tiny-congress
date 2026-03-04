@@ -14,7 +14,7 @@ pub struct BucketCount {
 
 #[derive(Debug, Clone)]
 pub struct DimensionDistribution {
-    pub dimension_id: uuid::Uuid,
+    pub dimension_id: Uuid,
     pub dimension_name: String,
     pub min_value: f32,
     pub max_value: f32,
@@ -75,6 +75,23 @@ struct StatsRow {
     vote_stddev: Option<f64>,
     vote_min: Option<f64>,
     vote_max: Option<f64>,
+}
+
+#[derive(sqlx::FromRow)]
+struct MedianRow {
+    dimension_id: Uuid,
+    median_value: f64,
+}
+
+#[derive(sqlx::FromRow)]
+#[allow(dead_code)] // fields populated by sqlx via FromRow; rustc can't see macro usage
+struct DistributionRow {
+    dimension_id: Uuid,
+    dimension_name: String,
+    min_value: f32,
+    max_value: f32,
+    bucket: i32,
+    count: i64,
 }
 
 // ─── Vote operations ──────────────────────────────────────────────────────
@@ -246,23 +263,6 @@ pub async fn compute_poll_stats(
         .collect())
 }
 
-#[derive(sqlx::FromRow)]
-struct MedianRow {
-    dimension_id: Uuid,
-    median_value: f64,
-}
-
-#[derive(sqlx::FromRow)]
-#[allow(dead_code)] // fields populated by sqlx via FromRow; rustc can't see macro usage
-struct DistributionRow {
-    dimension_id: uuid::Uuid,
-    dimension_name: String,
-    min_value: f32,
-    max_value: f32,
-    bucket: i32,
-    count: i64,
-}
-
 /// Compute per-dimension vote distribution for a poll, bucketed into 10 bins.
 ///
 /// Uses `width_bucket()` to assign each vote to a bin across the dimension's
@@ -274,7 +274,7 @@ struct DistributionRow {
 /// Returns `Database` on connection failure.
 pub async fn compute_poll_distribution(
     pool: &sqlx::PgPool,
-    poll_id: uuid::Uuid,
+    poll_id: Uuid,
 ) -> Result<Vec<DimensionDistribution>, VoteRepoError> {
     const NUM_BUCKETS: i32 = 10;
 
@@ -285,14 +285,17 @@ pub async fn compute_poll_distribution(
             d.name AS dimension_name,
             d.min_value,
             d.max_value,
-            LEAST(
-                width_bucket(
-                    v.value::float8,
-                    d.min_value::float8,
-                    d.max_value::float8,
+            GREATEST(
+                LEAST(
+                    width_bucket(
+                        v.value::float8,
+                        d.min_value::float8,
+                        d.max_value::float8,
+                        $2
+                    ),
                     $2
                 ),
-                $2
+                1
             )::int AS bucket,
             COUNT(*) AS count
         FROM rooms__poll_dimensions d
@@ -308,7 +311,7 @@ pub async fn compute_poll_distribution(
     .await?;
 
     // Fetch dimension ordering (needed to include dimensions with zero votes)
-    let dim_rows = sqlx::query_as::<_, (uuid::Uuid, String, f32, f32)>(
+    let dim_rows = sqlx::query_as::<_, (Uuid, String, f32, f32)>(
         r"
         SELECT id, name, min_value, max_value
         FROM rooms__poll_dimensions
@@ -321,7 +324,7 @@ pub async fn compute_poll_distribution(
     .await?;
 
     // Group distribution rows by dimension
-    let mut row_map: std::collections::HashMap<uuid::Uuid, Vec<DistributionRow>> =
+    let mut row_map: std::collections::HashMap<Uuid, Vec<DistributionRow>> =
         std::collections::HashMap::new();
     for row in rows {
         row_map.entry(row.dimension_id).or_default().push(row);
