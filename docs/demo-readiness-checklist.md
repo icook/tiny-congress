@@ -14,22 +14,24 @@ These are the things where, if missing, someone gets stuck or confused and close
 
 - [ ] **Landing page that explains what this is in one sentence.** Not your whitepaper — one line like "TinyCongress lets verified people vote on issues that matter, with more nuance than yes/no." Non-technical people need this before they'll create an account.
 - [ ] **Signup flow completes without errors.** Happy path only is fine, but it has to work every time. Test on mobile Safari — that's where most friends/family will open your link.
-- [ ] **Verification flow has clear instructions.** Whether it's a real ID.me integration or a dummy verifier, the user needs to understand *why* they're verifying ("this proves you're a real person, not a bot") and *what to do* at each step.
-- [ ] **Verification success is obvious.** A clear confirmation state — checkmark, badge, color change, something. "Did it work?" should never be a question.
+- [x] **Verification flow has clear instructions.** Demo verifier at `tc-verify-demo.ibcook.com` with method selection UI (Government ID, Phone, Email). Users are redirected to a separate site that explains the step. *(PR #456)*
+- [x] **Verification success is obvious.** Callback page shows green confirmation, navbar shows green "Verified" badge, settings page shows verification status and method. *(PR #456)*
 - [ ] **Error states don't dead-end.** If something fails during signup or verification, show a message and a way forward. A blank screen or unhandled exception kills the demo instantly.
+- [ ] **Login flow works end-to-end on mobile Safari.** Login has backup envelope decryption (Argon2id WASM) that could be slow or broken on iOS. This is the most fragile part of the auth path — untested on real devices.
+- [ ] **Signup → verify → vote completes in one session without re-login.** The redirect flow crosses domains (TC → verifier → TC callback). Cookie/auth state could be lost on mobile browsers with strict third-party restrictions.
 
 ### Room Entry & Navigation
 
-- [ ] **After verification, the path to a room is obvious.** Don't drop them on an empty dashboard. Either auto-navigate to the demo room or make the single room impossible to miss.
+- [x] **After verification, the path to a room is obvious.** Verification callback auto-redirects to `/rooms` after 2 seconds. Signup success screen shows "Verify Identity" and "Browse Rooms" buttons. *(PR #456)*
 - [ ] **Pre-seeded demo room exists with an active poll.** Don't make people wait for an admin to create content. The room should already have a compelling topic ready to vote on.
 - [ ] **The poll topic is something everyone has an opinion on.** Not a policy wonk topic. Something like "How should your city prioritize spending?" with dimensions like importance, urgency, feasibility. Your aunt needs to care.
-- [ ] **Eligibility is clear.** If they can't enter a room, they need to know why ("You need to verify your identity first") with a link back to verification.
+- [x] **Eligibility is clear.** Poll page shows yellow alert "You need to verify your identity to vote" with a "Verify Now" button when authenticated but unverified. *(PR #456)*
 
 ### Voting Experience
 
-- [ ] **Sliders (or whatever input) are labeled with human-readable anchors.** "0.0 to 1.0" means nothing to a non-technical person. "Not at all important" to "Extremely important" works. Each end of each dimension needs a plain-English label.
-- [ ] **Vote submission has clear feedback.** Button state change, a confirmation message, something. "Did my vote count?" is the first question everyone will ask.
-- [ ] **One vote per user per dimension, updatable.** The upsert behavior needs to work. If someone moves a slider and resubmits, it should feel natural and not create a duplicate.
+- [x] **Sliders are labeled with human-readable anchors.** Dimension-specific min/max labels from API data. *(PR #458)*
+- [x] **Vote submission has clear feedback.** Success toast on submission. *(PR #458)*
+- [x] **One vote per user per dimension, updatable.** Upsert behavior works. Visual distinction between "Submit Vote" and "Update Vote" states. *(PR #458)*
 
 ### Results
 
@@ -40,6 +42,7 @@ These are the things where, if missing, someone gets stuck or confused and close
 ### Infrastructure
 
 - [ ] **Demo environment is stable and publicly accessible.** You said you have this — just make sure it stays up through Mar 20 without manual intervention.
+- [ ] **Demo verifier deployed and accessible.** New service at `tc-verify-demo.ibcook.com` needs DNS, Ingress, and pod startup validated. First real deploy — not yet smoke-tested.
 - [ ] **HTTPS works.** No certificate warnings. Non-technical people will not click through a browser security warning.
 - [ ] **Page load is under 5 seconds.** Friends will open this on their phone over LTE. If it takes 10 seconds, they'll give up before the page renders.
 
@@ -52,17 +55,19 @@ These don't block the demo but meaningfully improve whether the concept clicks.
 ### For Everyone
 
 - [ ] **A 2-3 sentence "how it works" blurb on the room page.** "This room is exploring [topic]. Move the sliders to share your perspective across multiple dimensions. Your vote is anonymous but verified." Saves you from writing individual explanations in every text message.
-- [ ] **Visual distinction between "you haven't voted" and "you voted."** Grayed-out vs. colored, a checkmark, anything that shows status at a glance.
+- [x] **Visual distinction between "you haven't voted" and "you voted."** Voted state shown with different button text and color. *(PR #458)*
 - [ ] **A result visualization that shows distribution, not just averages.** Even a simple dot plot or histogram per dimension. This is where people go "oh, interesting" vs. "ok, some numbers." The *shape* of opinion is the whole thesis.
 - [ ] **Mobile-responsive layout.** Most friends/family will open this on their phone. The sliders especially need to work on a touch screen. Test on a real phone, not just browser dev tools.
 - [ ] **A "what happens next" message after voting.** "Thanks for voting! Here's what the community thinks so far:" followed by results. Closes the loop.
 - [ ] **Poll topic that seeds good conversation.** Pick 2-3 polls in the demo room on different topics. Gives people a reason to come back and compare perspectives. Local Kansas/Johnson County topics could work well for friends/family who share context.
-- [ ] **Shareable link per room.** So someone can text it to a friend who also wants to try. Word-of-mouth is your distribution mechanism for the demo.
+- [ ] **Shareable link per room.** So someone can text it to a friend who also wants to try. Word-of-mouth is your distribution mechanism for the demo. Verify room URLs work when pasted into a text message and resolve without auth walls before content is visible.
+- [ ] **"Why verify?" copy on signup success screen.** The verify button exists, but non-technical users need one sentence explaining why ("so we know you're a real person, not a bot").
+- [ ] **Graceful fallback if demo verifier is down.** If the verifier pod crashes, "Verify Now" buttons across the app lead to a broken page. Consider health-check or degradation message.
 
 ### For Technical Friends
 
 - [ ] **A brief "how it's built" page or section.** These people will want to know the stack, the architecture, the trust model. A link to the whitepaper or a simplified version. Don't put this in the main flow — make it a footer link or an "About" page.
-- [ ] **The endorsement/trust system is at least visible.** Even if it's not fully functional, showing that users have a trust level or verification badge signals the depth of the system to technical people who'll appreciate it.
+- [x] **The endorsement/trust system is at least visible.** Navbar shows verification badge. Settings page shows verification status, method, and date. *(PR #456)*
 - [ ] **Source code link (GitHub).** Technical friends will want to look at the code. If the repos are public, link them. If not, consider making them public for the demo period.
 
 ### For the Feedback Loop
@@ -123,30 +128,18 @@ gh issue edit <NUMBER> --add-label status/in-progress
 
 When done, close the issue and open a PR.
 
-### WS-V: Verification Flow *(in progress — separate thread)*
+### WS-V: Verification Flow *(complete — PR #456)*
 
-Owned by the demo-verification-flow plan. Covers:
-- Verification flow with clear instructions
-- Verification success is obvious (badge, confirmation)
-- Eligibility gating on poll page ("You need to verify first")
-- Navbar verification badge
-- Settings verification section
+~~Owned by the demo-verification-flow plan. Covers:~~
+- ~~Verification flow with clear instructions~~
+- ~~Verification success is obvious (badge, confirmation)~~
+- ~~Eligibility gating on poll page ("You need to verify first")~~
+- ~~Navbar verification badge~~
+- ~~Settings verification section~~
 
-**Files touched:** `service/src/sim/`, `service/src/bin/demo_verifier.rs`, `web/src/pages/Poll.page.tsx` (eligibility only), `web/src/components/Navbar/`, `web/src/pages/Settings.page.tsx`, `kube/`
+### WS-A: Slider & Voting UX *(complete — PR #458)* — [#450](https://github.com/icook/tiny-congress/issues/450)
 
-### WS-A: Slider & Voting UX — [#450](https://github.com/icook/tiny-congress/issues/450)
-
-Human-readable slider labels, vote submission feedback, voted/not-voted visual state.
-
-**Current state:** Sliders show generic "Not at all" / "Extremely" marks. No confirmation after voting. No visual distinction between voted and not-voted.
-
-**Checklist items:**
-- [ ] Slider endpoints use dimension-specific labels from API data (min_label / max_label)
-- [ ] Vote submission shows success toast or confirmation message
-- [ ] Visual distinction between "haven't voted" and "voted" state
-- [ ] "Update Vote" flow feels natural (not a duplicate)
-
-**Files:** `web/src/pages/Poll.page.tsx` (VoteSlider component, vote submission handler)
+~~Human-readable slider labels, vote submission feedback, voted/not-voted visual state.~~
 
 ### WS-B: Results Visualization — [#451](https://github.com/icook/tiny-congress/issues/451)
 
@@ -176,18 +169,33 @@ After login/verification, users should land somewhere useful — not a stub dash
 
 **Files:** `web/src/Router.tsx`, `web/src/components/Navbar/Navbar.tsx`, `web/src/pages/Login.page.tsx`, `web/src/pages/Signup.page.tsx`
 
-### WS-D: Demo Data & Poll Topics — [#453](https://github.com/icook/tiny-congress/issues/453)
+### WS-D: Demo Data & Poll Topics — [#453](https://github.com/icook/tiny-congress/issues/453) *(closed)*
 
-Ensure seeded content is compelling and approachable for non-wonky friends/family.
+~~Ensure seeded content is compelling and approachable for non-wonky friends/family.~~
 
-**Current state:** Sim generates LLM-authored civic governance topics. May be too policy-focused. Topics need to be things "your aunt cares about."
+### WS-E: Mobile & Cross-Browser Validation — [#460](https://github.com/icook/tiny-congress/issues/460)
+
+End-to-end testing on real mobile devices to catch issues that only appear outside desktop Chrome.
 
 **Checklist items:**
-- [ ] At least one pre-seeded room with a universally relatable topic
-- [ ] 2-3 polls per room with 3-5 dimensions each, human-readable labels
-- [ ] Enough seeded votes that results look populated (not "1 vote")
+- [ ] Signup → verify → vote flow completes on mobile Safari (iOS)
+- [ ] Login with backup envelope decryption works on mobile (Argon2id WASM performance)
+- [ ] Verification redirect flow preserves auth state across domain boundary
+- [ ] Sliders are usable on touch screens
+- [ ] Page load under 5 seconds on LTE
 
-**Files:** `service/src/sim/config.rs`, `service/src/sim/llm.rs`, `service/src/sim/votes.rs`
+**Depends on:** WS-B and WS-C should be done first so testing covers the full flow.
+
+### WS-F: Demo Environment Smoke Test — [#461](https://github.com/icook/tiny-congress/issues/461)
+
+Validate the deployed demo environment works end-to-end after PRs merge and Flux deploys.
+
+**Checklist items:**
+- [ ] Demo verifier pod starts and is reachable at `tc-verify-demo.ibcook.com`
+- [ ] Demo verifier can create endorsements against TC API (device auth works in-cluster)
+- [ ] Full signup → verify → vote → results flow works on the live demo URL
+- [ ] HTTPS works on all three domains (TC frontend, TC API, demo verifier)
+- [ ] Sim worker generates rooms and votes on schedule
 
 ---
 
