@@ -374,6 +374,8 @@ pub mod mock {
         pub account_by_username_result: Mutex<Option<Result<AccountRecord, AccountRepoError>>>,
         pub account_by_id_result: Mutex<Option<Result<AccountRecord, AccountRepoError>>>,
         pub create_device_key_error: Mutex<Option<DeviceKeyRepoError>>,
+        pub get_device_key_by_kid_result:
+            Mutex<Option<Result<DeviceKeyRecord, DeviceKeyRepoError>>>,
     }
 
     impl MockIdentityRepo {
@@ -384,6 +386,7 @@ pub mod mock {
                 account_by_username_result: Mutex::new(None),
                 account_by_id_result: Mutex::new(None),
                 create_device_key_error: Mutex::new(None),
+                get_device_key_by_kid_result: Mutex::new(None),
             }
         }
 
@@ -427,6 +430,21 @@ pub mod mock {
         /// Panics if the internal mutex is poisoned.
         pub fn set_create_device_key_error(&self, error: DeviceKeyRepoError) {
             *self.create_device_key_error.lock().expect("lock poisoned") = Some(error);
+        }
+
+        /// Set the result that [`IdentityRepo::get_device_key_by_kid`] will return.
+        ///
+        /// # Panics
+        ///
+        /// Panics if the internal mutex is poisoned.
+        pub fn set_get_device_key_by_kid_result(
+            &self,
+            result: Result<DeviceKeyRecord, DeviceKeyRepoError>,
+        ) {
+            *self
+                .get_device_key_by_kid_result
+                .lock()
+                .expect("lock poisoned") = Some(result);
         }
     }
 
@@ -529,7 +547,11 @@ pub mod mock {
             &self,
             _device_kid: &Kid,
         ) -> Result<DeviceKeyRecord, DeviceKeyRepoError> {
-            Err(DeviceKeyRepoError::NotFound)
+            self.get_device_key_by_kid_result
+                .lock()
+                .expect("lock poisoned")
+                .take()
+                .unwrap_or(Err(DeviceKeyRepoError::NotFound))
         }
 
         async fn revoke_device_key(&self, _device_kid: &Kid) -> Result<(), DeviceKeyRepoError> {
