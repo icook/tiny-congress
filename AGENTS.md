@@ -5,7 +5,7 @@ This file is a concise index of rules and pointers—not detailed documentation.
 ## Current Product Stage
 
 **Pre-launch demo** targeting friends & family by March 20, 2026.
-See `objectives.md` for the living checklist of demo-critical items.
+See `objectives.md` for the living checklist and quality stages table (who the audience is at each phase and what work serves them).
 
 The bar right now is: **can a non-technical person open this link on their phone, sign up, vote, and see results without anyone explaining it to them?**
 
