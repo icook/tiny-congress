@@ -700,9 +700,11 @@ mod tests {
     #[tokio::test]
     async fn test_login_account_database_error_returns_internal() {
         let repo = MockIdentityRepo::new();
-        repo.set_account_by_username_result(Err(crate::identity::repo::AccountRepoError::Database(
-            sqlx::Error::Protocol("db error".to_string()),
-        )));
+        repo.set_account_by_username_result(Err(
+            crate::identity::repo::AccountRepoError::Database(sqlx::Error::Protocol(
+                "db error".to_string(),
+            )),
+        ));
         let app = test_login_router(repo);
 
         let (req, _) = make_valid_components();
