@@ -515,6 +515,49 @@ mod tests {
         DefaultIdentityService::new(Arc::new(MockIdentityRepo::default()))
     }
 
+    // ── DevicePubkey::from_base64url (direct function tests) ──────────────
+
+    #[test]
+    fn test_device_pubkey_valid_32_bytes() {
+        let bytes = [1u8; 32];
+        let result = DevicePubkey::from_base64url(&encode_base64url(&bytes));
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().as_bytes(), &bytes);
+    }
+
+    #[test]
+    fn test_device_pubkey_invalid_base64() {
+        assert_eq!(
+            DevicePubkey::from_base64url("!!!not-base64!!!").unwrap_err(),
+            DevicePubkeyError::InvalidEncoding
+        );
+    }
+
+    #[test]
+    fn test_device_pubkey_empty_string() {
+        // Empty base64url decodes to zero bytes — length check fires, not encoding check.
+        assert_eq!(
+            DevicePubkey::from_base64url("").unwrap_err(),
+            DevicePubkeyError::InvalidLength
+        );
+    }
+
+    #[test]
+    fn test_device_pubkey_too_short() {
+        assert_eq!(
+            DevicePubkey::from_base64url(&encode_base64url(&[1u8; 16])).unwrap_err(),
+            DevicePubkeyError::InvalidLength
+        );
+    }
+
+    #[test]
+    fn test_device_pubkey_too_long() {
+        assert_eq!(
+            DevicePubkey::from_base64url(&encode_base64url(&[1u8; 64])).unwrap_err(),
+            DevicePubkeyError::InvalidLength
+        );
+    }
+
     // ── Username validation (direct function tests) ────────────────────────
 
     #[test]
