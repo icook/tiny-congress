@@ -317,6 +317,42 @@ mod tests {
         assert!(payload["encrypted_backup"].as_str().is_some());
     }
 
+    /// Anti-enumeration: account with no backup must not leak the real root_kid.
+    ///
+    /// If the handler returned the real account's root_kid alongside a synthetic backup,
+    /// an attacker could confirm that a username is registered (just without a backup)
+    /// by cross-referencing the root_kid across calls.
+    #[tokio::test]
+    async fn test_get_backup_account_without_backup_does_not_leak_root_kid() {
+        let real_root_kid = Kid::derive(&[1u8; 32]);
+        let repo = MockIdentityRepo::new();
+        repo.set_account_by_username_result(Ok(AccountRecord {
+            id: Uuid::new_v4(),
+            username: "alice".to_string(),
+            root_pubkey: encode_base64url(&[1u8; 32]),
+            root_kid: real_root_kid.clone(),
+        }));
+        // backup lookup defaults to NotFound
+        let app = test_router(repo);
+
+        let response = app
+            .oneshot(backup_request("alice"))
+            .await
+            .expect("response");
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = to_bytes(response.into_body(), 1024 * 1024)
+            .await
+            .expect("body");
+        let payload: serde_json::Value = serde_json::from_slice(&body).expect("json");
+        let returned_kid = payload["root_kid"].as_str().expect("root_kid field");
+        assert_ne!(
+            returned_kid,
+            real_root_kid.as_str(),
+            "real root_kid must not be returned when account has no backup"
+        );
+    }
+
     /// Happy path: real backup returned for known user.
     #[tokio::test]
     async fn test_get_backup_known_user_with_backup_returns_real_backup() {
