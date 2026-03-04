@@ -649,6 +649,42 @@ mod tests {
         assert_eq!(validate_username("ROOT"), Err(UsernameError::Reserved));
     }
 
+    // ── DeviceName validation (direct function tests) ─────────────────────
+
+    #[test]
+    fn test_device_name_empty() {
+        assert!(matches!(DeviceName::parse(""), Err(DeviceNameError::Empty)));
+    }
+
+    #[test]
+    fn test_device_name_whitespace_only() {
+        assert!(matches!(
+            DeviceName::parse("   "),
+            Err(DeviceNameError::Empty)
+        ));
+    }
+
+    #[test]
+    fn test_device_name_max_valid_length() {
+        let name = "a".repeat(128);
+        assert!(DeviceName::parse(&name).is_ok());
+    }
+
+    #[test]
+    fn test_device_name_too_long() {
+        let name = "a".repeat(129);
+        assert!(matches!(
+            DeviceName::parse(&name),
+            Err(DeviceNameError::TooLong)
+        ));
+    }
+
+    #[test]
+    fn test_device_name_trims_whitespace() {
+        let result = DeviceName::parse("  My Device  ").unwrap();
+        assert_eq!(result.as_str(), "My Device");
+    }
+
     // ── Service-level validation tests ─────────────────────────────────────
 
     #[tokio::test]
