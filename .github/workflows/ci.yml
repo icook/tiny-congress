@@ -411,6 +411,7 @@ jobs:
               - 'crates/tc-crypto/**'
             chart:
               - 'kube/app/**'
+              - 'kube/environments/**'
             ci:
               - '.github/workflows/**'
               - 'skaffold.yaml'
