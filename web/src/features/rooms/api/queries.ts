@@ -8,12 +8,14 @@ import {
   castVote,
   getMyVotes,
   getPollDetail,
+  getPollDistribution,
   getPollResults,
   listPolls,
   listRooms,
   type DimensionVote,
   type Poll,
   type PollDetail,
+  type PollDistribution,
   type PollResults,
   type Room,
   type Vote,
@@ -47,6 +49,16 @@ export function usePollResults(roomId: string, pollId: string) {
     queryKey: ['poll-results', pollId],
     queryFn: () => getPollResults(roomId, pollId),
     enabled: Boolean(roomId && pollId),
+    refetchInterval: 20_000,
+  });
+}
+
+export function usePollDistribution(roomId: string, pollId: string) {
+  return useQuery<PollDistribution>({
+    queryKey: ['poll-distribution', pollId],
+    queryFn: () => getPollDistribution(roomId, pollId),
+    enabled: Boolean(roomId && pollId),
+    refetchInterval: 20_000,
   });
 }
 

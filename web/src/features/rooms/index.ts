@@ -3,6 +3,7 @@ export {
   usePolls,
   usePollDetail,
   usePollResults,
+  usePollDistribution,
   useMyVotes,
   useCastVote,
 } from './api/queries';
@@ -15,4 +16,7 @@ export type {
   DimensionStats,
   Vote,
   DimensionVote,
+  BucketCount,
+  DimensionDistribution,
+  PollDistribution,
 } from './api/client';
