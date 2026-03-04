@@ -153,6 +153,10 @@ spec:
               value: {{ .Values.frontend.apiUrl | default (printf "http://%s:8080" (include "app.fullname" .)) | quote }}
             - name: TC_ENVIRONMENT
               value: {{ .Values.frontend.environment | default "" | quote }}
+            {{- if .Values.frontend.demoVerifierUrl }}
+            - name: TC_DEMO_VERIFIER_URL
+              value: {{ .Values.frontend.demoVerifierUrl | quote }}
+            {{- end }}
           startupProbe:
             httpGet:
               path: /

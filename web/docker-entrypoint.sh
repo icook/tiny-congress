@@ -15,15 +15,20 @@ esac
 # Optional environment label for non-production badge (empty = production/hidden)
 TC_ENVIRONMENT="${TC_ENVIRONMENT:-}"
 
+# Optional demo verifier URL (empty = verifier UI hidden)
+TC_DEMO_VERIFIER_URL="${TC_DEMO_VERIFIER_URL:-}"
+
 # Write to /tmp so this works with readOnlyRootFilesystem (nginx serves via alias)
 cat > /tmp/config.js <<'TEMPLATE'
 window.__TC_ENV__ = {
   VITE_API_URL: "__VITE_API_URL__",
-  TC_ENVIRONMENT: "__TC_ENVIRONMENT__"
+  TC_ENVIRONMENT: "__TC_ENVIRONMENT__",
+  TC_DEMO_VERIFIER_URL: "__TC_DEMO_VERIFIER_URL__"
 };
 TEMPLATE
 
 sed -i "s|__VITE_API_URL__|${VITE_API_URL}|" /tmp/config.js
 sed -i "s|__TC_ENVIRONMENT__|${TC_ENVIRONMENT}|" /tmp/config.js
+sed -i "s|__TC_DEMO_VERIFIER_URL__|${TC_DEMO_VERIFIER_URL}|" /tmp/config.js
 
 exec nginx -g 'daemon off;'

@@ -27,7 +27,7 @@ export function getEnvironment(): string {
 }
 
 export function getDemoVerifierUrl(): string | null {
-  return window.__TC_ENV__?.TC_DEMO_VERIFIER_URL ?? null;
+  return window.__TC_ENV__?.TC_DEMO_VERIFIER_URL || null;
 }
 
 export function getApiBaseUrl(): string {

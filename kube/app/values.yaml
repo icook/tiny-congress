@@ -126,6 +126,9 @@ frontend:
   # Environment label shown as a badge in the UI header.
   # Empty string = production (badge hidden). Values: demo, staging, development.
   environment: ""
+  # Demo verifier URL for identity verification redirect flow.
+  # Empty string = verifier UI hidden. Only set in demo environments.
+  demoVerifierUrl: ""
   service:
     type: ClusterIP
     port: 5173
