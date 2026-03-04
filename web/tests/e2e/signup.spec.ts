@@ -22,10 +22,9 @@ test('signup flow creates account with device key @smoke', async ({ page }) => {
   // Wait for success — timeout accounts for WASM loading + key generation + API call
   await expect(page.getByText(/Account Created/i)).toBeVisible({ timeout: 15_000 });
 
-  // Verify M2 contract: account ID, root KID, and device KID are all displayed
-  await expect(page.getByText(/Account ID:/i)).toBeVisible();
-  await expect(page.getByText(/Root Key ID:/i)).toBeVisible();
-  await expect(page.getByText(/Device Key ID:/i)).toBeVisible();
+  // Verify post-signup UX shows next steps
+  await expect(page.getByText(/What's next/i)).toBeVisible();
+  await expect(page.getByRole('link', { name: /Browse Rooms/i })).toBeVisible();
 
   // Verify the session storage message
   await expect(
