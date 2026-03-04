@@ -2,6 +2,21 @@
 
 This file is a concise index of rules and pointers—not detailed documentation. Keep it scannable; every section should earn its place. Move detailed reference material to `docs/` or directory READMEs.
 
+## Current Product Stage
+
+**Pre-launch demo** targeting friends & family by March 20, 2026.
+See `objectives.md` for the living checklist of demo-critical items.
+
+The bar right now is: **can a non-technical person open this link on their phone, sign up, vote, and see results without anyone explaining it to them?**
+
+Priorities at this stage:
+- UX dead-ends and confusion > code robustness
+- Core flow working end-to-end > test coverage on edge cases
+- Seeded demo data > admin tooling
+- Shipping something tryable > perfecting the architecture
+
+This does NOT lower the bar for crypto/trust boundary code — those principles are permanent. It adjusts the default priority for session-level decisions about where to invest effort.
+
 ## Default Delivery Flow
 - Always sync with `master` before starting work: `git checkout master && git pull --rebase`. When picking up a PR or ticket, rebase your working branch onto the refreshed `master` before any edits.
 - Create a branch for every ticket before making changes following the conventions in `docs/interfaces/branch-naming-conventions.md` (e.g., `feature/123-update-copy`, `fix/456-login-redirect`).
@@ -44,7 +59,7 @@ For detailed entity schemas, binary formats, validation rules, and invariant tab
 - Changes to `crates/tc-crypto/` affect both backend (native) and frontend (WASM) — test both sides
 
 ## Decision Authority
-**Proceed without asking:** Bug fixes with clear reproduction, test additions, lint/formatting fixes, doc updates that match current code.
+**Proceed without asking:** Bug fixes with clear reproduction, test additions, lint/formatting fixes, doc updates that match current code. UX changes that serve demo readiness (copy, layout, navigation, feedback messages) — even if they touch API-adjacent code like response display formatting.
 
 **Ask before proceeding:** New dependencies, API surface changes (new endpoints, changed response shapes), anything touching crypto/auth/the trust boundary, changes to shared types used by both GraphQL and REST, changes to `tc-crypto` public API.
 
