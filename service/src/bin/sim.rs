@@ -13,7 +13,7 @@ use tinycongress_api::sim::{
     config::SimConfig,
     content::{count_active_rooms, insert_sim_content},
     identity::SimAccount,
-    llm::generate_content,
+    llm::{generate_content, Usage},
     votes::cast_simulated_votes,
 };
 
@@ -122,7 +122,8 @@ async fn main() -> Result<(), anyhow::Error> {
     }
     tracing::info!("account signup complete");
 
-    // 7. Count active rooms via API
+    // 7. Count active rooms via API; track token usage across all LLM calls this session
+    let mut session_usage = Usage::default();
     let active_rooms = count_active_rooms(&client).await?;
     tracing::info!(
         active_rooms,
@@ -135,7 +136,8 @@ async fn main() -> Result<(), anyhow::Error> {
         let rooms_needed = config.target_rooms - active_rooms;
         tracing::info!(rooms_needed, "generating new content via LLM...");
 
-        let content = generate_content(&http, &config, rooms_needed).await?;
+        let (content, usage) = generate_content(&http, &config, rooms_needed).await?;
+        session_usage += usage;
         tracing::info!(
             rooms_generated = content.rooms.len(),
             "LLM content received"
@@ -163,6 +165,12 @@ async fn main() -> Result<(), anyhow::Error> {
     let vote_count = cast_simulated_votes(&client, &accounts, config.votes_per_poll).await?;
     tracing::info!(votes_cast = vote_count, "vote simulation complete");
 
+    tracing::info!(
+        prompt_tokens = session_usage.prompt_tokens,
+        completion_tokens = session_usage.completion_tokens,
+        total_tokens = session_usage.total_tokens,
+        "llm_session_summary"
+    );
     tracing::info!("tc-sim run complete");
     Ok(())
 }

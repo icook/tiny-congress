@@ -1,5 +1,7 @@
 //! LLM response types and `OpenRouter` client for generating sim content.
 
+use std::ops::AddAssign;
+
 use serde::{Deserialize, Serialize};
 
 use super::config::SimConfig;
@@ -39,6 +41,22 @@ pub struct SimDimension {
     pub max: f32,
 }
 
+/// Token usage from a single `OpenRouter` API call.
+#[derive(Debug, Default, Clone, Copy, Deserialize)]
+pub struct Usage {
+    pub prompt_tokens: u32,
+    pub completion_tokens: u32,
+    pub total_tokens: u32,
+}
+
+impl AddAssign for Usage {
+    fn add_assign(&mut self, rhs: Self) {
+        self.prompt_tokens += rhs.prompt_tokens;
+        self.completion_tokens += rhs.completion_tokens;
+        self.total_tokens += rhs.total_tokens;
+    }
+}
+
 // ---------------------------------------------------------------------------
 // OpenRouter API types (private)
 // ---------------------------------------------------------------------------
@@ -66,6 +84,7 @@ struct ResponseFormat {
 #[derive(Debug, Deserialize)]
 struct ChatResponse {
     choices: Vec<Choice>,
+    usage: Option<Usage>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -127,6 +146,8 @@ pub fn build_messages(config: &SimConfig, rooms_needed: usize) -> Vec<ChatMessag
 
 /// Call the `OpenRouter` API to generate sim content.
 ///
+/// Returns the generated content and token usage for this call.
+///
 /// # Errors
 ///
 /// Returns an error if the HTTP request fails, the response cannot be parsed,
@@ -135,7 +156,7 @@ pub async fn generate_content(
     client: &reqwest::Client,
     config: &SimConfig,
     rooms_needed: usize,
-) -> Result<SimContent, anyhow::Error> {
+) -> Result<(SimContent, Usage), anyhow::Error> {
     let messages = build_messages(config, rooms_needed);
 
     let request = ChatRequest {
@@ -165,6 +186,15 @@ pub async fn generate_content(
 
     let chat_response: ChatResponse = response.json().await?;
 
+    let usage = chat_response.usage.unwrap_or_default();
+    tracing::info!(
+        model = %config.openrouter_model,
+        prompt_tokens = usage.prompt_tokens,
+        completion_tokens = usage.completion_tokens,
+        total_tokens = usage.total_tokens,
+        "llm_call"
+    );
+
     let first_choice = chat_response
         .choices
         .into_iter()
@@ -173,7 +203,7 @@ pub async fn generate_content(
 
     let content: SimContent = serde_json::from_str(&first_choice.message.content)?;
 
-    Ok(content)
+    Ok((content, usage))
 }
 
 // ---------------------------------------------------------------------------
