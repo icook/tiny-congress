@@ -572,6 +572,49 @@ mod tests {
         );
     }
 
+    // ── CertificateSignature::from_base64url (direct function tests) ──────
+
+    #[test]
+    fn test_cert_sig_valid_64_bytes() {
+        let bytes = [2u8; 64];
+        let result = CertificateSignature::from_base64url(&encode_base64url(&bytes));
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().as_bytes(), &bytes);
+    }
+
+    #[test]
+    fn test_cert_sig_invalid_base64() {
+        assert_eq!(
+            CertificateSignature::from_base64url("!!!not-base64!!!").unwrap_err(),
+            CertificateSignatureError::InvalidEncoding
+        );
+    }
+
+    #[test]
+    fn test_cert_sig_empty_string() {
+        // Empty base64url decodes to zero bytes — length check fires, not encoding check.
+        assert_eq!(
+            CertificateSignature::from_base64url("").unwrap_err(),
+            CertificateSignatureError::InvalidLength
+        );
+    }
+
+    #[test]
+    fn test_cert_sig_too_short() {
+        assert_eq!(
+            CertificateSignature::from_base64url(&encode_base64url(&[1u8; 32])).unwrap_err(),
+            CertificateSignatureError::InvalidLength
+        );
+    }
+
+    #[test]
+    fn test_cert_sig_too_long() {
+        assert_eq!(
+            CertificateSignature::from_base64url(&encode_base64url(&[1u8; 128])).unwrap_err(),
+            CertificateSignatureError::InvalidLength
+        );
+    }
+
     // ── Username validation (direct function tests) ────────────────────────
 
     #[test]
