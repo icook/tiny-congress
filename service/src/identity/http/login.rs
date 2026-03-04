@@ -365,6 +365,40 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_login_empty_username_returns_bad_request() {
+        let repo = MockIdentityRepo::new();
+        let app = test_login_router(repo);
+
+        let body = serde_json::json!({
+            "username": "",
+            "timestamp": chrono::Utc::now().timestamp(),
+            "device": {
+                "pubkey": encode_base64url(&[0u8; 32]),
+                "name": "test",
+                "certificate": encode_base64url(&[0u8; 64])
+            }
+        })
+        .to_string();
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/auth/login")
+                    .header("content-type", "application/json")
+                    .body(Body::from(body))
+                    .expect("request builder"),
+            )
+            .await
+            .expect("response");
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        let body_bytes = to_bytes(response.into_body(), 1024).await.expect("body");
+        let payload: serde_json::Value = serde_json::from_slice(&body_bytes).expect("json");
+        assert!(payload["error"].as_str().unwrap().contains("required"));
+    }
+
+    #[tokio::test]
     async fn test_login_too_long_username_returns_bad_request() {
         let repo = MockIdentityRepo::new();
         let app = test_login_router(repo);
