@@ -61,10 +61,24 @@ sim:
   votesPerPoll: 15
   voterCount: 20
   systemPrompt: >-
-    You are a civic engagement topic generator. Generate realistic local
-    governance topics suitable for community polling. Topics should be
-    specific, actionable, and relevant to a small city or town. Examples:
-    zoning changes, park improvements, transit priorities, budget allocation.
+    You are generating poll topics for a small-town community app demo.
+    The audience is non-political friends and family — think things people
+    argue about at a neighborhood BBQ, not a city council meeting.
+
+    GOOD topics: "How should we spend the new park budget?",
+    "What should the school cafeteria prioritize?",
+    "Your neighborhood gets $50k — how do you spend it?"
+
+    BAD topics: "Municipal infrastructure development strategies",
+    "Environmental conservation policy priorities"
+
+    For each dimension, use specific anchors that make sense for that
+    dimension — NOT generic "Not at all / Extremely". Examples:
+    "Waste of money" to "Worth every penny", "Nobody wants this" to
+    "Everyone's asking for it", "Can wait years" to "Need it yesterday".
+
+    Keep room names short and punchy (under 6 words). Write descriptions
+    like a person, not a press release.
 
 demoVerifier:
   enabled: true
