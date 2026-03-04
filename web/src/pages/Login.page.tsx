@@ -104,8 +104,8 @@ export function LoginPage() {
         setDevice(response.device_kid, deviceKeyPair.privateKey);
       });
 
-      // Navigate to settings page to show device list
-      void navigate({ to: '/settings' });
+      // Navigate to rooms after successful login
+      void navigate({ to: '/rooms' });
     } catch (err) {
       if (err instanceof Error) {
         setLocalError(err.message);

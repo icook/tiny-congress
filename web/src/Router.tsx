@@ -10,7 +10,6 @@ import {
 import { AuthRequiredOutlet } from './components/AuthRequiredOutlet';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { AboutPage } from './pages/About.page';
-import { DashboardPage } from './pages/Dashboard.page';
 import { HomePage } from './pages/Home.page';
 import { Layout } from './pages/Layout';
 import { LoginPage } from './pages/Login.page';
@@ -18,7 +17,6 @@ import { PollPage } from './pages/Poll.page';
 import { RoomsPage } from './pages/Rooms.page';
 import { SettingsPage } from './pages/Settings.page';
 import { SignupPage } from './pages/Signup.page';
-import { ThreadedConversationPage } from './pages/ThreadedConversation.page';
 import { VerifyCallbackPage } from './pages/VerifyCallback.page';
 import { useDevice } from './providers/DeviceProvider';
 
@@ -36,18 +34,6 @@ const homeRoute = createRoute({
   component: HomePage,
 });
 
-const dashboardRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: 'dashboard',
-  component: DashboardPage,
-});
-
-const conversationsRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: 'conversations',
-  component: ThreadedConversationPage,
-});
-
 const aboutRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: 'about',
@@ -63,7 +49,7 @@ const guestOnlyLayout = createRoute({
   beforeLoad: ({ context }) => {
     if (context.auth.deviceKid) {
       // eslint-disable-next-line @typescript-eslint/only-throw-error -- TanStack Router redirect API
-      throw redirect({ to: '/settings' });
+      throw redirect({ to: '/rooms' });
     }
   },
 });
@@ -127,8 +113,6 @@ const pollRoute = createRoute({
 
 const routeTree = rootRoute.addChildren([
   homeRoute,
-  dashboardRoute,
-  conversationsRoute,
   aboutRoute,
   guestOnlyLayout.addChildren([signupRoute, loginRoute]),
   authRequiredLayout.addChildren([
@@ -139,8 +123,6 @@ const routeTree = rootRoute.addChildren([
   ]),
   roomsRoute,
   pollRoute,
-  createPlaceholderRoute(rootRoute, 'analytics', 'Analytics', 'Analytics page content'),
-  createPlaceholderRoute(rootRoute, 'releases', 'Releases', 'Releases page content'),
 ]);
 
 // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- context provided at render time via RouterProvider
