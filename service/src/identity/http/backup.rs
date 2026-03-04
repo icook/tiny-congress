@@ -29,8 +29,26 @@ type HmacSha256 = Hmac<Sha256>;
 pub struct SyntheticBackupKey(Vec<u8>);
 
 impl SyntheticBackupKey {
+    /// Minimum key length — HMAC-SHA256 recommends keys at least as long as the
+    /// hash output (32 bytes). Shorter keys weaken the anti-enumeration guarantee
+    /// because attackers could brute-force the key and precompute synthetic backups.
+    pub const MIN_KEY_LEN: usize = 32;
+
+    /// Create a new synthetic backup HMAC key.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `key` is shorter than [`Self::MIN_KEY_LEN`] bytes.
+    /// This is a startup-time configuration error that should prevent the
+    /// server from running with a weak anti-enumeration key.
     #[must_use]
-    pub const fn new(key: Vec<u8>) -> Self {
+    pub fn new(key: Vec<u8>) -> Self {
+        assert!(
+            key.len() >= Self::MIN_KEY_LEN,
+            "SyntheticBackupKey must be at least {} bytes, got {}",
+            Self::MIN_KEY_LEN,
+            key.len()
+        );
         Self(key)
     }
 
@@ -206,7 +224,25 @@ mod tests {
     use tower::ServiceExt;
     use uuid::Uuid;
 
-    const TEST_HMAC_KEY: &[u8] = b"test-hmac-key-for-unit-tests";
+    const TEST_HMAC_KEY: &[u8] = b"test-hmac-key-for-unit-tests-pad";
+
+    #[test]
+    fn synthetic_backup_key_accepts_32_byte_key() {
+        let key = SyntheticBackupKey::new(vec![0xAA; 32]);
+        assert_eq!(key.as_bytes().len(), 32);
+    }
+
+    #[test]
+    #[should_panic(expected = "must be at least 32 bytes")]
+    fn synthetic_backup_key_rejects_empty_key() {
+        let _ = SyntheticBackupKey::new(vec![]);
+    }
+
+    #[test]
+    #[should_panic(expected = "must be at least 32 bytes")]
+    fn synthetic_backup_key_rejects_short_key() {
+        let _ = SyntheticBackupKey::new(vec![0xAA; 16]);
+    }
 
     #[test]
     fn synthetic_backup_is_deterministic() {
