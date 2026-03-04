@@ -397,6 +397,79 @@ mod tests {
         assert_eq!(err.status(), StatusCode::BAD_REQUEST);
     }
 
+    // ── get_owned_device ────────────────────────────────────────────────────
+
+    fn make_device_record(account_id: Uuid) -> DeviceKeyRecord {
+        DeviceKeyRecord {
+            id: Uuid::new_v4(),
+            account_id,
+            device_kid: Kid::derive(&[3u8; 32]),
+            device_pubkey: encode_base64url(&[0u8; 32]),
+            device_name: "Test Device".to_string(),
+            certificate: vec![],
+            last_used_at: None,
+            revoked_at: None,
+            created_at: Utc::now(),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_get_owned_device_not_found() {
+        let repo = MockIdentityRepo::new(); // default: get_device_key_by_kid returns NotFound
+        let kid = Kid::derive(&[0u8; 32]);
+        let err = get_owned_device(&repo, &kid, Uuid::new_v4())
+            .await
+            .err()
+            .expect("expected error");
+        assert_eq!(err.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn test_get_owned_device_wrong_account_returns_not_found() {
+        // Security: cross-account access must return 404, not 403 — no device enumeration.
+        let owner_id = Uuid::new_v4();
+        let caller_id = Uuid::new_v4();
+        let record = make_device_record(owner_id);
+        let kid = record.device_kid.clone();
+
+        let repo = MockIdentityRepo::new();
+        repo.set_get_device_key_by_kid_result(Ok(record));
+
+        let err = get_owned_device(&repo, &kid, caller_id)
+            .await
+            .err()
+            .expect("expected error");
+        assert_eq!(err.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn test_get_owned_device_database_error_returns_internal() {
+        let repo = MockIdentityRepo::new();
+        repo.set_get_device_key_by_kid_result(Err(DeviceKeyRepoError::Database(
+            sqlx::Error::Protocol("db error".to_string()),
+        )));
+        let kid = Kid::derive(&[0u8; 32]);
+        let err = get_owned_device(&repo, &kid, Uuid::new_v4())
+            .await
+            .err()
+            .expect("expected error");
+        assert_eq!(err.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    }
+
+    #[tokio::test]
+    async fn test_get_owned_device_matching_account_returns_record() {
+        let account_id = Uuid::new_v4();
+        let record = make_device_record(account_id);
+        let kid = record.device_kid.clone();
+
+        let repo = MockIdentityRepo::new();
+        repo.set_get_device_key_by_kid_result(Ok(record.clone()));
+
+        let result = get_owned_device(&repo, &kid, account_id).await;
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().device_kid, kid);
+    }
+
     #[tokio::test]
     async fn test_validate_add_device_request_account_not_found() {
         // Post-auth account lookup fails → internal error (server-side invariant violation)
