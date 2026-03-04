@@ -73,6 +73,8 @@ Architecture Decision Records explaining why we chose specific approaches:
 | [005-mantine-first-styling.md](decisions/005-mantine-first-styling.md) | Mantine-first styling approach |
 | [006-wasm-crypto-sharing.md](decisions/006-wasm-crypto-sharing.md) | Shared crypto code via WASM |
 | [007-rest-endpoint-generation.md](decisions/007-rest-endpoint-generation.md) | REST endpoint generation strategy (Proposed) |
+| [008-account-based-verifiers.md](decisions/008-account-based-verifiers.md) | Verifiers as regular accounts with config bootstrap |
+| [009-sim-as-api-client.md](decisions/009-sim-as-api-client.md) | Simulation worker as pure HTTP API client |
 
 ## Checklists
 
