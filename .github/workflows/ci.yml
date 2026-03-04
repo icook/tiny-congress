@@ -56,6 +56,21 @@ jobs:
           directory: kube/
           config: .kube-linter.yaml
 
+      - name: Validate environment values
+        run: |
+          # Render the chart with each environment values file to catch drift.
+          # Image tags are stubbed — digests are provided by CD, not by values files.
+          for VALUES_FILE in kube/environments/*.yaml; do
+            ENV_NAME=$(basename "$VALUES_FILE" .yaml)
+            echo "::group::helm template ($ENV_NAME)"
+            helm template "tc-${ENV_NAME}" kube/app \
+              -f "$VALUES_FILE" \
+              --set image.tag=ci-stub \
+              --set frontend.image.tag=ci-stub \
+              --set postgres.image.tag=ci-stub
+            echo "::endgroup::"
+          done
+
   # ============================================================
   # JOB 0b: Lint web
   # ============================================================
