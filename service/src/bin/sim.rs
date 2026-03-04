@@ -38,6 +38,7 @@ async fn main() -> Result<(), anyhow::Error> {
         target_rooms = config.target_rooms,
         votes_per_poll = config.votes_per_poll,
         voter_count = config.voter_count,
+        api_key_len = config.openrouter_api_key.len(),
         "sim config loaded"
     );
 
