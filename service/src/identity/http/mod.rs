@@ -17,9 +17,9 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use super::service::{IdentityService, SignupError, SignupRequest};
+use super::service::{IdentityService, RootPubkey, SignupError, SignupRequest};
 use crate::identity::repo::AccountRecord;
-use tc_crypto::{decode_base64url, Kid};
+use tc_crypto::Kid;
 
 /// Signup response
 #[derive(Debug, Serialize, Deserialize)]
@@ -102,15 +102,12 @@ pub(crate) fn internal_error() -> axum::response::Response {
 pub(crate) fn decode_account_root_pubkey(
     account: &AccountRecord,
 ) -> Result<[u8; 32], axum::response::Response> {
-    let Ok(bytes) = decode_base64url(&account.root_pubkey) else {
-        tracing::error!("Corrupted root pubkey for account {}", account.id);
-        return Err(internal_error());
-    };
-    let Ok(arr): Result<[u8; 32], _> = bytes.as_slice().try_into() else {
-        tracing::error!("Corrupted root pubkey length for account {}", account.id);
-        return Err(internal_error());
-    };
-    Ok(arr)
+    RootPubkey::from_base64url(&account.root_pubkey)
+        .map(|k| *k.as_bytes())
+        .map_err(|e| {
+            tracing::error!("Corrupted root pubkey for account {}: {e}", account.id);
+            internal_error()
+        })
 }
 
 /// Handle signup request — delegates validation and persistence to [`IdentityService`].
