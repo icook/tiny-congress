@@ -1,0 +1,195 @@
+{
+  "areas": {
+    "service/src/identity/": {
+      "status": "active",
+      "total_prs": 30,
+      "total_skips": 0,
+      "consecutive_idle": 0,
+      "last_run": "2026-03-04T20:37:12Z",
+      "graduated_at": "",
+      "history": [
+        {
+          "pr": 429,
+          "type": "test_coverage",
+          "impact": "medium",
+          "summary": "refine: test self-revoke prevention in revoke_device handler"
+        },
+        {
+          "pr": 424,
+          "type": "test_coverage",
+          "impact": "medium",
+          "summary": "refine: test add_device handler DuplicateKid and MaxDevicesReached paths"
+        },
+        {
+          "pr": 418,
+          "type": "test_coverage",
+          "impact": "medium",
+          "summary": "refine: test list_devices handler success and DB error paths"
+        },
+        {
+          "pr": 417,
+          "type": "unknown",
+          "impact": "medium",
+          "summary": "refine: handle NotFound from revoke/rename device key mutations as 404"
+        },
+        {
+          "pr": 416,
+          "type": "test_coverage",
+          "impact": "medium",
+          "summary": "refine: test add_device handler DB error path on create_device_key"
+        },
+        {
+          "pr": 415,
+          "type": "test_coverage",
+          "impact": "medium",
+          "summary": "refine: test account DB error path in validate_add_device_request"
+        },
+        {
+          "pr": 414,
+          "type": "test_coverage",
+          "impact": "medium",
+          "summary": "refine: test revoke_device and rename_device repo error paths"
+        },
+        {
+          "pr": 413,
+          "type": "pattern_enforcement",
+          "impact": "medium",
+          "summary": "refine: consolidate username validation in login and backup handlers"
+        },
+        {
+          "pr": 412,
+          "type": "test_coverage",
+          "impact": "medium",
+          "summary": "refine: test account DB error and device creation DB error paths in login handler"
+        },
+        {
+          "pr": 411,
+          "type": "test_coverage",
+          "impact": "medium",
+          "summary": "refine: test empty username path in backup handler"
+        },
+        {
+          "pr": 410,
+          "type": "test_coverage",
+          "impact": "medium",
+          "summary": "refine: test empty username path in login handler"
+        },
+        {
+          "pr": 409,
+          "type": "unknown",
+          "impact": "medium",
+          "summary": "refine: return 422 for MaxDevicesReached in login handler"
+        },
+        {
+          "pr": 408,
+          "type": "test_coverage",
+          "impact": "medium",
+          "summary": "refine: test that synthetic backup passes envelope parsing"
+        },
+        {
+          "pr": 407,
+          "type": "test_coverage",
+          "impact": "medium",
+          "summary": "refine: test nonce replay and database error paths in login handler"
+        },
+        {
+          "pr": 406,
+          "type": "test_coverage",
+          "impact": "medium",
+          "summary": "refine: add handler-level tests for login anti-enumeration invariant"
+        },
+        {
+          "pr": 405,
+          "type": "security_hardening",
+          "impact": "medium",
+          "summary": "refine: enforce username max-length at login and backup endpoints"
+        },
+        {
+          "pr": 404,
+          "type": "test_coverage",
+          "impact": "medium",
+          "summary": "refine: test that no-backup accounts do not leak real root_kid"
+        },
+        {
+          "pr": 403,
+          "type": "test_coverage",
+          "impact": "medium",
+          "summary": "refine: add handler-level tests for get_backup security invariants"
+        },
+        {
+          "pr": 402,
+          "type": "pattern_enforcement",
+          "impact": "medium",
+          "summary": "refine: consolidate synthetic backup response into single helper"
+        },
+        {
+          "pr": 401,
+          "type": "test_coverage",
+          "impact": "medium",
+          "summary": "refine: add unit tests for get_owned_device security invariants"
+        },
+        {
+          "pr": 400,
+          "type": "pattern_enforcement",
+          "impact": "medium",
+          "summary": "refine: add RootPubkey newtype for validated root public key"
+        },
+        {
+          "pr": 399,
+          "type": "test_coverage",
+          "impact": "medium",
+          "summary": "refine: add unit tests for validate_add_device_request"
+        },
+        {
+          "pr": 398,
+          "type": "test_coverage",
+          "impact": "medium",
+          "summary": "refine: add direct unit tests for validate_login_device"
+        },
+        {
+          "pr": 397,
+          "type": "test_coverage",
+          "impact": "medium",
+          "summary": "refine: add direct unit tests for CertificateSignature::from_base64url"
+        },
+        {
+          "pr": 396,
+          "type": "pattern_enforcement",
+          "impact": "medium",
+          "summary": "refine: use thiserror for CertificateSignatureError"
+        },
+        {
+          "pr": 395,
+          "type": "test_coverage",
+          "impact": "medium",
+          "summary": "refine: add unit tests for untested map_signup_error paths"
+        },
+        {
+          "pr": 394,
+          "type": "test_coverage",
+          "impact": "medium",
+          "summary": "refine: add direct unit test for validate_username empty case"
+        },
+        {
+          "pr": 393,
+          "type": "test_coverage",
+          "impact": "medium",
+          "summary": "refine: add direct unit tests for DevicePubkey::from_base64url"
+        },
+        {
+          "pr": 392,
+          "type": "test_coverage",
+          "impact": "medium",
+          "summary": "refine: extract validate_nonce helper and add unit tests"
+        },
+        {
+          "pr": 391,
+          "type": "pattern_enforcement",
+          "impact": "medium",
+          "summary": "refine: use thiserror for UsernameError, DeviceNameError, DevicePubkeyError"
+        }
+      ],
+      "skipped": []
+    }
+  }
+}

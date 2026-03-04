@@ -18,6 +18,8 @@ cooldown = 0
 max_prs = 0
 # Stop after N consecutive "nothing to improve" results
 idle_limit = 3
+# Minimum impact to create a PR: "low" = everything, "medium" = skip cleanup, "high" = only significant
+min_impact = "medium"
 
 [ci]
 # Wait for CI after creating a PR and auto-fix failures
