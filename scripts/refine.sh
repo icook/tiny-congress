@@ -780,19 +780,45 @@ for i, c in enumerate(text):
     local summary
     summary="$(echo "$json_block" | jq -r '.summary // "no summary"' 2>/dev/null || echo "no summary")"
 
+    local impact
+    impact="$(echo "$json_block" | jq -r '.impact // "medium"' 2>/dev/null || echo "medium")"
+    local skip_reason
+    skip_reason="$(echo "$json_block" | jq -r '.skip_reason // ""' 2>/dev/null || echo "")"
+
+    # Downgrade change to skip if below impact threshold
+    if [[ "$action" == "change" ]]; then
+        local impact_num
+        impact_num="$(impact_to_num "$impact")"
+        if [[ "$impact_num" -lt "$IMPACT_THRESHOLD" ]]; then
+            log "Downgrading change to skip: impact=$impact below threshold=$MIN_IMPACT"
+            action="skip"
+            skip_reason="impact $impact below min_impact $MIN_IMPACT"
+        fi
+    fi
+
     log "Result: action=$action summary=$summary"
 
     case "$action" in
         change)
             handle_change "$wt_path" "$branch" "$summary"
+            local pr_num
+            pr_num="$(gh pr list --head "$branch" --json number --jq '.[0].number' 2>/dev/null || echo "0")"
+            update_ledger "change" "$impact" "$summary" "$pr_num" "" ""
+            ;;
+        skip)
+            log "Skipped: $summary ($skip_reason)"
+            cleanup_worktree "$wt_path" "$branch"
+            update_ledger "skip" "$impact" "$summary" "" "$skip_reason" ""
             ;;
         ticket)
             handle_ticket "$json_block" "$summary"
             cleanup_worktree "$wt_path" "$branch"
+            update_ledger "ticket" "$impact" "$summary"
             ;;
         clean)
             log "Focus area clean: $summary"
             cleanup_worktree "$wt_path" "$branch"
+            update_ledger "clean" "$impact" "$summary"
             ;;
         *)
             log "WARNING: Unknown action '$action', treating as error"
@@ -800,6 +826,9 @@ for i, c in enumerate(text):
             return 1
             ;;
     esac
+
+    # Commit ledger after each iteration
+    commit_ledger
 
     echo "$action"
 }
