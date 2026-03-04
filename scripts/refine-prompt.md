@@ -14,7 +14,8 @@ You are refining code in `{{FOCUS_PATH}}`.
 4. Do not add new dependencies.
 5. Do not modify files outside `{{FOCUS_PATH}}` unless the change requires
    updating a test file or a direct caller.
-6. Run `just lint` and `just test` before committing. If they fail, fix or abandon.
+6. Run `just fmt` to auto-fix formatting, then `just lint` and `just test` before committing. If lint or tests fail, fix or abandon.
+   `just test` runs unit tests only — do NOT run `just test-ci` or e2e tests (they require a full cluster that isn't available here). CI validates integration after the PR is created.
 
 ## Already in progress
 

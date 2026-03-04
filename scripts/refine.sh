@@ -336,7 +336,7 @@ $failure_logs
     fi
 
     # Push the fix
-    git -C "$wt_path" push --quiet origin "$branch"
+    git -C "$wt_path" push --quiet origin "HEAD:$branch"
     log "Pushed CI fix ($new_commits commit(s)) to $branch"
 
     git -C "$REPO_ROOT" worktree remove "$wt_path" --force 2>/dev/null || true
