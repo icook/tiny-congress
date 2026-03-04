@@ -307,6 +307,16 @@ mod tests {
     }
 
     #[test]
+    fn test_validate_login_device_name_too_long() {
+        let (mut req, root_pubkey) = make_valid_components();
+        req.device.name = "a".repeat(129); // exceeds 128-char DeviceName limit
+        let err = validate_login_device(&req, &root_pubkey)
+            .err()
+            .expect("expected validation error");
+        assert_eq!(err.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[test]
     fn test_validate_login_device_wrong_signature() {
         let (mut req, root_pubkey) = make_valid_components();
         req.device.certificate = encode_base64url(&[0xFFu8; 64]); // bytes don't form a valid sig
