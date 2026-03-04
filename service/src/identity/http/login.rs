@@ -698,6 +698,73 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_login_account_database_error_returns_internal() {
+        let repo = MockIdentityRepo::new();
+        repo.set_account_by_username_result(Err(crate::identity::repo::AccountRepoError::Database(
+            sqlx::Error::Protocol("db error".to_string()),
+        )));
+        let app = test_login_router(repo);
+
+        let (req, _) = make_valid_components();
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/auth/login")
+                    .header("content-type", "application/json")
+                    .body(Body::from(login_body(&req)))
+                    .expect("request builder"),
+            )
+            .await
+            .expect("response");
+
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        let body_bytes = to_bytes(response.into_body(), 1024).await.expect("body");
+        let payload: serde_json::Value = serde_json::from_slice(&body_bytes).expect("json");
+        // Must not leak DB details
+        let error_msg = payload["error"].as_str().unwrap();
+        assert!(!error_msg.contains("db error"));
+        assert!(!error_msg.contains("Protocol"));
+    }
+
+    #[tokio::test]
+    async fn test_login_device_creation_database_error_returns_internal() {
+        let (req, root_pubkey) = make_valid_components();
+
+        let repo = MockIdentityRepo::new();
+        repo.set_account_by_username_result(Ok(AccountRecord {
+            id: Uuid::new_v4(),
+            username: req.username.clone(),
+            root_pubkey: encode_base64url(&root_pubkey),
+            root_kid: Kid::derive(&root_pubkey),
+        }));
+        repo.set_create_device_key_error(DeviceKeyRepoError::Database(sqlx::Error::Protocol(
+            "db error".to_string(),
+        )));
+        let app = test_login_router(repo);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/auth/login")
+                    .header("content-type", "application/json")
+                    .body(Body::from(login_body(&req)))
+                    .expect("request builder"),
+            )
+            .await
+            .expect("response");
+
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        let body_bytes = to_bytes(response.into_body(), 1024).await.expect("body");
+        let payload: serde_json::Value = serde_json::from_slice(&body_bytes).expect("json");
+        let error_msg = payload["error"].as_str().unwrap();
+        // Must not leak DB details, but must include retry guidance
+        assert!(!error_msg.contains("db error"));
+        assert!(error_msg.contains("retry"));
+    }
+
+    #[tokio::test]
     async fn test_login_max_devices_returns_unprocessable() {
         let (req, root_pubkey) = make_valid_components();
 
