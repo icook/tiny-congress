@@ -506,9 +506,9 @@ mod tests {
 
         let (req, account) = make_valid_components();
         let repo = mock_with_account(account.clone());
-        repo.set_create_device_key_error(DeviceKeyRepoError::Database(
-            sqlx::Error::Protocol("db error".to_string()),
-        ));
+        repo.set_create_device_key_error(DeviceKeyRepoError::Database(sqlx::Error::Protocol(
+            "db error".to_string(),
+        )));
         let repo = std::sync::Arc::new(repo);
 
         let body = axum::body::Bytes::from(
