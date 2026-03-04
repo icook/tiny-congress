@@ -2,10 +2,10 @@
   "areas": {
     "service/src/identity/": {
       "status": "active",
-      "total_prs": 31,
+      "total_prs": 32,
       "total_skips": 0,
       "consecutive_idle": 0,
-      "last_run": "2026-03-04T21:23:27Z",
+      "last_run": "2026-03-04T21:45:19Z",
       "graduated_at": "",
       "history": [
         {
@@ -193,6 +193,12 @@
           "type": "",
           "impact": "medium",
           "summary": "Enforce 32-byte minimum key length on SyntheticBackupKey to prevent predictable synthetic backups from breaking the anti-enumeration guarantee"
+        },
+        {
+          "pr": 0,
+          "type": "",
+          "impact": "medium",
+          "summary": "Add handler-level test for rename_device invalid KID format path, verifying the endpoint returns 400 Bad Request for malformed path parameters"
         }
       ],
       "skipped": []
