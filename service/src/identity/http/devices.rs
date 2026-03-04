@@ -231,6 +231,7 @@ pub async fn revoke_device(
             }),
         )
             .into_response(),
+        Err(DeviceKeyRepoError::NotFound) => super::not_found("Device not found"),
         Err(e) => {
             tracing::error!("Failed to revoke device: {e}");
             super::internal_error()
@@ -273,6 +274,7 @@ pub async fn rename_device(
             }),
         )
             .into_response(),
+        Err(DeviceKeyRepoError::NotFound) => super::not_found("Device not found"),
         Err(e) => {
             tracing::error!("Failed to rename device: {e}");
             super::internal_error()
@@ -565,6 +567,29 @@ mod tests {
         assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
     }
 
+    /// TOCTOU race: device confirmed owned by `get_owned_device`, then deleted
+    /// before `revoke_device_key` executes — must return 404, not 500.
+    #[tokio::test]
+    async fn test_revoke_device_not_found_returns_404() {
+        use axum::response::IntoResponse;
+        use axum::{extract::Extension, extract::Path};
+
+        let account_id = Uuid::new_v4();
+        let target_kid = Kid::derive(&[0xBBu8; 32]);
+        let (repo, auth) = setup_revoke_preconditions(account_id, &target_kid);
+        repo.set_revoke_device_key_result(Err(DeviceKeyRepoError::NotFound));
+
+        let response = revoke_device(
+            Extension(repo as std::sync::Arc<dyn crate::identity::repo::IdentityRepo>),
+            Path(target_kid.as_str().to_string()),
+            auth,
+        )
+        .await
+        .into_response();
+
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
+
     // ── rename_device error paths ────────────────────────────────────────────
 
     fn setup_rename_preconditions(
@@ -631,6 +656,29 @@ mod tests {
         .into_response();
 
         assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    }
+
+    /// TOCTOU race: device confirmed owned by `get_owned_device`, then deleted
+    /// before `rename_device_key` executes — must return 404, not 500.
+    #[tokio::test]
+    async fn test_rename_device_not_found_returns_404() {
+        use axum::response::IntoResponse;
+        use axum::{extract::Extension, extract::Path};
+
+        let account_id = Uuid::new_v4();
+        let target_kid = Kid::derive(&[0xCCu8; 32]);
+        let (repo, auth) = setup_rename_preconditions(account_id, &target_kid);
+        repo.set_rename_device_key_result(Err(DeviceKeyRepoError::NotFound));
+
+        let response = rename_device(
+            Extension(repo as std::sync::Arc<dyn crate::identity::repo::IdentityRepo>),
+            Path(target_kid.as_str().to_string()),
+            auth,
+        )
+        .await
+        .into_response();
+
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
     }
 }
 
