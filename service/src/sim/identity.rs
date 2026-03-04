@@ -110,6 +110,31 @@ impl SimAccount {
         }
     }
 
+    /// Create a deterministic demo verifier account.
+    ///
+    /// Uses a separate seed domain (`"tc-demo-verifier-*"`) so keys never
+    /// collide with voter accounts or the sim verifier. The username is
+    /// `"demo_verifier"`.
+    #[must_use]
+    pub fn demo_verifier() -> Self {
+        let root_seed: [u8; 32] = Sha256::digest(b"tc-demo-verifier-root-key-v1").into();
+        let root_signing_key = SigningKey::from_bytes(&root_seed);
+
+        let device_seed: [u8; 32] = Sha256::digest(b"tc-demo-verifier-device-key-v1").into();
+        let device_signing_key = SigningKey::from_bytes(&device_seed);
+
+        let device_pubkey_bytes = device_signing_key.verifying_key().to_bytes();
+        let device_kid = Kid::derive(&device_pubkey_bytes);
+
+        Self {
+            username: "demo_verifier".to_string(),
+            account_id: None,
+            root_signing_key,
+            device_signing_key,
+            device_kid,
+        }
+    }
+
     /// Return the root public key as base64url for use in `TC_VERIFIERS` config.
     #[must_use]
     pub fn root_pubkey_base64url(&self) -> String {
@@ -455,5 +480,32 @@ mod tests {
         // Verify the derivation matches what we expect.
         let expected = Sha256::digest(b"tc-sim-root-key-v1-0");
         assert_eq!(&root_bytes[..], expected.as_slice());
+    }
+
+    #[test]
+    fn demo_verifier_is_deterministic() {
+        let a = SimAccount::demo_verifier();
+        let b = SimAccount::demo_verifier();
+        assert_eq!(a.root_signing_key.to_bytes(), b.root_signing_key.to_bytes());
+        assert_eq!(
+            a.device_signing_key.to_bytes(),
+            b.device_signing_key.to_bytes()
+        );
+        assert_eq!(a.device_kid, b.device_kid);
+        assert_eq!(a.username, "demo_verifier");
+    }
+
+    #[test]
+    fn demo_verifier_keys_differ_from_sim_verifier() {
+        let demo = SimAccount::demo_verifier();
+        let sim = SimAccount::verifier();
+        assert_ne!(
+            demo.root_signing_key.to_bytes(),
+            sim.root_signing_key.to_bytes()
+        );
+        assert_ne!(
+            demo.device_signing_key.to_bytes(),
+            sim.device_signing_key.to_bytes()
+        );
     }
 }

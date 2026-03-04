@@ -121,6 +121,14 @@ struct EndorseBody<'a> {
     topic: &'a str,
 }
 
+#[derive(Serialize)]
+struct EndorseBodyWithEvidence<'a> {
+    username: &'a str,
+    topic: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    evidence: Option<&'a serde_json::Value>,
+}
+
 // ---------------------------------------------------------------------------
 // SimClient
 // ---------------------------------------------------------------------------
@@ -490,6 +498,49 @@ impl SimClient {
         }
         Ok(())
     }
+
+    /// Endorse a user for a topic with optional evidence metadata.
+    ///
+    /// Like [`SimClient::endorse`] but allows attaching structured evidence
+    /// (e.g., which verification method the user chose). When `evidence` is
+    /// `None`, the field is omitted from the request body entirely.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the HTTP request fails or the response is not 2xx.
+    pub async fn endorse_with_evidence(
+        &self,
+        verifier: &SimAccount,
+        username: &str,
+        topic: &str,
+        evidence: Option<&serde_json::Value>,
+    ) -> Result<()> {
+        let path = "/verifiers/endorsements";
+        let body = serde_json::to_vec(&EndorseBodyWithEvidence {
+            username,
+            topic,
+            evidence,
+        })?;
+        let headers = verifier.sign_request("POST", path, &body);
+
+        let mut req = self
+            .http
+            .post(format!("{}{path}", self.api_url))
+            .header("Content-Type", "application/json")
+            .body(body);
+
+        for (key, value) in headers {
+            req = req.header(key, value);
+        }
+
+        let resp = req.send().await?;
+        let status = resp.status();
+        if !status.is_success() {
+            let body = resp.text().await.unwrap_or_default();
+            return Err(anyhow!("POST {path} returned {status}: {body}"));
+        }
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -821,5 +872,34 @@ mod tests {
     fn new_client_stores_url() {
         let client = SimClient::new(reqwest::Client::new(), "http://localhost:4000".to_string());
         assert_eq!(client.api_url, "http://localhost:4000");
+    }
+
+    #[test]
+    fn endorse_body_with_evidence_serializes() {
+        let evidence =
+            serde_json::json!({ "method": "government_id", "provider": "demo_verifier" });
+        let body = EndorseBodyWithEvidence {
+            username: "alice",
+            topic: "identity_verified",
+            evidence: Some(&evidence),
+        };
+        let json: serde_json::Value =
+            serde_json::from_slice(&serde_json::to_vec(&body).unwrap()).unwrap();
+        assert_eq!(json["username"], "alice");
+        assert_eq!(json["topic"], "identity_verified");
+        assert_eq!(json["evidence"]["method"], "government_id");
+    }
+
+    #[test]
+    fn endorse_body_without_evidence_omits_field() {
+        let body = EndorseBodyWithEvidence {
+            username: "bob",
+            topic: "identity_verified",
+            evidence: None,
+        };
+        let json: serde_json::Value =
+            serde_json::from_slice(&serde_json::to_vec(&body).unwrap()).unwrap();
+        assert_eq!(json["username"], "bob");
+        assert!(json.get("evidence").is_none());
     }
 }
