@@ -841,6 +841,18 @@ main() {
     log "Types: ${ENABLED_TYPES[*]}"
     log "Idle limit: $IDLE_LIMIT"
 
+    # Check if focus area is graduated
+    if [[ -f "$LEDGER" ]]; then
+        local area_key
+        area_key="$(echo "$FOCUS_PATH" | sed 's/\./\\./g')"
+        local area_status
+        area_status="$(yq -p toml -oy ".areas.\"$area_key\".status" "$LEDGER" 2>/dev/null || echo "null")"
+        if [[ "$area_status" == "graduated" ]]; then
+            log "Focus area $FOCUS_PATH is graduated. Set status to 'active' in refine-ledger.toml to re-run."
+            exit 0
+        fi
+    fi
+
     local idle_count=0
     local pr_count=0
     local fail_count=0
@@ -873,11 +885,13 @@ main() {
             ticket)
                 idle_count=0
                 ;;
-            clean)
+            clean|skip)
                 idle_count=$((idle_count + 1))
                 log "Idle count: $idle_count / $IDLE_LIMIT"
                 if [[ "$idle_count" -ge "$IDLE_LIMIT" ]]; then
-                    log "Reached idle_limit=$IDLE_LIMIT, focus area clean"
+                    log "Reached idle_limit=$IDLE_LIMIT, focus area graduated"
+                    graduate_area
+                    commit_ledger
                     break
                 fi
                 ;;
