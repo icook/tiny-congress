@@ -300,7 +300,7 @@ function VoteSlider({
           {dimension.description}
         </Text>
       ) : null}
-      <div style={{ paddingBottom: 8 }}>
+      <div style={{ paddingBottom: 8, paddingLeft: 8, paddingRight: 8 }}>
         <Slider
           value={value}
           onChange={onChange}
@@ -320,7 +320,12 @@ function VoteSlider({
             { value: dimension.min_value, label: dimension.min_label ?? 'Low' },
             { value: dimension.max_value, label: dimension.max_label ?? 'High' },
           ]}
-          styles={{ markLabel: { fontSize: 'var(--mantine-font-size-xs)' } }}
+          styles={{
+            markLabel: {
+              fontSize: 'var(--mantine-font-size-xs)',
+              whiteSpace: 'nowrap',
+            },
+          }}
         />
       </div>
     </div>
