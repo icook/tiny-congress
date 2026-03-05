@@ -72,6 +72,7 @@ For detailed entity schemas, binary formats, validation rules, and invariant tab
 - Assuming error mappings without checking the service layer. The HTTP status for a repo error depends on context (e.g., `DuplicateAccount` on backup is 500 during signup because the account was just created in the same transaction).
 - Confabulating API names. Verify method signatures against actual code before documenting or calling them (e.g., `Kid::from_str()` exists; `Kid::parse()` does not).
 - "Improving" code adjacent to the task — don't refactor, add docstrings, or clean up surrounding code unless asked.
+- Adding a frontend runtime config value without wiring both layers. A new `window.__TC_ENV__` field requires: (1) `web/src/config.ts` (interface + getter), (2) `kube/app/templates/deployment.yaml` (Helm value → container env var). The entrypoint auto-discovers `TC_*`/`VITE_*` env vars — no script changes needed. Missing the Helm layer means the value is silently empty in production.
 
 ## Documentation
 
