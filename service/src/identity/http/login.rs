@@ -19,7 +19,6 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
-use super::auth::MAX_TIMESTAMP_SKEW;
 use super::ErrorResponse;
 use crate::identity::repo::{AccountRepoError, DeviceKeyRepoError, IdentityRepo, NonceRepoError};
 use crate::identity::service::{validate_username, CertificateSignature, DeviceName, DevicePubkey};
@@ -102,9 +101,9 @@ pub async fn login(
     Extension(repo): Extension<Arc<dyn IdentityRepo>>,
     Json(req): Json<LoginRequest>,
 ) -> impl IntoResponse {
-    // Validate timestamp — use abs_diff to avoid overflow on extreme values
+    // Validate timestamp
     let now = chrono::Utc::now().timestamp();
-    if now.abs_diff(req.timestamp) > MAX_TIMESTAMP_SKEW as u64 {
+    if super::timestamp_is_stale(now, req.timestamp) {
         return super::bad_request("Timestamp out of range");
     }
 
