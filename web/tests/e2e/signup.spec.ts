@@ -38,7 +38,7 @@ test('signup flow creates account with device key @smoke', async ({ page }) => {
   });
 });
 
-test('signup shows error for duplicate username @smoke', async ({ page }) => {
+test('signup shows error for duplicate username @smoke', async ({ page, browser }) => {
   const username = `dup-user-${String(Date.now())}`;
 
   await page.goto('/signup');
@@ -50,33 +50,24 @@ test('signup shows error for duplicate username @smoke', async ({ page }) => {
   await page.getByRole('button', { name: /sign up/i }).click();
   await expect(page.getByText(/Account Created/i)).toBeVisible({ timeout: 15_000 });
 
-  // Clear device state so the redirect guard doesn't block the signup page.
-  // deleteDatabase is blocked while DeviceProvider holds an open connection;
-  // resolve on onblocked too — the deletion completes when the page navigates away.
-  await page.evaluate(
-    () =>
-      new Promise<void>((resolve, reject) => {
-        const req = indexedDB.deleteDatabase('tc-device-store');
-        req.onsuccess = () => {
-          resolve();
-        };
-        req.onblocked = () => {
-          resolve();
-        };
-        req.onerror = () => {
-          reject(new Error(String(req.error)));
-        };
-      })
-  );
+  // Fresh context simulates a new device — no IDB clearing needed, avoids
+  // the webkit race where deleteDatabase hasn't completed before the new
+  // page's DeviceProvider reads stale data and redirects away from /signup.
+  const { baseURL } = test.info().project.use;
+  const freshCtx = await browser.newContext({ baseURL });
+  const freshPage = await freshCtx.newPage();
 
-  // Navigate back to signup for a second attempt with the same username
-  await page.goto('/signup');
-  await expect(page.getByLabel(/username/i)).toBeVisible();
+  try {
+    await freshPage.goto('/signup');
+    await expect(freshPage.getByLabel(/username/i)).toBeVisible();
 
-  await page.getByLabel(/username/i).fill(username);
-  await page.getByLabel(/backup password/i).fill('test-password-123');
-  await page.getByRole('button', { name: /sign up/i }).click();
+    await freshPage.getByLabel(/username/i).fill(username);
+    await freshPage.getByLabel(/backup password/i).fill('test-password-123');
+    await freshPage.getByRole('button', { name: /sign up/i }).click();
 
-  // Should show an error (duplicate username)
-  await expect(page.getByText(/Signup failed/i)).toBeVisible({ timeout: 15_000 });
+    // Should show an error (duplicate username)
+    await expect(freshPage.getByText(/Signup failed/i)).toBeVisible({ timeout: 15_000 });
+  } finally {
+    await freshCtx.close();
+  }
 });

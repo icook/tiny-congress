@@ -3,10 +3,9 @@ import { expect, test } from './fixtures';
 const PASSWORD = 'test-password-123';
 
 /**
- * Sign up a user and clear device state so subsequent login tests
- * simulate a fresh browser / new device.
+ * Sign up a user on the given page.
  */
-async function signupAndClearDevice(page: import('@playwright/test').Page, username: string) {
+async function signupUser(page: import('@playwright/test').Page, username: string) {
   await page.goto('/signup');
   await expect(page.getByLabel(/username/i)).toBeVisible();
 
@@ -14,85 +13,88 @@ async function signupAndClearDevice(page: import('@playwright/test').Page, usern
   await page.getByLabel(/backup password/i).fill(PASSWORD);
   await page.getByRole('button', { name: /sign up/i }).click();
   await expect(page.getByText(/Account Created/i)).toBeVisible({ timeout: 15_000 });
-
-  // Clear IndexedDB to simulate a new device / fresh browser.
-  // deleteDatabase is blocked while DeviceProvider holds an open connection;
-  // resolve on onblocked too — the deletion completes when the page navigates away.
-  await page.evaluate(
-    () =>
-      new Promise<void>((resolve, reject) => {
-        const req = indexedDB.deleteDatabase('tc-device-store');
-        req.onsuccess = () => {
-          resolve();
-        };
-        req.onblocked = () => {
-          resolve();
-        };
-        req.onerror = () => {
-          reject(new Error(String(req.error)));
-        };
-      })
-  );
 }
 
-test('login flow recovers account and shows device list', async ({ page }) => {
+/**
+ * Create a fresh browser context that inherits the project's baseURL.
+ * A new context has empty IndexedDB, simulating a new device / fresh browser
+ * without needing to delete databases (which races on webkit).
+ */
+async function newDeviceContext(browser: import('@playwright/test').Browser) {
+  const { baseURL } = test.info().project.use;
+  const ctx = await browser.newContext({ baseURL });
+  return { ctx, page: await ctx.newPage() };
+}
+
+test('login flow recovers account and shows device list', async ({ page, browser }) => {
   const username = `login-user-${String(Date.now())}`;
-  await signupAndClearDevice(page, username);
+  await signupUser(page, username);
 
-  // Navigate to login
-  await page.goto('/login');
-  await expect(page.getByLabel(/username/i)).toBeVisible();
+  // Fresh context = new device with no IDB data.
+  const device2 = await newDeviceContext(browser);
 
-  // Screenshot: login form
-  await test.info().attach('login-form', {
-    body: await page.screenshot(),
-    contentType: 'image/png',
-  });
+  try {
+    await device2.page.goto('/login');
+    await expect(device2.page.getByLabel(/username/i)).toBeVisible();
 
-  // Fill and submit
-  await page.getByLabel(/username/i).fill(username);
-  await page.getByLabel(/backup password/i).fill(PASSWORD);
-  await page.getByRole('button', { name: /log in/i }).click();
+    await test.info().attach('login-form', {
+      body: await device2.page.screenshot(),
+      contentType: 'image/png',
+    });
 
-  // Argon2id KDF with m_cost=65536 can take several seconds in the browser.
-  // After decryption, the login API call creates a device and navigates to /rooms.
-  await expect(page.getByRole('heading', { name: /rooms/i })).toBeVisible({ timeout: 30_000 });
+    await device2.page.getByLabel(/username/i).fill(username);
+    await device2.page.getByLabel(/backup password/i).fill(PASSWORD);
+    await device2.page.getByRole('button', { name: /log in/i }).click();
 
-  // Navigate to settings to verify device list
-  await page.goto('/settings');
-  await expect(page.getByRole('heading', { name: /settings/i })).toBeVisible();
-  await expect(page.getByText(/Manage your devices/i)).toBeVisible();
+    // Argon2id KDF with m_cost=65536 can take several seconds in the browser.
+    // After decryption, the login API call creates a device and navigates to /rooms.
+    await expect(device2.page.getByRole('heading', { name: /rooms/i })).toBeVisible({
+      timeout: 30_000,
+    });
 
-  // Device list should load with two devices: the signup device + the login device
-  await expect(page.getByText(/Current/i)).toBeVisible({ timeout: 10_000 });
-  // Both devices show "Active" badge — verify at least one is visible
-  await expect(page.getByText(/Active/i).first()).toBeVisible();
+    // Navigate to settings to verify device list
+    await device2.page.goto('/settings');
+    await expect(device2.page.getByRole('heading', { name: /settings/i })).toBeVisible();
+    await expect(device2.page.getByText(/Manage your devices/i)).toBeVisible();
 
-  // Screenshot: settings with device list
-  await test.info().attach('login-settings', {
-    body: await page.screenshot(),
-    contentType: 'image/png',
-  });
+    // Device list should load with two devices: the signup device + the login device
+    await expect(device2.page.getByText(/Current/i)).toBeVisible({ timeout: 10_000 });
+    // Both devices show "Active" badge — verify at least one is visible
+    await expect(device2.page.getByText(/Active/i).first()).toBeVisible();
+
+    await test.info().attach('login-settings', {
+      body: await device2.page.screenshot(),
+      contentType: 'image/png',
+    });
+  } finally {
+    await device2.ctx.close();
+  }
 });
 
-test('login with wrong password shows error', async ({ page }) => {
+test('login with wrong password shows error', async ({ page, browser }) => {
   const username = `login-badpw-${String(Date.now())}`;
-  await signupAndClearDevice(page, username);
+  await signupUser(page, username);
 
-  await page.goto('/login');
-  await expect(page.getByLabel(/username/i)).toBeVisible();
+  const device2 = await newDeviceContext(browser);
 
-  await page.getByLabel(/username/i).fill(username);
-  await page.getByLabel(/backup password/i).fill('wrong-password');
-  await page.getByRole('button', { name: /log in/i }).click();
+  try {
+    await device2.page.goto('/login');
+    await expect(device2.page.getByLabel(/username/i)).toBeVisible();
 
-  // Decryption with the wrong password should fail and show an error
-  await expect(page.getByText(/Wrong password or corrupted backup/i)).toBeVisible({
-    timeout: 30_000,
-  });
+    await device2.page.getByLabel(/username/i).fill(username);
+    await device2.page.getByLabel(/backup password/i).fill('wrong-password');
+    await device2.page.getByRole('button', { name: /log in/i }).click();
 
-  // Should still be on the login page (not navigated away)
-  await expect(page.getByRole('heading', { name: /log in/i })).toBeVisible();
+    // Decryption with the wrong password should fail and show an error
+    await expect(device2.page.getByText(/Wrong password or corrupted backup/i)).toBeVisible({
+      timeout: 30_000,
+    });
+
+    // Should still be on the login page (not navigated away)
+    await expect(device2.page.getByRole('heading', { name: /log in/i })).toBeVisible();
+  } finally {
+    await device2.ctx.close();
+  }
 });
 
 test('login with unknown username shows error', async ({ page }) => {
