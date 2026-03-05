@@ -45,5 +45,11 @@ export function getApiBaseUrl(): string {
     return buildTime;
   }
 
+  if (!import.meta.env.DEV) {
+    throw new Error(
+      'API URL is not configured. Set VITE_API_URL (build-time) or TC_API_URL via /config.js (runtime).'
+    );
+  }
+
   return 'http://localhost:8080';
 }

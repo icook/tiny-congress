@@ -25,9 +25,15 @@ describe('getApiBaseUrl', () => {
     expect(getApiBaseUrl()).toBe('https://api.staging.example.com');
   });
 
-  test('falls back to localhost when neither runtime config nor env var is set', async () => {
+  test('falls back to localhost in dev when neither runtime config nor env var is set', async () => {
     const { getApiBaseUrl } = await import('./config');
     expect(getApiBaseUrl()).toBe('http://localhost:8080');
+  });
+
+  test('throws in production when no API URL is configured', async () => {
+    vi.stubEnv('DEV', '');
+    const mod = await import('./config');
+    expect(() => mod.getApiBaseUrl()).toThrow('API URL is not configured');
   });
 
   test('runtime config takes precedence over import.meta.env', async () => {
