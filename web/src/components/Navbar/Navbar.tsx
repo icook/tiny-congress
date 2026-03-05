@@ -1,13 +1,9 @@
 import {
-  IconCalendarStats,
-  IconDeviceDesktopAnalytics,
   IconDoor,
-  IconGauge,
   IconHome2,
   IconInfoCircle,
   IconLogin,
   IconLogout,
-  IconMessages,
   IconSettings,
   IconShieldCheck,
   IconUserPlus,
@@ -20,12 +16,8 @@ import { useDevice } from '@/providers/DeviceProvider';
 
 const navLinks = [
   { icon: IconHome2, label: 'Home', path: '/' },
-  { icon: IconGauge, label: 'Dashboard', path: '/dashboard' },
   { icon: IconDoor, label: 'Rooms', path: '/rooms' },
-  { icon: IconMessages, label: 'Conversations', path: '/conversations' },
   { icon: IconInfoCircle, label: 'About', path: '/about' },
-  { icon: IconDeviceDesktopAnalytics, label: 'Analytics', path: '/analytics' },
-  { icon: IconCalendarStats, label: 'Releases', path: '/releases' },
 ];
 
 const guestLinks = [
