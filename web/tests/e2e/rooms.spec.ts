@@ -16,18 +16,15 @@ test('rooms page loads and shows content', async ({ page }) => {
 test('rooms page is accessible from navbar', async ({ page }) => {
   await page.goto('/');
 
-  // On mobile viewports the navbar is behind a burger menu
-  const burger = page.getByRole('button', { name: /toggle navigation/i });
-  // eslint-disable-next-line playwright/no-conditional-in-test
-  if (await burger.isVisible()) {
-    await burger.click();
-  }
+  // On mobile viewports the navbar is behind a burger menu.
+  // Try to open it; if it doesn't exist (desktop) the click is skipped.
+  const burger = page.locator('.mantine-Burger-root');
+  await burger.click({ timeout: 2_000 }).catch(() => {
+    /* burger not present on desktop — expected */
+  });
 
-  // Navbar should have a Rooms link (use exact match to avoid the "Browse Rooms" CTA)
   const roomsLink = page.getByRole('link', { name: /^Rooms$/i });
-  await expect(roomsLink).toBeVisible();
-
-  // Click it
+  await expect(roomsLink).toBeVisible({ timeout: 5_000 });
   await roomsLink.click();
 
   // Should navigate to rooms page
