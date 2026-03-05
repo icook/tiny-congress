@@ -265,6 +265,9 @@ sim:
 dashboards:
   enabled: false
 
+metrics:
+  enabled: false
+
 demoVerifier:
   enabled: false
   apiUrl: ""
