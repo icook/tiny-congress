@@ -70,10 +70,19 @@ jobs:
           echo "Target not reachable after 30 attempts"
           exit 1
 
+      - name: Derive API URL from target
+        id: api
+        run: |
+          BASE="${{ steps.target.outputs.url }}"
+          # https://tiny-congress-demo.ibcook.com → https://tc-api-demo.ibcook.com
+          API_URL=$(echo "$BASE" | sed 's|https://tiny-congress-demo\.|https://tc-api-demo.|')/graphql
+          echo "url=$API_URL" >> "$GITHUB_OUTPUT"
+
       - name: Run Playwright tests
         working-directory: web
         env:
           PLAYWRIGHT_BASE_URL: ${{ steps.target.outputs.url }}
+          PLAYWRIGHT_API_URL: ${{ steps.api.outputs.url }}
           PLAYWRIGHT_SKIP_WEB_SERVER: "true"
         run: yarn playwright:test --project ${{ matrix.project }}
 
