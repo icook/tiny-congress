@@ -19,6 +19,7 @@ This does NOT lower the bar for crypto/trust boundary code — those principles 
 
 ## Default Delivery Flow
 - Always sync with `master` before starting work: `git checkout master && git pull --rebase`. When picking up a PR or ticket, rebase your working branch onto the refreshed `master` before any edits.
+- Assign yourself to the issue before starting work (`gh issue edit <number> --add-assignee <user>`) so others know it's claimed.
 - Create a branch for every ticket before making changes following the conventions in `docs/interfaces/branch-naming-conventions.md` (e.g., `feature/123-update-copy`, `fix/456-login-redirect`).
 - Implement the work, keep commits focused, and run the relevant test suites via `just test` (unit tests) or `just test-ci` (full CI suite).
 - Treat each major checkpoint on a PR (e.g., before opening, after rebasing, after addressing review) as a moment to leave a fresh status comment with what changed and what still needs attention.
