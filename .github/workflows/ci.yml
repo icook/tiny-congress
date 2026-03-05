@@ -954,6 +954,35 @@ jobs:
           kubectl get all -n default || true
 
   # ============================================================
+  # CI Gate — single required check that aggregates all jobs
+  # ============================================================
+  ci-gate:
+    name: CI Gate
+    if: always()
+    needs:
+      - lint
+      - lint-kube
+      - lint-web
+      - static-analysis
+      - build-storybook
+      - build-docs
+      - codegen-check
+      - security-audit
+      - sqlx-check
+      - build-images
+      - scan-images
+      - integration-tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check results
+        run: |
+          results='${{ toJson(needs.*.result) }}'
+          if echo "$results" | grep -q '"failure"'; then
+            echo "One or more required jobs failed"
+            exit 1
+          fi
+
+  # ============================================================
   # JOB 2b: Update gitops repo with image digests (master only)
   # ============================================================
   deploy-gitops:
