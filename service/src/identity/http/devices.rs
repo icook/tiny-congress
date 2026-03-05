@@ -607,6 +607,36 @@ mod tests {
 
     // ── revoke_device error paths ────────────────────────────────────────────
 
+    /// Invalid KID in the path must return 400 before any repo call.
+    ///
+    /// Symmetric with `test_rename_device_invalid_kid_format_returns_bad_request`.
+    #[tokio::test]
+    async fn test_revoke_device_invalid_kid_format_returns_bad_request() {
+        use axum::body::to_bytes;
+        use axum::response::IntoResponse;
+        use axum::{extract::Extension, extract::Path};
+
+        let account_id = Uuid::new_v4();
+        let auth_kid = Kid::derive(&[0xAAu8; 32]);
+
+        // Repo is not called — KID parsing fails first.
+        let repo = std::sync::Arc::new(MockIdentityRepo::new());
+        let auth = AuthenticatedDevice::for_test(account_id, auth_kid, axum::body::Bytes::new());
+
+        let response = revoke_device(
+            Extension(repo as std::sync::Arc<dyn crate::identity::repo::IdentityRepo>),
+            Path("not-a-valid-kid!!!".to_string()),
+            auth,
+        )
+        .await
+        .into_response();
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        let body = to_bytes(response.into_body(), 1024).await.expect("body");
+        let payload: serde_json::Value = serde_json::from_slice(&body).expect("json");
+        assert_eq!(payload["error"].as_str().unwrap(), "Invalid KID format");
+    }
+
     /// Self-revoke must return 422 — a device cannot revoke its own KID.
     ///
     /// If this check were absent, an authenticated device could accidentally
