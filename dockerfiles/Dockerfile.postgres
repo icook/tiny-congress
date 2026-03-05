@@ -25,7 +25,7 @@ COPY --from=builder / /
 ENV PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 ENV LANG=en_US.utf8
 ENV PG_MAJOR=18
-ENV PG_VERSION=18.2
+ENV PG_VERSION=18.3
 ENV PGDATA=/var/lib/postgresql/18/docker
 VOLUME /var/lib/postgresql
 # Database name default (non-sensitive)
