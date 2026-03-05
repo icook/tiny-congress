@@ -2,11 +2,13 @@ import {
   createRootRouteWithContext,
   createRoute,
   createRouter,
+  Link,
   Outlet,
   redirect,
   RouterProvider,
   useParams,
 } from '@tanstack/react-router';
+import { Button, Group, Stack, Text, Title } from '@mantine/core';
 import { AuthRequiredOutlet } from './components/AuthRequiredOutlet';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { AboutPage } from './pages/About.page';
@@ -66,7 +68,7 @@ const loginRoute = createRoute({
   component: LoginPage,
 });
 
-// Layout route for auth-required pages (settings, account, security)
+// Layout route for auth-required pages
 // beforeLoad handles navigation-time guard; AuthRequiredOutlet handles reactive logout
 const authRequiredLayout = createRoute({
   getParentRoute: () => rootRoute,
@@ -115,18 +117,34 @@ const routeTree = rootRoute.addChildren([
   homeRoute,
   aboutRoute,
   guestOnlyLayout.addChildren([signupRoute, loginRoute]),
-  authRequiredLayout.addChildren([
-    settingsRoute,
-    verifyCallbackRoute,
-    createPlaceholderRoute(authRequiredLayout, 'account', 'Account', 'Account page content'),
-    createPlaceholderRoute(authRequiredLayout, 'security', 'Security', 'Security page content'),
-  ]),
+  authRequiredLayout.addChildren([settingsRoute, verifyCallbackRoute]),
   roomsRoute,
   pollRoute,
 ]);
 
-// eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- context provided at render time via RouterProvider
-const router = createRouter({ routeTree, context: undefined! });
+function NotFoundPage() {
+  return (
+    <Stack gap="md" maw={600} mx="auto" mt={100} ta="center">
+      <Title order={2}>Page not found</Title>
+      <Text c="dimmed">The page you're looking for doesn't exist.</Text>
+      <Group justify="center">
+        <Button component={Link} to="/rooms">
+          Browse Rooms
+        </Button>
+        <Button component={Link} to="/" variant="outline">
+          Go Home
+        </Button>
+      </Group>
+    </Stack>
+  );
+}
+
+const router = createRouter({
+  routeTree,
+  // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- context provided at render time via RouterProvider
+  context: undefined!,
+  defaultNotFoundComponent: NotFoundPage,
+});
 
 declare module '@tanstack/react-router' {
   interface Register {
@@ -151,26 +169,4 @@ export function Router() {
 function PollPageWrapper() {
   const { roomId, pollId } = useParams({ from: '/rooms/$roomId/polls/$pollId' });
   return <PollPage roomId={roomId} pollId={pollId} />;
-}
-
-function createPlaceholderRoute(
-  parent: typeof rootRoute | typeof authRequiredLayout,
-  path: string,
-  title: string,
-  description: string
-) {
-  return createRoute({
-    getParentRoute: () => parent,
-    path,
-    component: () => <PlaceholderPage title={title} description={description} />,
-  });
-}
-
-function PlaceholderPage({ title, description }: { title: string; description: string }) {
-  return (
-    <div>
-      <h1>{title}</h1>
-      <p>{description}</p>
-    </div>
-  );
 }
