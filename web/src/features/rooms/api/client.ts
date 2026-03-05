@@ -58,6 +58,21 @@ export interface PollResults {
   voter_count: number;
 }
 
+export interface BucketCount {
+  label: string;
+  count: number;
+}
+
+export interface DimensionDistribution {
+  dimension_id: string;
+  dimension_name: string;
+  buckets: BucketCount[];
+}
+
+export interface PollDistribution {
+  dimensions: DimensionDistribution[];
+}
+
 export interface Vote {
   dimension_id: string;
   value: number;
@@ -93,6 +108,13 @@ export async function getPollDetail(roomId: string, pollId: string): Promise<Pol
 
 export async function getPollResults(roomId: string, pollId: string): Promise<PollResults> {
   return fetchJson(`/rooms/${roomId}/polls/${pollId}/results`);
+}
+
+export async function getPollDistribution(
+  roomId: string,
+  pollId: string
+): Promise<PollDistribution> {
+  return fetchJson(`/rooms/${roomId}/polls/${pollId}/results/distribution`);
 }
 
 export async function checkEndorsement(

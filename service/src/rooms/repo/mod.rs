@@ -6,7 +6,7 @@ pub mod votes;
 
 pub use polls::{DimensionRecord, PollRecord, PollRepoError};
 pub use rooms::{RoomRecord, RoomRepoError};
-pub use votes::{DimensionStats, VoteRecord, VoteRepoError};
+pub use votes::{BucketCount, DimensionDistribution, DimensionStats, VoteRecord, VoteRepoError};
 
 use async_trait::async_trait;
 use sqlx::PgPool;
@@ -71,6 +71,10 @@ pub trait RoomsRepo: Send + Sync {
     async fn count_voters(&self, poll_id: Uuid) -> Result<i64, VoteRepoError>;
     async fn compute_poll_stats(&self, poll_id: Uuid)
         -> Result<Vec<DimensionStats>, VoteRepoError>;
+    async fn compute_poll_distribution(
+        &self,
+        poll_id: Uuid,
+    ) -> Result<Vec<DimensionDistribution>, VoteRepoError>;
 }
 
 /// `PostgreSQL` implementation of [`RoomsRepo`].
@@ -198,5 +202,12 @@ impl RoomsRepo for PgRoomsRepo {
         poll_id: Uuid,
     ) -> Result<Vec<DimensionStats>, VoteRepoError> {
         votes::compute_poll_stats(&self.pool, poll_id).await
+    }
+
+    async fn compute_poll_distribution(
+        &self,
+        poll_id: Uuid,
+    ) -> Result<Vec<DimensionDistribution>, VoteRepoError> {
+        votes::compute_poll_distribution(&self.pool, poll_id).await
     }
 }

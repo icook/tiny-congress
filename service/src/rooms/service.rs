@@ -10,8 +10,8 @@ use serde::Deserialize;
 use uuid::Uuid;
 
 use super::repo::{
-    DimensionRecord, DimensionStats, PollRecord, PollRepoError, RoomRecord, RoomRepoError,
-    RoomsRepo, VoteRecord,
+    DimensionDistribution, DimensionRecord, DimensionStats, PollRecord, PollRepoError, RoomRecord,
+    RoomRepoError, RoomsRepo, VoteRecord,
 };
 use crate::reputation::service::EndorsementService;
 
@@ -114,6 +114,7 @@ pub trait RoomsService: Send + Sync {
 
     // Results
     async fn get_poll_results(&self, poll_id: Uuid) -> Result<PollResults, PollError>;
+    async fn get_poll_distribution(&self, poll_id: Uuid) -> Result<PollDistribution, PollError>;
     async fn get_user_votes(
         &self,
         poll_id: Uuid,
@@ -126,6 +127,11 @@ pub struct PollResults {
     pub poll: PollRecord,
     pub dimensions: Vec<DimensionStats>,
     pub voter_count: i64,
+}
+
+#[derive(Debug, Clone)]
+pub struct PollDistribution {
+    pub dimensions: Vec<DimensionDistribution>,
 }
 
 // ─── Implementation ────────────────────────────────────────────────────────
@@ -411,6 +417,29 @@ impl RoomsService for DefaultRoomsService {
             dimensions,
             voter_count,
         })
+    }
+
+    async fn get_poll_distribution(&self, poll_id: Uuid) -> Result<PollDistribution, PollError> {
+        // Verify poll exists first
+        self.repo.get_poll(poll_id).await.map_err(|e| {
+            if matches!(e, PollRepoError::NotFound) {
+                PollError::PollNotFound
+            } else {
+                tracing::error!("Poll lookup for distribution failed: {e}");
+                PollError::Internal("Internal server error".to_string())
+            }
+        })?;
+
+        let dimensions = self
+            .repo
+            .compute_poll_distribution(poll_id)
+            .await
+            .map_err(|e| {
+                tracing::error!("Poll distribution computation failed: {e}");
+                PollError::Internal("Internal server error".to_string())
+            })?;
+
+        Ok(PollDistribution { dimensions })
     }
 
     async fn get_user_votes(

@@ -5,6 +5,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { IconAlertTriangle, IconCheck, IconLock, IconShieldOff } from '@tabler/icons-react';
 import { Link } from '@tanstack/react-router';
+import { BarChart } from '@mantine/charts';
 import {
   Alert,
   Badge,
@@ -12,10 +13,8 @@ import {
   Card,
   Group,
   Loader,
-  Progress,
   Slider,
   Stack,
-  Table,
   Text,
   Title,
 } from '@mantine/core';
@@ -23,6 +22,7 @@ import {
   useCastVote,
   useMyVotes,
   usePollDetail,
+  usePollDistribution,
   usePollResults,
   type Dimension,
   type DimensionVote,
@@ -42,6 +42,7 @@ export function PollPage({ roomId, pollId }: PollPageProps) {
 
   const detailQuery = usePollDetail(roomId, pollId);
   const resultsQuery = usePollResults(roomId, pollId);
+  const distributionQuery = usePollDistribution(roomId, pollId);
   const myVotesQuery = useMyVotes(roomId, pollId, deviceKid, privateKey, crypto);
   const voteMutation = useCastVote(roomId, pollId, deviceKid, privateKey, crypto);
   const verificationQuery = useVerificationStatus(deviceKid, privateKey, crypto);
@@ -173,7 +174,7 @@ export function PollPage({ roomId, pollId }: PollPageProps) {
 
             {voteMutation.isSuccess ? (
               <Alert icon={<IconCheck size={16} />} color="green">
-                Vote submitted! See the results below.
+                Thanks for voting! Scroll down to see what the community thinks.
               </Alert>
             ) : null}
 
@@ -202,7 +203,9 @@ export function PollPage({ roomId, pollId }: PollPageProps) {
       <Card shadow="sm" padding="lg" radius="md" withBorder>
         <Stack gap="md">
           <Group justify="space-between">
-            <Title order={4}>Results</Title>
+            <Title order={4}>
+              {voteMutation.isSuccess ? "Here's what the community thinks:" : 'Results'}
+            </Title>
             {resultsQuery.data ? (
               <Text size="sm" c="dimmed">
                 {String(resultsQuery.data.voter_count)} voter
@@ -211,11 +214,11 @@ export function PollPage({ roomId, pollId }: PollPageProps) {
             ) : null}
           </Group>
 
-          {resultsQuery.isLoading ? <Loader size="sm" /> : null}
+          {distributionQuery.isLoading ? <Loader size="sm" /> : null}
 
-          {resultsQuery.isError ? (
+          {distributionQuery.isError ? (
             <Alert icon={<IconAlertTriangle size={16} />} color="red">
-              Failed to load results: {resultsQuery.error.message}
+              Failed to load results: {distributionQuery.error.message}
             </Alert>
           ) : null}
 
@@ -225,8 +228,8 @@ export function PollPage({ roomId, pollId }: PollPageProps) {
             </Text>
           ) : null}
 
-          {(resultsQuery.data?.voter_count ?? 0) > 0 ? (
-            <ResultsTable dimensions={resultsQuery.data?.dimensions ?? []} />
+          {(resultsQuery.data?.voter_count ?? 0) > 0 && distributionQuery.data ? (
+            <DistributionResults dimensions={distributionQuery.data.dimensions} />
           ) : null}
         </Stack>
       </Card>
@@ -282,62 +285,34 @@ function VoteSlider({
   );
 }
 
-function ResultsTable({
+function DistributionResults({
   dimensions,
 }: {
   dimensions: {
+    dimension_id: string;
     dimension_name: string;
-    count: number;
-    mean: number;
-    median: number;
-    stddev: number;
-    min: number;
-    max: number;
+    buckets: { label: string; count: number }[];
   }[];
 }) {
   return (
-    <Stack gap="md">
-      {dimensions.map((dim) => {
-        const range = dim.max - dim.min;
-        const pct = range > 0 ? ((dim.mean - dim.min) / range) * 100 : 0;
-        return (
-          <div key={dim.dimension_name}>
-            <Group justify="space-between" mb={4}>
-              <Text size="sm" fw={500}>
-                {dim.dimension_name}
-              </Text>
-              <Text size="xs" c="dimmed">
-                mean: {dim.mean.toFixed(2)} | median: {dim.median.toFixed(2)} | votes:{' '}
-                {String(dim.count)}
-              </Text>
-            </Group>
-            <Progress value={pct} size="lg" radius="sm" />
-          </div>
-        );
-      })}
-
-      <Table striped highlightOnHover withTableBorder>
-        <Table.Thead>
-          <Table.Tr>
-            <Table.Th>Dimension</Table.Th>
-            <Table.Th ta="right">Mean</Table.Th>
-            <Table.Th ta="right">Median</Table.Th>
-            <Table.Th ta="right">Std Dev</Table.Th>
-            <Table.Th ta="right">Votes</Table.Th>
-          </Table.Tr>
-        </Table.Thead>
-        <Table.Tbody>
-          {dimensions.map((dim) => (
-            <Table.Tr key={dim.dimension_name}>
-              <Table.Td>{dim.dimension_name}</Table.Td>
-              <Table.Td ta="right">{dim.mean.toFixed(3)}</Table.Td>
-              <Table.Td ta="right">{dim.median.toFixed(3)}</Table.Td>
-              <Table.Td ta="right">{dim.stddev.toFixed(3)}</Table.Td>
-              <Table.Td ta="right">{String(dim.count)}</Table.Td>
-            </Table.Tr>
-          ))}
-        </Table.Tbody>
-      </Table>
+    <Stack gap="xl">
+      {dimensions.map((dim) => (
+        <div key={dim.dimension_id}>
+          <Text size="sm" fw={500} mb="xs">
+            {dim.dimension_name}
+          </Text>
+          <BarChart
+            h={160}
+            data={dim.buckets.map((b) => ({ label: b.label, Votes: b.count }))}
+            dataKey="label"
+            series={[{ name: 'Votes', color: 'blue.6' }]}
+            tickLine="none"
+            gridAxis="none"
+            withTooltip={false}
+            barProps={{ radius: 2 }}
+          />
+        </div>
+      ))}
     </Stack>
   );
 }
