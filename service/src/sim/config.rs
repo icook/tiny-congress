@@ -7,8 +7,12 @@ use serde::Deserialize;
 pub struct SimConfig {
     /// Base URL of the `TinyCongress` API (e.g., `http://localhost:4000`)
     pub api_url: String,
-    /// `OpenRouter` API key
+    /// `OpenRouter` API key (not required when `mock_llm` is true)
+    #[serde(default)]
     pub openrouter_api_key: String,
+    /// Use deterministic mock content instead of calling `OpenRouter`
+    #[serde(default)]
+    pub mock_llm: bool,
     /// `OpenRouter` model identifier (e.g., "anthropic/claude-sonnet-4-6")
     #[serde(default = "default_model")]
     pub openrouter_model: String,
@@ -62,8 +66,8 @@ impl SimConfig {
     ///
     /// # Errors
     ///
-    /// Returns an error if required env vars (`SIM_API_URL`,
-    /// `SIM_OPENROUTER_API_KEY`) are missing.
+    /// Returns an error if the required env var `SIM_API_URL` is missing.
+    /// `SIM_OPENROUTER_API_KEY` is optional when `SIM_MOCK_LLM=true`.
     pub fn from_env() -> Result<Self, Box<figment::Error>> {
         use figment::{providers::Env, Figment};
         Figment::new()
@@ -116,15 +120,14 @@ mod tests {
     }
 
     #[test]
-    fn error_when_openrouter_api_key_missing() {
+    fn loads_without_api_key_for_mock_mode() {
         figment::Jail::expect_with(|jail| {
             jail.set_env("SIM_API_URL", "http://localhost:4000");
+            jail.set_env("SIM_MOCK_LLM", "true");
 
-            let result = SimConfig::from_env();
-            assert!(
-                result.is_err(),
-                "should fail without SIM_OPENROUTER_API_KEY"
-            );
+            let config = SimConfig::from_env().expect("should load without API key in mock mode");
+            assert!(config.mock_llm);
+            assert!(config.openrouter_api_key.is_empty());
             Ok(())
         });
     }
