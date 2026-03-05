@@ -66,7 +66,7 @@ export function SignupForm({
           <Title order={3}>What&apos;s next?</Title>
           <Text size="sm">
             {verifierUrl
-              ? 'Verify your identity to start voting in rooms.'
+              ? 'Verify your identity so we know you\u0027re a real person, not a bot. Verified users can vote in rooms.'
               : 'You\u0027re all set! Start exploring rooms and voting on polls.'}
           </Text>
           <Group mt="xs">
