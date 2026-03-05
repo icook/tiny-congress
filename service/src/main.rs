@@ -183,6 +183,7 @@ async fn build_app(
     let rooms_service = Arc::new(DefaultRoomsService::new(
         rooms_repo as Arc<dyn RoomsRepo>,
         trust_repo,
+        pool.clone(),
     )) as Arc<dyn RoomsService>;
 
     let (prometheus_layer, metric_handle) = PrometheusMetricLayer::pair();

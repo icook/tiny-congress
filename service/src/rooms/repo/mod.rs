@@ -1,14 +1,19 @@
 //! Repository layer for rooms persistence
 
+pub mod lifecycle_queue;
 pub mod polls;
 pub mod rooms;
 pub mod votes;
 
+pub use lifecycle_queue::{
+    enqueue_lifecycle_event, read_lifecycle_event, LifecycleMessage, LifecyclePayload,
+};
 pub use polls::{DimensionRecord, PollRecord, PollRepoError};
 pub use rooms::{RoomRecord, RoomRepoError};
 pub use votes::{BucketCount, DimensionDistribution, DimensionStats, VoteRecord, VoteRepoError};
 
 use async_trait::async_trait;
+use chrono::{DateTime, Utc};
 use sqlx::PgPool;
 use uuid::Uuid;
 
@@ -22,10 +27,12 @@ pub trait RoomsRepo: Send + Sync {
         name: &str,
         description: Option<&str>,
         eligibility_topic: &str,
+        poll_duration_secs: Option<i32>,
     ) -> Result<RoomRecord, RoomRepoError>;
     async fn list_rooms(&self, status: Option<&str>) -> Result<Vec<RoomRecord>, RoomRepoError>;
     async fn get_room(&self, room_id: Uuid) -> Result<RoomRecord, RoomRepoError>;
     async fn update_room_status(&self, room_id: Uuid, status: &str) -> Result<(), RoomRepoError>;
+    async fn rooms_needing_content(&self) -> Result<Vec<RoomRecord>, RoomRepoError>;
 
     // Poll operations
     async fn create_poll(
@@ -33,10 +40,19 @@ pub trait RoomsRepo: Send + Sync {
         room_id: Uuid,
         question: &str,
         description: Option<&str>,
+        agenda_position: Option<i32>,
     ) -> Result<PollRecord, PollRepoError>;
     async fn list_polls_by_room(&self, room_id: Uuid) -> Result<Vec<PollRecord>, PollRepoError>;
     async fn get_poll(&self, poll_id: Uuid) -> Result<PollRecord, PollRepoError>;
     async fn update_poll_status(&self, poll_id: Uuid, status: &str) -> Result<(), PollRepoError>;
+    async fn next_agenda_poll(&self, room_id: Uuid) -> Result<Option<PollRecord>, PollRepoError>;
+    async fn next_agenda_position(&self, room_id: Uuid) -> Result<i32, PollRepoError>;
+    async fn set_poll_closes_at(
+        &self,
+        poll_id: Uuid,
+        closes_at: DateTime<Utc>,
+    ) -> Result<(), PollRepoError>;
+    async fn get_active_poll(&self, room_id: Uuid) -> Result<Option<PollRecord>, PollRepoError>;
 
     // Dimension operations
     #[allow(clippy::too_many_arguments)]
@@ -100,8 +116,16 @@ impl RoomsRepo for PgRoomsRepo {
         name: &str,
         description: Option<&str>,
         eligibility_topic: &str,
+        poll_duration_secs: Option<i32>,
     ) -> Result<RoomRecord, RoomRepoError> {
-        rooms::create_room(&self.pool, name, description, eligibility_topic).await
+        rooms::create_room(
+            &self.pool,
+            name,
+            description,
+            eligibility_topic,
+            poll_duration_secs,
+        )
+        .await
     }
 
     async fn list_rooms(&self, status: Option<&str>) -> Result<Vec<RoomRecord>, RoomRepoError> {
@@ -116,13 +140,18 @@ impl RoomsRepo for PgRoomsRepo {
         rooms::update_room_status(&self.pool, room_id, status).await
     }
 
+    async fn rooms_needing_content(&self) -> Result<Vec<RoomRecord>, RoomRepoError> {
+        rooms::rooms_needing_content(&self.pool).await
+    }
+
     async fn create_poll(
         &self,
         room_id: Uuid,
         question: &str,
         description: Option<&str>,
+        agenda_position: Option<i32>,
     ) -> Result<PollRecord, PollRepoError> {
-        polls::create_poll(&self.pool, room_id, question, description).await
+        polls::create_poll(&self.pool, room_id, question, description, agenda_position).await
     }
 
     async fn list_polls_by_room(&self, room_id: Uuid) -> Result<Vec<PollRecord>, PollRepoError> {
@@ -135,6 +164,26 @@ impl RoomsRepo for PgRoomsRepo {
 
     async fn update_poll_status(&self, poll_id: Uuid, status: &str) -> Result<(), PollRepoError> {
         polls::update_poll_status(&self.pool, poll_id, status).await
+    }
+
+    async fn next_agenda_poll(&self, room_id: Uuid) -> Result<Option<PollRecord>, PollRepoError> {
+        polls::next_agenda_poll(&self.pool, room_id).await
+    }
+
+    async fn next_agenda_position(&self, room_id: Uuid) -> Result<i32, PollRepoError> {
+        polls::next_agenda_position(&self.pool, room_id).await
+    }
+
+    async fn set_poll_closes_at(
+        &self,
+        poll_id: Uuid,
+        closes_at: DateTime<Utc>,
+    ) -> Result<(), PollRepoError> {
+        polls::set_poll_closes_at(&self.pool, poll_id, closes_at).await
+    }
+
+    async fn get_active_poll(&self, room_id: Uuid) -> Result<Option<PollRecord>, PollRepoError> {
+        polls::get_active_poll(&self.pool, room_id).await
     }
 
     async fn create_dimension(
