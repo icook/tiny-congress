@@ -1,1260 +1,778 @@
 {
-  "annotations": [],
-  "cursorSync": "Off",
-  "elements": {
-    "replicaCount": {
-      "kind": "Panel",
-      "spec": {
-        "id": 0,
-        "title": "Replicas",
-        "description": "",
-        "links": [],
-        "data": {
-          "kind": "QueryGroup",
-          "spec": {
-            "queries": [
-              {
-                "kind": "PanelQuery",
-                "spec": {
-                  "query": {
-                    "expr": "kube_deployment_status_replicas_available{namespace=\"${namespace}\", deployment=~\"tc-.*\"}",
-                    "legendFormat": "{{deployment}}",
-                    "datasource": {
-                      "type": "prometheus",
-                      "uid": "${prometheus_datasource}"
-                    }
-                  },
-                  "refId": "A",
-                  "hidden": false
-                }
-              }
-            ],
-            "transformations": [],
-            "queryOptions": {}
-          }
-        },
-        "vizConfig": {
-          "kind": "VizConfig",
-          "group": "stat",
-          "version": "",
-          "spec": {
-            "options": {
-              "graphMode": "area",
-              "colorMode": "background",
-              "justifyMode": "auto",
-              "textMode": "auto",
-              "wideLayout": true,
-              "showPercentChange": false,
-              "reduceOptions": {
-                "calcs": []
-              },
-              "percentChangeColorMode": "standard",
-              "orientation": "auto"
-            },
-            "fieldConfig": {
-              "defaults": {
-                "thresholds": {
-                  "mode": "absolute",
-                  "steps": [
-                    {
-                      "color": "red",
-                      "value": null
-                    },
-                    {
-                      "color": "green",
-                      "value": 1
-                    }
-                  ]
-                }
-              },
-              "overrides": []
-            }
-          }
-        }
-      }
-    },
-    "podRestarts24h": {
-      "kind": "Panel",
-      "spec": {
-        "id": 0,
-        "title": "Pod Restarts (24h)",
-        "description": "",
-        "links": [],
-        "data": {
-          "kind": "QueryGroup",
-          "spec": {
-            "queries": [
-              {
-                "kind": "PanelQuery",
-                "spec": {
-                  "query": {
-                    "expr": "sum(increase(kube_pod_container_status_restarts_total{namespace=\"${namespace}\"}[24h]))",
-                    "legendFormat": "",
-                    "datasource": {
-                      "type": "prometheus",
-                      "uid": "${prometheus_datasource}"
-                    }
-                  },
-                  "refId": "A",
-                  "hidden": false
-                }
-              }
-            ],
-            "transformations": [],
-            "queryOptions": {}
-          }
-        },
-        "vizConfig": {
-          "kind": "VizConfig",
-          "group": "stat",
-          "version": "",
-          "spec": {
-            "options": {
-              "graphMode": "area",
-              "colorMode": "background",
-              "justifyMode": "auto",
-              "textMode": "auto",
-              "wideLayout": true,
-              "showPercentChange": false,
-              "reduceOptions": {
-                "calcs": []
-              },
-              "percentChangeColorMode": "standard",
-              "orientation": "auto"
-            },
-            "fieldConfig": {
-              "defaults": {
-                "thresholds": {
-                  "mode": "absolute",
-                  "steps": [
-                    {
-                      "color": "green",
-                      "value": null
-                    },
-                    {
-                      "color": "orange",
-                      "value": 1
-                    },
-                    {
-                      "color": "red",
-                      "value": 5
-                    }
-                  ]
-                }
-              },
-              "overrides": []
-            }
-          }
-        }
-      }
-    },
-    "uptime": {
-      "kind": "Panel",
-      "spec": {
-        "id": 0,
-        "title": "Uptime Since Deploy",
-        "description": "",
-        "links": [],
-        "data": {
-          "kind": "QueryGroup",
-          "spec": {
-            "queries": [
-              {
-                "kind": "PanelQuery",
-                "spec": {
-                  "query": {
-                    "expr": "min(time() - kube_pod_start_time{namespace=\"${namespace}\", pod=~\"tc-.*\"})",
-                    "legendFormat": "",
-                    "datasource": {
-                      "type": "prometheus",
-                      "uid": "${prometheus_datasource}"
-                    }
-                  },
-                  "refId": "A",
-                  "hidden": false
-                }
-              }
-            ],
-            "transformations": [],
-            "queryOptions": {}
-          }
-        },
-        "vizConfig": {
-          "kind": "VizConfig",
-          "group": "stat",
-          "version": "",
-          "spec": {
-            "options": null,
-            "fieldConfig": {
-              "defaults": {
-                "unit": "s"
-              },
-              "overrides": []
-            }
-          }
-        }
-      }
-    },
-    "requestRate": {
-      "kind": "Panel",
-      "spec": {
-        "id": 0,
-        "title": "Request Rate by Status",
-        "description": "",
-        "links": [],
-        "data": {
-          "kind": "QueryGroup",
-          "spec": {
-            "queries": [
-              {
-                "kind": "PanelQuery",
-                "spec": {
-                  "query": {
-                    "expr": "sum by (status_code) (rate(http_requests_total{namespace=\"${namespace}\"}[5m]))",
-                    "legendFormat": "{{status_code}}",
-                    "datasource": {
-                      "type": "prometheus",
-                      "uid": "${prometheus_datasource}"
-                    }
-                  },
-                  "refId": "A",
-                  "hidden": false
-                }
-              }
-            ],
-            "transformations": [],
-            "queryOptions": {}
-          }
-        },
-        "vizConfig": {
-          "kind": "VizConfig",
-          "group": "timeseries",
-          "version": "",
-          "spec": {
-            "options": {
-              "legend": {
-                "displayMode": "table",
-                "placement": "right",
-                "showLegend": true,
-                "calcs": []
-              },
-              "tooltip": {
-                "mode": "single",
-                "sort": "asc"
-              }
-            },
-            "fieldConfig": {
-              "defaults": {
-                "unit": "reqps",
-                "custom": {
-                  "lineWidth": 2,
-                  "fillOpacity": 10
-                }
-              },
-              "overrides": []
-            }
-          }
-        }
-      }
-    },
-    "latency": {
-      "kind": "Panel",
-      "spec": {
-        "id": 0,
-        "title": "Request Latency",
-        "description": "",
-        "links": [],
-        "data": {
-          "kind": "QueryGroup",
-          "spec": {
-            "queries": [
-              {
-                "kind": "PanelQuery",
-                "spec": {
-                  "query": {
-                    "expr": "histogram_quantile(0.50, sum by (le) (rate(http_request_duration_seconds_bucket{namespace=\"${namespace}\"}[5m])))",
-                    "legendFormat": "p50",
-                    "datasource": {
-                      "type": "prometheus",
-                      "uid": "${prometheus_datasource}"
-                    }
-                  },
-                  "refId": "A",
-                  "hidden": false
-                }
-              },
-              {
-                "kind": "PanelQuery",
-                "spec": {
-                  "query": {
-                    "expr": "histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket{namespace=\"${namespace}\"}[5m])))",
-                    "legendFormat": "p95",
-                    "datasource": {
-                      "type": "prometheus",
-                      "uid": "${prometheus_datasource}"
-                    }
-                  },
-                  "refId": "B",
-                  "hidden": false
-                }
-              },
-              {
-                "kind": "PanelQuery",
-                "spec": {
-                  "query": {
-                    "expr": "histogram_quantile(0.99, sum by (le) (rate(http_request_duration_seconds_bucket{namespace=\"${namespace}\"}[5m])))",
-                    "legendFormat": "p99",
-                    "datasource": {
-                      "type": "prometheus",
-                      "uid": "${prometheus_datasource}"
-                    }
-                  },
-                  "refId": "C",
-                  "hidden": false
-                }
-              }
-            ],
-            "transformations": [],
-            "queryOptions": {}
-          }
-        },
-        "vizConfig": {
-          "kind": "VizConfig",
-          "group": "timeseries",
-          "version": "",
-          "spec": {
-            "options": null,
-            "fieldConfig": {
-              "defaults": {
-                "unit": "s",
-                "custom": {
-                  "lineWidth": 2,
-                  "fillOpacity": 5
-                }
-              },
-              "overrides": []
-            }
-          }
-        }
-      }
-    },
-    "errorRate": {
-      "kind": "Panel",
-      "spec": {
-        "id": 0,
-        "title": "Error Rate %",
-        "description": "",
-        "links": [],
-        "data": {
-          "kind": "QueryGroup",
-          "spec": {
-            "queries": [
-              {
-                "kind": "PanelQuery",
-                "spec": {
-                  "query": {
-                    "expr": "sum(rate(http_requests_total{namespace=\"${namespace}\", status_code=~\"5..\"}[5m])) / sum(rate(http_requests_total{namespace=\"${namespace}\"}[5m])) * 100",
-                    "legendFormat": "",
-                    "datasource": {
-                      "type": "prometheus",
-                      "uid": "${prometheus_datasource}"
-                    }
-                  },
-                  "refId": "A",
-                  "hidden": false
-                }
-              }
-            ],
-            "transformations": [],
-            "queryOptions": {}
-          }
-        },
-        "vizConfig": {
-          "kind": "VizConfig",
-          "group": "stat",
-          "version": "",
-          "spec": {
-            "options": {
-              "graphMode": "area",
-              "colorMode": "background",
-              "justifyMode": "auto",
-              "textMode": "auto",
-              "wideLayout": true,
-              "showPercentChange": false,
-              "reduceOptions": {
-                "calcs": []
-              },
-              "percentChangeColorMode": "standard",
-              "orientation": "auto"
-            },
-            "fieldConfig": {
-              "defaults": {
-                "unit": "percent",
-                "thresholds": {
-                  "mode": "absolute",
-                  "steps": [
-                    {
-                      "color": "green",
-                      "value": null
-                    },
-                    {
-                      "color": "orange",
-                      "value": 1
-                    },
-                    {
-                      "color": "red",
-                      "value": 5
-                    }
-                  ]
-                }
-              },
-              "overrides": []
-            }
-          }
-        }
-      }
-    },
-    "cpuUsage": {
-      "kind": "Panel",
-      "spec": {
-        "id": 0,
-        "title": "CPU Usage vs Limit",
-        "description": "",
-        "links": [],
-        "data": {
-          "kind": "QueryGroup",
-          "spec": {
-            "queries": [
-              {
-                "kind": "PanelQuery",
-                "spec": {
-                  "query": {
-                    "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=\"${namespace}\", container!=\"\"}[5m])) by (pod)",
-                    "legendFormat": "{{pod}} usage",
-                    "datasource": {
-                      "type": "prometheus",
-                      "uid": "${prometheus_datasource}"
-                    }
-                  },
-                  "refId": "A",
-                  "hidden": false
-                }
-              },
-              {
-                "kind": "PanelQuery",
-                "spec": {
-                  "query": {
-                    "expr": "sum(kube_pod_container_resource_limits{namespace=\"${namespace}\", resource=\"cpu\"}) by (pod)",
-                    "legendFormat": "{{pod}} limit",
-                    "datasource": {
-                      "type": "prometheus",
-                      "uid": "${prometheus_datasource}"
-                    }
-                  },
-                  "refId": "B",
-                  "hidden": false
-                }
-              }
-            ],
-            "transformations": [],
-            "queryOptions": {}
-          }
-        },
-        "vizConfig": {
-          "kind": "VizConfig",
-          "group": "timeseries",
-          "version": "",
-          "spec": {
-            "options": null,
-            "fieldConfig": {
-              "defaults": {
-                "unit": "short",
-                "custom": {
-                  "lineWidth": 2,
-                  "fillOpacity": 10
-                }
-              },
-              "overrides": []
-            }
-          }
-        }
-      }
-    },
-    "memoryUsage": {
-      "kind": "Panel",
-      "spec": {
-        "id": 0,
-        "title": "Memory Usage vs Limit",
-        "description": "",
-        "links": [],
-        "data": {
-          "kind": "QueryGroup",
-          "spec": {
-            "queries": [
-              {
-                "kind": "PanelQuery",
-                "spec": {
-                  "query": {
-                    "expr": "sum(container_memory_working_set_bytes{namespace=\"${namespace}\", container!=\"\"}) by (pod)",
-                    "legendFormat": "{{pod}} usage",
-                    "datasource": {
-                      "type": "prometheus",
-                      "uid": "${prometheus_datasource}"
-                    }
-                  },
-                  "refId": "A",
-                  "hidden": false
-                }
-              },
-              {
-                "kind": "PanelQuery",
-                "spec": {
-                  "query": {
-                    "expr": "sum(kube_pod_container_resource_limits{namespace=\"${namespace}\", resource=\"memory\"}) by (pod)",
-                    "legendFormat": "{{pod}} limit",
-                    "datasource": {
-                      "type": "prometheus",
-                      "uid": "${prometheus_datasource}"
-                    }
-                  },
-                  "refId": "B",
-                  "hidden": false
-                }
-              }
-            ],
-            "transformations": [],
-            "queryOptions": {}
-          }
-        },
-        "vizConfig": {
-          "kind": "VizConfig",
-          "group": "timeseries",
-          "version": "",
-          "spec": {
-            "options": null,
-            "fieldConfig": {
-              "defaults": {
-                "unit": "bytes",
-                "custom": {
-                  "lineWidth": 2,
-                  "fillOpacity": 10
-                }
-              },
-              "overrides": []
-            }
-          }
-        }
-      }
-    },
-    "resourcePct": {
-      "kind": "Panel",
-      "spec": {
-        "id": 0,
-        "title": "Resource % of Limit",
-        "description": "",
-        "links": [],
-        "data": {
-          "kind": "QueryGroup",
-          "spec": {
-            "queries": [
-              {
-                "kind": "PanelQuery",
-                "spec": {
-                  "query": {
-                    "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=\"${namespace}\", container!=\"\"}[5m])) / sum(kube_pod_container_resource_limits{namespace=\"${namespace}\", resource=\"cpu\"}) * 100",
-                    "legendFormat": "CPU %",
-                    "datasource": {
-                      "type": "prometheus",
-                      "uid": "${prometheus_datasource}"
-                    }
-                  },
-                  "refId": "A",
-                  "hidden": false
-                }
-              },
-              {
-                "kind": "PanelQuery",
-                "spec": {
-                  "query": {
-                    "expr": "sum(container_memory_working_set_bytes{namespace=\"${namespace}\", container!=\"\"}) / sum(kube_pod_container_resource_limits{namespace=\"${namespace}\", resource=\"memory\"}) * 100",
-                    "legendFormat": "Memory %",
-                    "datasource": {
-                      "type": "prometheus",
-                      "uid": "${prometheus_datasource}"
-                    }
-                  },
-                  "refId": "B",
-                  "hidden": false
-                }
-              }
-            ],
-            "transformations": [],
-            "queryOptions": {}
-          }
-        },
-        "vizConfig": {
-          "kind": "VizConfig",
-          "group": "gauge",
-          "version": "",
-          "spec": {
-            "options": null,
-            "fieldConfig": {
-              "defaults": {
-                "unit": "percent",
-                "min": 0,
-                "max": 100,
-                "thresholds": {
-                  "mode": "absolute",
-                  "steps": [
-                    {
-                      "color": "green",
-                      "value": null
-                    },
-                    {
-                      "color": "orange",
-                      "value": 70
-                    },
-                    {
-                      "color": "red",
-                      "value": 90
-                    }
-                  ]
-                }
-              },
-              "overrides": []
-            }
-          }
-        }
-      }
-    },
-    "pgConnections": {
-      "kind": "Panel",
-      "spec": {
-        "id": 0,
-        "title": "Active Connections",
-        "description": "",
-        "links": [],
-        "data": {
-          "kind": "QueryGroup",
-          "spec": {
-            "queries": [
-              {
-                "kind": "PanelQuery",
-                "spec": {
-                  "query": {
-                    "expr": "pg_stat_activity_count{namespace=\"${namespace}\", state=\"active\"}",
-                    "legendFormat": "active",
-                    "datasource": {
-                      "type": "prometheus",
-                      "uid": "${prometheus_datasource}"
-                    }
-                  },
-                  "refId": "A",
-                  "hidden": false
-                }
-              }
-            ],
-            "transformations": [],
-            "queryOptions": {}
-          }
-        },
-        "vizConfig": {
-          "kind": "VizConfig",
-          "group": "timeseries",
-          "version": "",
-          "spec": {
-            "options": null,
-            "fieldConfig": {
-              "defaults": {
-                "custom": {
-                  "lineWidth": 2,
-                  "fillOpacity": 10
-                }
-              },
-              "overrides": []
-            }
-          }
-        }
-      }
-    },
-    "pgPoolUtil": {
-      "kind": "Panel",
-      "spec": {
-        "id": 0,
-        "title": "Pool Utilization",
-        "description": "",
-        "links": [],
-        "data": {
-          "kind": "QueryGroup",
-          "spec": {
-            "queries": [
-              {
-                "kind": "PanelQuery",
-                "spec": {
-                  "query": {
-                    "expr": "pg_stat_activity_count{namespace=\"${namespace}\"} / pg_settings_max_connections{namespace=\"${namespace}\"} * 100",
-                    "legendFormat": "",
-                    "datasource": {
-                      "type": "prometheus",
-                      "uid": "${prometheus_datasource}"
-                    }
-                  },
-                  "refId": "A",
-                  "hidden": false
-                }
-              }
-            ],
-            "transformations": [],
-            "queryOptions": {}
-          }
-        },
-        "vizConfig": {
-          "kind": "VizConfig",
-          "group": "stat",
-          "version": "",
-          "spec": {
-            "options": {
-              "graphMode": "area",
-              "colorMode": "background",
-              "justifyMode": "auto",
-              "textMode": "auto",
-              "wideLayout": true,
-              "showPercentChange": false,
-              "reduceOptions": {
-                "calcs": []
-              },
-              "percentChangeColorMode": "standard",
-              "orientation": "auto"
-            },
-            "fieldConfig": {
-              "defaults": {
-                "unit": "percent",
-                "thresholds": {
-                  "mode": "absolute",
-                  "steps": [
-                    {
-                      "color": "green",
-                      "value": null
-                    },
-                    {
-                      "color": "orange",
-                      "value": 60
-                    },
-                    {
-                      "color": "red",
-                      "value": 85
-                    }
-                  ]
-                }
-              },
-              "overrides": []
-            }
-          }
-        }
-      }
-    },
-    "pgQueryDuration": {
-      "kind": "Panel",
-      "spec": {
-        "id": 0,
-        "title": "Query Duration",
-        "description": "",
-        "links": [],
-        "data": {
-          "kind": "QueryGroup",
-          "spec": {
-            "queries": [
-              {
-                "kind": "PanelQuery",
-                "spec": {
-                  "query": {
-                    "expr": "rate(pg_stat_statements_mean_exec_time_ms{namespace=\"${namespace}\"}[5m])",
-                    "legendFormat": "mean",
-                    "datasource": {
-                      "type": "prometheus",
-                      "uid": "${prometheus_datasource}"
-                    }
-                  },
-                  "refId": "A",
-                  "hidden": false
-                }
-              }
-            ],
-            "transformations": [],
-            "queryOptions": {}
-          }
-        },
-        "vizConfig": {
-          "kind": "VizConfig",
-          "group": "timeseries",
-          "version": "",
-          "spec": {
-            "options": null,
-            "fieldConfig": {
-              "defaults": {
-                "unit": "ms",
-                "custom": {
-                  "lineWidth": 2,
-                  "fillOpacity": 5
-                }
-              },
-              "overrides": []
-            }
-          }
-        }
-      }
-    },
-    "errorLogs": {
-      "kind": "Panel",
-      "spec": {
-        "id": 0,
-        "title": "Recent Error Logs",
-        "description": "",
-        "links": [],
-        "data": {
-          "kind": "QueryGroup",
-          "spec": {
-            "queries": [
-              {
-                "kind": "PanelQuery",
-                "spec": {
-                  "query": {
-                    "expr": "{namespace=\"${namespace}\", container=~\"tc-.*\"} |= \"ERROR\"",
-                    "maxLines": 200,
-                    "datasource": {
-                      "type": "loki",
-                      "uid": "${loki_datasource}"
-                    }
-                  },
-                  "refId": "A",
-                  "hidden": false
-                }
-              }
-            ],
-            "transformations": [],
-            "queryOptions": {}
-          }
-        },
-        "vizConfig": {
-          "kind": "VizConfig",
-          "group": "logs",
-          "version": "",
-          "spec": {
-            "options": {
-              "showLabels": false,
-              "showCommonLabels": false,
-              "showTime": true,
-              "showLogContextToggle": false,
-              "wrapLogMessage": true,
-              "prettifyLogMessage": true,
-              "enableLogDetails": true,
-              "sortOrder": "Descending",
-              "dedupStrategy": "none"
-            },
-            "fieldConfig": {
-              "defaults": {},
-              "overrides": []
-            }
-          }
-        }
-      }
-    },
-    "errorRateLoki": {
-      "kind": "Panel",
-      "spec": {
-        "id": 0,
-        "title": "Error Rate (Loki)",
-        "description": "",
-        "links": [],
-        "data": {
-          "kind": "QueryGroup",
-          "spec": {
-            "queries": [
-              {
-                "kind": "PanelQuery",
-                "spec": {
-                  "query": {
-                    "expr": "sum(count_over_time({namespace=\"${namespace}\", container=~\"tc-.*\"} |= \"ERROR\" [5m]))",
-                    "maxLines": 200,
-                    "datasource": {
-                      "type": "loki",
-                      "uid": "${loki_datasource}"
-                    }
-                  },
-                  "refId": "A",
-                  "hidden": false
-                }
-              }
-            ],
-            "transformations": [],
-            "queryOptions": {}
-          }
-        },
-        "vizConfig": {
-          "kind": "VizConfig",
-          "group": "timeseries",
-          "version": "",
-          "spec": {
-            "options": null,
-            "fieldConfig": {
-              "defaults": {
-                "color": {
-                  "mode": "fixed",
-                  "fixedColor": "red"
-                },
-                "custom": {
-                  "lineWidth": 2,
-                  "fillOpacity": 15
-                }
-              },
-              "overrides": []
-            }
-          }
-        }
-      }
-    }
-  },
-  "layout": {
-    "kind": "RowsLayout",
-    "spec": {
-      "rows": [
-        {
-          "kind": "RowsLayoutRow",
-          "spec": {
-            "layout": {
-              "kind": "GridLayout",
-              "spec": {
-                "items": [
-                  {
-                    "kind": "GridLayoutItem",
-                    "spec": {
-                      "x": 0,
-                      "y": 0,
-                      "width": 8,
-                      "height": 4,
-                      "element": {
-                        "kind": "ElementReference",
-                        "name": "replicaCount"
-                      }
-                    }
-                  },
-                  {
-                    "kind": "GridLayoutItem",
-                    "spec": {
-                      "x": 0,
-                      "y": 0,
-                      "width": 8,
-                      "height": 4,
-                      "element": {
-                        "kind": "ElementReference",
-                        "name": "podRestarts24h"
-                      }
-                    }
-                  },
-                  {
-                    "kind": "GridLayoutItem",
-                    "spec": {
-                      "x": 0,
-                      "y": 0,
-                      "width": 8,
-                      "height": 4,
-                      "element": {
-                        "kind": "ElementReference",
-                        "name": "uptime"
-                      }
-                    }
-                  }
-                ]
-              }
-            },
-            "title": "Deployment Status"
-          }
-        },
-        {
-          "kind": "RowsLayoutRow",
-          "spec": {
-            "layout": {
-              "kind": "GridLayout",
-              "spec": {
-                "items": [
-                  {
-                    "kind": "GridLayoutItem",
-                    "spec": {
-                      "x": 0,
-                      "y": 0,
-                      "width": 10,
-                      "height": 8,
-                      "element": {
-                        "kind": "ElementReference",
-                        "name": "requestRate"
-                      }
-                    }
-                  },
-                  {
-                    "kind": "GridLayoutItem",
-                    "spec": {
-                      "x": 0,
-                      "y": 0,
-                      "width": 10,
-                      "height": 8,
-                      "element": {
-                        "kind": "ElementReference",
-                        "name": "latency"
-                      }
-                    }
-                  },
-                  {
-                    "kind": "GridLayoutItem",
-                    "spec": {
-                      "x": 0,
-                      "y": 0,
-                      "width": 4,
-                      "height": 8,
-                      "element": {
-                        "kind": "ElementReference",
-                        "name": "errorRate"
-                      }
-                    }
-                  }
-                ]
-              }
-            },
-            "title": "HTTP Health"
-          }
-        },
-        {
-          "kind": "RowsLayoutRow",
-          "spec": {
-            "layout": {
-              "kind": "GridLayout",
-              "spec": {
-                "items": [
-                  {
-                    "kind": "GridLayoutItem",
-                    "spec": {
-                      "x": 0,
-                      "y": 0,
-                      "width": 9,
-                      "height": 8,
-                      "element": {
-                        "kind": "ElementReference",
-                        "name": "cpuUsage"
-                      }
-                    }
-                  },
-                  {
-                    "kind": "GridLayoutItem",
-                    "spec": {
-                      "x": 0,
-                      "y": 0,
-                      "width": 9,
-                      "height": 8,
-                      "element": {
-                        "kind": "ElementReference",
-                        "name": "memoryUsage"
-                      }
-                    }
-                  },
-                  {
-                    "kind": "GridLayoutItem",
-                    "spec": {
-                      "x": 0,
-                      "y": 0,
-                      "width": 6,
-                      "height": 8,
-                      "element": {
-                        "kind": "ElementReference",
-                        "name": "resourcePct"
-                      }
-                    }
-                  }
-                ]
-              }
-            },
-            "title": "Resource Health"
-          }
-        },
-        {
-          "kind": "RowsLayoutRow",
-          "spec": {
-            "layout": {
-              "kind": "GridLayout",
-              "spec": {
-                "items": [
-                  {
-                    "kind": "GridLayoutItem",
-                    "spec": {
-                      "x": 0,
-                      "y": 0,
-                      "width": 9,
-                      "height": 8,
-                      "element": {
-                        "kind": "ElementReference",
-                        "name": "pgConnections"
-                      }
-                    }
-                  },
-                  {
-                    "kind": "GridLayoutItem",
-                    "spec": {
-                      "x": 0,
-                      "y": 0,
-                      "width": 6,
-                      "height": 8,
-                      "element": {
-                        "kind": "ElementReference",
-                        "name": "pgPoolUtil"
-                      }
-                    }
-                  },
-                  {
-                    "kind": "GridLayoutItem",
-                    "spec": {
-                      "x": 0,
-                      "y": 0,
-                      "width": 9,
-                      "height": 8,
-                      "element": {
-                        "kind": "ElementReference",
-                        "name": "pgQueryDuration"
-                      }
-                    }
-                  }
-                ]
-              }
-            },
-            "title": "Postgres Health"
-          }
-        },
-        {
-          "kind": "RowsLayoutRow",
-          "spec": {
-            "layout": {
-              "kind": "GridLayout",
-              "spec": {
-                "items": [
-                  {
-                    "kind": "GridLayoutItem",
-                    "spec": {
-                      "x": 0,
-                      "y": 0,
-                      "width": 16,
-                      "height": 10,
-                      "element": {
-                        "kind": "ElementReference",
-                        "name": "errorLogs"
-                      }
-                    }
-                  },
-                  {
-                    "kind": "GridLayoutItem",
-                    "spec": {
-                      "x": 0,
-                      "y": 0,
-                      "width": 8,
-                      "height": 10,
-                      "element": {
-                        "kind": "ElementReference",
-                        "name": "errorRateLoki"
-                      }
-                    }
-                  }
-                ]
-              }
-            },
-            "title": "Logs (Loki)"
-          }
-        }
-      ]
-    }
-  },
-  "links": [],
-  "preload": false,
-  "tags": [
-    "tiny-congress",
-    "auto-generated"
-  ],
-  "timeSettings": {
-    "from": "now-3h",
-    "to": "now",
-    "autoRefresh": "30s",
-    "autoRefreshIntervals": [
-      "10s",
-      "30s",
-      "1m",
-      "5m",
-      "15m"
-    ],
-    "hideTimepicker": false,
-    "fiscalYearStartMonth": 0,
-    "timezone": "browser"
-  },
-  "title": "Tiny Congress Health",
-  "variables": [
-    {
-      "kind": "CustomVariable",
-      "spec": {
+  "schemaVersion": 42,
+  "templating": {
+    "list": [
+      {
+        "type": "custom",
         "name": "namespace",
-        "query": "",
+        "label": "Namespace",
+        "skipUrlSync": false,
         "current": {
           "text": "tiny-congress-demo",
           "value": "tiny-congress-demo",
           "selected": true
         },
-        "options": [
-          {
-            "text": "tiny-congress-demo",
-            "value": "tiny-congress-demo"
-          }
-        ],
         "multi": false,
-        "includeAll": false,
-        "hide": "dontHide",
-        "skipUrlSync": false,
         "allowCustomValue": true,
-        "label": "Namespace"
-      }
-    },
-    {
-      "kind": "DatasourceVariable",
-      "spec": {
+        "includeAll": false,
+        "auto": false,
+        "auto_min": "10s",
+        "auto_count": 30
+      },
+      {
+        "type": "datasource",
         "name": "prometheus_datasource",
-        "pluginId": "prometheus",
-        "refresh": "never",
-        "regex": "",
-        "current": {
-          "text": "",
-          "value": ""
-        },
-        "options": [],
-        "multi": false,
-        "includeAll": false,
-        "hide": "dontHide",
+        "label": "Prometheus",
         "skipUrlSync": false,
+        "query": "prometheus",
+        "multi": false,
         "allowCustomValue": true,
-        "label": "Prometheus"
+        "includeAll": false,
+        "auto": false,
+        "auto_min": "10s",
+        "auto_count": 30
+      },
+      {
+        "type": "datasource",
+        "name": "loki_datasource",
+        "label": "Loki",
+        "skipUrlSync": false,
+        "query": "loki",
+        "multi": false,
+        "allowCustomValue": true,
+        "includeAll": false,
+        "auto": false,
+        "auto_min": "10s",
+        "auto_count": 30
+      }
+    ]
+  },
+  "annotations": {},
+  "title": "Tiny Congress Health",
+  "tags": [
+    "tiny-congress",
+    "auto-generated"
+  ],
+  "timezone": "browser",
+  "editable": true,
+  "graphTooltip": 0,
+  "time": {
+    "from": "now-3h",
+    "to": "now"
+  },
+  "timepicker": {
+    "hidden": false,
+    "refresh_intervals": [
+      "10s",
+      "30s",
+      "1m",
+      "5m",
+      "15m"
+    ]
+  },
+  "fiscalYearStartMonth": 0,
+  "refresh": "30s",
+  "panels": [
+    {
+      "type": "row",
+      "collapsed": true,
+      "id": 0,
+      "panels": [
+        {
+          "type": "stat",
+          "targets": [
+            {
+              "expr": "kube_deployment_status_replicas_available{namespace=\"${namespace}\", deployment=~\"tc-.*\"}",
+              "legendFormat": "{{deployment}}",
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${prometheus_datasource}"
+              }
+            }
+          ],
+          "title": "Replicas",
+          "transparent": false,
+          "gridPos": {
+            "h": 4,
+            "w": 8,
+            "x": 0,
+            "y": 1
+          },
+          "repeatDirection": "h",
+          "options": {
+            "graphMode": "area",
+            "colorMode": "background",
+            "justifyMode": "auto",
+            "textMode": "auto",
+            "wideLayout": true,
+            "showPercentChange": false,
+            "reduceOptions": {
+              "calcs": []
+            },
+            "percentChangeColorMode": "standard",
+            "orientation": "auto"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "value": null,
+                    "color": "red"
+                  },
+                  {
+                    "value": 1.0,
+                    "color": "green"
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          }
+        },
+        {
+          "type": "stat",
+          "targets": [
+            {
+              "expr": "sum(increase(kube_pod_container_status_restarts_total{namespace=\"${namespace}\"}[24h]))",
+              "legendFormat": "",
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${prometheus_datasource}"
+              }
+            }
+          ],
+          "title": "Pod Restarts (24h)",
+          "transparent": false,
+          "gridPos": {
+            "h": 4,
+            "w": 8,
+            "x": 8,
+            "y": 1
+          },
+          "repeatDirection": "h",
+          "options": {
+            "graphMode": "area",
+            "colorMode": "background",
+            "justifyMode": "auto",
+            "textMode": "auto",
+            "wideLayout": true,
+            "showPercentChange": false,
+            "reduceOptions": {
+              "calcs": []
+            },
+            "percentChangeColorMode": "standard",
+            "orientation": "auto"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "value": null,
+                    "color": "green"
+                  },
+                  {
+                    "value": 1.0,
+                    "color": "orange"
+                  },
+                  {
+                    "value": 5.0,
+                    "color": "red"
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          }
+        },
+        {
+          "type": "stat",
+          "targets": [
+            {
+              "expr": "min(time() - kube_pod_start_time{namespace=\"${namespace}\", pod=~\"tc-.*\"})",
+              "legendFormat": "",
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${prometheus_datasource}"
+              }
+            }
+          ],
+          "title": "Uptime Since Deploy",
+          "transparent": false,
+          "gridPos": {
+            "h": 4,
+            "w": 8,
+            "x": 16,
+            "y": 1
+          },
+          "repeatDirection": "h",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s"
+            },
+            "overrides": []
+          }
+        }
+      ],
+      "title": "Deployment Status",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
       }
     },
     {
-      "kind": "DatasourceVariable",
-      "spec": {
-        "name": "loki_datasource",
-        "pluginId": "loki",
-        "refresh": "never",
-        "regex": "",
-        "current": {
-          "text": "",
-          "value": ""
+      "type": "row",
+      "collapsed": true,
+      "id": 0,
+      "panels": [
+        {
+          "type": "timeseries",
+          "targets": [
+            {
+              "expr": "sum by (status_code) (rate(http_requests_total{namespace=\"${namespace}\"}[5m]))",
+              "legendFormat": "{{status_code}}",
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${prometheus_datasource}"
+              }
+            }
+          ],
+          "title": "Request Rate by Status",
+          "transparent": false,
+          "gridPos": {
+            "h": 8,
+            "w": 10,
+            "x": 0,
+            "y": 6
+          },
+          "repeatDirection": "h",
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "right",
+              "showLegend": true,
+              "calcs": []
+            },
+            "tooltip": {
+              "mode": "single",
+              "sort": "asc"
+            }
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "reqps",
+              "custom": {
+                "lineWidth": 2,
+                "fillOpacity": 10
+              }
+            },
+            "overrides": []
+          }
         },
-        "options": [],
-        "multi": false,
-        "includeAll": false,
-        "hide": "dontHide",
-        "skipUrlSync": false,
-        "allowCustomValue": true,
-        "label": "Loki"
+        {
+          "type": "timeseries",
+          "targets": [
+            {
+              "expr": "histogram_quantile(0.50, sum by (le) (rate(http_request_duration_seconds_bucket{namespace=\"${namespace}\"}[5m])))",
+              "legendFormat": "p50",
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${prometheus_datasource}"
+              }
+            },
+            {
+              "expr": "histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket{namespace=\"${namespace}\"}[5m])))",
+              "legendFormat": "p95",
+              "refId": "B",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${prometheus_datasource}"
+              }
+            },
+            {
+              "expr": "histogram_quantile(0.99, sum by (le) (rate(http_request_duration_seconds_bucket{namespace=\"${namespace}\"}[5m])))",
+              "legendFormat": "p99",
+              "refId": "C",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${prometheus_datasource}"
+              }
+            }
+          ],
+          "title": "Request Latency",
+          "transparent": false,
+          "gridPos": {
+            "h": 8,
+            "w": 10,
+            "x": 10,
+            "y": 6
+          },
+          "repeatDirection": "h",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s",
+              "custom": {
+                "lineWidth": 2,
+                "fillOpacity": 5
+              }
+            },
+            "overrides": []
+          }
+        },
+        {
+          "type": "stat",
+          "targets": [
+            {
+              "expr": "sum(rate(http_requests_total{namespace=\"${namespace}\", status_code=~\"5..\"}[5m])) / sum(rate(http_requests_total{namespace=\"${namespace}\"}[5m])) * 100",
+              "legendFormat": "",
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${prometheus_datasource}"
+              }
+            }
+          ],
+          "title": "Error Rate %",
+          "transparent": false,
+          "gridPos": {
+            "h": 8,
+            "w": 4,
+            "x": 20,
+            "y": 6
+          },
+          "repeatDirection": "h",
+          "options": {
+            "graphMode": "area",
+            "colorMode": "background",
+            "justifyMode": "auto",
+            "textMode": "auto",
+            "wideLayout": true,
+            "showPercentChange": false,
+            "reduceOptions": {
+              "calcs": []
+            },
+            "percentChangeColorMode": "standard",
+            "orientation": "auto"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "value": null,
+                    "color": "green"
+                  },
+                  {
+                    "value": 1.0,
+                    "color": "orange"
+                  },
+                  {
+                    "value": 5.0,
+                    "color": "red"
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          }
+        }
+      ],
+      "title": "HTTP Health",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 5
+      }
+    },
+    {
+      "type": "row",
+      "collapsed": true,
+      "id": 0,
+      "panels": [
+        {
+          "type": "timeseries",
+          "targets": [
+            {
+              "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=\"${namespace}\", container!=\"\"}[5m])) by (pod)",
+              "legendFormat": "{{pod}} usage",
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${prometheus_datasource}"
+              }
+            },
+            {
+              "expr": "sum(kube_pod_container_resource_limits{namespace=\"${namespace}\", resource=\"cpu\"}) by (pod)",
+              "legendFormat": "{{pod}} limit",
+              "refId": "B",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${prometheus_datasource}"
+              }
+            }
+          ],
+          "title": "CPU Usage vs Limit",
+          "transparent": false,
+          "gridPos": {
+            "h": 8,
+            "w": 9,
+            "x": 0,
+            "y": 15
+          },
+          "repeatDirection": "h",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "custom": {
+                "lineWidth": 2,
+                "fillOpacity": 10
+              }
+            },
+            "overrides": []
+          }
+        },
+        {
+          "type": "timeseries",
+          "targets": [
+            {
+              "expr": "sum(container_memory_working_set_bytes{namespace=\"${namespace}\", container!=\"\"}) by (pod)",
+              "legendFormat": "{{pod}} usage",
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${prometheus_datasource}"
+              }
+            },
+            {
+              "expr": "sum(kube_pod_container_resource_limits{namespace=\"${namespace}\", resource=\"memory\"}) by (pod)",
+              "legendFormat": "{{pod}} limit",
+              "refId": "B",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${prometheus_datasource}"
+              }
+            }
+          ],
+          "title": "Memory Usage vs Limit",
+          "transparent": false,
+          "gridPos": {
+            "h": 8,
+            "w": 9,
+            "x": 9,
+            "y": 15
+          },
+          "repeatDirection": "h",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "bytes",
+              "custom": {
+                "lineWidth": 2,
+                "fillOpacity": 10
+              }
+            },
+            "overrides": []
+          }
+        },
+        {
+          "type": "gauge",
+          "targets": [
+            {
+              "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=\"${namespace}\", container!=\"\"}[5m])) / sum(kube_pod_container_resource_limits{namespace=\"${namespace}\", resource=\"cpu\"}) * 100",
+              "legendFormat": "CPU %",
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${prometheus_datasource}"
+              }
+            },
+            {
+              "expr": "sum(container_memory_working_set_bytes{namespace=\"${namespace}\", container!=\"\"}) / sum(kube_pod_container_resource_limits{namespace=\"${namespace}\", resource=\"memory\"}) * 100",
+              "legendFormat": "Memory %",
+              "refId": "B",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${prometheus_datasource}"
+              }
+            }
+          ],
+          "title": "Resource % of Limit",
+          "transparent": false,
+          "gridPos": {
+            "h": 8,
+            "w": 6,
+            "x": 18,
+            "y": 15
+          },
+          "repeatDirection": "h",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "min": 0,
+              "max": 100,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "value": null,
+                    "color": "green"
+                  },
+                  {
+                    "value": 70.0,
+                    "color": "orange"
+                  },
+                  {
+                    "value": 90.0,
+                    "color": "red"
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          }
+        }
+      ],
+      "title": "Resource Health",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 14
+      }
+    },
+    {
+      "type": "row",
+      "collapsed": true,
+      "id": 0,
+      "panels": [
+        {
+          "type": "timeseries",
+          "targets": [
+            {
+              "expr": "pg_stat_activity_count{namespace=\"${namespace}\", state=\"active\"}",
+              "legendFormat": "active",
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${prometheus_datasource}"
+              }
+            }
+          ],
+          "title": "Active Connections",
+          "transparent": false,
+          "gridPos": {
+            "h": 8,
+            "w": 9,
+            "x": 0,
+            "y": 24
+          },
+          "repeatDirection": "h",
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "lineWidth": 2,
+                "fillOpacity": 10
+              }
+            },
+            "overrides": []
+          }
+        },
+        {
+          "type": "stat",
+          "targets": [
+            {
+              "expr": "pg_stat_activity_count{namespace=\"${namespace}\"} / pg_settings_max_connections{namespace=\"${namespace}\"} * 100",
+              "legendFormat": "",
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${prometheus_datasource}"
+              }
+            }
+          ],
+          "title": "Pool Utilization",
+          "transparent": false,
+          "gridPos": {
+            "h": 8,
+            "w": 6,
+            "x": 9,
+            "y": 24
+          },
+          "repeatDirection": "h",
+          "options": {
+            "graphMode": "area",
+            "colorMode": "background",
+            "justifyMode": "auto",
+            "textMode": "auto",
+            "wideLayout": true,
+            "showPercentChange": false,
+            "reduceOptions": {
+              "calcs": []
+            },
+            "percentChangeColorMode": "standard",
+            "orientation": "auto"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "value": null,
+                    "color": "green"
+                  },
+                  {
+                    "value": 60.0,
+                    "color": "orange"
+                  },
+                  {
+                    "value": 85.0,
+                    "color": "red"
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          }
+        },
+        {
+          "type": "timeseries",
+          "targets": [
+            {
+              "expr": "rate(pg_stat_statements_mean_exec_time_ms{namespace=\"${namespace}\"}[5m])",
+              "legendFormat": "mean",
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${prometheus_datasource}"
+              }
+            }
+          ],
+          "title": "Query Duration",
+          "transparent": false,
+          "gridPos": {
+            "h": 8,
+            "w": 9,
+            "x": 15,
+            "y": 24
+          },
+          "repeatDirection": "h",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "ms",
+              "custom": {
+                "lineWidth": 2,
+                "fillOpacity": 5
+              }
+            },
+            "overrides": []
+          }
+        }
+      ],
+      "title": "Postgres Health",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 23
+      }
+    },
+    {
+      "type": "row",
+      "collapsed": true,
+      "id": 0,
+      "panels": [
+        {
+          "type": "logs",
+          "targets": [
+            {
+              "expr": "{namespace=\"${namespace}\", container=~\"tc-.*\"} |= \"ERROR\"",
+              "maxLines": 200,
+              "refId": "A",
+              "datasource": {
+                "type": "loki",
+                "uid": "${loki_datasource}"
+              }
+            }
+          ],
+          "title": "Recent Error Logs",
+          "transparent": false,
+          "gridPos": {
+            "h": 10,
+            "w": 16,
+            "x": 0,
+            "y": 33
+          },
+          "repeatDirection": "h",
+          "options": {
+            "showLabels": false,
+            "showCommonLabels": false,
+            "showTime": true,
+            "showLogContextToggle": false,
+            "wrapLogMessage": true,
+            "prettifyLogMessage": true,
+            "enableLogDetails": true,
+            "sortOrder": "Descending",
+            "dedupStrategy": "none"
+          }
+        },
+        {
+          "type": "timeseries",
+          "targets": [
+            {
+              "expr": "sum(count_over_time({namespace=\"${namespace}\", container=~\"tc-.*\"} |= \"ERROR\" [5m]))",
+              "maxLines": 200,
+              "refId": "A",
+              "datasource": {
+                "type": "loki",
+                "uid": "${loki_datasource}"
+              }
+            }
+          ],
+          "title": "Error Rate (Loki)",
+          "transparent": false,
+          "gridPos": {
+            "h": 10,
+            "w": 8,
+            "x": 16,
+            "y": 33
+          },
+          "repeatDirection": "h",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "fixed",
+                "fixedColor": "red"
+              },
+              "custom": {
+                "lineWidth": 2,
+                "fillOpacity": 15
+              }
+            },
+            "overrides": []
+          }
+        }
+      ],
+      "title": "Logs (Loki)",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 32
       }
     }
-  ],
-  "editable": true
+  ]
 }

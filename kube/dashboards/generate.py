@@ -28,30 +28,30 @@ def validate(data: dict) -> list[str]:
     if data.get("title") != "Tiny Congress Health":
         errors.append(f"unexpected title: {data.get('title')}")
 
-    elements = data.get("elements", {})
-    if len(elements) < 10:
-        errors.append(f"expected >=10 elements, got {len(elements)}")
+    panels = data.get("panels", [])
+    # v1 format: row panels with nested content panels
+    row_panels = [p for p in panels if p.get("type") == "row"]
+    # Content panels may be nested inside rows or at top level
+    content_panels = [p for p in panels if p.get("type") != "row"]
+    for rp in row_panels:
+        content_panels.extend(rp.get("panels", []))
 
-    layout = data.get("layout", {})
-    if layout.get("kind") != "RowsLayout":
-        errors.append(f"expected RowsLayout, got {layout.get('kind')}")
-    else:
-        rows = layout["spec"].get("rows", [])
-        if len(rows) != 5:
-            errors.append(f"expected 5 rows, got {len(rows)}")
+    if len(row_panels) != 5:
+        errors.append(f"expected 5 row panels, got {len(row_panels)}")
 
-    variables = data.get("variables", [])
-    var_names = {v["spec"]["name"] for v in variables}
+    if len(content_panels) < 10:
+        errors.append(f"expected >=10 content panels, got {len(content_panels)}")
+
+    # Check all content panels have gridPos
+    for p in content_panels:
+        if "gridPos" not in p:
+            errors.append(f"panel '{p.get('title', '?')}' missing gridPos")
+
+    variables = data.get("templating", {}).get("list", [])
+    var_names = {v.get("name") for v in variables}
     for required in ("namespace", "prometheus_datasource", "loki_datasource"):
         if required not in var_names:
             errors.append(f"missing variable: {required}")
-
-    # Every element referenced in a grid item must exist
-    for row in layout.get("spec", {}).get("rows", []):
-        for item in row.get("spec", {}).get("layout", {}).get("spec", {}).get("items", []):
-            ref = item.get("spec", {}).get("element", {}).get("spec", {}).get("name", "")
-            if ref and ref not in elements:
-                errors.append(f"grid references missing element: {ref}")
 
     return errors
 
@@ -71,7 +71,11 @@ def main() -> None:
             print(f"FAIL: {e}", file=sys.stderr)
         sys.exit(1)
 
-    print(f"OK: {len(rendered['elements'])} panels, {len(rendered['layout']['spec']['rows'])} rows")
+    panels = rendered.get("panels", [])
+    row_count = sum(1 for p in panels if p.get("type") == "row")
+    content_count = sum(len(p.get("panels", [])) for p in panels if p.get("type") == "row")
+    content_count += sum(1 for p in panels if p.get("type") != "row")
+    print(f"OK: {content_count} panels, {row_count} rows")
 
     if not args.check:
         OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
