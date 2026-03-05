@@ -1,5 +1,6 @@
 export {
   useRooms,
+  useRoom,
   usePolls,
   usePollDetail,
   usePollResults,
