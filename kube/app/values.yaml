@@ -271,8 +271,8 @@ demoVerifier:
   allowedCallback: ""
   listenAddr: "0.0.0.0:8090"
   logLevel: "info"
-  ingress:
-    host: ""
+  service:
+    annotations: {}
   resources:
     requests:
       cpu: 25m
