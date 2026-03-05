@@ -200,6 +200,8 @@ async fn main() -> Result<(), anyhow::Error> {
                             dim.min,
                             dim.max,
                             sort_order,
+                            dim.min_label.as_deref(),
+                            dim.max_label.as_deref(),
                         )
                         .await?;
                 }
