@@ -55,8 +55,12 @@ test('login flow recovers account and shows device list', async ({ page }) => {
   await page.getByRole('button', { name: /log in/i }).click();
 
   // Argon2id KDF with m_cost=65536 can take several seconds in the browser.
-  // After decryption, the login API call creates a device and navigates to /settings.
-  await expect(page.getByRole('heading', { name: /settings/i })).toBeVisible({ timeout: 30_000 });
+  // After decryption, the login API call creates a device and navigates to /rooms.
+  await expect(page.getByRole('heading', { name: /rooms/i })).toBeVisible({ timeout: 30_000 });
+
+  // Navigate to settings to verify device list
+  await page.goto('/settings');
+  await expect(page.getByRole('heading', { name: /settings/i })).toBeVisible();
   await expect(page.getByText(/Manage your devices/i)).toBeVisible();
 
   // Device list should load with two devices: the signup device + the login device
@@ -64,7 +68,7 @@ test('login flow recovers account and shows device list', async ({ page }) => {
   // Both devices show "Active" badge — verify at least one is visible
   await expect(page.getByText(/Active/i).first()).toBeVisible();
 
-  // Screenshot: settings with device list after login
+  // Screenshot: settings with device list
   await test.info().attach('login-settings', {
     body: await page.screenshot(),
     contentType: 'image/png',
