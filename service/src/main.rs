@@ -128,7 +128,7 @@ async fn build_app(
     build_info: BuildInfo,
     schema: Schema<QueryRoot, MutationRoot, EmptySubscription>,
     allow_origin: AllowOrigin,
-) -> Result<(Router, PgPool), anyhow::Error> {
+) -> Result<(Router, PgPool, Arc<dyn RoomsService>), anyhow::Error> {
     let rest_v1 = Router::new().route("/build-info", get(rest::get_build_info));
 
     // Identity wiring
@@ -185,6 +185,7 @@ async fn build_app(
         trust_repo,
         pool.clone(),
     )) as Arc<dyn RoomsService>;
+    let rooms_service_bg = rooms_service.clone();
 
     let (prometheus_layer, metric_handle) = PrometheusMetricLayer::pair();
 
@@ -263,7 +264,7 @@ async fn build_app(
     ));
     tokio::spawn(async move { trust_worker.run().await });
 
-    Ok((app, pool))
+    Ok((app, pool, rooms_service_bg))
 }
 
 #[tokio::main]
@@ -316,11 +317,17 @@ async fn main() -> Result<(), anyhow::Error> {
     };
 
     // Service wiring
-    let (app, pool_for_cleanup) =
+    let (app, pool_for_cleanup, rooms_service) =
         build_app(&config, pool.clone(), build_info, schema, allow_origin).await?;
     let mut app = app;
 
-    spawn_nonce_cleanup(pool_for_cleanup);
+    spawn_nonce_cleanup(pool_for_cleanup.clone());
+
+    rooms::lifecycle::spawn_lifecycle_consumer(
+        pool_for_cleanup,
+        rooms_service,
+        Duration::from_secs(5),
+    );
 
     // Add security headers middleware if enabled
     if let Some(headers) = security_headers {
