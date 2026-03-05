@@ -2,39 +2,19 @@
 # https://aquasecurity.github.io/trivy/latest/docs/configuration/filtering/#trivyignore
 
 # ============================================================
-# postgres image: gosu binary vulnerabilities
+# postgres image: gosu binary (Go stdlib CVEs)
 # ============================================================
-# gosu is only used during container startup to drop privileges.
-# The postgres process itself doesn't use gosu during runtime.
-# These vulnerabilities in gosu's Go stdlib are not exploitable
-# in our use case (no tar parsing or x509 error string handling).
+# gosu is baked into the postgres:18-alpine base image for privilege
+# dropping at container startup. It's built with Go 1.24.6; these CVEs
+# are fixed in Go >=1.24.8 but no gosu rebuild is available yet.
+# Our image replaces gosu with a symlink to su-exec (C binary) so the
+# Go code never executes, but trivy still detects it in lower image layers.
+# Remove these once gosu is rebuilt with a patched Go (track upstream:
+# https://github.com/tianon/gosu/releases).
 
-# golang: archive/tar: Unbounded allocation when parsing GNU sparse map
-# Affects: gosu in postgres:18 base image (Go 1.24.6)
-# Fixed in: Go 1.24.8, 1.25.2
 CVE-2025-58183
-
-# crypto/x509: Excessive resource consumption when printing error string
-# Affects: gosu in postgres:18 base image (Go 1.24.6)
-# Fixed in: Go 1.24.11, 1.25.5
-CVE-2025-61729
-
-# crypto/tls: Unexpected session resumption
-# Affects: gosu in postgres:18 base image (Go 1.24.6)
-# Fixed in: Go 1.24.13, 1.25.7, 1.26.0-rc.3
-CVE-2025-68121
-
-# net/url: Memory exhaustion in query parameter parsing
-# Affects: gosu in postgres:18 base image (Go 1.24.6)
-# Fixed in: Go 1.24.12, 1.25.6
 CVE-2025-61726
-
-# archive/zip: Excessive CPU consumption when building directory names
-# Affects: gosu in postgres:18 base image (Go 1.24.6)
-# Fixed in: Go 1.24.12, 1.25.6
 CVE-2025-61728
-
-# crypto/tls: TLS 1.3 handshake multiple message vulnerability
-# Affects: gosu in postgres:18 base image (Go 1.24.6)
-# Fixed in: Go 1.24.12, 1.25.6
+CVE-2025-61729
 CVE-2025-61730
+CVE-2025-68121
