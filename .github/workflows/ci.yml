@@ -825,6 +825,13 @@ jobs:
           PF_API_PID=$!
           timeout 60 bash -c 'until curl -sf http://localhost:8080/health >/dev/null; do sleep 1; done'
 
+          # Generate runtime config for the preview server (mirrors docker-entrypoint.sh)
+          cat > dist/config.js <<CFGEOF
+          window.__TC_ENV__ = {
+            VITE_API_URL: "http://localhost:8080",
+          };
+          CFGEOF
+
           # Start local preview server with instrumented build
           yarn preview --host 0.0.0.0 --port 5173 --strictPort &
           PREVIEW_PID=$!
