@@ -66,8 +66,8 @@ impl SimConfig {
     ///
     /// # Errors
     ///
-    /// Returns an error if required env vars (`SIM_API_URL`,
-    /// `SIM_OPENROUTER_API_KEY`) are missing.
+    /// Returns an error if the required env var `SIM_API_URL` is missing.
+    /// `SIM_OPENROUTER_API_KEY` is optional when `SIM_MOCK_LLM=true`.
     pub fn from_env() -> Result<Self, Box<figment::Error>> {
         use figment::{providers::Env, Figment};
         Figment::new()
