@@ -208,6 +208,10 @@ postgres:
     capabilities:
       drop:
         - ALL
+  exporter:
+    image:
+      repository: quay.io/prometheuscommunity/postgres-exporter
+      tag: "v0.17.0"
 
 # HMAC key for synthetic backup envelope generation (anti-enumeration).
 # REQUIRED — helm template will fail if this is empty and no existing secret
