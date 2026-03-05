@@ -31,6 +31,9 @@ pub struct SimConfig {
     /// Log level filter (e.g., "info", "debug", "warn")
     #[serde(default = "default_log_level")]
     pub log_level: String,
+    /// Duration (in seconds) for polls created in sim rooms
+    #[serde(default = "default_poll_duration_secs")]
+    pub poll_duration_secs: i32,
 }
 
 fn default_model() -> String {
@@ -59,6 +62,10 @@ const fn default_voter_count() -> usize {
 
 fn default_log_level() -> String {
     "info".to_string()
+}
+
+const fn default_poll_duration_secs() -> i32 {
+    86400 // 24 hours
 }
 
 impl SimConfig {
@@ -104,6 +111,7 @@ mod tests {
             );
             assert_eq!(config.voter_count, 20);
             assert_eq!(config.log_level, "info");
+            assert_eq!(config.poll_duration_secs, 86400);
             Ok(())
         });
     }

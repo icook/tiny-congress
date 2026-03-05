@@ -82,6 +82,8 @@ struct CreateRoomBody<'a> {
     name: &'a str,
     description: &'a str,
     eligibility_topic: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    poll_duration_secs: Option<i32>,
 }
 
 #[derive(Serialize)]
@@ -151,6 +153,22 @@ impl SimClient {
     }
 
     // -- Unauthenticated endpoints ----------------------------------------
+
+    /// Get rooms that have capacity for new content (no active poll).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the HTTP request fails or the response is not 2xx.
+    pub async fn get_capacity(&self) -> Result<Vec<RoomResponse>> {
+        let url = format!("{}/rooms/capacity", self.api_url);
+        let resp = self.http.get(&url).send().await?;
+        let status = resp.status();
+        if !status.is_success() {
+            let body = resp.text().await.unwrap_or_default();
+            return Err(anyhow!("GET /rooms/capacity returned {status}: {body}"));
+        }
+        Ok(resp.json().await?)
+    }
 
     /// List all rooms.
     ///
@@ -258,12 +276,14 @@ impl SimClient {
         name: &str,
         description: &str,
         eligibility_topic: &str,
+        poll_duration_secs: Option<i32>,
     ) -> Result<RoomResponse> {
         let path = "/rooms";
         let body = serde_json::to_vec(&CreateRoomBody {
             name,
             description,
             eligibility_topic,
+            poll_duration_secs,
         })?;
         let headers = account.sign_request("POST", path, &body);
 
@@ -681,6 +701,7 @@ mod tests {
             name: "Test Room",
             description: "A test room",
             eligibility_topic: "testing",
+            poll_duration_secs: Some(3600),
         };
         let json: serde_json::Value =
             serde_json::from_slice(&serde_json::to_vec(&body).unwrap()).unwrap();
@@ -688,6 +709,7 @@ mod tests {
         assert_eq!(json["name"], "Test Room");
         assert_eq!(json["description"], "A test room");
         assert_eq!(json["eligibility_topic"], "testing");
+        assert_eq!(json["poll_duration_secs"], 3600);
     }
 
     #[test]
