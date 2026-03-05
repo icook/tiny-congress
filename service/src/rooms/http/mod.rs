@@ -25,6 +25,7 @@ pub struct RoomResponse {
     pub description: Option<String>,
     pub eligibility_topic: String,
     pub status: String,
+    pub poll_duration_secs: Option<i32>,
     pub created_at: String,
 }
 
@@ -35,6 +36,7 @@ pub struct PollResponse {
     pub question: String,
     pub description: Option<String>,
     pub status: String,
+    pub closes_at: Option<String>,
     pub created_at: String,
 }
 
@@ -102,6 +104,7 @@ pub struct CreateRoomRequest {
     pub description: Option<String>,
     #[serde(default = "default_eligibility_topic")]
     pub eligibility_topic: String,
+    pub poll_duration_secs: Option<i32>,
 }
 
 fn default_eligibility_topic() -> String {
@@ -194,6 +197,7 @@ async fn create_room(
             &req.name,
             req.description.as_deref(),
             &req.eligibility_topic,
+            req.poll_duration_secs,
         )
         .await
     {
@@ -442,6 +446,7 @@ fn room_to_response(r: super::repo::RoomRecord) -> RoomResponse {
         description: r.description,
         eligibility_topic: r.eligibility_topic,
         status: r.status,
+        poll_duration_secs: r.poll_duration_secs,
         created_at: r.created_at.to_rfc3339(),
     }
 }
@@ -453,6 +458,7 @@ fn poll_to_response(p: super::repo::PollRecord) -> PollResponse {
         question: p.question,
         description: p.description,
         status: p.status,
+        closes_at: p.closes_at.map(|t| t.to_rfc3339()),
         created_at: p.created_at.to_rfc3339(),
     }
 }

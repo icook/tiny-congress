@@ -77,7 +77,9 @@ pub trait RoomsService: Send + Sync {
         name: &str,
         description: Option<&str>,
         eligibility_topic: &str,
+        poll_duration_secs: Option<i32>,
     ) -> Result<RoomRecord, RoomError>;
+    async fn rooms_needing_content(&self) -> Result<Vec<RoomRecord>, RoomError>;
     async fn list_rooms(&self, status: Option<&str>) -> Result<Vec<RoomRecord>, RoomError>;
     async fn get_room(&self, room_id: Uuid) -> Result<RoomRecord, RoomError>;
 
@@ -143,14 +145,21 @@ pub struct PollDistribution {
 pub struct DefaultRoomsService {
     repo: Arc<dyn RoomsRepo>,
     endorsement_service: Arc<dyn EndorsementService>,
+    #[allow(dead_code)] // Used by lifecycle engine (Task 4)
+    pool: sqlx::PgPool,
 }
 
 impl DefaultRoomsService {
     #[must_use]
-    pub fn new(repo: Arc<dyn RoomsRepo>, endorsement_service: Arc<dyn EndorsementService>) -> Self {
+    pub fn new(
+        repo: Arc<dyn RoomsRepo>,
+        endorsement_service: Arc<dyn EndorsementService>,
+        pool: sqlx::PgPool,
+    ) -> Self {
         Self {
             repo,
             endorsement_service,
+            pool,
         }
     }
 }
@@ -162,6 +171,7 @@ impl RoomsService for DefaultRoomsService {
         name: &str,
         description: Option<&str>,
         eligibility_topic: &str,
+        poll_duration_secs: Option<i32>,
     ) -> Result<RoomRecord, RoomError> {
         if name.trim().is_empty() {
             return Err(RoomError::Validation(
@@ -169,7 +179,12 @@ impl RoomsService for DefaultRoomsService {
             ));
         }
         self.repo
-            .create_room(name.trim(), description, eligibility_topic)
+            .create_room(
+                name.trim(),
+                description,
+                eligibility_topic,
+                poll_duration_secs,
+            )
             .await
             .map_err(|e| match e {
                 RoomRepoError::DuplicateName => RoomError::DuplicateRoomName,
@@ -199,6 +214,13 @@ impl RoomsService for DefaultRoomsService {
         })
     }
 
+    async fn rooms_needing_content(&self) -> Result<Vec<RoomRecord>, RoomError> {
+        self.repo.rooms_needing_content().await.map_err(|e| {
+            tracing::error!("rooms_needing_content failed: {e}");
+            RoomError::Internal("Internal server error".to_string())
+        })
+    }
+
     async fn create_poll(
         &self,
         room_id: Uuid,
@@ -210,8 +232,12 @@ impl RoomsService for DefaultRoomsService {
                 "Question cannot be empty".to_string(),
             ));
         }
+        let position = self.repo.next_agenda_position(room_id).await.map_err(|e| {
+            tracing::error!("Agenda position lookup failed: {e}");
+            PollError::Internal("Internal server error".to_string())
+        })?;
         self.repo
-            .create_poll(room_id, question.trim(), description)
+            .create_poll(room_id, question.trim(), description, Some(position))
             .await
             .map_err(|e| {
                 tracing::error!("Poll creation failed: {e}");
