@@ -10,9 +10,6 @@ name: Refinement Loop
 #                              Run: ./scripts/refine-setup.sh
 
 on:
-  schedule:
-    # Every 4 hours
-    - cron: '0 */4 * * *'
   workflow_dispatch:
     inputs:
       max_prs:
