@@ -59,22 +59,22 @@ async fn ensure_verifier_account(
         return Ok(id);
     }
 
-    // Create new account
+    // Create new account, returning the actual id (existing or newly inserted)
     let id = Uuid::new_v4();
-    sqlx::query(
+    let returned_id: (Uuid,) = sqlx::query_as(
         r"INSERT INTO accounts (id, username, root_pubkey, root_kid)
           VALUES ($1, $2, $3, $4)
-          ON CONFLICT (username) DO UPDATE SET username = EXCLUDED.username
+          ON CONFLICT (username) DO UPDATE SET root_pubkey = EXCLUDED.root_pubkey, root_kid = EXCLUDED.root_kid
           RETURNING id",
     )
     .bind(id)
     .bind(name)
     .bind(public_key)
     .bind(kid.as_str())
-    .execute(pool)
+    .fetch_one(pool)
     .await?;
 
-    Ok(id)
+    Ok(returned_id.0)
 }
 
 /// Ensure the account has an `authorized_verifier` endorsement (genesis, NULL issuer).
