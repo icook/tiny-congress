@@ -66,6 +66,15 @@ For detailed entity schemas, binary formats, validation rules, and invariant tab
 
 **Never without explicit approval:** Database migrations, changing KDF parameters or envelope format, deleting or renaming public API endpoints.
 
+## Generated Files (Do Not Edit Directly)
+Some files are generated from source definitions and must not be hand-edited. Editing the output instead of the source will fail CI.
+
+| Generated file | Source | Regenerate with |
+|---|---|---|
+| `kube/app/files/dashboards/health.json` | `kube/dashboards/health.py` | `just generate-dashboards` |
+
+When a generated file needs changes, edit the source and run the generator. The CI `check-dashboards` job verifies the committed JSON matches the generator output.
+
 ## Common Mistakes
 - Using `String` where a newtype exists (`Kid`, `BackupEnvelope`). If a domain type exists, use it — the type system is the guardrail.
 - Adding `match` arms, database columns, or dispatch logic for variants that don't exist yet (second KDF algorithm, second envelope version). Wait until the second variant arrives.

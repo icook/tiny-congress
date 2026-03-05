@@ -91,8 +91,8 @@ request_rate = (
     .title("Request Rate by Status")
     .grid_pos(Pos(h=8, w=10, x=0, y=6))
     .with_target(prom_target(
-        f'sum by (status_code) (rate(http_requests_total{{namespace="{NS}"}}[5m]))',
-        "{{status_code}}",
+        f'sum by (status) (rate(axum_http_requests_total{{namespace="{NS}"}}[5m]))',
+        "{{status}}",
     ))
     .line_width(2)
     .fill_opacity(10)
@@ -105,15 +105,15 @@ latency = (
     .title("Request Latency")
     .grid_pos(Pos(h=8, w=10, x=10, y=6))
     .with_target(prom_target(
-        f'histogram_quantile(0.50, sum by (le) (rate(http_request_duration_seconds_bucket{{namespace="{NS}"}}[5m])))',
+        f'histogram_quantile(0.50, sum by (le) (rate(axum_http_requests_duration_seconds_bucket{{namespace="{NS}"}}[5m])))',
         "p50", "A",
     ))
     .with_target(prom_target(
-        f'histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket{{namespace="{NS}"}}[5m])))',
+        f'histogram_quantile(0.95, sum by (le) (rate(axum_http_requests_duration_seconds_bucket{{namespace="{NS}"}}[5m])))',
         "p95", "B",
     ))
     .with_target(prom_target(
-        f'histogram_quantile(0.99, sum by (le) (rate(http_request_duration_seconds_bucket{{namespace="{NS}"}}[5m])))',
+        f'histogram_quantile(0.99, sum by (le) (rate(axum_http_requests_duration_seconds_bucket{{namespace="{NS}"}}[5m])))',
         "p99", "C",
     ))
     .line_width(2)
@@ -126,7 +126,7 @@ error_rate = (
     .title("Error Rate %")
     .grid_pos(Pos(h=8, w=4, x=20, y=6))
     .with_target(prom_target(
-        f'sum(rate(http_requests_total{{namespace="{NS}", status_code=~"5.."}}[5m])) / sum(rate(http_requests_total{{namespace="{NS}"}}[5m])) * 100',
+        f'sum(rate(axum_http_requests_total{{namespace="{NS}", status=~"5.."}}[5m])) / sum(rate(axum_http_requests_total{{namespace="{NS}"}}[5m])) * 100',
     ))
     .unit("percent")
     .color_mode("background")
