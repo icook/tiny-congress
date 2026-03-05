@@ -8,6 +8,7 @@ const config: CodegenConfig = {
       plugins: ['typescript', 'graphql-codegen-typescript-validation-schema'],
       config: {
         // TypeScript plugin config
+        strictScalars: true,
         scalars: {
           ID: 'string',
         },
@@ -26,6 +27,8 @@ const config: CodegenConfig = {
         scalarSchemas: {
           ID: 'z.string()',
         },
+        // Fallback for unmapped scalars — use unknown instead of any
+        defaultScalarTypeSchema: 'z.unknown()',
         // Generate schemas for all object types
         withObjectType: true,
       },
