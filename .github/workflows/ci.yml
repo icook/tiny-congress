@@ -593,6 +593,7 @@ jobs:
     name: Integration tests
     runs-on: ubuntu-latest
     needs:
+      - detect-changes
       - build-images
       - scan-images
       - lint
@@ -603,9 +604,13 @@ jobs:
       - codegen-check
       - sqlx-check
       - security-audit
-    # Run when all dependencies succeeded or were skipped (path-filtered).
-    # Block only on failure or cancellation.
+    # always() is required so this job evaluates its `if` even when
+    # path-filtered dependencies are skipped.  Without it, GitHub Actions
+    # silently skips this job whenever any `needs` job is skipped, which
+    # allowed broken E2E tests to reach master undetected.
     if: >-
+      always() &&
+      (needs.detect-changes.outputs.api == 'true' || needs.detect-changes.outputs.ui == 'true' || needs.detect-changes.outputs.ci == 'true') &&
       !contains(needs.*.result, 'failure') &&
       !contains(needs.*.result, 'cancelled')
     permissions:
@@ -783,7 +788,7 @@ jobs:
 
       - name: Build instrumented frontend for E2E tests
         working-directory: web
-        run: PLAYWRIGHT_COVERAGE=1 yarn build
+        run: VITE_API_URL=http://localhost:8080 PLAYWRIGHT_COVERAGE=1 yarn build
 
       - name: Analyze bundle size
         if: always()
