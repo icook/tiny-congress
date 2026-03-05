@@ -105,9 +105,12 @@ export function PollPage({ roomId, pollId }: PollPageProps) {
   if (detailQuery.isError) {
     return (
       <Stack gap="md" maw={800} mx="auto" mt="xl">
-        <Alert icon={<IconAlertTriangle size={16} />} color="red">
-          Failed to load poll: {detailQuery.error.message}
+        <Alert icon={<IconAlertTriangle size={16} />} color="red" title="Poll not found">
+          This poll may have been removed or the link may be incorrect.
         </Alert>
+        <Button component={Link} to="/rooms" variant="light">
+          Browse Rooms
+        </Button>
       </Stack>
     );
   }

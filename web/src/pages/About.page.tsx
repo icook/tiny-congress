@@ -14,9 +14,40 @@ export function AboutPage() {
         <Title order={2}>About TinyCongress</Title>
       </Group>
 
-      <Text c="dimmed" size="sm">
-        Build metadata for both the API (fetched via GraphQL) and the UI (baked in at build time),
-        so operators can verify exactly which revisions are running.
+      <Text size="sm">
+        TinyCongress is an experimental platform for structured group decision-making. Instead of
+        simple yes/no polls, participants vote across multiple dimensions — capturing the nuance of
+        how people actually think about complex issues.
+      </Text>
+
+      <Text size="sm">
+        Every account is backed by cryptographic identity. Your keys are generated in your browser
+        and never leave your device. The server is a witness, not a trusted authority.
+      </Text>
+
+      <Card shadow="sm" padding="lg" radius="md" withBorder>
+        <Stack gap="xs">
+          <Title order={5}>How it works</Title>
+          <Text size="sm" c="dimmed">
+            1. Create an account with a username and backup password
+          </Text>
+          <Text size="sm" c="dimmed">
+            2. Verify your identity to prove you&apos;re a real person
+          </Text>
+          <Text size="sm" c="dimmed">
+            3. Join a room and vote on multi-dimensional polls
+          </Text>
+          <Text size="sm" c="dimmed">
+            4. See how the community thinks — not just averages, but the shape of opinion
+          </Text>
+        </Stack>
+      </Card>
+
+      <Title order={4} mt="md">
+        Build Info
+      </Title>
+      <Text c="dimmed" size="xs">
+        Revision metadata for the API and UI.
       </Text>
 
       {isPending ? (
