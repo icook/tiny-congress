@@ -81,7 +81,8 @@ describe('SignupPage', () => {
     render(<SignupPage />);
 
     await user.type(screen.getByLabelText(/username/i), ' alice ');
-    await user.type(screen.getByLabelText(/backup password/i), 'test-password');
+    await user.type(screen.getByLabelText(/^backup password/i), 'test-password');
+    await user.type(screen.getByLabelText(/confirm backup password/i), 'test-password');
     await user.click(screen.getByRole('button', { name: /sign up/i }));
 
     expect(mockMutateAsync).toHaveBeenCalledWith(
@@ -123,7 +124,8 @@ describe('SignupPage', () => {
     render(<SignupPage />);
 
     await user.type(screen.getByLabelText(/username/i), 'alice');
-    await user.type(screen.getByLabelText(/backup password/i), 'test-password');
+    await user.type(screen.getByLabelText(/^backup password/i), 'test-password');
+    await user.type(screen.getByLabelText(/confirm backup password/i), 'test-password');
     await user.click(screen.getByRole('button', { name: /sign up/i }));
 
     expect(await screen.findByText(/boom/)).toBeInTheDocument();
