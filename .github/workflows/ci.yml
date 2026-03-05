@@ -1522,13 +1522,15 @@ jobs:
 
           upload_dir() {
             local target="$1"
+            local count=0
             while IFS= read -r -d '' file; do
               rel="${file#site/}"
-              echo "Uploading ${rel} → ${target}/${rel}"
-              curl --fail-with-body --retry 2 -u "ci:${DUFS_PASSWORD}" \
+              curl -s --fail-with-body --retry 2 -u "ci:${DUFS_PASSWORD}" \
                 -T "$file" \
                 "${BASE}/${target}/${rel}"
+              count=$((count + 1))
             done < <(find site -type f -print0)
+            echo "Uploaded ${count} files to ${target}/"
           }
 
           upload_dir "$DEST"
