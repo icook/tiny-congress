@@ -118,6 +118,9 @@ pub trait RoomsService: Send + Sync {
         votes: &[DimensionVote],
     ) -> Result<Vec<VoteRecord>, VoteError>;
 
+    /// List draft polls in a room's agenda, ordered by position.
+    async fn get_agenda(&self, room_id: Uuid) -> Result<Vec<PollRecord>, PollError>;
+
     // Lifecycle operations
     /// Close the active poll and activate the next one from the agenda.
     async fn close_poll_and_advance(&self, room_id: Uuid, poll_id: Uuid) -> Result<(), PollError>;
@@ -354,6 +357,13 @@ impl RoomsService for DefaultRoomsService {
                     PollError::Internal("Internal server error".to_string())
                 }
             })
+    }
+
+    async fn get_agenda(&self, room_id: Uuid) -> Result<Vec<PollRecord>, PollError> {
+        self.repo.list_agenda(room_id).await.map_err(|e| {
+            tracing::error!("Agenda list failed: {e}");
+            PollError::Internal("Internal server error".to_string())
+        })
     }
 
     async fn close_poll_and_advance(&self, room_id: Uuid, poll_id: Uuid) -> Result<(), PollError> {

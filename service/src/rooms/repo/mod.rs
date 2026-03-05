@@ -53,6 +53,7 @@ pub trait RoomsRepo: Send + Sync {
         closes_at: DateTime<Utc>,
     ) -> Result<(), PollRepoError>;
     async fn get_active_poll(&self, room_id: Uuid) -> Result<Option<PollRecord>, PollRepoError>;
+    async fn list_agenda(&self, room_id: Uuid) -> Result<Vec<PollRecord>, PollRepoError>;
 
     // Dimension operations
     #[allow(clippy::too_many_arguments)]
@@ -184,6 +185,10 @@ impl RoomsRepo for PgRoomsRepo {
 
     async fn get_active_poll(&self, room_id: Uuid) -> Result<Option<PollRecord>, PollRepoError> {
         polls::get_active_poll(&self.pool, room_id).await
+    }
+
+    async fn list_agenda(&self, room_id: Uuid) -> Result<Vec<PollRecord>, PollRepoError> {
+        polls::list_agenda(&self.pool, room_id).await
     }
 
     async fn create_dimension(
