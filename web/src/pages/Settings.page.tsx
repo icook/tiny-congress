@@ -11,7 +11,7 @@ import { useCrypto } from '@/providers/CryptoProvider';
 import { useDevice } from '@/providers/DeviceProvider';
 
 export function SettingsPage() {
-  const { deviceKid, privateKey } = useDevice();
+  const { deviceKid, privateKey, username } = useDevice();
   const { crypto } = useCrypto();
 
   const devicesQuery = useListDevices(deviceKid, privateKey, crypto);
@@ -112,7 +112,7 @@ export function SettingsPage() {
                 </Text>
               </Group>
               {(() => {
-                const url = buildVerifierUrl('');
+                const url = buildVerifierUrl(username ?? '');
                 if (url) {
                   return (
                     <Button component="a" href={url} variant="light" size="sm">

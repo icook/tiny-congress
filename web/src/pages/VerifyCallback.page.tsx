@@ -9,6 +9,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useSearch } from '@tanstack/react-router';
 import { Alert, Button, Stack, Text, Title } from '@mantine/core';
 import { buildVerifierUrl } from '@/features/verification';
+import { useDevice } from '@/providers/DeviceProvider';
 
 interface VerifyCallbackSearch {
   verification?: string;
@@ -20,6 +21,7 @@ export function VerifyCallbackPage() {
   const search: VerifyCallbackSearch = useSearch({ strict: false });
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { username } = useDevice();
 
   const isSuccess = search.verification === 'success';
   const isError = search.verification === 'error';
@@ -64,7 +66,7 @@ export function VerifyCallbackPage() {
           </Alert>
           <Button
             onClick={() => {
-              const url = buildVerifierUrl('');
+              const url = buildVerifierUrl(username ?? '');
               if (url) {
                 window.location.href = url;
               }

@@ -101,7 +101,7 @@ export function LoginPage() {
       // time) would see stale context and redirect back to /login.
       // See https://github.com/TanStack/router/issues/2072
       flushSync(() => {
-        setDevice(response.device_kid, deviceKeyPair.privateKey);
+        setDevice(response.device_kid, deviceKeyPair.privateKey, username.trim());
       });
 
       // Navigate to rooms after successful login
