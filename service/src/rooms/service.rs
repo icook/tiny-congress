@@ -93,6 +93,7 @@ pub trait RoomsService: Send + Sync {
     async fn close_poll(&self, poll_id: Uuid) -> Result<(), PollError>;
 
     // Dimension operations
+    #[allow(clippy::too_many_arguments)]
     async fn add_dimension(
         &self,
         poll_id: Uuid,
@@ -101,6 +102,8 @@ pub trait RoomsService: Send + Sync {
         min_value: f32,
         max_value: f32,
         sort_order: i32,
+        min_label: Option<&str>,
+        max_label: Option<&str>,
     ) -> Result<DimensionRecord, PollError>;
     async fn list_dimensions(&self, poll_id: Uuid) -> Result<Vec<DimensionRecord>, PollError>;
 
@@ -269,6 +272,8 @@ impl RoomsService for DefaultRoomsService {
         min_value: f32,
         max_value: f32,
         sort_order: i32,
+        min_label: Option<&str>,
+        max_label: Option<&str>,
     ) -> Result<DimensionRecord, PollError> {
         if name.trim().is_empty() {
             return Err(PollError::Validation(
@@ -288,6 +293,8 @@ impl RoomsService for DefaultRoomsService {
                 min_value,
                 max_value,
                 sort_order,
+                min_label,
+                max_label,
             )
             .await
             .map_err(|e| {

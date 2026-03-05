@@ -37,6 +37,8 @@ pub struct SimDimension {
     pub description: String,
     pub min: f32,
     pub max: f32,
+    pub min_label: Option<String>,
+    pub max_label: Option<String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -99,7 +101,9 @@ Respond with ONLY valid JSON matching this schema:
               "name": "Dimension Name",
               "description": "What this dimension measures",
               "min": 0.0,
-              "max": 10.0
+              "max": 10.0,
+              "min_label": "Low end label",
+              "max_label": "High end label"
             }
           ]
         }
@@ -201,13 +205,17 @@ mod tests {
                                     "name": "Safety Impact",
                                     "description": "Expected improvement to cyclist safety",
                                     "min": 0.0,
-                                    "max": 10.0
+                                    "max": 10.0,
+                                    "min_label": "No improvement",
+                                    "max_label": "Major improvement"
                                 },
                                 {
                                     "name": "Cost Effectiveness",
                                     "description": "Value relative to projected costs",
                                     "min": 0.0,
-                                    "max": 5.0
+                                    "max": 5.0,
+                                    "min_label": "Poor value",
+                                    "max_label": "Excellent value"
                                 }
                             ]
                         }

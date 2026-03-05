@@ -26,6 +26,8 @@ pub struct DimensionRecord {
     pub min_value: f32,
     pub max_value: f32,
     pub sort_order: i32,
+    pub min_label: Option<String>,
+    pub max_label: Option<String>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -61,6 +63,8 @@ struct DimensionRow {
     min_value: f32,
     max_value: f32,
     sort_order: i32,
+    min_label: Option<String>,
+    max_label: Option<String>,
 }
 
 fn poll_row_to_record(row: PollRow) -> PollRecord {
@@ -85,6 +89,8 @@ fn dim_row_to_record(row: DimensionRow) -> DimensionRecord {
         min_value: row.min_value,
         max_value: row.max_value,
         sort_order: row.sort_order,
+        min_label: row.min_label,
+        max_label: row.max_label,
     }
 }
 
@@ -201,6 +207,7 @@ where
 /// # Errors
 ///
 /// Returns `DuplicateDimension` if a dimension with this name already exists for the poll.
+#[allow(clippy::too_many_arguments)]
 pub async fn create_dimension<'e, E>(
     executor: E,
     poll_id: Uuid,
@@ -209,15 +216,17 @@ pub async fn create_dimension<'e, E>(
     min_value: f32,
     max_value: f32,
     sort_order: i32,
+    min_label: Option<&str>,
+    max_label: Option<&str>,
 ) -> Result<DimensionRecord, PollRepoError>
 where
     E: sqlx::Executor<'e, Database = sqlx::Postgres>,
 {
     let result = sqlx::query_as::<_, DimensionRow>(
         r"
-        INSERT INTO rooms__poll_dimensions (poll_id, name, description, min_value, max_value, sort_order)
-        VALUES ($1, $2, $3, $4, $5, $6)
-        RETURNING id, poll_id, name, description, min_value, max_value, sort_order
+        INSERT INTO rooms__poll_dimensions (poll_id, name, description, min_value, max_value, sort_order, min_label, max_label)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        RETURNING id, poll_id, name, description, min_value, max_value, sort_order, min_label, max_label
         ",
     )
     .bind(poll_id)
@@ -226,6 +235,8 @@ where
     .bind(min_value)
     .bind(max_value)
     .bind(sort_order)
+    .bind(min_label)
+    .bind(max_label)
     .fetch_one(executor)
     .await;
 
@@ -254,7 +265,7 @@ where
 {
     let rows = sqlx::query_as::<_, DimensionRow>(
         r"
-        SELECT id, poll_id, name, description, min_value, max_value, sort_order
+        SELECT id, poll_id, name, description, min_value, max_value, sort_order, min_label, max_label
         FROM rooms__poll_dimensions WHERE poll_id = $1 ORDER BY sort_order ASC
         ",
     )

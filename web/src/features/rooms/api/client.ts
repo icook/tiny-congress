@@ -33,6 +33,8 @@ export interface Dimension {
   description: string | null;
   min_value: number;
   max_value: number;
+  min_label: string | null;
+  max_label: string | null;
   sort_order: number;
 }
 
