@@ -13,6 +13,7 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 /// Consolidated repository trait for rooms persistence.
+#[allow(clippy::too_many_arguments)]
 #[async_trait]
 pub trait RoomsRepo: Send + Sync {
     // Room operations

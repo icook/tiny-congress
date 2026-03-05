@@ -36,6 +36,8 @@ export interface Dimension {
   min_label: string | null;
   max_label: string | null;
   sort_order: number;
+  min_label: string | null;
+  max_label: string | null;
 }
 
 export interface PollDetail {
