@@ -158,6 +158,7 @@ TinyCongress handles cryptographic identity and delegation. The bar is: code tha
 - DO NOT modify `skaffold.yaml` profiles without running the testing-local-dev skill
 - DO NOT run bare `git push`; ALWAYS specify the remote and branch explicitly: `git push origin <branch-name>` (see ADR-004)
 - DO NOT use `--force` or `--force-with-lease` without explicit branch: `git push --force-with-lease origin <branch-name>`
+- DO NOT print or display secret values decoded from Kubernetes secrets, `.env` files, or any credential store — describe what was found (e.g. "admin credentials exist in the secret") or write scripts the human can run themselves, but never echo the plaintext value into the conversation
 
 ## Recovery Protocol
 If an agent violates these rules:
