@@ -207,7 +207,11 @@ pub mod test_db {
                     .rsplit_once(':')
                     .unwrap_or((&image_full, "latest"));
 
-                // Start postgres container with custom image that includes pgmq
+                // Start postgres container with custom image that includes pgmq.
+                // Label with the current PID so `just prune-testcontainers` can
+                // identify and remove orphans from crashed runs without clobbering
+                // containers owned by other live test processes.
+                let owner_pid = std::process::id().to_string();
                 let container = GenericImage::new(image_name, image_tag)
                     .with_exposed_port(5432.into())
                     .with_wait_for(testcontainers::core::WaitFor::message_on_stderr(
@@ -216,6 +220,7 @@ pub mod test_db {
                     .with_env_var("POSTGRES_USER", "postgres")
                     .with_env_var("POSTGRES_PASSWORD", "postgres")
                     .with_env_var("POSTGRES_DB", "tiny-congress")
+                    .with_label("tc-owner-pid", owner_pid)
                     .start()
                     .await
                     .expect("Failed to start postgres container");

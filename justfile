@@ -30,7 +30,7 @@ default:
 # =============================================================================
 
 # Run backend unit tests (auto-builds postgres image if needed for DB tests)
-test-backend: _ensure-test-postgres
+test-backend: _ensure-test-postgres prune-testcontainers
     cd service && cargo test
 
 # Run backend unit tests in watch mode (re-runs on file changes)
@@ -408,6 +408,23 @@ refine-remote *ARGS:
 # =============================================================================
 # Utility Commands
 # =============================================================================
+
+# Remove testcontainers whose owner process has exited (safe for parallel test runs)
+prune-testcontainers:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    STALE=""
+    while IFS= read -r cid; do
+        [ -z "$cid" ] && continue
+        pid=$(docker inspect "$cid" --format '{{{{index .Config.Labels "tc-owner-pid"}}' 2>/dev/null || true)
+        if [ -n "$pid" ] && ! kill -0 "$pid" 2>/dev/null; then
+            STALE="$STALE $cid"
+        fi
+    done < <(docker ps -aq --filter "label=tc-owner-pid")
+    if [ -n "$STALE" ]; then
+        echo "Pruning orphaned testcontainers (dead owner PIDs)..."
+        docker rm -f $STALE
+    fi
 
 # Clean build artifacts
 clean: _clean-wasm
