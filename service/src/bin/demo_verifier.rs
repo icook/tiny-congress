@@ -559,7 +559,10 @@ async fn main() -> Result<(), anyhow::Error> {
     );
 
     // 3. Create HTTP client and derive verifier identity
-    let http = reqwest::Client::new();
+    let http = reqwest::Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(5))
+        .build()
+        .context("failed to build HTTP client")?;
     let client = SimClient::new(http, config.api_url.clone());
     let verifier = SimAccount::demo_verifier();
 
@@ -577,11 +580,14 @@ async fn main() -> Result<(), anyhow::Error> {
         ready: AtomicBool::new(false),
     });
 
-    // Spawn background login retry so the server starts immediately
+    // Spawn background login retry so the server starts immediately.
+    // Retries every 5s for up to 5 minutes — plenty of headroom for the API
+    // pod to come up during a Helm upgrade.
     let bg_state = Arc::clone(&state);
     tokio::spawn(async move {
-        let delays = [1, 2, 5, 10, 30];
-        for (attempt, &delay) in delays.iter().enumerate() {
+        let max_attempts = 60;
+        let delay = std::time::Duration::from_secs(5);
+        for attempt in 1..=max_attempts {
             let login_body = bg_state.verifier.build_login_json();
             match bg_state.client.login(&login_body).await {
                 Ok(resp) => {
@@ -604,16 +610,15 @@ async fn main() -> Result<(), anyhow::Error> {
                 }
                 Err(e) => {
                     tracing::warn!(
-                        attempt = attempt + 1,
-                        delay_secs = delay,
+                        attempt,
                         error = %e,
-                        "could not reach API for login — retrying"
+                        "could not reach API for login — retrying in 5s"
                     );
-                    tokio::time::sleep(std::time::Duration::from_secs(delay)).await;
+                    tokio::time::sleep(delay).await;
                 }
             }
         }
-        tracing::error!("demo verifier login failed after all retries — verify requests will fail until API is reachable");
+        tracing::error!("demo verifier login failed after {max_attempts} attempts");
     });
 
     let app = Router::new()
