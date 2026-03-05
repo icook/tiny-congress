@@ -32,7 +32,7 @@ interface NavbarProps {
 }
 
 export function Navbar({ onNavigate }: NavbarProps) {
-  const { deviceKid, privateKey, clearDevice } = useDevice();
+  const { deviceKid, privateKey, username, clearDevice } = useDevice();
   const navigate = useNavigate();
   const currentPath = useRouterState({
     select: (state) => state.location.pathname,
@@ -107,7 +107,7 @@ export function Navbar({ onNavigate }: NavbarProps) {
               </Badge>
             ) : (
               (() => {
-                const url = buildVerifierUrl('');
+                const url = buildVerifierUrl(username ?? '');
                 if (url) {
                   return (
                     <Badge

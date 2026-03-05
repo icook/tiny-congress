@@ -132,7 +132,8 @@ describe('LoginPage', () => {
     // Should store device credentials (non-extractable CryptoKey)
     expect(mockSetDevice).toHaveBeenCalledWith(
       'kid-device',
-      expect.objectContaining({ type: 'private' }) as CryptoKey
+      expect.objectContaining({ type: 'private' }) as CryptoKey,
+      'alice'
     );
   });
 

@@ -38,7 +38,7 @@ interface PollPageProps {
 }
 
 export function PollPage({ roomId, pollId }: PollPageProps) {
-  const { deviceKid, privateKey, isLoading: deviceLoading } = useDevice();
+  const { deviceKid, privateKey, username, isLoading: deviceLoading } = useDevice();
   const { crypto } = useCrypto();
 
   const detailQuery = usePollDetail(roomId, pollId);
@@ -190,7 +190,7 @@ export function PollPage({ roomId, pollId }: PollPageProps) {
               <Alert icon={<IconShieldOff size={16} />} color="yellow">
                 You need to verify your identity to vote in this room.
                 {(() => {
-                  const url = buildVerifierUrl('');
+                  const url = buildVerifierUrl(username ?? '');
                   if (url) {
                     return (
                       <Button component="a" href={url} size="xs" variant="light" mt="xs">

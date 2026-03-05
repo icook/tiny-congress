@@ -28,6 +28,7 @@ const CURRENT_KEY = 'current';
 interface StoredDevice {
   kid: string;
   privateKey: CryptoKey;
+  username?: string;
 }
 
 interface DeviceContextValue {
@@ -35,10 +36,12 @@ interface DeviceContextValue {
   deviceKid: string | null;
   /** Non-extractable CryptoKey for signing, or null if not authenticated */
   privateKey: CryptoKey | null;
+  /** Current username, or null if not authenticated */
+  username: string | null;
   /** True while loading credentials from IndexedDB on mount */
   isLoading: boolean;
   /** Store device credentials after signup/login */
-  setDevice: (kid: string, key: CryptoKey) => void;
+  setDevice: (kid: string, key: CryptoKey, username: string) => void;
   /** Clear device credentials (logout) */
   clearDevice: () => void;
 }
@@ -49,6 +52,7 @@ const noop = () => {};
 const DeviceContext = createContext<DeviceContextValue>({
   deviceKid: null,
   privateKey: null,
+  username: null,
   isLoading: true,
   setDevice: noop,
   clearDevice: noop,
@@ -89,6 +93,7 @@ interface DeviceProviderProps {
 export function DeviceProvider({ children }: DeviceProviderProps) {
   const [deviceKid, setDeviceKid] = useState<string | null>(null);
   const [privateKey, setPrivateKey] = useState<CryptoKey | null>(null);
+  const [username, setUsername] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   // Load from IndexedDB on mount
@@ -98,6 +103,7 @@ export function DeviceProvider({ children }: DeviceProviderProps) {
         if (stored) {
           setDeviceKid(stored.kid);
           setPrivateKey(stored.privateKey);
+          setUsername(stored.username ?? null);
         }
       })
       .catch((err: unknown) => {
@@ -110,10 +116,11 @@ export function DeviceProvider({ children }: DeviceProviderProps) {
       });
   }, []);
 
-  const setDeviceFn = useCallback((kid: string, key: CryptoKey) => {
+  const setDeviceFn = useCallback((kid: string, key: CryptoKey, name: string) => {
     setDeviceKid(kid);
     setPrivateKey(key);
-    saveDevice({ kid, privateKey: key }).catch((err: unknown) => {
+    setUsername(name);
+    saveDevice({ kid, privateKey: key, username: name }).catch((err: unknown) => {
       // eslint-disable-next-line no-console
       console.warn('Failed to save device to IndexedDB:', err);
     });
@@ -122,6 +129,7 @@ export function DeviceProvider({ children }: DeviceProviderProps) {
   const clearDeviceFn = useCallback(() => {
     setDeviceKid(null);
     setPrivateKey(null);
+    setUsername(null);
     deleteDevice().catch((err: unknown) => {
       // eslint-disable-next-line no-console
       console.warn('Failed to delete device from IndexedDB:', err);
@@ -132,11 +140,12 @@ export function DeviceProvider({ children }: DeviceProviderProps) {
     () => ({
       deviceKid,
       privateKey,
+      username,
       isLoading,
       setDevice: setDeviceFn,
       clearDevice: clearDeviceFn,
     }),
-    [deviceKid, privateKey, isLoading, setDeviceFn, clearDeviceFn]
+    [deviceKid, privateKey, username, isLoading, setDeviceFn, clearDeviceFn]
   );
 
   return <DeviceContext.Provider value={value}>{children}</DeviceContext.Provider>;

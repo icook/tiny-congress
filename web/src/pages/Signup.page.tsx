@@ -70,7 +70,7 @@ export function SignupPage() {
       });
 
       // Store device credentials in session context (CryptoKey is non-extractable)
-      setDevice(response.device_kid, deviceKeyPair.privateKey);
+      setDevice(response.device_kid, deviceKeyPair.privateKey, username.trim());
 
       setCreatedAccount(response);
     } catch {
