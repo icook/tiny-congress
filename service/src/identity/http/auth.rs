@@ -308,7 +308,7 @@ mod tests {
         Router::new()
             .route("/test", get(ok_handler))
             .layer(axum::extract::Extension(
-                Arc::new(repo) as Arc<dyn IdentityRepo>,
+                Arc::new(repo) as Arc<dyn IdentityRepo>
             ))
     }
 
@@ -407,7 +407,12 @@ mod tests {
         // Valid 64-byte format but wrong signature bytes
         let bad_sig = encode_base64url(&[0u8; 64]);
         let response = app
-            .oneshot(build_auth_request(kid.as_str(), &bad_sig, timestamp, "nonce"))
+            .oneshot(build_auth_request(
+                kid.as_str(),
+                &bad_sig,
+                timestamp,
+                "nonce",
+            ))
             .await
             .expect("response");
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
@@ -433,7 +438,12 @@ mod tests {
         let nonce = "nonce-revoked-test";
         let signature = sign_canonical(&signing_key, "GET", "/test", timestamp, nonce, b"");
         let response = app
-            .oneshot(build_auth_request(kid.as_str(), &signature, timestamp, nonce))
+            .oneshot(build_auth_request(
+                kid.as_str(),
+                &signature,
+                timestamp,
+                nonce,
+            ))
             .await
             .expect("response");
         assert_eq!(response.status(), StatusCode::FORBIDDEN);
@@ -454,7 +464,12 @@ mod tests {
         let nonce = "nonce-valid-test";
         let signature = sign_canonical(&signing_key, "GET", "/test", timestamp, nonce, b"");
         let response = app
-            .oneshot(build_auth_request(kid.as_str(), &signature, timestamp, nonce))
+            .oneshot(build_auth_request(
+                kid.as_str(),
+                &signature,
+                timestamp,
+                nonce,
+            ))
             .await
             .expect("response");
         assert_eq!(response.status(), StatusCode::OK);
