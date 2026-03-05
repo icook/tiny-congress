@@ -148,7 +148,75 @@ pub fn build_messages(config: &SimConfig, rooms_needed: usize) -> Vec<ChatMessag
     ]
 }
 
-/// Call the `OpenRouter` API to generate sim content.
+/// Return deterministic mock content for CI testing without `OpenRouter`.
+#[must_use]
+pub fn mock_content(rooms_needed: usize) -> SimContent {
+    let rooms = (0..rooms_needed)
+        .map(|i| SimRoom {
+            name: format!("Mock Room {}", i + 1),
+            description: format!("A mock room for CI testing (room {})", i + 1),
+            polls: vec![
+                SimPoll {
+                    question: format!("Should we improve mock topic {}A?", i + 1),
+                    description: "A mock poll for pipeline testing".to_string(),
+                    dimensions: vec![
+                        SimDimension {
+                            name: "Impact".to_string(),
+                            description: "Expected community impact".to_string(),
+                            min: 0.0,
+                            max: 10.0,
+                            min_label: Some("No impact".to_string()),
+                            max_label: Some("Major impact".to_string()),
+                        },
+                        SimDimension {
+                            name: "Feasibility".to_string(),
+                            description: "How feasible is this proposal".to_string(),
+                            min: 0.0,
+                            max: 5.0,
+                            min_label: Some("Not feasible".to_string()),
+                            max_label: Some("Very feasible".to_string()),
+                        },
+                    ],
+                },
+                SimPoll {
+                    question: format!("How should we fund mock topic {}B?", i + 1),
+                    description: "A second mock poll for pipeline testing".to_string(),
+                    dimensions: vec![
+                        SimDimension {
+                            name: "Cost".to_string(),
+                            description: "Estimated cost to implement".to_string(),
+                            min: 0.0,
+                            max: 10.0,
+                            min_label: Some("Low cost".to_string()),
+                            max_label: Some("High cost".to_string()),
+                        },
+                        SimDimension {
+                            name: "Priority".to_string(),
+                            description: "How urgent is this".to_string(),
+                            min: 1.0,
+                            max: 5.0,
+                            min_label: Some("Low priority".to_string()),
+                            max_label: Some("High priority".to_string()),
+                        },
+                        SimDimension {
+                            name: "Public Support".to_string(),
+                            description: "Expected level of public support".to_string(),
+                            min: 0.0,
+                            max: 10.0,
+                            min_label: Some("Low support".to_string()),
+                            max_label: Some("High support".to_string()),
+                        },
+                    ],
+                },
+            ],
+        })
+        .collect();
+
+    SimContent { rooms }
+}
+
+/// Call the `OpenRouter` API to generate sim content, or return mock content
+/// if `config.mock_llm` is true.
 ///
 /// Returns the generated content and token usage for this call.
 ///
@@ -161,6 +229,11 @@ pub async fn generate_content(
     config: &SimConfig,
     rooms_needed: usize,
 ) -> Result<(SimContent, Usage), anyhow::Error> {
+    if config.mock_llm {
+        tracing::info!(rooms_needed, "using mock LLM content (SIM_MOCK_LLM=true)");
+        return Ok((mock_content(rooms_needed), Usage::default()));
+    }
+
     let messages = build_messages(config, rooms_needed);
 
     let request = ChatRequest {
@@ -270,6 +343,54 @@ mod tests {
     }
 
     #[test]
+    fn mock_content_generates_requested_room_count() {
+        let content = mock_content(3);
+        assert_eq!(content.rooms.len(), 3);
+        for (i, room) in content.rooms.iter().enumerate() {
+            assert_eq!(room.name, format!("Mock Room {}", i + 1));
+            assert_eq!(room.polls.len(), 2, "each room should have 2 polls");
+            // First poll has 2 dimensions, second has 3
+            assert_eq!(room.polls[0].dimensions.len(), 2);
+            assert_eq!(room.polls[1].dimensions.len(), 3);
+            // All dimensions should have labels
+            for poll in &room.polls {
+                for dim in &poll.dimensions {
+                    assert!(dim.min_label.is_some(), "dimension should have min_label");
+                    assert!(dim.max_label.is_some(), "dimension should have max_label");
+                    assert!(dim.max > dim.min, "max should be greater than min");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn mock_content_zero_rooms() {
+        let content = mock_content(0);
+        assert!(content.rooms.is_empty());
+    }
+
+    #[tokio::test]
+    async fn generate_content_returns_mock_when_enabled() {
+        let config = SimConfig {
+            api_url: "http://localhost:4000".to_string(),
+            openrouter_api_key: String::new(),
+            openrouter_model: "unused".to_string(),
+            target_rooms: 5,
+            votes_per_poll: 15,
+            system_prompt: "unused".to_string(),
+            voter_count: 20,
+            log_level: "info".to_string(),
+            mock_llm: true,
+        };
+
+        let client = reqwest::Client::new();
+        let (content, usage) = generate_content(&client, &config, 2).await.unwrap();
+
+        assert_eq!(content.rooms.len(), 2);
+        assert_eq!(usage.total_tokens, 0, "mock should report zero tokens");
+    }
+
+    #[test]
     fn builds_correct_messages() {
         let config = SimConfig {
             api_url: "http://localhost:4000".to_string(),
@@ -280,6 +401,7 @@ mod tests {
             system_prompt: "You are a test system.".to_string(),
             voter_count: 20,
             log_level: "info".to_string(),
+            mock_llm: false,
         };
 
         let messages = build_messages(&config, 2);
