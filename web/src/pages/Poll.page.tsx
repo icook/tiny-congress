@@ -127,14 +127,7 @@ export function PollPage({ roomId, pollId }: PollPageProps) {
         </Text>
         {roomName ? (
           <>
-            <Text
-              component={Link}
-              to="/rooms/$roomId"
-              params={{ roomId }}
-              size="sm"
-              c="dimmed"
-              style={{ textDecoration: 'none' }}
-            >
+            <Text size="sm" c="dimmed">
               {roomName}
             </Text>
             <Text size="sm" c="dimmed">
