@@ -4,5 +4,6 @@
 //! multi-dimensional voting. Eligibility is checked via the endorsement system.
 
 pub mod http;
+pub mod lifecycle;
 pub mod repo;
 pub mod service;
