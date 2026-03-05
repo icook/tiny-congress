@@ -4,13 +4,13 @@ description: Configure Node.js with yarn caching and enable corepack
 runs:
   using: composite
   steps:
+    - name: Enable corepack
+      shell: bash
+      run: corepack enable
+
     - name: Set up Node
       uses: actions/setup-node@v6
       with:
         node-version-file: web/.nvmrc
         cache: yarn
         cache-dependency-path: web/yarn.lock
-
-    - name: Enable corepack
-      shell: bash
-      run: corepack enable

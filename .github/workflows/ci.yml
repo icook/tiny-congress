@@ -427,7 +427,7 @@ jobs:
   build-images:
     name: Build ${{ matrix.image }}
     needs: [detect-changes]
-    runs-on: ubuntu-latest
+    runs-on: arc-runner-set
     permissions:
       contents: read
       packages: write
@@ -524,10 +524,8 @@ jobs:
             ${{ steps.tags.outputs.sha_tag }}
             ${{ steps.tags.outputs.branch_tag }}
           cache-from: |
-            type=gha,scope=${{ matrix.image }}
             type=registry,ref=${{ env.REGISTRY }}/${{ matrix.image }}:cache
           cache-to: |
-            type=gha,scope=${{ matrix.image }},mode=max
             type=registry,ref=${{ env.REGISTRY }}/${{ matrix.image }}:cache,mode=max
 
       - name: Export image metadata
@@ -593,7 +591,7 @@ jobs:
   # ============================================================
   integration-tests:
     name: Integration tests
-    runs-on: ubuntu-latest
+    runs-on: arc-runner-set
     needs:
       - detect-changes
       - build-images
@@ -643,15 +641,7 @@ jobs:
           echo "Starting KinD cluster skaffold-ci (logs: ${KIND_LOG})"
           kind create cluster --name skaffold-ci --wait 0s >"${KIND_LOG}" 2>&1 &
 
-      - name: Cache Skaffold
-        id: cache-skaffold
-        uses: actions/cache@v5
-        with:
-          path: /usr/local/bin/skaffold
-          key: skaffold-v${{ hashFiles('.skaffold-version') }}
-
       - name: Install Skaffold
-        if: steps.cache-skaffold.outputs.cache-hit != 'true'
         run: |
           set -euo pipefail
           SKAFFOLD_VERSION="v$(cat .skaffold-version)"
@@ -696,22 +686,12 @@ jobs:
       - name: Install cargo-llvm-cov
         uses: taiki-e/install-action@cargo-llvm-cov
 
-      - name: Cache Rust dependencies
-        uses: Swatinem/rust-cache@v2
-
       - name: Setup web toolchain
         uses: ./.github/actions/setup-web
 
       - name: Install web dependencies
         working-directory: web
         run: yarn install --immutable
-
-      - name: Cache Playwright browsers
-        id: cache-playwright
-        uses: actions/cache@v5
-        with:
-          path: ${{ env.PLAYWRIGHT_BROWSERS_PATH }}
-          key: playwright-${{ runner.os }}-${{ hashFiles('web/yarn.lock') }}
 
       - name: Install Playwright browsers
         working-directory: web
