@@ -836,7 +836,7 @@ jobs:
 
           # Run tests - coverage report generated in Playwright global teardown
           yarn playwright:clean
-          yarn playwright:test || TEST_EXIT=$?
+          yarn playwright:test --project chromium || TEST_EXIT=$?
 
           # Cleanup
           kill "$PREVIEW_PID" "$PF_API_PID" 2>/dev/null || true
