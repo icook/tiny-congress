@@ -7,6 +7,12 @@ import { Link } from '@tanstack/react-router';
 import { Alert, Badge, Card, Group, Loader, Stack, Text, Title } from '@mantine/core';
 import { usePolls, useRooms, type Room } from '@/features/rooms';
 
+const ROOM_STATUS_COLOR: Record<string, string> = {
+  open: 'green',
+  closed: 'gray',
+  archived: 'gray',
+};
+
 export function RoomsPage() {
   const roomsQuery = useRooms();
 
@@ -29,7 +35,7 @@ export function RoomsPage() {
 
       {roomsQuery.data?.length === 0 ? (
         <Alert icon={<IconDoor size={16} />} color="blue">
-          No rooms are currently open.
+          No rooms are open right now — check back soon.
         </Alert>
       ) : null}
 
@@ -44,13 +50,14 @@ function RoomCard({ room }: { room: Room }) {
   const pollsQuery = usePolls(room.id);
 
   const activePolls = pollsQuery.data?.filter((p) => p.status === 'active') ?? [];
+  const statusColor = ROOM_STATUS_COLOR[room.status] ?? 'yellow';
 
   return (
     <Card shadow="sm" padding="lg" radius="md" withBorder>
       <Stack gap="sm">
         <Group justify="space-between">
           <Title order={4}>{room.name}</Title>
-          <Badge color="green" variant="light">
+          <Badge color={statusColor} variant="light">
             {room.status}
           </Badge>
         </Group>
@@ -82,12 +89,7 @@ function RoomCard({ room }: { room: Room }) {
                 withBorder
                 style={{ cursor: 'pointer', textDecoration: 'none' }}
               >
-                <Group justify="space-between">
-                  <Text size="sm">{poll.question}</Text>
-                  <Badge size="sm" color="blue" variant="light">
-                    active
-                  </Badge>
-                </Group>
+                <Text size="sm">{poll.question}</Text>
               </Card>
             ))}
           </Stack>
