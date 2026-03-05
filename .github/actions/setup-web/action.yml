@@ -4,11 +4,18 @@ description: Configure Node.js with yarn caching and enable corepack
 runs:
   using: composite
   steps:
+    # Install Node first so corepack is available (ARC runners have no pre-installed Node)
+    - name: Set up Node
+      uses: actions/setup-node@v6
+      with:
+        node-version-file: web/.nvmrc
+
     - name: Enable corepack
       shell: bash
       run: corepack enable
 
-    - name: Set up Node
+    # Re-run with cache now that yarn is available via corepack
+    - name: Set up Node cache
       uses: actions/setup-node@v6
       with:
         node-version-file: web/.nvmrc
