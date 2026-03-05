@@ -83,6 +83,9 @@ sim:
 dashboards:
   enabled: true
 
+metrics:
+  enabled: true
+
 demoVerifier:
   enabled: true
   apiUrl: "http://tc-demo.tiny-congress-demo.svc.cluster.local:8080"
