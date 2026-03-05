@@ -1,0 +1,1 @@
+grafana-foundation-sdk==0.0.12

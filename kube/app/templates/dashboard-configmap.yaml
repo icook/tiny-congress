@@ -1,0 +1,12 @@
+{{- if .Values.dashboards.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "app.fullname" . }}-dashboard-health
+  labels:
+    {{- include "app.labels" . | nindent 4 }}
+    grafana_dashboard: "1"
+data:
+  tc-health.json: |
+    {{- .Files.Get "files/dashboards/health.json" | nindent 4 }}
+{{- end }}
