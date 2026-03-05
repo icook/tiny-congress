@@ -1066,10 +1066,10 @@ jobs:
           git push
 
   # ============================================================
-  # JOB 3: Deploy to Cloudflare Pages
+  # JOB 3: Upload CI reports to Dufs
   # ============================================================
-  deploy-cloudflare:
-    name: Deploy to Cloudflare Pages
+  deploy-reports:
+    name: Upload CI reports to Dufs
     runs-on: ubuntu-latest
     needs: [integration-tests, build-storybook, build-docs]
     if: >-
@@ -1078,7 +1078,6 @@ jobs:
       needs.integration-tests.result != 'failure'
     permissions:
       contents: read
-      deployments: write
       pull-requests: write
     steps:
       - name: Checkout for assets
@@ -1532,13 +1531,35 @@ jobs:
           </html>
           EOF
 
-      - name: Deploy to Cloudflare Pages
-        id: deploy
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages deploy site --project-name=tiny-congress --branch=${{ github.head_ref || github.ref_name }}
+      - name: Upload reports to Dufs
+        env:
+          DUFS_PASSWORD: ${{ secrets.DUFS_UPLOAD_PASSWORD }}
+        run: |
+          set -euo pipefail
+          DEST="${{ github.sha }}"
+
+          # Upload all site files via WebDAV PUT
+          find site -type f | while read -r file; do
+            rel="${file#site/}"
+            curl -sf -u "ci:${DUFS_PASSWORD}" \
+              -T "$file" \
+              "https://reports-upload.ibcook.com/${DEST}/${rel}"
+          done
+
+          # Also upload as "latest" for quick access
+          find site -type f | while read -r file; do
+            rel="${file#site/}"
+            curl -sf -u "ci:${DUFS_PASSWORD}" \
+              -T "$file" \
+              "https://reports-upload.ibcook.com/latest/${rel}"
+          done
+
+          {
+            echo "### 📋 CI Reports"
+            echo ""
+            echo "- [Latest](https://reports.ibcook.com/latest/)"
+            echo "- [This run](https://reports.ibcook.com/${DEST}/)"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Add PR comment with report links
         if: github.event_name == 'pull_request'
@@ -1548,17 +1569,17 @@ jobs:
           message: |
             ## 🏛️ CI Reports
 
-            **[📋 All Reports](${{ steps.deploy.outputs.deployment-url }}/)**
+            **[📋 All Reports](https://reports.ibcook.com/${{ github.sha }}/)**
 
             ### 📚 API Documentation
             | | |
             |---|---|
-            | 🦀 [Rust API Docs](${{ steps.deploy.outputs.deployment-url }}/rust-docs/tinycongress_api/) | 📘 [TypeScript Docs](${{ steps.deploy.outputs.deployment-url }}/ts-docs/) |
+            | 🦀 [Rust API Docs](https://reports.ibcook.com/${{ github.sha }}/rust-docs/tinycongress_api/) | 📘 [TypeScript Docs](https://reports.ibcook.com/${{ github.sha }}/ts-docs/) |
 
             ### 🧪 Test Artifacts
             | | |
             |---|---|
-            | 📊 [Coverage](${{ steps.deploy.outputs.deployment-url }}/coverage/) | 📚 [Storybook](${{ steps.deploy.outputs.deployment-url }}/storybook/) |
-            | 🎭 [Playwright](${{ steps.deploy.outputs.deployment-url }}/playwright/) | |
+            | 📊 [Coverage](https://reports.ibcook.com/${{ github.sha }}/coverage/) | 📚 [Storybook](https://reports.ibcook.com/${{ github.sha }}/storybook/) |
+            | 🎭 [Playwright](https://reports.ibcook.com/${{ github.sha }}/playwright/) | |
 
             <sub>🤖 Generated from commit ${{ github.sha }}</sub>
