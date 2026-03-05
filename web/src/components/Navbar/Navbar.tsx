@@ -27,7 +27,11 @@ const guestLinks = [
 
 const authedLinks = [{ icon: IconSettings, label: 'Settings', path: '/settings' }];
 
-export function Navbar() {
+interface NavbarProps {
+  onNavigate?: () => void;
+}
+
+export function Navbar({ onNavigate }: NavbarProps) {
   const { deviceKid, privateKey, clearDevice } = useDevice();
   const navigate = useNavigate();
   const currentPath = useRouterState({
@@ -44,6 +48,7 @@ export function Navbar() {
 
   const handleLogout = () => {
     clearDevice();
+    onNavigate?.();
     void navigate({ to: '/' });
   };
 
@@ -70,6 +75,7 @@ export function Navbar() {
             label={link.label}
             leftSection={<link.icon size={18} stroke={1.5} />}
             active={isActive(link.path)}
+            onClick={onNavigate}
             fw={500}
           />
         ))}
@@ -85,6 +91,7 @@ export function Navbar() {
               label={link.label}
               leftSection={<link.icon size={18} stroke={1.5} />}
               active={isActive(link.path)}
+              onClick={onNavigate}
               fw={500}
             />
           ))}

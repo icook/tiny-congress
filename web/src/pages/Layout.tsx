@@ -37,7 +37,7 @@ function EnvironmentBadge() {
 }
 
 export function Layout() {
-  const [opened, { toggle }] = useDisclosure();
+  const [opened, { toggle, close }] = useDisclosure();
   const { setColorScheme } = useMantineColorScheme();
   const colorScheme = useComputedColorScheme();
 
@@ -80,7 +80,7 @@ export function Layout() {
         </Group>
       </AppShell.Header>
       <AppShell.Navbar>
-        <Navbar />
+        <Navbar onNavigate={close} />
       </AppShell.Navbar>
 
       <AppShell.Main>
