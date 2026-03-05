@@ -1,4 +1,5 @@
 self-hosted-runner:
-  labels: []
+  labels:
+    - arc-runner-set
 
 config-variables: null
