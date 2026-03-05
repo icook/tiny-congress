@@ -1525,15 +1525,22 @@ jobs:
             local config
             config=$(mktemp)
             local count=0
+            local total_bytes=0
             while IFS= read -r -d '' file; do
               rel="${file#site/}"
               printf 'url = "%s/%s/%s"\nupload-file = "%s"\nuser = "ci:%s"\nsilent\nfail-with-body\nnext\n' \
                 "$BASE" "$target" "$rel" "$file" "$DUFS_PASSWORD" >> "$config"
               count=$((count + 1))
+              total_bytes=$((total_bytes + $(wc -c < "$file")))
             done < <(find site -type f -print0)
+            local start elapsed mb speed
+            start=$(date +%s%3N)
             curl --parallel --parallel-max 20 --retry 2 --config "$config"
             rm "$config"
-            echo "Uploaded ${count} files to ${target}/"
+            elapsed=$(( $(date +%s%3N) - start ))
+            mb=$(echo "scale=1; $total_bytes / 1048576" | bc)
+            speed=$(echo "scale=1; $total_bytes / 1024 / $elapsed" | bc)
+            echo "Uploaded ${count} files (${mb} MB) to ${target}/ in ${elapsed}ms (${speed} MB/s)"
           }
 
           upload_dir "$DEST"
