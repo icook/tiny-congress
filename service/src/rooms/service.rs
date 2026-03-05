@@ -118,6 +118,12 @@ pub trait RoomsService: Send + Sync {
         votes: &[DimensionVote],
     ) -> Result<Vec<VoteRecord>, VoteError>;
 
+    // Lifecycle operations
+    /// Close the active poll and activate the next one from the agenda.
+    async fn close_poll_and_advance(&self, room_id: Uuid, poll_id: Uuid) -> Result<(), PollError>;
+    /// Activate the next poll from a room's agenda (if any).
+    async fn activate_next_from_agenda(&self, room_id: Uuid) -> Result<(), PollError>;
+
     // Results
     async fn get_poll_results(&self, poll_id: Uuid) -> Result<PollResults, PollError>;
     async fn get_poll_distribution(&self, poll_id: Uuid) -> Result<PollDistribution, PollError>;
@@ -236,13 +242,72 @@ impl RoomsService for DefaultRoomsService {
             tracing::error!("Agenda position lookup failed: {e}");
             PollError::Internal("Internal server error".to_string())
         })?;
-        self.repo
+        let poll = self
+            .repo
             .create_poll(room_id, question.trim(), description, Some(position))
             .await
             .map_err(|e| {
                 tracing::error!("Poll creation failed: {e}");
                 PollError::Internal("Internal server error".to_string())
-            })
+            })?;
+
+        // Auto-activate if room has cadence and no active poll
+        let room = self.repo.get_room(room_id).await.map_err(|e| {
+            tracing::error!("Room lookup for auto-activate failed: {e}");
+            PollError::Internal("Internal server error".to_string())
+        })?;
+
+        if room.poll_duration_secs.is_some() {
+            let active = self.repo.get_active_poll(room_id).await.map_err(|e| {
+                tracing::error!("Active poll check failed: {e}");
+                PollError::Internal("Internal server error".to_string())
+            })?;
+
+            if active.is_none() {
+                // This is the first poll or agenda was empty — activate it
+                self.repo
+                    .update_poll_status(poll.id, "active")
+                    .await
+                    .map_err(|e| {
+                        tracing::error!("Auto-activate failed: {e}");
+                        PollError::Internal("Internal server error".to_string())
+                    })?;
+
+                if let Some(duration_secs) = room.poll_duration_secs {
+                    let closes_at =
+                        chrono::Utc::now() + chrono::Duration::seconds(i64::from(duration_secs));
+                    self.repo
+                        .set_poll_closes_at(poll.id, closes_at)
+                        .await
+                        .map_err(|e| {
+                            tracing::error!("Set closes_at on auto-activate failed: {e}");
+                            PollError::Internal("Internal server error".to_string())
+                        })?;
+
+                    super::repo::lifecycle_queue::enqueue_lifecycle_event(
+                        &self.pool,
+                        &super::repo::lifecycle_queue::LifecyclePayload::ClosePoll {
+                            poll_id: poll.id,
+                            room_id,
+                        },
+                        f64::from(duration_secs),
+                    )
+                    .await
+                    .map_err(|e| {
+                        tracing::error!("Enqueue close event failed: {e}");
+                        PollError::Internal("Internal server error".to_string())
+                    })?;
+                }
+
+                // Re-fetch to return updated status
+                return self.repo.get_poll(poll.id).await.map_err(|e| {
+                    tracing::error!("Poll re-fetch failed: {e}");
+                    PollError::Internal("Internal server error".to_string())
+                });
+            }
+        }
+
+        Ok(poll)
     }
 
     async fn list_polls(&self, room_id: Uuid) -> Result<Vec<PollRecord>, PollError> {
@@ -289,6 +354,89 @@ impl RoomsService for DefaultRoomsService {
                     PollError::Internal("Internal server error".to_string())
                 }
             })
+    }
+
+    async fn close_poll_and_advance(&self, room_id: Uuid, poll_id: Uuid) -> Result<(), PollError> {
+        // 1. Close the poll (idempotent — if already closed, skip)
+        let poll = self.repo.get_poll(poll_id).await.map_err(|e| {
+            if matches!(e, PollRepoError::NotFound) {
+                PollError::PollNotFound
+            } else {
+                tracing::error!("Poll lookup failed: {e}");
+                PollError::Internal("Internal server error".to_string())
+            }
+        })?;
+
+        if poll.status == "active" {
+            self.repo
+                .update_poll_status(poll_id, "closed")
+                .await
+                .map_err(|e| {
+                    tracing::error!("Poll close failed: {e}");
+                    PollError::Internal("Internal server error".to_string())
+                })?;
+            tracing::info!(poll_id = %poll_id, room_id = %room_id, "closed poll");
+        }
+
+        // 2. Activate next from agenda
+        self.activate_next_from_agenda(room_id).await
+    }
+
+    async fn activate_next_from_agenda(&self, room_id: Uuid) -> Result<(), PollError> {
+        let next = self.repo.next_agenda_poll(room_id).await.map_err(|e| {
+            tracing::error!("Next agenda poll lookup failed: {e}");
+            PollError::Internal("Internal server error".to_string())
+        })?;
+
+        let Some(next_poll) = next else {
+            tracing::info!(room_id = %room_id, "agenda empty, room idle");
+            return Ok(());
+        };
+
+        // Activate the poll
+        self.repo
+            .update_poll_status(next_poll.id, "active")
+            .await
+            .map_err(|e| {
+                tracing::error!("Poll activation failed: {e}");
+                PollError::Internal("Internal server error".to_string())
+            })?;
+
+        // Set closes_at and enqueue close event based on room cadence
+        let room = self.repo.get_room(room_id).await.map_err(|e| {
+            tracing::error!("Room lookup failed: {e}");
+            PollError::Internal("Internal server error".to_string())
+        })?;
+
+        if let Some(duration_secs) = room.poll_duration_secs {
+            let closes_at =
+                chrono::Utc::now() + chrono::Duration::seconds(i64::from(duration_secs));
+            self.repo
+                .set_poll_closes_at(next_poll.id, closes_at)
+                .await
+                .map_err(|e| {
+                    tracing::error!("Set closes_at failed: {e}");
+                    PollError::Internal("Internal server error".to_string())
+                })?;
+
+            // Enqueue close event
+            super::repo::lifecycle_queue::enqueue_lifecycle_event(
+                &self.pool,
+                &super::repo::lifecycle_queue::LifecyclePayload::ClosePoll {
+                    poll_id: next_poll.id,
+                    room_id,
+                },
+                f64::from(duration_secs),
+            )
+            .await
+            .map_err(|e| {
+                tracing::error!("Enqueue close event failed: {e}");
+                PollError::Internal("Internal server error".to_string())
+            })?;
+        }
+
+        tracing::info!(poll_id = %next_poll.id, room_id = %room_id, "activated next poll from agenda");
+        Ok(())
     }
 
     async fn add_dimension(
