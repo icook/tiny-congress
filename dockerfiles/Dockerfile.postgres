@@ -1,18 +1,33 @@
-FROM postgres:18
+FROM postgres:18-alpine AS builder
 
-# Ensure pg_config from Postgres 18 is preferred
-ENV PATH="/usr/lib/postgresql/18/bin:${PATH}"
-ENV PG_CONFIG=/usr/lib/postgresql/18/bin/pg_config
-
-# Install pgmq extension and required contrib modules, then clean up build deps and apt cache.
+# Install pgmq extension and required contrib modules, then clean up build deps.
+# Replace gosu (Go binary) with su-exec (C binary) symlink so the entrypoint
+# script keeps working while eliminating Go stdlib from the final image.
 RUN set -eux; \
-    buildDeps='build-essential libicu-dev postgresql-server-dev-18 pgxnclient'; \
-    apt-get update; \
-    apt-get install --no-install-recommends -y $buildDeps postgresql-contrib; \
-    pgxn install pgmq; \
-    apt-get purge -y --auto-remove $buildDeps; \
-    rm -rf /var/lib/apt/lists/*
+    apk add --no-cache --virtual .build-deps build-base icu-dev python3 py3-pip; \
+    apk add --no-cache postgresql18-contrib su-exec; \
+    python3 -m venv /tmp/pgxn-venv; \
+    /tmp/pgxn-venv/bin/pip install --no-cache-dir pgxnclient; \
+    /tmp/pgxn-venv/bin/pgxn install pgmq; \
+    rm -rf /tmp/pgxn-venv; \
+    apk del .build-deps; \
+    rm -f /usr/local/bin/gosu; \
+    ln -s /sbin/su-exec /usr/local/bin/gosu; \
+    echo "CREATE EXTENSION IF NOT EXISTS pgmq;" > /docker-entrypoint-initdb.d/init-extensions.sql
 
+# Flatten into a single layer so the base image's gosu Go binary (present in
+# an earlier layer) is truly absent. Trivy's gobinary scanner examines all
+# layers; rm + symlink in an upper layer is not enough.
+FROM scratch
+COPY --from=builder / /
+
+# Re-declare metadata lost by FROM scratch (sourced from postgres:18-alpine).
+ENV PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+ENV LANG=en_US.utf8
+ENV PG_MAJOR=18
+ENV PG_VERSION=18.2
+ENV PGDATA=/var/lib/postgresql/18/docker
+VOLUME /var/lib/postgresql
 # Database name default (non-sensitive)
 # POSTGRES_USER and POSTGRES_PASSWORD must be provided at runtime via:
 #   - docker run -e POSTGRES_PASSWORD=... -e POSTGRES_USER=...
@@ -20,9 +35,7 @@ RUN set -eux; \
 #   - testcontainers .with_env_var() calls
 ENV POSTGRES_DB=tiny-congress
 
-# Create extension setup script
-RUN echo "CREATE EXTENSION IF NOT EXISTS pgmq;" > /docker-entrypoint-initdb.d/init-extensions.sql
-
+STOPSIGNAL SIGINT
 EXPOSE 5432
-
+ENTRYPOINT ["docker-entrypoint.sh"]
 CMD ["postgres"]
