@@ -53,7 +53,13 @@ export function Layout() {
     >
       <AppShell.Header>
         <Group h="100%" px="md" gap="sm">
-          <Burger opened={opened} onClick={toggle} hiddenFrom="sm" size="sm" />
+          <Burger
+            opened={opened}
+            onClick={toggle}
+            hiddenFrom="sm"
+            size="sm"
+            aria-label="Toggle navigation"
+          />
           <Image
             src={colorScheme === 'dark' ? logoLight : logoDark}
             alt="TinyCongress logo"

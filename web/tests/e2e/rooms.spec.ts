@@ -16,6 +16,13 @@ test('rooms page loads and shows content', async ({ page }) => {
 test('rooms page is accessible from navbar', async ({ page }) => {
   await page.goto('/');
 
+  // On mobile viewports the navbar is behind a burger menu
+  const burger = page.getByRole('button', { name: /toggle navigation/i });
+  // eslint-disable-next-line playwright/no-conditional-in-test
+  if (await burger.isVisible()) {
+    await burger.click();
+  }
+
   // Navbar should have a Rooms link (use exact match to avoid the "Browse Rooms" CTA)
   const roomsLink = page.getByRole('link', { name: /^Rooms$/i });
   await expect(roomsLink).toBeVisible();
