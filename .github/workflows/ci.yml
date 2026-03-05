@@ -1532,6 +1532,8 @@ jobs:
           EOF
 
       - name: Upload reports to Dufs
+        env:
+          DUFS_PASSWORD: ${{ secrets.DUFS_UPLOAD_PASSWORD }}
         run: |
           set -euo pipefail
           DEST="${{ github.sha }}"
@@ -1539,7 +1541,7 @@ jobs:
           # Upload all site files via WebDAV PUT
           find site -type f | while read -r file; do
             rel="${file#site/}"
-            curl -sf -u "ci:${{ secrets.DUFS_UPLOAD_PASSWORD }}" \
+            curl -sf -u "ci:${DUFS_PASSWORD}" \
               -T "$file" \
               "https://reports-upload.ibcook.com/${DEST}/${rel}"
           done
@@ -1547,15 +1549,17 @@ jobs:
           # Also upload as "latest" for quick access
           find site -type f | while read -r file; do
             rel="${file#site/}"
-            curl -sf -u "ci:${{ secrets.DUFS_UPLOAD_PASSWORD }}" \
+            curl -sf -u "ci:${DUFS_PASSWORD}" \
               -T "$file" \
               "https://reports-upload.ibcook.com/latest/${rel}"
           done
 
-          echo "### 📋 CI Reports" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "- [Latest](https://reports.ibcook.com/latest/)" >> "$GITHUB_STEP_SUMMARY"
-          echo "- [This run](https://reports.ibcook.com/${DEST}/)" >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "### 📋 CI Reports"
+            echo ""
+            echo "- [Latest](https://reports.ibcook.com/latest/)"
+            echo "- [This run](https://reports.ibcook.com/${DEST}/)"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Add PR comment with report links
         if: github.event_name == 'pull_request'
