@@ -68,6 +68,7 @@ pub enum VoteError {
 
 // ─── Service trait ─────────────────────────────────────────────────────────
 
+#[allow(clippy::too_many_arguments)]
 #[async_trait]
 pub trait RoomsService: Send + Sync {
     // Room operations
