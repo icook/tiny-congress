@@ -1,20 +1,6 @@
 # Trivy vulnerability ignore list
 # https://aquasecurity.github.io/trivy/latest/docs/configuration/filtering/#trivyignore
-
-# ============================================================
-# postgres image: gosu binary (Go stdlib CVEs)
-# ============================================================
-# gosu is baked into the postgres:18-alpine base image for privilege
-# dropping at container startup. It's built with Go 1.24.6; these CVEs
-# are fixed in Go >=1.24.8 but no gosu rebuild is available yet.
-# Our image replaces gosu with a symlink to su-exec (C binary) so the
-# Go code never executes, but trivy still detects it in lower image layers.
-# Remove these once gosu is rebuilt with a patched Go (track upstream:
-# https://github.com/tianon/gosu/releases).
-
-CVE-2025-58183
-CVE-2025-61726
-CVE-2025-61728
-CVE-2025-61729
-CVE-2025-61730
-CVE-2025-68121
+#
+# This file is intentionally empty. The postgres image uses a multi-stage
+# build (FROM scratch + COPY --from) to flatten layers, ensuring the gosu
+# Go binary from the base image is not present in any layer of the final image.
