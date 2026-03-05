@@ -121,15 +121,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Set up Node
-        uses: actions/setup-node@v6
-        with:
-          node-version-file: web/.nvmrc
-          cache: yarn
-          cache-dependency-path: web/yarn.lock
-
-      - name: Enable corepack
-        run: corepack enable
+      - name: Setup web toolchain
+        uses: ./.github/actions/setup-web
 
       - name: Install just
         uses: extractions/setup-just@v3
@@ -183,15 +176,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Set up Node
-        uses: actions/setup-node@v6
-        with:
-          node-version-file: web/.nvmrc
-          cache: yarn
-          cache-dependency-path: web/yarn.lock
-
-      - name: Enable corepack
-        run: corepack enable
+      - name: Setup web toolchain
+        uses: ./.github/actions/setup-web
 
       - name: Install just
         uses: extractions/setup-just@v3
@@ -227,15 +213,8 @@ jobs:
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
 
-      - name: Set up Node
-        uses: actions/setup-node@v6
-        with:
-          node-version-file: web/.nvmrc
-          cache: yarn
-          cache-dependency-path: web/yarn.lock
-
-      - name: Enable corepack
-        run: corepack enable
+      - name: Setup web toolchain
+        uses: ./.github/actions/setup-web
 
       - name: Install dependencies
         run: cd web && yarn install --immutable
@@ -273,15 +252,8 @@ jobs:
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
 
-      - name: Set up Node
-        uses: actions/setup-node@v6
-        with:
-          node-version-file: web/.nvmrc
-          cache: yarn
-          cache-dependency-path: web/yarn.lock
-
-      - name: Enable corepack
-        run: corepack enable
+      - name: Setup web toolchain
+        uses: ./.github/actions/setup-web
 
       - name: Install just
         uses: extractions/setup-just@v3
@@ -324,15 +296,8 @@ jobs:
       - name: Install cargo-machete
         uses: taiki-e/install-action@cargo-machete
 
-      - name: Set up Node
-        uses: actions/setup-node@v6
-        with:
-          node-version-file: web/.nvmrc
-          cache: yarn
-          cache-dependency-path: web/yarn.lock
-
-      - name: Enable corepack
-        run: corepack enable
+      - name: Setup web toolchain
+        uses: ./.github/actions/setup-web
 
       - name: Install frontend dependencies
         run: cd web && yarn install --immutable
@@ -727,15 +692,8 @@ jobs:
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
 
-      - name: Set up Node
-        uses: actions/setup-node@v6
-        with:
-          node-version-file: web/.nvmrc
-          cache: yarn
-          cache-dependency-path: web/yarn.lock
-
-      - name: Enable corepack
-        run: corepack enable
+      - name: Setup web toolchain
+        uses: ./.github/actions/setup-web
 
       - name: Install web dependencies
         working-directory: web

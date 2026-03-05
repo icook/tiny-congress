@@ -37,16 +37,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Set up Node
-        uses: actions/setup-node@v4
-        with:
-          node-version-file: web/.node-version
-          cache: yarn
-          cache-dependency-path: web/yarn.lock
+      - name: Setup web toolchain
+        uses: ./.github/actions/setup-web
 
       - name: Install dependencies
         working-directory: web
-        run: yarn install --frozen-lockfile
+        run: yarn install --immutable
 
       - name: Install Playwright browsers
         working-directory: web
