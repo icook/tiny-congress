@@ -50,6 +50,7 @@ use utoipa_swagger_ui::SwaggerUi;
 /// Liveness check — confirms the process is alive.
 ///
 /// Always returns 200. Used by Kubernetes startup and liveness probes.
+// perf-test: trigger BuildKit remote driver benchmark
 async fn health_check() -> impl IntoResponse {
     StatusCode::OK
 }
