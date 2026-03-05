@@ -77,15 +77,8 @@ jobs:
 
       # ── Node toolchain (for `just lint-frontend` / `just test-frontend`) ──
 
-      - name: Set up Node
-        uses: actions/setup-node@v6
-        with:
-          node-version-file: web/.nvmrc
-          cache: yarn
-          cache-dependency-path: web/yarn.lock
-
-      - name: Enable corepack
-        run: corepack enable
+      - name: Setup web toolchain
+        uses: ./.github/actions/setup-web
 
       - name: Install frontend dependencies
         run: cd web && yarn install --immutable
