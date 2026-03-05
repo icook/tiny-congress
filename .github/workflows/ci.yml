@@ -1069,8 +1069,7 @@ jobs:
     needs: [integration-tests, build-storybook, build-docs]
     if: >-
       always() &&
-      !contains(needs.*.result, 'cancelled') &&
-      needs.integration-tests.result != 'failure'
+      !contains(needs.*.result, 'cancelled')
     permissions:
       contents: read
       pull-requests: write
