@@ -41,7 +41,7 @@ spec:
             periodSeconds: 10
           readinessProbe:
             httpGet:
-              path: /health
+              path: /ready
               port: 8090
             initialDelaySeconds: 3
             periodSeconds: 5

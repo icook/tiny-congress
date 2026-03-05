@@ -7,6 +7,7 @@
     clippy::unwrap_used
 )]
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use anyhow::Context;
@@ -60,6 +61,7 @@ struct AppState {
     client: SimClient,
     verifier: SimAccount,
     allowed_callback: String,
+    ready: AtomicBool,
 }
 
 // ---------------------------------------------------------------------------
@@ -84,6 +86,14 @@ struct VerifyResponse {
 
 async fn health() -> StatusCode {
     StatusCode::OK
+}
+
+async fn ready(State(state): State<Arc<AppState>>) -> StatusCode {
+    if state.ready.load(Ordering::Relaxed) {
+        StatusCode::OK
+    } else {
+        StatusCode::SERVICE_UNAVAILABLE
+    }
 }
 
 async fn index_page() -> Html<String> {
@@ -559,33 +569,57 @@ async fn main() -> Result<(), anyhow::Error> {
         "demo verifier identity (ensure TC_VERIFIERS includes this public key)"
     );
 
-    // 4. Login to register device key
-    let login_body = verifier.build_login_json();
-    let resp = client.login(&login_body).await?;
-    let login_status = resp.status();
-    if login_status.as_u16() == 201 {
-        tracing::info!("demo verifier device key registered via login");
-    } else if login_status.as_u16() == 409 {
-        tracing::debug!("demo verifier device key already registered");
-    } else {
-        let body = resp.text().await.unwrap_or_default();
-        tracing::warn!(
-            status = %login_status,
-            body = %body,
-            "demo verifier login failed (account may not be bootstrapped yet)"
-        );
-    }
-
-    // 5. Build and start axum server
+    // 4. Build app state and start server — login happens in background
     let state = Arc::new(AppState {
         client,
         verifier,
         allowed_callback: config.allowed_callback,
+        ready: AtomicBool::new(false),
+    });
+
+    // Spawn background login retry so the server starts immediately
+    let bg_state = Arc::clone(&state);
+    tokio::spawn(async move {
+        let delays = [1, 2, 5, 10, 30];
+        for (attempt, &delay) in delays.iter().enumerate() {
+            let login_body = bg_state.verifier.build_login_json();
+            match bg_state.client.login(&login_body).await {
+                Ok(resp) => {
+                    let status = resp.status().as_u16();
+                    if status == 201 {
+                        tracing::info!("demo verifier device key registered via login");
+                        bg_state.ready.store(true, Ordering::Relaxed);
+                    } else if status == 409 {
+                        tracing::debug!("demo verifier device key already registered");
+                        bg_state.ready.store(true, Ordering::Relaxed);
+                    } else {
+                        let body = resp.text().await.unwrap_or_default();
+                        tracing::warn!(
+                            status,
+                            body = %body,
+                            "demo verifier login returned unexpected status"
+                        );
+                    }
+                    return;
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        attempt = attempt + 1,
+                        delay_secs = delay,
+                        error = %e,
+                        "could not reach API for login — retrying"
+                    );
+                    tokio::time::sleep(std::time::Duration::from_secs(delay)).await;
+                }
+            }
+        }
+        tracing::error!("demo verifier login failed after all retries — verify requests will fail until API is reachable");
     });
 
     let app = Router::new()
         .route("/", get(index_page))
         .route("/health", get(health))
+        .route("/ready", get(ready))
         .route("/api/verify", post(verify))
         .layer(CorsLayer::permissive())
         .with_state(state);
