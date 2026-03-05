@@ -15,6 +15,7 @@ use axum::{
     routing::get,
     Extension, Router,
 };
+use axum_prometheus::PrometheusMetricLayer;
 use sqlx::PgPool;
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -160,6 +161,8 @@ async fn build_app(
         endorsement_service.clone(),
     )) as Arc<dyn RoomsService>;
 
+    let (prometheus_layer, metric_handle) = PrometheusMetricLayer::pair();
+
     let app = Router::new()
         .route("/graphql", {
             let route = axum::routing::post(graphql_handler);
@@ -179,6 +182,7 @@ async fn build_app(
         .merge(rooms::http::router())
         .route("/health", get(health_check))
         .route("/ready", get(readiness_check))
+        .route("/metrics", get(|| async move { metric_handle.render() }))
         .layer(Extension(schema))
         .layer(Extension(service))
         .layer(Extension(repo_ext))
@@ -217,6 +221,8 @@ async fn build_app(
             .allow_headers(Any)
             .allow_origin(allow_origin),
     );
+
+    let app = app.layer(prometheus_layer);
 
     Ok((app, pool))
 }
