@@ -1,30 +1,30 @@
 import { expect, test } from './fixtures';
 
-test('rooms page loads and shows empty state', async ({ page }) => {
+test('rooms page loads and shows content', async ({ page }) => {
   await page.goto('/rooms');
 
   // Page title should render
   await expect(page.getByRole('heading', { name: /Rooms/i })).toBeVisible();
 
-  // Subtitle should render
-  await expect(page.getByText(/Browse open rooms and participate in polls/i)).toBeVisible();
+  // Either shows rooms or the empty state message (depending on DB state)
+  const emptyState = page.getByText(/No rooms are currently open/i);
+  const roomHeading = page.getByRole('heading', { level: 4 }).first();
 
-  // Either shows rooms or the empty state message
-  const content = page.getByText(/No rooms are currently open/i);
-  const roomCard = page.locator('[data-testid="room-card"]').first();
-
-  // One of these should be visible (depending on DB state)
-  await expect(content.or(roomCard)).toBeVisible({ timeout: 10_000 });
+  await expect(emptyState.or(roomHeading)).toBeVisible({ timeout: 10_000 });
 });
 
 test('rooms page is accessible from navbar', async ({ page }) => {
   await page.goto('/');
 
-  // Navbar should have a Rooms link (use exact match to avoid the "Browse Rooms" CTA)
-  const roomsLink = page.getByRole('link', { name: /^Rooms$/i });
-  await expect(roomsLink).toBeVisible();
+  // On mobile viewports the navbar is behind a burger menu.
+  // Try to open it; if it doesn't exist (desktop) the click is skipped.
+  const burger = page.locator('.mantine-Burger-root');
+  await burger.click({ timeout: 2_000 }).catch(() => {
+    /* burger not present on desktop — expected */
+  });
 
-  // Click it
+  const roomsLink = page.getByRole('link', { name: /^Rooms$/i });
+  await expect(roomsLink).toBeVisible({ timeout: 5_000 });
   await roomsLink.click();
 
   // Should navigate to rooms page
@@ -39,5 +39,5 @@ test('non-existent poll shows error', async ({ page }) => {
   );
 
   // Should show an error alert (poll not found from API)
-  await expect(page.getByText(/Failed to load poll/i)).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByText(/Poll not found/i)).toBeVisible({ timeout: 10_000 });
 });

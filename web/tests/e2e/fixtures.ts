@@ -15,17 +15,20 @@ const coverageDir = path.join(process.cwd(), 'coverage/playwright');
 const rawCoverageDir = path.join(process.cwd(), '.playwright-coverage');
 
 // Extended test fixture with V8 coverage collection via Monocart
+// page.coverage (CDP) is only available on Chromium-based browsers.
 export const test = base.extend<{ coveragePage: void }>({
   coveragePage: [
-    async ({ page }, use, testInfo) => {
-      if (shouldCollectCoverage) {
+    async ({ page, browserName }, use, testInfo) => {
+      const canCollectCoverage = shouldCollectCoverage && browserName === 'chromium';
+
+      if (canCollectCoverage) {
         await page.coverage.startJSCoverage({ resetOnNavigation: false });
       }
 
       // Run the test
       await use();
 
-      if (shouldCollectCoverage) {
+      if (canCollectCoverage) {
         const coverage = await page.coverage.stopJSCoverage();
 
         if (coverage.length > 0) {
