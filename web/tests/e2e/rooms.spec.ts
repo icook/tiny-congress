@@ -39,5 +39,5 @@ test('non-existent poll shows error', async ({ page }) => {
   );
 
   // Should show an error alert (poll not found from API)
-  await expect(page.getByText(/Failed to load poll/i)).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByText(/Poll not found/i)).toBeVisible({ timeout: 10_000 });
 });
