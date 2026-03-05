@@ -261,6 +261,10 @@ sim:
       cpu: 200m
       memory: 128Mi
 
+# Grafana dashboard ConfigMaps (picked up by sidecar with grafana_dashboard label)
+dashboards:
+  enabled: false
+
 demoVerifier:
   enabled: false
   apiUrl: ""

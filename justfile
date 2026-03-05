@@ -342,6 +342,14 @@ lint-scripts:
 lint-kube:
     kube-linter lint kube/ --config .kube-linter.yaml
 
+# Generate Grafana dashboard JSON from Python definitions
+generate-dashboards:
+    cd kube/dashboards && python3 generate.py
+
+# Validate dashboard definitions without writing output
+check-dashboards:
+    cd kube/dashboards && python3 generate.py --check
+
 # Check for rustdoc warnings (broken links)
 lint-docs:
     cd service && cargo doc --no-deps --document-private-items 2>&1 | (! grep -E "^warning:")

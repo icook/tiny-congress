@@ -80,6 +80,9 @@ sim:
     Keep room names short and punchy (under 6 words). Write descriptions
     like a person, not a press release.
 
+dashboards:
+  enabled: true
+
 demoVerifier:
   enabled: true
   apiUrl: "http://tc-demo.tiny-congress-demo.svc.cluster.local:8080"
