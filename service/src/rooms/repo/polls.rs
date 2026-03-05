@@ -287,6 +287,33 @@ where
 
 // ─── Lifecycle queries ───────────────────────────────────────────────────
 
+/// List all draft polls in a room's agenda, ordered by position.
+///
+/// # Errors
+///
+/// Returns `Database` on connection failure.
+pub async fn list_agenda<'e, E>(
+    executor: E,
+    room_id: Uuid,
+) -> Result<Vec<PollRecord>, PollRepoError>
+where
+    E: sqlx::Executor<'e, Database = sqlx::Postgres>,
+{
+    let rows = sqlx::query_as::<_, PollRow>(
+        r"
+        SELECT id, room_id, question, description, status, created_at,
+               activated_at, closed_at, closes_at, agenda_position
+        FROM rooms__polls
+        WHERE room_id = $1 AND status = 'draft' AND agenda_position IS NOT NULL
+        ORDER BY agenda_position ASC
+        ",
+    )
+    .bind(room_id)
+    .fetch_all(executor)
+    .await?;
+    Ok(rows.into_iter().map(poll_row_to_record).collect())
+}
+
 /// Find the next draft poll in a room's agenda (lowest `agenda_position`).
 ///
 /// # Errors

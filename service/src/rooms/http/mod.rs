@@ -146,7 +146,9 @@ pub fn router() -> Router {
     Router::new()
         // Room endpoints
         .route("/rooms", get(list_rooms).post(create_room))
+        .route("/rooms/capacity", get(get_capacity))
         .route("/rooms/{room_id}", get(get_room))
+        .route("/rooms/{room_id}/agenda", get(get_agenda))
         // Poll endpoints
         .route("/rooms/{room_id}/polls", get(list_polls).post(create_poll))
         .route("/rooms/{room_id}/polls/{poll_id}", get(get_poll_detail))
@@ -203,6 +205,29 @@ async fn create_room(
     {
         Ok(room) => (StatusCode::CREATED, Json(room_to_response(room))).into_response(),
         Err(e) => room_error_response(e),
+    }
+}
+
+async fn get_capacity(Extension(service): Extension<Arc<dyn RoomsService>>) -> impl IntoResponse {
+    match service.rooms_needing_content().await {
+        Ok(rooms) => {
+            let rooms: Vec<_> = rooms.into_iter().map(room_to_response).collect();
+            (StatusCode::OK, Json(rooms)).into_response()
+        }
+        Err(e) => room_error_response(e),
+    }
+}
+
+async fn get_agenda(
+    Extension(service): Extension<Arc<dyn RoomsService>>,
+    Path(room_id): Path<Uuid>,
+) -> impl IntoResponse {
+    match service.get_agenda(room_id).await {
+        Ok(polls) => {
+            let polls: Vec<_> = polls.into_iter().map(poll_to_response).collect();
+            (StatusCode::OK, Json(polls)).into_response()
+        }
+        Err(e) => poll_error_response(e),
     }
 }
 
