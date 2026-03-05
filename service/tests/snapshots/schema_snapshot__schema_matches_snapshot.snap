@@ -55,6 +55,13 @@ CREATE TABLE request_nonces (
     nonce_hash BYTEA NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now());
 
+CREATE TABLE rooms__lifecycle_queue (
+    id INT8 NOT NULL DEFAULT nextval('rooms__lifecycle_queue_id_seq'::regclass),
+    message_type TEXT NOT NULL,
+    payload JSONB NOT NULL,
+    visible_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now());
+
 CREATE TABLE rooms__poll_dimensions (
     id UUID NOT NULL DEFAULT gen_random_uuid(),
     poll_id UUID NOT NULL,
@@ -74,7 +81,9 @@ CREATE TABLE rooms__polls (
     status TEXT NOT NULL DEFAULT 'draft'::text,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     activated_at TIMESTAMPTZ,
-    closed_at TIMESTAMPTZ);
+    closed_at TIMESTAMPTZ,
+    closes_at TIMESTAMPTZ,
+    agenda_position INT4);
 
 CREATE TABLE rooms__rooms (
     id UUID NOT NULL DEFAULT gen_random_uuid(),
@@ -85,7 +94,8 @@ CREATE TABLE rooms__rooms (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     closed_at TIMESTAMPTZ,
     constraint_type TEXT NOT NULL DEFAULT 'endorsed_by'::text,
-    constraint_config JSONB NOT NULL DEFAULT '{}'::jsonb);
+    constraint_config JSONB NOT NULL DEFAULT '{}'::jsonb,
+    poll_duration_secs INT4);
 
 CREATE TABLE rooms__votes (
     id UUID NOT NULL DEFAULT gen_random_uuid(),
@@ -200,6 +210,12 @@ CREATE INDEX idx_request_nonces_created_at ON public.request_nonces USING btree 
 
 -- request_nonces.request_nonces_pkey
 CREATE UNIQUE INDEX request_nonces_pkey ON public.request_nonces USING btree (nonce_hash)
+
+-- rooms__lifecycle_queue.idx_lifecycle_queue_visible
+CREATE INDEX idx_lifecycle_queue_visible ON public.rooms__lifecycle_queue USING btree (visible_at, id)
+
+-- rooms__lifecycle_queue.rooms__lifecycle_queue_pkey
+CREATE UNIQUE INDEX rooms__lifecycle_queue_pkey ON public.rooms__lifecycle_queue USING btree (id)
 
 -- rooms__poll_dimensions.idx_poll_dimensions_poll
 CREATE INDEX idx_poll_dimensions_poll ON public.rooms__poll_dimensions USING btree (poll_id)
@@ -332,6 +348,13 @@ CREATE UNIQUE INDEX trust__user_influence_pkey ON public.trust__user_influence U
 -- request_nonces: request_nonces_created_at_not_null (CHECK)
 -- request_nonces: request_nonces_nonce_hash_not_null (CHECK)
 -- request_nonces: request_nonces_pkey (PRIMARY KEY)
+-- rooms__lifecycle_queue: rooms__lifecycle_queue_created_at_not_null (CHECK)
+-- rooms__lifecycle_queue: rooms__lifecycle_queue_id_not_null (CHECK)
+-- rooms__lifecycle_queue: rooms__lifecycle_queue_message_type_check (CHECK)
+-- rooms__lifecycle_queue: rooms__lifecycle_queue_message_type_not_null (CHECK)
+-- rooms__lifecycle_queue: rooms__lifecycle_queue_payload_not_null (CHECK)
+-- rooms__lifecycle_queue: rooms__lifecycle_queue_pkey (PRIMARY KEY)
+-- rooms__lifecycle_queue: rooms__lifecycle_queue_visible_at_not_null (CHECK)
 -- rooms__poll_dimensions: rooms__poll_dimensions_id_not_null (CHECK)
 -- rooms__poll_dimensions: rooms__poll_dimensions_max_value_not_null (CHECK)
 -- rooms__poll_dimensions: rooms__poll_dimensions_min_value_not_null (CHECK)
