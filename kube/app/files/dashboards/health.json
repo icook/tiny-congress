@@ -406,8 +406,8 @@
           "type": "timeseries",
           "targets": [
             {
-              "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=\"${namespace}\", container!=\"\"}[5m])) by (pod)",
-              "legendFormat": "{{pod}} usage",
+              "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=\"${namespace}\", container!=\"\"}[5m])) by (container)",
+              "legendFormat": "{{container}} usage",
               "refId": "A",
               "datasource": {
                 "type": "prometheus",
@@ -415,8 +415,8 @@
               }
             },
             {
-              "expr": "sum(kube_pod_container_resource_limits{namespace=\"${namespace}\", resource=\"cpu\"}) by (pod)",
-              "legendFormat": "{{pod}} limit",
+              "expr": "sum(kube_pod_container_resource_limits{namespace=\"${namespace}\", resource=\"cpu\"}) by (container)",
+              "legendFormat": "{{container}} limit",
               "refId": "B",
               "datasource": {
                 "type": "prometheus",
@@ -448,8 +448,8 @@
           "type": "timeseries",
           "targets": [
             {
-              "expr": "sum(container_memory_working_set_bytes{namespace=\"${namespace}\", container!=\"\"}) by (pod)",
-              "legendFormat": "{{pod}} usage",
+              "expr": "sum(container_memory_working_set_bytes{namespace=\"${namespace}\", container!=\"\"}) by (container)",
+              "legendFormat": "{{container}} usage",
               "refId": "A",
               "datasource": {
                 "type": "prometheus",
@@ -457,8 +457,8 @@
               }
             },
             {
-              "expr": "sum(kube_pod_container_resource_limits{namespace=\"${namespace}\", resource=\"memory\"}) by (pod)",
-              "legendFormat": "{{pod}} limit",
+              "expr": "sum(kube_pod_container_resource_limits{namespace=\"${namespace}\", resource=\"memory\"}) by (container)",
+              "legendFormat": "{{container}} limit",
               "refId": "B",
               "datasource": {
                 "type": "prometheus",
@@ -652,8 +652,8 @@
           "type": "timeseries",
           "targets": [
             {
-              "expr": "rate(pg_stat_statements_mean_exec_time_ms{namespace=\"${namespace}\"}[5m])",
-              "legendFormat": "mean",
+              "expr": "rate(pg_stat_user_tables_seq_tup_read{namespace=\"${namespace}\"}[5m])",
+              "legendFormat": "seq reads/s",
               "refId": "A",
               "datasource": {
                 "type": "prometheus",
@@ -661,7 +661,7 @@
               }
             }
           ],
-          "title": "Query Duration",
+          "title": "Table Seq Reads",
           "transparent": false,
           "gridPos": {
             "h": 8,
@@ -672,7 +672,7 @@
           "repeatDirection": "h",
           "fieldConfig": {
             "defaults": {
-              "unit": "ms",
+              "unit": "short",
               "custom": {
                 "lineWidth": 2,
                 "fillOpacity": 5
@@ -699,7 +699,7 @@
           "type": "logs",
           "targets": [
             {
-              "expr": "{namespace=\"${namespace}\", container=~\"tc-.*\"} |= \"ERROR\"",
+              "expr": "{namespace=\"${namespace}\"} |~ \"ERROR|error|panic\"",
               "maxLines": 200,
               "refId": "A",
               "datasource": {
@@ -733,7 +733,7 @@
           "type": "timeseries",
           "targets": [
             {
-              "expr": "sum(count_over_time({namespace=\"${namespace}\", container=~\"tc-.*\"} |= \"ERROR\" [5m]))",
+              "expr": "sum(count_over_time({namespace=\"${namespace}\"} |~ \"ERROR|error|panic\" [5m]))",
               "maxLines": 200,
               "refId": "A",
               "datasource": {

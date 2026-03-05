@@ -153,12 +153,12 @@ cpu_usage = (
     .title("CPU Usage vs Limit")
     .grid_pos(Pos(h=8, w=9, x=0, y=15))
     .with_target(prom_target(
-        f'sum(rate(container_cpu_usage_seconds_total{{namespace="{NS}", container!=""}}[5m])) by (pod)',
-        "{{pod}} usage", "A",
+        f'sum(rate(container_cpu_usage_seconds_total{{namespace="{NS}", container!=""}}[5m])) by (container)',
+        "{{container}} usage", "A",
     ))
     .with_target(prom_target(
-        f'sum(kube_pod_container_resource_limits{{namespace="{NS}", resource="cpu"}}) by (pod)',
-        "{{pod}} limit", "B",
+        f'sum(kube_pod_container_resource_limits{{namespace="{NS}", resource="cpu"}}) by (container)',
+        "{{container}} limit", "B",
     ))
     .line_width(2)
     .fill_opacity(10)
@@ -170,12 +170,12 @@ memory_usage = (
     .title("Memory Usage vs Limit")
     .grid_pos(Pos(h=8, w=9, x=9, y=15))
     .with_target(prom_target(
-        f'sum(container_memory_working_set_bytes{{namespace="{NS}", container!=""}}) by (pod)',
-        "{{pod}} usage", "A",
+        f'sum(container_memory_working_set_bytes{{namespace="{NS}", container!=""}}) by (container)',
+        "{{container}} usage", "A",
     ))
     .with_target(prom_target(
-        f'sum(kube_pod_container_resource_limits{{namespace="{NS}", resource="memory"}}) by (pod)',
-        "{{pod}} limit", "B",
+        f'sum(kube_pod_container_resource_limits{{namespace="{NS}", resource="memory"}}) by (container)',
+        "{{container}} limit", "B",
     ))
     .line_width(2)
     .fill_opacity(10)
@@ -245,15 +245,15 @@ pg_pool_util = (
 
 pg_query_duration = (
     ts.Panel()
-    .title("Query Duration")
+    .title("Table Seq Reads")
     .grid_pos(Pos(h=8, w=9, x=15, y=24))
     .with_target(prom_target(
-        f'rate(pg_stat_statements_mean_exec_time_ms{{namespace="{NS}"}}[5m])',
-        "mean", "A",
+        f'rate(pg_stat_user_tables_seq_tup_read{{namespace="{NS}"}}[5m])',
+        "seq reads/s", "A",
     ))
     .line_width(2)
     .fill_opacity(5)
-    .unit("ms")
+    .unit("short")
 )
 
 row4 = (
@@ -272,7 +272,7 @@ error_logs = (
     .title("Recent Error Logs")
     .grid_pos(Pos(h=10, w=16, x=0, y=33))
     .with_target(loki_target(
-        f'{{namespace="{NS}", container=~"tc-.*"}} |= "ERROR"',
+        f'{{namespace="{NS}"}} |~ "ERROR|error|panic"',
         max_lines=200,
     ))
     .show_time(True)
@@ -287,7 +287,7 @@ error_rate_loki = (
     .title("Error Rate (Loki)")
     .grid_pos(Pos(h=10, w=8, x=16, y=33))
     .with_target(loki_target(
-        f'sum(count_over_time({{namespace="{NS}", container=~"tc-.*"}} |= "ERROR" [5m]))',
+        f'sum(count_over_time({{namespace="{NS}"}} |~ "ERROR|error|panic" [5m]))',
     ))
     .line_width(2)
     .fill_opacity(15)
