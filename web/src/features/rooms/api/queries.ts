@@ -100,6 +100,7 @@ export function useCastVote(
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['my-votes', pollId] });
       void queryClient.invalidateQueries({ queryKey: ['poll-results', pollId] });
+      void queryClient.invalidateQueries({ queryKey: ['poll-distribution', pollId] });
     },
   });
 }

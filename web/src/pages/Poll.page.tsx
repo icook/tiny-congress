@@ -172,7 +172,14 @@ export function PollPage({ roomId, pollId }: PollPageProps) {
 
             {!isAuthenticated ? (
               <Alert icon={<IconLock size={16} />} color="yellow">
-                Sign up or log in to vote on this poll.
+                <Link to="/signup" style={{ fontWeight: 600 }}>
+                  Sign up
+                </Link>{' '}
+                or{' '}
+                <Link to="/login" style={{ fontWeight: 600 }}>
+                  log in
+                </Link>{' '}
+                to vote on this poll.
               </Alert>
             ) : null}
 
