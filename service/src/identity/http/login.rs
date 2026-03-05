@@ -206,6 +206,7 @@ pub async fn login(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::identity::http::auth::MAX_TIMESTAMP_SKEW;
     use crate::identity::repo::{
         mock::MockIdentityRepo, AccountRecord, DeviceKeyRepoError, NonceRepoError,
     };
