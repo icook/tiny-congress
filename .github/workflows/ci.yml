@@ -577,7 +577,7 @@ jobs:
 
       - name: Run Trivy vulnerability scanner
         if: steps.should-scan.outputs.changed != 'false'
-        uses: aquasecurity/trivy-action@0.33.1
+        uses: aquasecurity/trivy-action@0.34.0
         with:
           image-ref: ${{ env.REGISTRY }}/${{ matrix.image }}:${{ github.sha }}
           format: 'table'
@@ -585,6 +585,7 @@ jobs:
           ignore-unfixed: true
           severity: 'CRITICAL,HIGH'
           trivyignores: '.trivyignore'
+          version: 'v0.65.0'
 
   # ============================================================
   # JOB 2: Run Skaffold test/deploy and host-based integration/E2E tests
