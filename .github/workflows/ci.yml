@@ -1538,22 +1538,21 @@ jobs:
         run: |
           set -euo pipefail
           DEST="${{ github.sha }}"
+          BASE="https://reports-upload.ibcook.com"
 
-          # Upload all site files via WebDAV PUT
-          find site -type f | while read -r file; do
-            rel="${file#site/}"
-            curl -sf -u "ci:${DUFS_PASSWORD}" \
-              -T "$file" \
-              "https://reports-upload.ibcook.com/${DEST}/${rel}"
-          done
+          upload_dir() {
+            local target="$1"
+            while IFS= read -r -d '' file; do
+              rel="${file#site/}"
+              echo "Uploading ${rel} → ${target}/${rel}"
+              curl --fail-with-body --retry 2 -u "ci:${DUFS_PASSWORD}" \
+                -T "$file" \
+                "${BASE}/${target}/${rel}"
+            done < <(find site -type f -print0)
+          }
 
-          # Also upload as "latest" for quick access
-          find site -type f | while read -r file; do
-            rel="${file#site/}"
-            curl -sf -u "ci:${DUFS_PASSWORD}" \
-              -T "$file" \
-              "https://reports-upload.ibcook.com/latest/${rel}"
-          done
+          upload_dir "$DEST"
+          upload_dir "latest"
 
           {
             echo "### 📋 CI Reports"
