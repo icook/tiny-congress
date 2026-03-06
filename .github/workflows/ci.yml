@@ -139,6 +139,12 @@ jobs:
   # ============================================================
   static-analysis:
     name: Static Analysis
+    needs: [detect-changes]
+    if: >-
+      needs.detect-changes.outputs.api == 'true' ||
+      needs.detect-changes.outputs.ui == 'true' ||
+      needs.detect-changes.outputs.chart == 'true' ||
+      needs.detect-changes.outputs.ci == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -595,15 +601,8 @@ jobs:
     needs:
       - detect-changes
       - build-images
-      - scan-images
       - lint
-      - lint-kube
       - lint-web
-      - build-storybook
-      - static-analysis
-      - codegen-check
-      - sqlx-check
-      - security-audit
     # always() is required so this job evaluates its `if` even when
     # path-filtered dependencies are skipped.  Without it, GitHub Actions
     # silently skips this job whenever any `needs` job is skipped, which
@@ -693,6 +692,12 @@ jobs:
         working-directory: web
         run: yarn install --immutable
 
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.PLAYWRIGHT_BROWSERS_PATH }}
+          key: playwright-chromium-${{ hashFiles('web/yarn.lock') }}
+
       - name: Install Playwright browsers
         working-directory: web
         run: yarn playwright install --with-deps chromium
@@ -703,7 +708,7 @@ jobs:
           rm -f service/coverage/backend-unit.lcov
 
       - name: Install wasm-pack
-        run: cargo install wasm-pack --locked
+        uses: taiki-e/install-action@wasm-pack
 
       - name: Build WASM
         run: |
@@ -909,6 +914,7 @@ jobs:
       - lint-kube
       - lint-web
       - static-analysis
+      - check-dashboards
       - build-storybook
       - build-docs
       - codegen-check
