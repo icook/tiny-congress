@@ -680,6 +680,14 @@ jobs:
         working-directory: web
         run: yarn install --immutable
 
+      # catthehacker doesn't pre-install Rust (unlike GHA ubuntu-24.04 which
+      # ships it at /usr/local/cargo). Install explicitly so wasm-pack can
+      # find cargo on both runner types.
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
       - name: Install wasm-pack
         uses: taiki-e/install-action@wasm-pack
 
@@ -848,6 +856,14 @@ jobs:
       - name: Install Playwright browsers
         working-directory: web
         run: yarn playwright install --with-deps chromium
+
+      # catthehacker doesn't pre-install Rust (unlike GHA ubuntu-24.04 which
+      # ships it at /usr/local/cargo). Install explicitly so wasm-pack can
+      # find cargo on both runner types.
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
 
       - name: Install wasm-pack
         uses: taiki-e/install-action@wasm-pack
