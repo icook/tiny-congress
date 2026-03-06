@@ -1180,8 +1180,18 @@ jobs:
             echo "Uploaded ${count} files (${mb} MB) to ${target}/ in ${elapsed}ms (${speed} MB/s)"
           }
 
-          upload_dir "$DEST"
-          upload_dir "latest"
+          for attempt in 1 2 3; do
+            if upload_dir "$DEST" && upload_dir "latest"; then
+              break
+            fi
+            if [ "$attempt" -lt 3 ]; then
+              echo "Upload failed (attempt ${attempt}/3), retrying in $((attempt * 60))s..."
+              sleep $((attempt * 60))
+            else
+              echo "Upload failed after 3 attempts"
+              exit 1
+            fi
+          done
 
           {
             echo "### 📋 CI Reports"
