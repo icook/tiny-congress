@@ -1522,13 +1522,27 @@ jobs:
 
           upload_dir() {
             local target="$1"
+            local config
+            config=$(mktemp)
+            local count=0
+            local total_bytes=0
+            local first=true
             while IFS= read -r -d '' file; do
               rel="${file#site/}"
-              echo "Uploading ${rel} → ${target}/${rel}"
-              curl --fail-with-body --retry 2 -u "ci:${DUFS_PASSWORD}" \
-                -T "$file" \
-                "${BASE}/${target}/${rel}"
+              if $first; then first=false; else printf 'next\n' >> "$config"; fi
+              printf 'url = "%s/%s/%s"\nupload-file = "%s"\nuser = "ci:%s"\nsilent\nfail-with-body\n' \
+                "$BASE" "$target" "$rel" "$file" "$DUFS_PASSWORD" >> "$config"
+              count=$((count + 1))
+              total_bytes=$((total_bytes + $(wc -c < "$file")))
             done < <(find site -type f -print0)
+            local start elapsed mb speed
+            start=$(date +%s%3N)
+            curl --parallel --parallel-max 20 --retry 2 --config "$config"
+            rm "$config"
+            elapsed=$(( $(date +%s%3N) - start ))
+            mb=$(echo "scale=1; $total_bytes / 1048576" | bc)
+            speed=$(echo "scale=1; $total_bytes / 1024 / $elapsed" | bc)
+            echo "Uploaded ${count} files (${mb} MB) to ${target}/ in ${elapsed}ms (${speed} MB/s)"
           }
 
           upload_dir "$DEST"
