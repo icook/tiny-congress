@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
+import { Center, Loader } from '@mantine/core';
 
 /**
  * Interface for the crypto module functions exposed by WASM
@@ -86,7 +87,11 @@ export function CryptoProvider({ children }: CryptoProviderProps) {
   // Don't render children until WASM is loaded
   // This ensures crypto is always available when useCryptoRequired is called
   if (state.isLoading) {
-    return null;
+    return (
+      <Center style={{ height: '100vh' }}>
+        <Loader size="sm" />
+      </Center>
+    );
   }
 
   if (state.error) {

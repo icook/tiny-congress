@@ -13,16 +13,16 @@ import { mantineTheme } from './theme/mantineTheme';
 export default function App() {
   return (
     <ErrorBoundary context="Application">
-      <CryptoProvider>
-        <DeviceProvider>
-          <QueryProvider>
-            <MantineProvider theme={mantineTheme} defaultColorScheme="dark">
-              <Notifications />
+      <MantineProvider theme={mantineTheme} defaultColorScheme="dark">
+        <Notifications />
+        <CryptoProvider>
+          <DeviceProvider>
+            <QueryProvider>
               <Router />
-            </MantineProvider>
-          </QueryProvider>
-        </DeviceProvider>
-      </CryptoProvider>
+            </QueryProvider>
+          </DeviceProvider>
+        </CryptoProvider>
+      </MantineProvider>
     </ErrorBoundary>
   );
 }
