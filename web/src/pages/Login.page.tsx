@@ -115,14 +115,12 @@ export function LoginPage() {
     }
   };
 
-  const displayError = localError;
-
   return (
     <Stack gap="md" maw={500} mx="auto" mt="xl">
       <div>
         <Title order={2}>Log In</Title>
         <Text c="dimmed" size="sm" mt="xs">
-          Sign in to your TinyCongress account
+          Enter your username and the backup password you chose when you signed up.
         </Text>
       </div>
 
@@ -145,8 +143,8 @@ export function LoginPage() {
             />
 
             <PasswordInput
-              label="Backup password"
-              placeholder="Enter your backup password"
+              label="Backup Password"
+              description="The password you chose when creating your account."
               required
               value={password}
               onChange={(e) => {
@@ -155,9 +153,9 @@ export function LoginPage() {
               disabled={loginMutation.isPending || isGeneratingKeys}
             />
 
-            {displayError ? (
+            {localError ? (
               <Alert icon={<IconAlertTriangle size={16} />} title="Login failed" color="red">
-                {displayError}
+                {localError}
               </Alert>
             ) : null}
 
