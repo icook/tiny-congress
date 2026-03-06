@@ -598,13 +598,8 @@ jobs:
   unit-tests:
     name: Unit tests (Vitest)
     runs-on: ubuntu-24.04
-    needs:
-      - detect-changes
-    if: >-
-      always() &&
-      (needs.detect-changes.outputs.ui == 'true' || needs.detect-changes.outputs.ci == 'true') &&
-      !contains(needs.*.result, 'failure') &&
-      !contains(needs.*.result, 'cancelled')
+    needs: [detect-changes]
+    if: needs.detect-changes.outputs.ui == 'true' || needs.detect-changes.outputs.ci == 'true'
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -642,14 +637,8 @@ jobs:
   rust-coverage:
     name: Rust coverage
     runs-on: ubuntu-24.04
-    needs:
-      - detect-changes
-      - build-images
-    if: >-
-      always() &&
-      (needs.detect-changes.outputs.api == 'true' || needs.detect-changes.outputs.ci == 'true') &&
-      !contains(needs.*.result, 'failure') &&
-      !contains(needs.*.result, 'cancelled')
+    needs: [detect-changes, build-images]
+    if: needs.detect-changes.outputs.api == 'true' || needs.detect-changes.outputs.ci == 'true'
     env:
       TEST_POSTGRES_IMAGE: ${{ needs.build-images.outputs.postgres-tag || format('ghcr.io/{0}/postgres:{1}', github.repository, github.sha) }}
     steps:
@@ -973,7 +962,7 @@ jobs:
       github.event_name == 'push' && github.ref == 'refs/heads/master' &&
       !contains(needs.*.result, 'failure') &&
       !contains(needs.*.result, 'cancelled')
-    needs: [e2e-tests, detect-changes]
+    needs: [unit-tests, rust-coverage, e2e-tests, detect-changes]
     runs-on: ubuntu-latest
     permissions:
       contents: read
