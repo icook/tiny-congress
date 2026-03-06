@@ -427,7 +427,7 @@ jobs:
   build-images:
     name: Build ${{ matrix.image }}
     needs: [detect-changes]
-    runs-on: arc-runner-set
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       packages: write
@@ -597,7 +597,7 @@ jobs:
   # ============================================================
   integration-tests:
     name: Integration tests
-    runs-on: arc-runner-set
+    runs-on: ubuntu-24.04
     needs:
       - detect-changes
       - build-images
