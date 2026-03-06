@@ -36,6 +36,10 @@ jobs:
           else
             BASE="https://tiny-congress-demo.ibcook.com"
           fi
+          if [[ "$BASE" != *"tiny-congress-demo."* ]]; then
+            echo "Non-default URLs must follow the tiny-congress-demo.* pattern for API/verifier derivation"
+            exit 1
+          fi
           API="${BASE/https:\/\/tiny-congress-demo./https://tc-api-demo.}"
           VERIFIER="${BASE/https:\/\/tiny-congress-demo./https://tc-verify-demo.}"
           echo "frontend=$BASE" >> "$GITHUB_OUTPUT"
