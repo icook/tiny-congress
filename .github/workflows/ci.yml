@@ -17,9 +17,7 @@ env:
   REGISTRY: ghcr.io/${{ github.repository }}
 
 jobs:
-  # ============================================================
-  # JOB 0: Lint Rust formatting
-  # ============================================================
+  # ── Lint Rust formatting ──────────────────────────────────
   lint:
     name: Lint Rust formatting
     needs: [detect-changes]
@@ -43,9 +41,7 @@ jobs:
       - name: Lint backend
         run: just lint-backend
 
-  # ============================================================
-  # JOB 0a: Lint Kubernetes manifests
-  # ============================================================
+  # ── Lint Kubernetes manifests ─────────────────────────────
   lint-kube:
     name: Lint Kubernetes manifests
     needs: [detect-changes]
@@ -76,9 +72,7 @@ jobs:
             echo "::endgroup::"
           done
 
-  # ============================================================
-  # JOB 0a1: Validate Grafana dashboards
-  # ============================================================
+  # ── Validate Grafana dashboards ──────────────────────────
   check-dashboards:
     name: Validate Grafana dashboards
     needs: [detect-changes]
@@ -110,9 +104,7 @@ jobs:
             exit 1
           fi
 
-  # ============================================================
-  # JOB 0b: Lint web
-  # ============================================================
+  # ── Lint web ─────────────────────────────────────────────
   lint-web:
     name: Lint web
     needs: [detect-changes]
@@ -134,9 +126,7 @@ jobs:
       - name: Run Linters
         run: just lint-frontend
 
-  # ============================================================
-  # JOB 0b1: Static Analysis (typos, Dockerfiles, workflows, scripts)
-  # ============================================================
+  # ── Static analysis (typos, Dockerfiles, workflows, scripts)
   static-analysis:
     name: Static Analysis
     needs: [detect-changes]
@@ -171,9 +161,7 @@ jobs:
       - name: Run static analysis
         run: just lint-static
 
-  # ============================================================
-  # JOB 0b2: Build Storybook
-  # ============================================================
+  # ── Build Storybook ──────────────────────────────────────
   build-storybook:
     name: Build Storybook
     needs: [detect-changes]
@@ -202,9 +190,7 @@ jobs:
           path: web/storybook-static/
           retention-days: 30
 
-  # ============================================================
-  # JOB 0b3: Build API Documentation
-  # ============================================================
+  # ── Build API documentation ──────────────────────────────
   build-docs:
     name: Build documentation
     needs: [detect-changes]
@@ -241,9 +227,7 @@ jobs:
             web/docs
           retention-days: 7
 
-  # ============================================================
-  # JOB 0c: Verify codegen is up-to-date (GraphQL + OpenAPI)
-  # ============================================================
+  # ── Verify codegen is up-to-date (GraphQL + OpenAPI) ─────
   codegen-check:
     name: Check codegen
     needs: [detect-changes]
@@ -280,9 +264,7 @@ jobs:
           fi
           echo "✓ Codegen is up to date"
 
-  # ============================================================
-  # JOB 0d: Security & Dependency Audit
-  # ============================================================
+  # ── Security & dependency audit ──────────────────────────
   security-audit:
     name: Security & Dependency Audit
     needs: [detect-changes]
@@ -321,9 +303,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  # ============================================================
-  # JOB 0e: Verify SQLx query snapshots are up-to-date
-  # ============================================================
+  # ── Verify SQLx query snapshots ──────────────────────────
   sqlx-check:
     name: Check SQLx snapshots
     runs-on: ubuntu-latest
@@ -387,9 +367,7 @@ jobs:
           fi
           echo "✓ SQLx snapshots are up to date"
 
-  # ============================================================
-  # JOB 0f: Detect which paths changed (skip unnecessary builds)
-  # ============================================================
+  # ── Detect which paths changed (skip unnecessary builds) ─
   detect-changes:
     name: Detect changed paths
     runs-on: ubuntu-latest
@@ -427,9 +405,7 @@ jobs:
               - 'skaffold.yaml'
               - 'justfile'
 
-  # ============================================================
-  # JOB 1: Build all container images in parallel
-  # ============================================================
+  # ── Build all container images in parallel ────────────────
   build-images:
     name: Build ${{ matrix.image }}
     needs: [detect-changes]
@@ -539,9 +515,7 @@ jobs:
         run: |
           echo "${{ matrix.image }}-tag=${{ steps.tags.outputs.sha_tag }}" >> "$GITHUB_OUTPUT"
 
-  # ============================================================
-  # JOB 1b: Scan container images for vulnerabilities
-  # ============================================================
+  # ── Scan container images for vulnerabilities ─────────────
   scan-images:
     name: Scan ${{ matrix.image }}
     runs-on: ubuntu-latest
@@ -592,9 +566,7 @@ jobs:
           trivyignores: '.trivyignore'
           version: 'v0.65.0'
 
-  # ============================================================
-  # JOB 2a: Vitest unit tests + coverage
-  # ============================================================
+  # ── Vitest unit tests + coverage ─────────────────────────
   unit-tests:
     name: Unit tests (Vitest)
     runs-on: ubuntu-24.04
@@ -631,9 +603,7 @@ jobs:
           path: web/coverage/vitest/
           retention-days: 7
 
-  # ============================================================
-  # JOB 2b: Rust unit tests + coverage
-  # ============================================================
+  # ── Rust unit tests + coverage ───────────────────────────
   rust-coverage:
     name: Rust coverage
     runs-on: ubuntu-24.04
@@ -678,9 +648,7 @@ jobs:
           if-no-files-found: warn
           path: service/coverage/backend-unit.lcov
 
-  # ============================================================
-  # JOB 2c: E2E tests (KinD + Skaffold + Playwright)
-  # ============================================================
+  # ── E2E tests (KinD + Skaffold + Playwright) ─────────────
   e2e-tests:
     name: E2E tests
     runs-on: ubuntu-24.04
@@ -920,9 +888,7 @@ jobs:
           echo '--- All Resources ---'
           kubectl get all -n default || true
 
-  # ============================================================
-  # CI Gate — single required check that aggregates all jobs
-  # ============================================================
+  # ── CI gate (single required check) ─────────────────────
   ci-gate:
     name: CI Gate
     if: always()
@@ -952,9 +918,7 @@ jobs:
             exit 1
           fi
 
-  # ============================================================
-  # JOB 2b: Update gitops repo with image digests (master only)
-  # ============================================================
+  # ── Update gitops image digests (master only) ────────────
   deploy-gitops:
     name: Update gitops image digests
     if: >-
@@ -1072,9 +1036,7 @@ jobs:
           ${BODY}"
           git push
 
-  # ============================================================
-  # JOB 3: Upload CI reports to Dufs
-  # ============================================================
+  # ── Upload CI reports to Dufs ────────────────────────────
   deploy-reports:
     name: Upload CI reports to Dufs
     runs-on: ubuntu-latest
@@ -1244,326 +1206,20 @@ jobs:
           echo "coverage_pct=${VITEST_LINES}" >> "$GITHUB_OUTPUT"
 
       - name: Generate landing page
+        env:
+          COVERAGE_PCT: ${{ steps.artifacts.outputs.coverage_pct }}
+          VITEST_LINES: ${{ steps.artifacts.outputs.vitest_lines }}
+          VITEST_BRANCHES: ${{ steps.artifacts.outputs.vitest_branches }}
+          VITEST_FUNCTIONS: ${{ steps.artifacts.outputs.vitest_functions }}
+          PW_LINES: ${{ steps.artifacts.outputs.pw_lines }}
+          PW_BRANCHES: ${{ steps.artifacts.outputs.pw_branches }}
+          PW_FUNCTIONS: ${{ steps.artifacts.outputs.pw_functions }}
+          RUST_LINES: ${{ steps.artifacts.outputs.rust_lines }}
+          RUST_FUNCTIONS: ${{ steps.artifacts.outputs.rust_functions }}
         run: |
-          COMMIT_SHORT="${GITHUB_SHA:0:7}"
-          BUILD_DATE="$(date -u +"%Y-%m-%d %H:%M UTC")"
-          COVERAGE_PCT="${{ steps.artifacts.outputs.coverage_pct }}"
-
-          # Coverage by test type
-          VITEST_LINES="${{ steps.artifacts.outputs.vitest_lines }}"
-          VITEST_BRANCHES="${{ steps.artifacts.outputs.vitest_branches }}"
-          VITEST_FUNCTIONS="${{ steps.artifacts.outputs.vitest_functions }}"
-          PW_LINES="${{ steps.artifacts.outputs.pw_lines }}"
-          PW_BRANCHES="${{ steps.artifacts.outputs.pw_branches }}"
-          PW_FUNCTIONS="${{ steps.artifacts.outputs.pw_functions }}"
-          RUST_LINES="${{ steps.artifacts.outputs.rust_lines }}"
-          RUST_FUNCTIONS="${{ steps.artifacts.outputs.rust_functions }}"
-
-          cat > site/index.html <<EOF
-          <!DOCTYPE html>
-          <html lang="en">
-          <head>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>Tiny Congress - Developer Resources</title>
-            <link rel="icon" href="favicon.ico">
-            <meta name="color-scheme" content="light dark">
-            <style>
-              :root {
-                --bg: #f8fafc;
-                --bg-card: #ffffff;
-                --bg-hover: #f1f5f9;
-                --text: #0f172a;
-                --text-secondary: #64748b;
-                --text-muted: #94a3b8;
-                --link: #2563eb;
-                --border: #e2e8f0;
-                --accent: #3b82f6;
-                --success: #22c55e;
-                --shadow: 0 1px 3px rgba(0,0,0,0.1), 0 1px 2px rgba(0,0,0,0.06);
-              }
-              @media (prefers-color-scheme: dark) {
-                :root {
-                  --bg: #0f172a;
-                  --bg-card: #1e293b;
-                  --bg-hover: #334155;
-                  --text: #f1f5f9;
-                  --text-secondary: #94a3b8;
-                  --text-muted: #64748b;
-                  --link: #60a5fa;
-                  --border: #334155;
-                  --accent: #3b82f6;
-                  --success: #22c55e;
-                  --shadow: 0 1px 3px rgba(0,0,0,0.3);
-                }
-              }
-              * { box-sizing: border-box; }
-              body {
-                font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-                max-width: 800px;
-                margin: 0 auto;
-                padding: 24px;
-                line-height: 1.6;
-                background: var(--bg);
-                color: var(--text);
-              }
-
-              /* Header with build context */
-              .header {
-                background: var(--bg-card);
-                border-radius: 12px;
-                padding: 24px;
-                margin-bottom: 24px;
-                box-shadow: var(--shadow);
-                border: 1px solid var(--border);
-              }
-              .header-top {
-                display: flex;
-                align-items: center;
-                gap: 16px;
-                margin-bottom: 16px;
-              }
-              .logo { height: 48px; width: auto; }
-              .header h1 {
-                margin: 0;
-                font-size: 1.75rem;
-                font-weight: 600;
-              }
-              .build-context {
-                display: grid;
-                grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-                gap: 12px;
-                padding-top: 16px;
-                border-top: 1px solid var(--border);
-              }
-              .build-item {
-                display: flex;
-                flex-direction: column;
-                gap: 2px;
-              }
-              .build-label {
-                font-size: 0.75rem;
-                text-transform: uppercase;
-                letter-spacing: 0.05em;
-                color: var(--text-muted);
-                font-weight: 500;
-              }
-              .build-value {
-                font-family: ui-monospace, 'SF Mono', monospace;
-                font-size: 0.875rem;
-                color: var(--text-secondary);
-              }
-              .build-value a {
-                color: var(--link);
-                text-decoration: none;
-              }
-              .build-value a:hover { text-decoration: underline; }
-
-              /* Coverage highlight */
-              .coverage-badge {
-                background: linear-gradient(135deg, var(--accent), #8b5cf6);
-                color: white;
-                padding: 4px 12px;
-                border-radius: 20px;
-                font-weight: 600;
-                font-size: 0.875rem;
-                display: inline-flex;
-                align-items: center;
-                gap: 6px;
-              }
-
-              /* Sections */
-              .section {
-                background: var(--bg-card);
-                border-radius: 12px;
-                padding: 20px;
-                margin-bottom: 16px;
-                box-shadow: var(--shadow);
-                border: 1px solid var(--border);
-              }
-              .section h2 {
-                margin: 0 0 16px 0;
-                font-size: 1rem;
-                font-weight: 600;
-                color: var(--text-secondary);
-                display: flex;
-                align-items: center;
-                gap: 8px;
-              }
-
-              /* Link grid */
-              .link-grid {
-                display: grid;
-                grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-                gap: 10px;
-              }
-              .link-card {
-                display: flex;
-                align-items: center;
-                gap: 10px;
-                padding: 12px 16px;
-                background: var(--bg);
-                border: 1px solid var(--border);
-                border-radius: 8px;
-                color: var(--text);
-                text-decoration: none;
-                transition: all 0.15s ease;
-              }
-              .link-card:hover {
-                background: var(--bg-hover);
-                border-color: var(--accent);
-                transform: translateY(-1px);
-              }
-              .link-icon { font-size: 1.25rem; }
-              .link-label { font-weight: 500; }
-
-              /* Coverage table */
-              .coverage-table {
-                width: 100%;
-                border-collapse: collapse;
-                margin-top: 16px;
-                font-size: 0.875rem;
-                background: var(--bg-card);
-                border-radius: 8px;
-                overflow: hidden;
-              }
-              .coverage-table th {
-                text-align: left;
-                padding: 10px 14px;
-                background: var(--bg-hover);
-                color: var(--text-muted);
-                font-weight: 500;
-                text-transform: uppercase;
-                font-size: 0.75rem;
-                letter-spacing: 0.05em;
-              }
-              .coverage-table td {
-                padding: 12px 14px;
-                border-bottom: 1px solid var(--border);
-              }
-              .coverage-table tr:last-child td {
-                border-bottom: none;
-              }
-              .coverage-table .test-type {
-                display: flex;
-                align-items: center;
-                gap: 8px;
-              }
-              .coverage-table .pct {
-                font-weight: 600;
-                font-family: ui-monospace, monospace;
-              }
-              .coverage-table .pct.good { color: #22c55e; }
-              .coverage-table .pct.ok { color: #eab308; }
-              .coverage-table .pct.low { color: #ef4444; }
-              .coverage-table a {
-                color: var(--link);
-                text-decoration: none;
-                font-size: 0.85rem;
-              }
-              .coverage-table a:hover { text-decoration: underline; }
-            </style>
-          </head>
-          <body>
-            <header class="header">
-              <div class="header-top">
-                <img src="logo.svg" alt="Tiny Congress" class="logo">
-                <h1>Tiny Congress</h1>
-                <span class="coverage-badge">
-                  📊 ${COVERAGE_PCT}% coverage
-                </span>
-              </div>
-              <div class="build-context">
-                <div class="build-item">
-                  <span class="build-label">Commit</span>
-                  <span class="build-value"><a href="https://github.com/icook/tiny-congress/commit/${GITHUB_SHA}">${COMMIT_SHORT}</a></span>
-                </div>
-                <div class="build-item">
-                  <span class="build-label">Branch</span>
-                  <span class="build-value">${GITHUB_REF_NAME}</span>
-                </div>
-                <div class="build-item">
-                  <span class="build-label">Built</span>
-                  <span class="build-value">${BUILD_DATE}</span>
-                </div>
-                <div class="build-item">
-                  <span class="build-label">Workflow</span>
-                  <span class="build-value"><a href="https://github.com/icook/tiny-congress/actions/runs/${GITHUB_RUN_ID}">#${GITHUB_RUN_NUMBER}</a></span>
-                </div>
-              </div>
-            </header>
-
-            <section class="section">
-              <h2>📚 API Documentation</h2>
-              <div class="link-grid">
-                <a href="rust-docs/tinycongress_api/" class="link-card">
-                  <span class="link-icon">🦀</span>
-                  <span class="link-label">Rust API Docs</span>
-                </a>
-                <a href="ts-docs/" class="link-card">
-                  <span class="link-icon">📘</span>
-                  <span class="link-label">TypeScript Docs</span>
-                </a>
-              </div>
-            </section>
-
-            <section class="section">
-              <h2>📊 Coverage Reports</h2>
-              <table class="coverage-table">
-                <thead>
-                  <tr>
-                    <th>Test Type</th>
-                    <th>Lines</th>
-                    <th>Branches</th>
-                    <th>Functions</th>
-                    <th>Details</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr>
-                    <td><span class="test-type">🧪 Vitest Unit Tests</span></td>
-                    <td class="pct">${VITEST_LINES}%</td>
-                    <td class="pct">${VITEST_BRANCHES}%</td>
-                    <td class="pct">${VITEST_FUNCTIONS}%</td>
-                    <td><a href="coverage/vitest/">View Report</a></td>
-                  </tr>
-                  <tr>
-                    <td><span class="test-type">🎭 Playwright E2E</span></td>
-                    <td class="pct">${PW_LINES}%</td>
-                    <td class="pct">${PW_BRANCHES}%</td>
-                    <td class="pct">${PW_FUNCTIONS}%</td>
-                    <td><a href="coverage/playwright/">View Report</a></td>
-                  </tr>
-                  <tr>
-                    <td><span class="test-type">🦀 Rust Backend</span></td>
-                    <td class="pct">${RUST_LINES}%</td>
-                    <td class="pct">N/A</td>
-                    <td class="pct">${RUST_FUNCTIONS}%</td>
-                    <td><a href="coverage/rust/">View Report</a></td>
-                  </tr>
-                </tbody>
-              </table>
-              <div style="margin-top: 12px; text-align: right;">
-                <a href="coverage/" style="color: var(--link); font-size: 0.875rem;">View Full Coverage Report →</a>
-              </div>
-            </section>
-
-            <section class="section">
-              <h2>🧪 Test Reports</h2>
-              <div class="link-grid">
-                <a href="storybook/" class="link-card">
-                  <span class="link-icon">📚</span>
-                  <span class="link-label">Storybook</span>
-                </a>
-                <a href="playwright/" class="link-card">
-                  <span class="link-icon">🎭</span>
-                  <span class="link-label">Playwright E2E</span>
-                </a>
-              </div>
-            </section>
-          </body>
-          </html>
-          EOF
+          export COMMIT_SHORT="${GITHUB_SHA:0:7}"
+          export BUILD_DATE="$(date -u +"%Y-%m-%d %H:%M UTC")"
+          envsubst < .github/templates/reports-landing.html > site/index.html
 
       - name: Upload reports to Dufs
         env:
