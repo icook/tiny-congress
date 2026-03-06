@@ -32,8 +32,19 @@ jobs:
         with:
           components: rustfmt, clippy
 
+      # runs-on/cache@v4 is a drop-in for actions/cache that routes to S3
+      # on ARC runners (via RUNS_ON_S3_BUCKET_CACHE env var on the pod) and
+      # falls back to GitHub's native cache on GHA runners. This replaced
+      # Swatinem/rust-cache because it has no S3 backend support.
       - name: Cache Rust dependencies
-        uses: Swatinem/rust-cache@v2
+        uses: runs-on/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: rust-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: rust-${{ runner.os }}-
 
       - name: Install just
         uses: extractions/setup-just@v3
@@ -86,8 +97,13 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-          cache: pip
-          cache-dependency-path: kube/dashboards/requirements.txt
+
+      - name: Cache pip dependencies
+        uses: runs-on/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-${{ hashFiles('kube/dashboards/requirements.txt') }}
+          restore-keys: pip-${{ runner.os }}-
 
       - name: Install dependencies
         run: pip install -r kube/dashboards/requirements.txt
@@ -204,7 +220,14 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Cache Rust dependencies
-        uses: Swatinem/rust-cache@v2
+        uses: runs-on/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: rust-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: rust-${{ runner.os }}-
 
       - name: Setup web toolchain
         uses: ./.github/actions/setup-web
@@ -241,7 +264,14 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Cache Rust dependencies
-        uses: Swatinem/rust-cache@v2
+        uses: runs-on/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: rust-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: rust-${{ runner.os }}-
 
       - name: Setup web toolchain
         uses: ./.github/actions/setup-web
@@ -343,7 +373,14 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Cache Rust dependencies
-        uses: Swatinem/rust-cache@v2
+        uses: runs-on/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: rust-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: rust-${{ runner.os }}-
 
       - name: Install sqlx-cli
         run: cargo install sqlx-cli --locked --no-default-features --features postgres
@@ -378,7 +415,18 @@ jobs:
       chart: ${{ steps.filter.outputs.chart }}
       dashboards: ${{ steps.filter.outputs.dashboards }}
       ci: ${{ steps.filter.outputs.ci }}
+      # Computed once, referenced by all heavy jobs via needs.detect-changes.outputs.runner.
+      # Toggle: gh variable set USE_ARC_RUNNERS --body "false" --repo icook/tiny-congress
+      runner: ${{ steps.runner.outputs.label }}
     steps:
+      - name: Select runner
+        id: runner
+        run: |
+          if [ "${{ vars.USE_ARC_RUNNERS }}" != "true" ]; then
+            echo "label=ubuntu-24.04" >> "$GITHUB_OUTPUT"
+          else
+            echo "label=arc-runner-set" >> "$GITHUB_OUTPUT"
+          fi
       - uses: actions/checkout@v6
       - uses: dorny/paths-filter@v3
         id: filter
@@ -409,7 +457,7 @@ jobs:
   build-images:
     name: Build ${{ matrix.image }}
     needs: [detect-changes]
-    runs-on: ubuntu-24.04
+    runs-on: ${{ needs.detect-changes.outputs.runner }}
     permissions:
       contents: read
       packages: write
@@ -434,8 +482,29 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Set up Docker Buildx
+      # BuildKit + cache registry adapt to the runner environment:
+      # - ARC (self-hosted): remote BuildKit daemon + Zot in-cluster registry
+      # - GHA (hosted):      local buildx driver + GHCR for layer cache
+      # This lets the same workflow work on both without conditional runs-on.
+      - name: Set up Docker Buildx (remote in-cluster BuildKit)
+        if: runner.environment == 'self-hosted'
         uses: docker/setup-buildx-action@v3
+        with:
+          driver: remote
+          endpoint: tcp://buildkitd.buildkit.svc.cluster.local:1234
+
+      - name: Set up Docker Buildx
+        if: runner.environment != 'self-hosted'
+        uses: docker/setup-buildx-action@v3
+
+      - name: Configure cache registry
+        id: cache
+        run: |
+          if [ "$RUNNER_ENVIRONMENT" = "self-hosted" ]; then
+            echo "registry=zot.zot.svc.cluster.local:5000/cache" >> "$GITHUB_OUTPUT"
+          else
+            echo "registry=${{ env.REGISTRY }}" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Login to GHCR
         uses: docker/login-action@v3
@@ -506,9 +575,9 @@ jobs:
             ${{ steps.tags.outputs.sha_tag }}
             ${{ steps.tags.outputs.branch_tag }}
           cache-from: |
-            type=registry,ref=${{ env.REGISTRY }}/${{ matrix.image }}:cache
+            type=registry,ref=${{ steps.cache.outputs.registry }}/${{ matrix.image }}:cache
           cache-to: |
-            type=registry,ref=${{ env.REGISTRY }}/${{ matrix.image }}:cache,mode=max
+            type=registry,ref=${{ steps.cache.outputs.registry }}/${{ matrix.image }}:cache,mode=max
 
       - name: Export image metadata
         id: meta
@@ -569,7 +638,7 @@ jobs:
   # ── Vitest unit tests + coverage ─────────────────────────
   unit-tests:
     name: Unit tests (Vitest)
-    runs-on: ubuntu-24.04
+    runs-on: ${{ needs.detect-changes.outputs.runner }}
     needs: [detect-changes]
     if: needs.detect-changes.outputs.ui == 'true' || needs.detect-changes.outputs.ci == 'true'
     steps:
@@ -582,6 +651,14 @@ jobs:
       - name: Install web dependencies
         working-directory: web
         run: yarn install --immutable
+
+      # catthehacker doesn't pre-install Rust (unlike GHA ubuntu-24.04 which
+      # ships it at /usr/local/cargo). Install explicitly so wasm-pack can
+      # find cargo on both runner types.
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
 
       - name: Install wasm-pack
         uses: taiki-e/install-action@wasm-pack
@@ -606,7 +683,7 @@ jobs:
   # ── Rust unit tests + coverage ───────────────────────────
   rust-coverage:
     name: Rust coverage
-    runs-on: ubuntu-24.04
+    runs-on: ${{ needs.detect-changes.outputs.runner }}
     needs: [detect-changes, build-images]
     if: needs.detect-changes.outputs.api == 'true' || needs.detect-changes.outputs.ci == 'true'
     env:
@@ -628,7 +705,14 @@ jobs:
           components: llvm-tools-preview
 
       - name: Cache Rust dependencies
-        uses: Swatinem/rust-cache@v2
+        uses: runs-on/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: rust-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: rust-${{ runner.os }}-
 
       - name: Install cargo-llvm-cov
         uses: taiki-e/install-action@cargo-llvm-cov
@@ -651,7 +735,7 @@ jobs:
   # ── E2E tests (KinD + Skaffold + Playwright) ─────────────
   e2e-tests:
     name: E2E tests
-    runs-on: ubuntu-24.04
+    runs-on: ${{ needs.detect-changes.outputs.runner }}
     needs:
       - detect-changes
       - build-images
@@ -683,6 +767,10 @@ jobs:
         with:
           install_only: true
           cluster_name: skaffold-ci
+
+      # GHA ubuntu-24.04 pre-installs Helm; catthehacker ARC runners do not.
+      - name: Install Helm
+        uses: azure/setup-helm@v4
 
       - name: Start KinD cluster in background
         run: |
@@ -732,7 +820,7 @@ jobs:
         run: yarn install --immutable
 
       - name: Cache Playwright browsers
-        uses: actions/cache@v4
+        uses: runs-on/cache@v4
         with:
           path: ${{ env.PLAYWRIGHT_BROWSERS_PATH }}
           key: playwright-chromium-${{ hashFiles('web/yarn.lock') }}
@@ -740,6 +828,14 @@ jobs:
       - name: Install Playwright browsers
         working-directory: web
         run: yarn playwright install --with-deps chromium
+
+      # catthehacker doesn't pre-install Rust (unlike GHA ubuntu-24.04 which
+      # ships it at /usr/local/cargo). Install explicitly so wasm-pack can
+      # find cargo on both runner types.
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
 
       - name: Install wasm-pack
         uses: taiki-e/install-action@wasm-pack
