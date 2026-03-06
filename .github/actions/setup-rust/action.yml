@@ -1,5 +1,5 @@
 name: Setup Rust Toolchain
-description: Install Rust stable with caching for toolchain and optionally dependencies
+description: Install Rust stable with toolchain + dependency caching via runs-on/cache
 
 inputs:
   components:
