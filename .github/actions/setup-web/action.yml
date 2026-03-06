@@ -10,9 +10,21 @@ runs:
       with:
         node-version-file: web/.nvmrc
 
+    # Cache the corepack store so the yarn binary is available without a network
+    # download on ARC runners (catthehacker images don't bundle yarn 4.x).
+    - name: Cache corepack
+      uses: runs-on/cache@v4
+      with:
+        path: ~/.cache/node/corepack
+        key: corepack-${{ runner.os }}-${{ hashFiles('web/package.json') }}
+
     - name: Enable corepack
       shell: bash
-      run: corepack enable
+      run: |
+        corepack enable
+        # Pre-fetch the pinned yarn version; no-op if corepack cache was restored.
+        YARN_VER=$(node -p "require('./web/package.json').packageManager.split('@')[1]")
+        corepack prepare "yarn@${YARN_VER}" --activate
 
     - name: Get yarn cache directory
       id: yarn-cache-dir

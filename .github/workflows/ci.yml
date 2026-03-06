@@ -54,6 +54,10 @@ jobs:
           directory: kube/
           config: .kube-linter.yaml
 
+      # GHA ubuntu-24.04 pre-installs Helm; catthehacker ARC runners do not.
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+
       - name: Validate environment values
         run: |
           # Render the chart with each environment values file to catch drift.
@@ -159,6 +163,10 @@ jobs:
         run: |
           bash <(curl -fsSL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
           sudo install actionlint /usr/local/bin/
+
+      # GHA ubuntu-24.04 pre-installs shellcheck; catthehacker ARC runners do not.
+      - name: Install shellcheck
+        run: sudo apt-get install -y --no-install-recommends shellcheck
 
       - name: Run static analysis
         run: just lint-static
@@ -1118,6 +1126,10 @@ jobs:
       - name: Install web dependencies
         working-directory: web
         run: yarn install --immutable
+
+      # GHA ubuntu-24.04 pre-installs gettext (envsubst); catthehacker ARC runners do not.
+      - name: Install envsubst
+        run: sudo apt-get install -y --no-install-recommends gettext-base
 
       - name: Create site directory
         run: |
