@@ -66,7 +66,9 @@ export function Layout() {
             h={32}
             w="auto"
           />
-          <Text fw={700}>TinyCongress</Text>
+          <Text fw={700} visibleFrom="sm">
+            TinyCongress
+          </Text>
           <EnvironmentBadge />
           <ActionIcon
             variant="subtle"
