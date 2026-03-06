@@ -388,15 +388,19 @@ jobs:
           # Default: ubuntu-latest (GHA hosted)
           commit_msg=$(git log -1 --format=%s HEAD)
           if echo "$commit_msg" | grep -qF '[arc]' || [ "${{ vars.USE_ARC_RUNNERS }}" = "true" ]; then
-            echo "nano=arc-runner-nano" >> "$GITHUB_OUTPUT"
-            echo "small=arc-runner-small" >> "$GITHUB_OUTPUT"
-            echo "medium=arc-runner-medium" >> "$GITHUB_OUTPUT"
-            echo "large=arc-runner-large" >> "$GITHUB_OUTPUT"
+            {
+              echo "nano=arc-runner-nano"
+              echo "small=arc-runner-small"
+              echo "medium=arc-runner-medium"
+              echo "large=arc-runner-large"
+            } >> "$GITHUB_OUTPUT"
           else
-            echo "nano=ubuntu-latest" >> "$GITHUB_OUTPUT"
-            echo "small=ubuntu-latest" >> "$GITHUB_OUTPUT"
-            echo "medium=ubuntu-latest" >> "$GITHUB_OUTPUT"
-            echo "large=ubuntu-latest" >> "$GITHUB_OUTPUT"
+            {
+              echo "nano=ubuntu-latest"
+              echo "small=ubuntu-latest"
+              echo "medium=ubuntu-latest"
+              echo "large=ubuntu-latest"
+            } >> "$GITHUB_OUTPUT"
           fi
       - uses: dorny/paths-filter@v3
         id: filter
@@ -949,6 +953,7 @@ jobs:
     name: CI Gate
     if: always()
     needs:
+      - detect-changes
       - lint
       - lint-kube
       - lint-web
@@ -1096,7 +1101,7 @@ jobs:
   deploy-reports:
     name: Upload CI reports to Dufs
     runs-on: ${{ needs.detect-changes.outputs.runner-small }}
-    needs: [unit-tests, rust-coverage, e2e-tests, build-storybook, build-docs]
+    needs: [detect-changes, unit-tests, rust-coverage, e2e-tests, build-storybook, build-docs]
     if: >-
       always() &&
       !contains(needs.*.result, 'cancelled')
