@@ -7,7 +7,7 @@ test('rooms page loads and shows content', async ({ page }) => {
   await expect(page.getByRole('heading', { name: /Rooms/i })).toBeVisible();
 
   // Either shows rooms or the empty state message (depending on DB state)
-  const emptyState = page.getByText(/No rooms are currently open/i);
+  const emptyState = page.getByText(/No rooms are (currently open|open right now)/i);
   const roomHeading = page.getByRole('heading', { level: 4 }).first();
 
   await expect(emptyState.or(roomHeading)).toBeVisible({ timeout: 10_000 });
