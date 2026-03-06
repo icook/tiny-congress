@@ -680,14 +680,6 @@ jobs:
         working-directory: web
         run: yarn install --immutable
 
-      # Rust toolchain needed for wasm-pack. On GHA ubuntu-24.04 runners Rust
-      # is pre-installed system-wide; on ARC (catthehacker) our /home/runner
-      # emptyDir mount hides ~/.cargo, so we install explicitly.
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: wasm32-unknown-unknown
-
       - name: Install wasm-pack
         uses: taiki-e/install-action@wasm-pack
 
@@ -856,11 +848,6 @@ jobs:
       - name: Install Playwright browsers
         working-directory: web
         run: yarn playwright install --with-deps chromium
-
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: wasm32-unknown-unknown
 
       - name: Install wasm-pack
         uses: taiki-e/install-action@wasm-pack
