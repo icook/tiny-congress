@@ -932,68 +932,6 @@ jobs:
           kubectl get all -n default || true
 
   # ============================================================
-  # JOB 2d: Assemble unified coverage report from all test jobs
-  # ============================================================
-  coverage-report:
-    name: Coverage report
-    runs-on: ubuntu-latest
-    needs: [unit-tests, rust-coverage, e2e-tests]
-    if: always()
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Setup web toolchain
-        uses: ./.github/actions/setup-web
-
-      - name: Install web dependencies
-        working-directory: web
-        run: yarn install --immutable
-
-      - name: Download Vitest coverage
-        uses: actions/download-artifact@v7
-        with:
-          name: vitest-coverage
-          path: web/coverage/vitest/
-        continue-on-error: true
-
-      - name: Download Rust coverage
-        uses: actions/download-artifact@v7
-        with:
-          name: rust-coverage
-          path: service/coverage/
-        continue-on-error: true
-
-      - name: Download Playwright coverage
-        uses: actions/download-artifact@v7
-        with:
-          name: playwright-coverage
-          path: web/coverage/playwright/
-        continue-on-error: true
-
-      - name: Summarize coverage to job summary
-        run: |
-          node scripts/summarize-coverage.mjs \
-            --vitest web/coverage/vitest/coverage-summary.json \
-            --playwright web/coverage/playwright/coverage-summary.json \
-            --rust "service/coverage/backend-unit.lcov:unit" \
-            >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Install lcov for HTML generation
-        run: sudo apt-get update && sudo apt-get install -y lcov
-
-      - name: Build unified coverage report
-        working-directory: web
-        run: node scripts/build-coverage-report.mjs
-
-      - name: Upload coverage report
-        uses: actions/upload-artifact@v6
-        with:
-          name: coverage-report
-          path: coverage-report/
-          retention-days: 7
-
-  # ============================================================
   # CI Gate — single required check that aggregates all jobs
   # ============================================================
   ci-gate:
@@ -1015,7 +953,6 @@ jobs:
       - unit-tests
       - rust-coverage
       - e2e-tests
-      - coverage-report
     runs-on: ubuntu-latest
     steps:
       - name: Check results
@@ -1152,7 +1089,7 @@ jobs:
   deploy-reports:
     name: Upload CI reports to Dufs
     runs-on: ubuntu-latest
-    needs: [coverage-report, e2e-tests, build-storybook, build-docs]
+    needs: [unit-tests, rust-coverage, e2e-tests, build-storybook, build-docs]
     if: >-
       always() &&
       !contains(needs.*.result, 'cancelled')
@@ -1160,13 +1097,15 @@ jobs:
       contents: read
       pull-requests: write
     steps:
-      - name: Checkout for assets
+      - name: Checkout
         uses: actions/checkout@v6
-        with:
-          sparse-checkout: |
-            web/src/logo-dark.svg
-            web/src/favicon.ico
-          sparse-checkout-cone-mode: false
+
+      - name: Setup web toolchain
+        uses: ./.github/actions/setup-web
+
+      - name: Install web dependencies
+        working-directory: web
+        run: yarn install --immutable
 
       - name: Create site directory
         run: |
@@ -1174,11 +1113,18 @@ jobs:
           cp web/src/logo-dark.svg site/logo.svg
           cp web/src/favicon.ico site/favicon.ico
 
-      - name: Download coverage report
+      - name: Download Vitest coverage
         uses: actions/download-artifact@v7
         with:
-          name: coverage-report
-          path: site/coverage
+          name: vitest-coverage
+          path: web/coverage/vitest/
+        continue-on-error: true
+
+      - name: Download Playwright coverage
+        uses: actions/download-artifact@v7
+        with:
+          name: playwright-coverage
+          path: web/coverage/playwright/
         continue-on-error: true
 
       - name: Download Storybook
@@ -1206,12 +1152,32 @@ jobs:
         uses: actions/download-artifact@v7
         with:
           name: rust-coverage
-          path: artifacts/rust-coverage
+          path: service/coverage/
         continue-on-error: true
+
+      - name: Summarize coverage to job summary
+        run: |
+          node scripts/summarize-coverage.mjs \
+            --vitest web/coverage/vitest/coverage-summary.json \
+            --playwright web/coverage/playwright/coverage-summary.json \
+            --rust "service/coverage/backend-unit.lcov:unit" \
+            >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Install lcov for HTML generation
+        run: sudo apt-get update && sudo apt-get install -y lcov
+
+      - name: Build unified coverage report
+        working-directory: web
+        run: node scripts/build-coverage-report.mjs
 
       - name: Organize artifacts
         id: artifacts
         run: |
+          # Move coverage report into site
+          if [ -d coverage-report ]; then
+            mv coverage-report site/coverage
+          fi
+
           # Playwright report is nested
           if [ -d artifacts/playwright/playwright-report ]; then
             mv artifacts/playwright/playwright-report site/playwright
@@ -1229,10 +1195,10 @@ jobs:
 
           # Extract coverage percentages from all test types
           # Vitest
-          if [ -f site/coverage/vitest/coverage-summary.json ]; then
-            VITEST_LINES=$(jq -r '.total.lines.pct // 0' site/coverage/vitest/coverage-summary.json)
-            VITEST_BRANCHES=$(jq -r '.total.branches.pct // 0' site/coverage/vitest/coverage-summary.json)
-            VITEST_FUNCTIONS=$(jq -r '.total.functions.pct // 0' site/coverage/vitest/coverage-summary.json)
+          if [ -f web/coverage/vitest/coverage-summary.json ]; then
+            VITEST_LINES=$(jq -r '.total.lines.pct // 0' web/coverage/vitest/coverage-summary.json)
+            VITEST_BRANCHES=$(jq -r '.total.branches.pct // 0' web/coverage/vitest/coverage-summary.json)
+            VITEST_FUNCTIONS=$(jq -r '.total.functions.pct // 0' web/coverage/vitest/coverage-summary.json)
           else
             VITEST_LINES=0; VITEST_BRANCHES=0; VITEST_FUNCTIONS=0
           fi
@@ -1243,10 +1209,10 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
           # Playwright
-          if [ -f site/coverage/playwright/coverage-summary.json ]; then
-            PW_LINES=$(jq -r '.total.lines.pct // 0' site/coverage/playwright/coverage-summary.json)
-            PW_BRANCHES=$(jq -r '.total.branches.pct // 0' site/coverage/playwright/coverage-summary.json)
-            PW_FUNCTIONS=$(jq -r '.total.functions.pct // 0' site/coverage/playwright/coverage-summary.json)
+          if [ -f web/coverage/playwright/coverage-summary.json ]; then
+            PW_LINES=$(jq -r '.total.lines.pct // 0' web/coverage/playwright/coverage-summary.json)
+            PW_BRANCHES=$(jq -r '.total.branches.pct // 0' web/coverage/playwright/coverage-summary.json)
+            PW_FUNCTIONS=$(jq -r '.total.functions.pct // 0' web/coverage/playwright/coverage-summary.json)
           else
             PW_LINES=0; PW_BRANCHES=0; PW_FUNCTIONS=0
           fi
@@ -1256,10 +1222,9 @@ jobs:
             echo "pw_functions=${PW_FUNCTIONS}"
           } >> "$GITHUB_OUTPUT"
 
-          # Rust (parse lcov file directly - must happen before artifacts cleanup)
-          RUST_LCOV="artifacts/rust-coverage/backend-unit.lcov"
+          # Rust (parse lcov file directly)
+          RUST_LCOV="service/coverage/backend-unit.lcov"
           if [ -f "$RUST_LCOV" ]; then
-            # Sum up LF (lines found) and LH (lines hit) from lcov
             LINES_FOUND=$(grep "^LF:" "$RUST_LCOV" | cut -d: -f2 | awk '{s+=$1} END {print s+0}')
             LINES_HIT=$(grep "^LH:" "$RUST_LCOV" | cut -d: -f2 | awk '{s+=$1} END {print s+0}')
             FUNCS_FOUND=$(grep "^FNF:" "$RUST_LCOV" | cut -d: -f2 | awk '{s+=$1} END {print s+0}')
