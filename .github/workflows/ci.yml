@@ -819,7 +819,7 @@ jobs:
         run: |
           set -euo pipefail
           cargo build --release
-          echo "API_BINARY_PATH=$(pwd)/target/release/tinycongress-api" >> "$GITHUB_ENV"
+          echo "API_BINARY_PATH=${GITHUB_WORKSPACE}/target/release/tinycongress-api" >> "$GITHUB_ENV"
 
       - name: Start PostgreSQL
         id: postgres
