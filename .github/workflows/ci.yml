@@ -22,7 +22,7 @@ jobs:
     name: Lint Rust formatting
     needs: [detect-changes]
     if: needs.detect-changes.outputs.api == 'true' || needs.detect-changes.outputs.ci == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ${{ needs.detect-changes.outputs.runner-nano }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -43,7 +43,7 @@ jobs:
     name: Lint Kubernetes manifests
     needs: [detect-changes]
     if: needs.detect-changes.outputs.chart == 'true' || needs.detect-changes.outputs.ci == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ${{ needs.detect-changes.outputs.runner-nano }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -74,7 +74,7 @@ jobs:
     name: Validate Grafana dashboards
     needs: [detect-changes]
     if: needs.detect-changes.outputs.dashboards == 'true' || needs.detect-changes.outputs.ci == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ${{ needs.detect-changes.outputs.runner-nano }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -111,7 +111,7 @@ jobs:
     name: Lint web
     needs: [detect-changes]
     if: needs.detect-changes.outputs.ui == 'true' || needs.detect-changes.outputs.ci == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ${{ needs.detect-changes.outputs.runner-small }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -137,7 +137,7 @@ jobs:
       needs.detect-changes.outputs.ui == 'true' ||
       needs.detect-changes.outputs.chart == 'true' ||
       needs.detect-changes.outputs.ci == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ${{ needs.detect-changes.outputs.runner-nano }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -168,7 +168,7 @@ jobs:
     name: Build Storybook
     needs: [detect-changes]
     if: needs.detect-changes.outputs.ui == 'true' || needs.detect-changes.outputs.ci == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ${{ needs.detect-changes.outputs.runner-small }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -197,7 +197,7 @@ jobs:
     name: Build documentation
     needs: [detect-changes]
     if: needs.detect-changes.outputs.api == 'true' || needs.detect-changes.outputs.ui == 'true' || needs.detect-changes.outputs.ci == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ${{ needs.detect-changes.outputs.runner-medium }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -231,7 +231,7 @@ jobs:
     name: Check codegen
     needs: [detect-changes]
     if: needs.detect-changes.outputs.api == 'true' || needs.detect-changes.outputs.ui == 'true' || needs.detect-changes.outputs.ci == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ${{ needs.detect-changes.outputs.runner-medium }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -265,7 +265,7 @@ jobs:
     name: Security & Dependency Audit
     needs: [detect-changes]
     if: needs.detect-changes.outputs.api == 'true' || needs.detect-changes.outputs.ui == 'true' || needs.detect-changes.outputs.ci == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ${{ needs.detect-changes.outputs.runner-small }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -302,7 +302,7 @@ jobs:
   # ── Verify SQLx query snapshots ──────────────────────────
   sqlx-check:
     name: Check SQLx snapshots
-    runs-on: ubuntu-latest
+    runs-on: ${{ needs.detect-changes.outputs.runner-medium }}
     needs: [build-images, detect-changes]
     if: needs.detect-changes.outputs.api == 'true' || needs.detect-changes.outputs.ci == 'true'
     env:
@@ -371,9 +371,12 @@ jobs:
       chart: ${{ steps.filter.outputs.chart }}
       dashboards: ${{ steps.filter.outputs.dashboards }}
       ci: ${{ steps.filter.outputs.ci }}
-      # Computed once, referenced by all heavy jobs via needs.detect-changes.outputs.runner.
+      # Runner tier outputs — set all at once, each job picks the right size.
       # Toggle: gh variable set USE_ARC_RUNNERS --body "false" --repo icook/tiny-congress
-      runner: ${{ steps.runner.outputs.label }}
+      runner-nano: ${{ steps.runner.outputs.nano }}
+      runner-small: ${{ steps.runner.outputs.small }}
+      runner-medium: ${{ steps.runner.outputs.medium }}
+      runner-large: ${{ steps.runner.outputs.large }}
     steps:
       - uses: actions/checkout@v6
       - name: Select runner
@@ -382,12 +385,18 @@ jobs:
           # Three ways to enable ARC runners (in priority order):
           #   1. Commit message contains [arc]  — per-commit, good for iteration
           #   2. Repo var USE_ARC_RUNNERS=true   — global override
-          # Default: ubuntu-24.04 (GHA hosted)
+          # Default: ubuntu-latest (GHA hosted)
           commit_msg=$(git log -1 --format=%s HEAD)
           if echo "$commit_msg" | grep -qF '[arc]' || [ "${{ vars.USE_ARC_RUNNERS }}" = "true" ]; then
-            echo "label=arc-runner-set" >> "$GITHUB_OUTPUT"
+            echo "nano=arc-runner-nano" >> "$GITHUB_OUTPUT"
+            echo "small=arc-runner-small" >> "$GITHUB_OUTPUT"
+            echo "medium=arc-runner-medium" >> "$GITHUB_OUTPUT"
+            echo "large=arc-runner-large" >> "$GITHUB_OUTPUT"
           else
-            echo "label=ubuntu-24.04" >> "$GITHUB_OUTPUT"
+            echo "nano=ubuntu-latest" >> "$GITHUB_OUTPUT"
+            echo "small=ubuntu-latest" >> "$GITHUB_OUTPUT"
+            echo "medium=ubuntu-latest" >> "$GITHUB_OUTPUT"
+            echo "large=ubuntu-latest" >> "$GITHUB_OUTPUT"
           fi
       - uses: dorny/paths-filter@v3
         id: filter
@@ -418,7 +427,7 @@ jobs:
   build-images:
     name: Build ${{ matrix.image }}
     needs: [detect-changes]
-    runs-on: ${{ needs.detect-changes.outputs.runner }}
+    runs-on: ${{ needs.detect-changes.outputs.runner-nano }}
     permissions:
       contents: read
       packages: write
@@ -548,7 +557,7 @@ jobs:
   # ── Scan container images for vulnerabilities ─────────────
   scan-images:
     name: Scan ${{ matrix.image }}
-    runs-on: ubuntu-latest
+    runs-on: ${{ needs.detect-changes.outputs.runner-nano }}
     needs: [build-images, detect-changes]
     strategy:
       fail-fast: false
@@ -599,7 +608,7 @@ jobs:
   # ── Vitest unit tests + coverage ─────────────────────────
   unit-tests:
     name: Unit tests (Vitest)
-    runs-on: ${{ needs.detect-changes.outputs.runner }}
+    runs-on: ${{ needs.detect-changes.outputs.runner-medium }}
     needs: [detect-changes]
     if: needs.detect-changes.outputs.ui == 'true' || needs.detect-changes.outputs.ci == 'true'
     steps:
@@ -642,7 +651,7 @@ jobs:
   # ── Rust unit tests + coverage ───────────────────────────
   rust-coverage:
     name: Rust coverage
-    runs-on: ${{ needs.detect-changes.outputs.runner }}
+    runs-on: ${{ needs.detect-changes.outputs.runner-large }}
     needs: [detect-changes, build-images]
     if: needs.detect-changes.outputs.api == 'true' || needs.detect-changes.outputs.ci == 'true'
     env:
@@ -684,7 +693,7 @@ jobs:
   # ── E2E tests (KinD + Skaffold + Playwright) ─────────────
   e2e-tests:
     name: E2E tests
-    runs-on: ${{ needs.detect-changes.outputs.runner }}
+    runs-on: ${{ needs.detect-changes.outputs.runner-large }}
     needs:
       - detect-changes
       - build-images
@@ -955,7 +964,7 @@ jobs:
       - unit-tests
       - rust-coverage
       - e2e-tests
-    runs-on: ubuntu-latest
+    runs-on: ${{ needs.detect-changes.outputs.runner-nano }}
     steps:
       - name: Check results
         run: |
@@ -974,7 +983,7 @@ jobs:
       !contains(needs.*.result, 'failure') &&
       !contains(needs.*.result, 'cancelled')
     needs: [unit-tests, rust-coverage, e2e-tests, detect-changes]
-    runs-on: ubuntu-latest
+    runs-on: ${{ needs.detect-changes.outputs.runner-nano }}
     permissions:
       contents: read
       packages: read
@@ -1086,7 +1095,7 @@ jobs:
   # ── Upload CI reports to Dufs ────────────────────────────
   deploy-reports:
     name: Upload CI reports to Dufs
-    runs-on: ubuntu-latest
+    runs-on: ${{ needs.detect-changes.outputs.runner-small }}
     needs: [unit-tests, rust-coverage, e2e-tests, build-storybook, build-docs]
     if: >-
       always() &&
