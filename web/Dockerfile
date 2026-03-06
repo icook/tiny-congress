@@ -45,7 +45,9 @@ RUN yarn build
 # Production stage — nginx-unprivileged runs as UID 101, listens on 8080
 FROM nginxinc/nginx-unprivileged:alpine
 # Upgrade system packages to pick up security patches (e.g. zlib CVE-2026-22184)
+USER root
 RUN apk upgrade --no-cache
+USER 101
 WORKDIR /usr/share/nginx/html
 
 # SPA routing + runtime config cache headers
