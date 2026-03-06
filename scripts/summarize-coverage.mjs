@@ -11,7 +11,7 @@
  *     --rust service/coverage/backend-unit.lcov:unit,service/coverage/backend-integration.lcov:integration
  */
 
-import { readFileSync, existsSync } from 'fs';
+import { readFileSync, appendFileSync, existsSync } from 'fs';
 import { basename } from 'path';
 import { parseArgs } from 'util';
 
@@ -34,6 +34,7 @@ const { values } = parseArgs({
     vitest: { type: 'string' },
     playwright: { type: 'string' },
     rust: { type: 'string' },
+    'github-output': { type: 'string' },
   },
 });
 
@@ -275,8 +276,9 @@ function main() {
   let hasContent = false;
 
   // Vitest
+  let vitestData = null;
   if (values.vitest) {
-    const vitestData = parseVitestCoverage(values.vitest);
+    vitestData = parseVitestCoverage(values.vitest);
     const section = renderVitestSection(vitestData);
     if (section) {
       output.push(section, '');
@@ -285,8 +287,9 @@ function main() {
   }
 
   // Playwright
+  let playwrightData = null;
   if (values.playwright) {
-    const playwrightData = parsePlaywrightCoverage(values.playwright);
+    playwrightData = parsePlaywrightCoverage(values.playwright);
     const section = renderPlaywrightSection(playwrightData);
     if (section) {
       output.push(section, '');
@@ -295,13 +298,14 @@ function main() {
   }
 
   // Rust (can have multiple files with labels)
+  let rustData = [];
   if (values.rust) {
     const rustFiles = values.rust.split(',').map((entry) => {
       const [path, label] = entry.includes(':') ? entry.split(':') : [entry, basename(entry, '.lcov')];
       return { path: path.trim(), label: label.trim() };
     });
 
-    const rustData = rustFiles
+    rustData = rustFiles
       .map(({ path, label }) => ({
         label: label.charAt(0).toUpperCase() + label.slice(1) + ' Tests',
         data: parseLcovFile(path),
@@ -320,6 +324,25 @@ function main() {
   }
 
   console.log(output.join('\n'));
+
+  // Write key=value pairs for GitHub Actions step outputs
+  if (values['github-output']) {
+    const t = vitestData?.total;
+    const p = playwrightData?.total;
+    const r = rustData[0]?.data?.total;
+    const lines = [
+      `vitest_lines=${t?.lines.pct ?? 0}`,
+      `vitest_branches=${t?.branches.pct ?? 0}`,
+      `vitest_functions=${t?.functions.pct ?? 0}`,
+      `pw_lines=${p?.lines.pct ?? 0}`,
+      `pw_branches=${p?.branches.pct ?? 0}`,
+      `pw_functions=${p?.functions.pct ?? 0}`,
+      `rust_lines=${r?.lines.pct ?? 0}`,
+      `rust_functions=${r?.functions.pct ?? 0}`,
+      `coverage_pct=${t?.lines.pct ?? 0}`,
+    ];
+    appendFileSync(values['github-output'], lines.join('\n') + '\n');
+  }
 }
 
 main();
