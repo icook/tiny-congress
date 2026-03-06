@@ -31,7 +31,7 @@ test('settings page shows device list after signup', async ({ page }) => {
   await expect(page.getByText(/Manage your devices/i)).toBeVisible();
 
   // Device list should load and show the current device
-  await expect(page.getByText(/Current/i)).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByText('Current', { exact: true })).toBeVisible({ timeout: 10_000 });
   await expect(page.getByText(/Active/i)).toBeVisible();
 
   // Screenshot: authenticated settings with device list
@@ -60,7 +60,7 @@ test('current device cannot be revoked or renamed', async ({ page }) => {
   });
 
   // Wait for device list to load
-  await expect(page.getByText(/Current/i)).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByText('Current', { exact: true })).toBeVisible({ timeout: 10_000 });
 
   // The current device row should NOT have rename or revoke action icons
   // With only one device (current), the Actions column should be empty
