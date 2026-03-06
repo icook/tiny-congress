@@ -39,7 +39,7 @@ jobs:
           API="${BASE/https:\/\/tiny-congress-demo./https://tc-api-demo.}"
           VERIFIER="${BASE/https:\/\/tiny-congress-demo./https://tc-verify-demo.}"
           echo "frontend=$BASE" >> "$GITHUB_OUTPUT"
-          echo "api=${API}/graphql" >> "$GITHUB_OUTPUT"
+          echo "api=$API" >> "$GITHUB_OUTPUT"
           echo "verifier=$VERIFIER" >> "$GITHUB_OUTPUT"
 
       - name: Check HTTPS — frontend
@@ -49,7 +49,7 @@ jobs:
 
       - name: Check HTTPS — API
         run: |
-          curl -sSf --max-time 15 "${{ steps.urls.outputs.api }}" > /dev/null
+          curl -sSf --max-time 15 "${{ steps.urls.outputs.api }}/health" > /dev/null
           echo "API reachable"
 
       - name: Check HTTPS — demo verifier
@@ -63,7 +63,7 @@ jobs:
           RESP=$(curl -sSf --max-time 15 \
             -H "Content-Type: application/json" \
             -d "$QUERY" \
-            "${{ steps.urls.outputs.api }}")
+            "${{ steps.urls.outputs.api }}/graphql")
           echo "Response: $RESP"
           echo "$RESP" | grep -q '"id"' || { echo "No rooms found — sim worker may not be running"; exit 1; }
           echo "Sim worker content verified"
@@ -102,7 +102,7 @@ jobs:
         working-directory: web
         env:
           PLAYWRIGHT_BASE_URL: ${{ needs.preflight.outputs.frontend_url }}
-          PLAYWRIGHT_API_URL: ${{ needs.preflight.outputs.api_url }}
+          PLAYWRIGHT_API_URL: ${{ needs.preflight.outputs.api_url }}/graphql
           PLAYWRIGHT_SKIP_WEB_SERVER: "true"
         run: yarn playwright:test --project ${{ matrix.project }}
 
