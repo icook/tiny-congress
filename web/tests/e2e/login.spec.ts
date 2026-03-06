@@ -12,7 +12,7 @@ async function signupUser(page: import('@playwright/test').Page, username: strin
   await page.getByLabel(/username/i).fill(username);
   await page.getByLabel(/backup password/i).fill(PASSWORD);
   await page.getByRole('button', { name: /sign up/i }).click();
-  await expect(page.getByText(/Account Created/i)).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText(/account has been created/i)).toBeVisible({ timeout: 15_000 });
 }
 
 /**
