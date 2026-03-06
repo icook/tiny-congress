@@ -441,15 +441,20 @@ jobs:
       # Toggle: gh variable set USE_ARC_RUNNERS --body "false" --repo icook/tiny-congress
       runner: ${{ steps.runner.outputs.label }}
     steps:
+      - uses: actions/checkout@v6
       - name: Select runner
         id: runner
         run: |
-          if [ "${{ vars.USE_ARC_RUNNERS }}" != "true" ]; then
-            echo "label=ubuntu-24.04" >> "$GITHUB_OUTPUT"
-          else
+          # Three ways to enable ARC runners (in priority order):
+          #   1. Commit message contains [arc]  — per-commit, good for iteration
+          #   2. Repo var USE_ARC_RUNNERS=true   — global override
+          # Default: ubuntu-24.04 (GHA hosted)
+          commit_msg=$(git log -1 --format=%s HEAD)
+          if echo "$commit_msg" | grep -qF '[arc]' || [ "${{ vars.USE_ARC_RUNNERS }}" = "true" ]; then
             echo "label=arc-runner-set" >> "$GITHUB_OUTPUT"
+          else
+            echo "label=ubuntu-24.04" >> "$GITHUB_OUTPUT"
           fi
-      - uses: actions/checkout@v6
       - uses: dorny/paths-filter@v3
         id: filter
         with:
