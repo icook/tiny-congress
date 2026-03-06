@@ -1107,11 +1107,13 @@ jobs:
         continue-on-error: true
 
       - name: Summarize coverage to job summary
+        id: artifacts
         run: |
           node scripts/summarize-coverage.mjs \
             --vitest web/coverage/vitest/coverage-summary.json \
             --playwright web/coverage/playwright/coverage-summary.json \
             --rust "service/coverage/backend-unit.lcov:unit" \
+            --github-output "$GITHUB_OUTPUT" \
             >> "$GITHUB_STEP_SUMMARY"
 
       - name: Install lcov for HTML generation
@@ -1122,88 +1124,12 @@ jobs:
         run: node scripts/build-coverage-report.mjs
 
       - name: Organize artifacts
-        id: artifacts
         run: |
-          # Move coverage report into site
-          if [ -d coverage-report ]; then
-            mv coverage-report site/coverage
-          fi
-
-          # Playwright report is nested
-          if [ -d artifacts/playwright/playwright-report ]; then
-            mv artifacts/playwright/playwright-report site/playwright
-          fi
-
-          # Rust docs
-          if [ -d artifacts/docs/target/doc ]; then
-            mv artifacts/docs/target/doc site/rust-docs
-          fi
-
-          # TypeScript docs
-          if [ -d artifacts/docs/web/docs ]; then
-            mv artifacts/docs/web/docs site/ts-docs
-          fi
-
-          # Extract coverage percentages from all test types
-          # Vitest
-          if [ -f web/coverage/vitest/coverage-summary.json ]; then
-            VITEST_LINES=$(jq -r '.total.lines.pct // 0' web/coverage/vitest/coverage-summary.json)
-            VITEST_BRANCHES=$(jq -r '.total.branches.pct // 0' web/coverage/vitest/coverage-summary.json)
-            VITEST_FUNCTIONS=$(jq -r '.total.functions.pct // 0' web/coverage/vitest/coverage-summary.json)
-          else
-            VITEST_LINES=0; VITEST_BRANCHES=0; VITEST_FUNCTIONS=0
-          fi
-          {
-            echo "vitest_lines=${VITEST_LINES}"
-            echo "vitest_branches=${VITEST_BRANCHES}"
-            echo "vitest_functions=${VITEST_FUNCTIONS}"
-          } >> "$GITHUB_OUTPUT"
-
-          # Playwright
-          if [ -f web/coverage/playwright/coverage-summary.json ]; then
-            PW_LINES=$(jq -r '.total.lines.pct // 0' web/coverage/playwright/coverage-summary.json)
-            PW_BRANCHES=$(jq -r '.total.branches.pct // 0' web/coverage/playwright/coverage-summary.json)
-            PW_FUNCTIONS=$(jq -r '.total.functions.pct // 0' web/coverage/playwright/coverage-summary.json)
-          else
-            PW_LINES=0; PW_BRANCHES=0; PW_FUNCTIONS=0
-          fi
-          {
-            echo "pw_lines=${PW_LINES}"
-            echo "pw_branches=${PW_BRANCHES}"
-            echo "pw_functions=${PW_FUNCTIONS}"
-          } >> "$GITHUB_OUTPUT"
-
-          # Rust (parse lcov file directly)
-          RUST_LCOV="service/coverage/backend-unit.lcov"
-          if [ -f "$RUST_LCOV" ]; then
-            LINES_FOUND=$(grep "^LF:" "$RUST_LCOV" | cut -d: -f2 | awk '{s+=$1} END {print s+0}')
-            LINES_HIT=$(grep "^LH:" "$RUST_LCOV" | cut -d: -f2 | awk '{s+=$1} END {print s+0}')
-            FUNCS_FOUND=$(grep "^FNF:" "$RUST_LCOV" | cut -d: -f2 | awk '{s+=$1} END {print s+0}')
-            FUNCS_HIT=$(grep "^FNH:" "$RUST_LCOV" | cut -d: -f2 | awk '{s+=$1} END {print s+0}')
-
-            if [ "$LINES_FOUND" -gt 0 ]; then
-              RUST_LINES=$(echo "scale=1; $LINES_HIT * 100 / $LINES_FOUND" | bc)
-            else
-              RUST_LINES=0
-            fi
-            if [ "$FUNCS_FOUND" -gt 0 ]; then
-              RUST_FUNCTIONS=$(echo "scale=1; $FUNCS_HIT * 100 / $FUNCS_FOUND" | bc)
-            else
-              RUST_FUNCTIONS=0
-            fi
-          else
-            RUST_LINES=0; RUST_FUNCTIONS=0
-          fi
-          {
-            echo "rust_lines=${RUST_LINES}"
-            echo "rust_functions=${RUST_FUNCTIONS}"
-          } >> "$GITHUB_OUTPUT"
-
-          # Cleanup artifacts
+          if [ -d coverage-report ]; then mv coverage-report site/coverage; fi
+          if [ -d artifacts/playwright/playwright-report ]; then mv artifacts/playwright/playwright-report site/playwright; fi
+          if [ -d artifacts/docs/target/doc ]; then mv artifacts/docs/target/doc site/rust-docs; fi
+          if [ -d artifacts/docs/web/docs ]; then mv artifacts/docs/web/docs site/ts-docs; fi
           rm -rf artifacts
-
-          # Overall coverage (vitest lines as primary)
-          echo "coverage_pct=${VITEST_LINES}" >> "$GITHUB_OUTPUT"
 
       - name: Generate landing page
         env:
