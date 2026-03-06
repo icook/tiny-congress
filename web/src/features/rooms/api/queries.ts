@@ -10,6 +10,7 @@ import {
   getPollDetail,
   getPollDistribution,
   getPollResults,
+  getRoom,
   listPolls,
   listRooms,
   type DimensionVote,
@@ -25,6 +26,14 @@ export function useRooms() {
   return useQuery<Room[]>({
     queryKey: ['rooms'],
     queryFn: listRooms,
+  });
+}
+
+export function useRoom(roomId: string) {
+  return useQuery<Room>({
+    queryKey: ['room', roomId],
+    queryFn: () => getRoom(roomId),
+    enabled: Boolean(roomId),
   });
 }
 

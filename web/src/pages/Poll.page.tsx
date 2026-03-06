@@ -18,13 +18,13 @@ import {
   Text,
   Title,
 } from '@mantine/core';
-import { notifications } from '@mantine/notifications';
 import {
   useCastVote,
   useMyVotes,
   usePollDetail,
   usePollDistribution,
   usePollResults,
+  useRoom,
   type Dimension,
   type DimensionVote,
 } from '@/features/rooms';
@@ -41,6 +41,7 @@ export function PollPage({ roomId, pollId }: PollPageProps) {
   const { deviceKid, privateKey, username, isLoading: deviceLoading } = useDevice();
   const { crypto } = useCrypto();
 
+  const roomQuery = useRoom(roomId);
   const detailQuery = usePollDetail(roomId, pollId);
   const resultsQuery = usePollResults(roomId, pollId);
   const distributionQuery = usePollDistribution(roomId, pollId);
@@ -81,18 +82,8 @@ export function PollPage({ roomId, pollId }: PollPageProps) {
       dimension_id: dim.id,
       value: votes[dim.id] ?? (dim.min_value + dim.max_value) / 2,
     }));
-    voteMutation.mutate(dimensionVotes, {
-      onSuccess: () => {
-        notifications.show({
-          title: hasVoted ? 'Vote updated' : 'Vote submitted!',
-          message: "Thanks! Here's what the community thinks:",
-          color: 'green',
-          icon: <IconCheck size={16} />,
-          autoClose: 3000,
-        });
-      },
-    });
-  }, [detailQuery.data, votes, voteMutation, hasVoted]);
+    voteMutation.mutate(dimensionVotes);
+  }, [detailQuery.data, votes, voteMutation]);
 
   if (detailQuery.isLoading || deviceLoading) {
     return (
@@ -123,6 +114,7 @@ export function PollPage({ roomId, pollId }: PollPageProps) {
   const isActive = poll.status === 'active';
   const isAuthenticated = Boolean(deviceKid);
   const canVote = isActive && isAuthenticated && isVerified;
+  const roomName = roomQuery.data?.name;
 
   return (
     <Stack gap="md" maw={800} mx="auto" mt="xl" px="md">
@@ -132,6 +124,28 @@ export function PollPage({ roomId, pollId }: PollPageProps) {
         </Text>
         <Text size="sm" c="dimmed">
           /
+        </Text>
+        {roomName ? (
+          <>
+            <Text size="sm" c="dimmed">
+              {roomName}
+            </Text>
+            <Text size="sm" c="dimmed">
+              /
+            </Text>
+          </>
+        ) : null}
+        <Text
+          size="sm"
+          c="dimmed"
+          style={{
+            maxWidth: 200,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {poll.question}
         </Text>
       </Group>
 
@@ -172,6 +186,12 @@ export function PollPage({ roomId, pollId }: PollPageProps) {
                 </Badge>
               ) : null}
             </Group>
+
+            {!hasVoted && canVote ? (
+              <Text size="sm" c="dimmed">
+                Move the sliders to set your position on each dimension, then submit.
+              </Text>
+            ) : null}
 
             {!isAuthenticated ? (
               <Alert icon={<IconLock size={16} />} color="yellow">
@@ -234,19 +254,23 @@ export function PollPage({ roomId, pollId }: PollPageProps) {
             ) : null}
           </Stack>
         </Card>
-      ) : null}
+      ) : (
+        <Card shadow="sm" padding="lg" radius="md" withBorder>
+          <Alert icon={<IconLock size={16} />} color="gray" title="Poll closed">
+            This poll is no longer accepting votes.
+          </Alert>
+        </Card>
+      )}
 
       {/* Results section */}
       <Card shadow="sm" padding="lg" radius="md" withBorder>
         <Stack gap="md">
           <Group justify="space-between">
-            <Title order={4}>
-              {voteMutation.isSuccess ? "Here's what the community thinks:" : 'Results'}
-            </Title>
+            <Title order={4}>Results</Title>
             {resultsQuery.data ? (
               <Text size="sm" c="dimmed">
-                {String(resultsQuery.data.voter_count)} voter
-                {resultsQuery.data.voter_count !== 1 ? 's' : ''}
+                {String(resultsQuery.data.voter_count)} vote
+                {resultsQuery.data.voter_count !== 1 ? 's' : ''} cast
               </Text>
             ) : null}
           </Group>
@@ -261,7 +285,7 @@ export function PollPage({ roomId, pollId }: PollPageProps) {
 
           {resultsQuery.data?.voter_count === 0 ? (
             <Text size="sm" c="dimmed">
-              No votes yet.
+              No votes yet. Be the first!
             </Text>
           ) : null}
 
@@ -272,6 +296,10 @@ export function PollPage({ roomId, pollId }: PollPageProps) {
       </Card>
     </Stack>
   );
+}
+
+function valueToPercent(value: number, min: number, max: number): number {
+  return Math.round(((value - min) / (max - min)) * 100);
 }
 
 function VoteSlider({
@@ -285,6 +313,8 @@ function VoteSlider({
   onChange: (value: number) => void;
   disabled: boolean;
 }) {
+  const pct = valueToPercent(value, dimension.min_value, dimension.max_value);
+
   return (
     <div>
       <Group justify="space-between" mb="xs">
@@ -292,7 +322,7 @@ function VoteSlider({
           {dimension.name}
         </Text>
         <Text size="sm" c="dimmed">
-          {value.toFixed(2)}
+          {String(pct)}%
         </Text>
       </Group>
       {dimension.description ? (
@@ -310,12 +340,9 @@ function VoteSlider({
           disabled={disabled}
           size="lg"
           thumbSize={26}
-          label={(val) => {
-            const pct = Math.round(
-              ((val - dimension.min_value) / (dimension.max_value - dimension.min_value)) * 100
-            );
-            return `${String(pct)}%`;
-          }}
+          label={(val) =>
+            `${String(valueToPercent(val, dimension.min_value, dimension.max_value))}%`
+          }
           marks={[
             { value: dimension.min_value, label: dimension.min_label ?? 'Low' },
             { value: dimension.max_value, label: dimension.max_label ?? 'High' },
