@@ -1526,9 +1526,11 @@ jobs:
             config=$(mktemp)
             local count=0
             local total_bytes=0
+            local first=true
             while IFS= read -r -d '' file; do
               rel="${file#site/}"
-              printf 'url = "%s/%s/%s"\nupload-file = "%s"\nuser = "ci:%s"\nsilent\nfail-with-body\nnext\n' \
+              if $first; then first=false; else printf 'next\n' >> "$config"; fi
+              printf 'url = "%s/%s/%s"\nupload-file = "%s"\nuser = "ci:%s"\nsilent\nfail-with-body\n' \
                 "$BASE" "$target" "$rel" "$file" "$DUFS_PASSWORD" >> "$config"
               count=$((count + 1))
               total_bytes=$((total_bytes + $(wc -c < "$file")))
