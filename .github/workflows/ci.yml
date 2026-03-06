@@ -1217,8 +1217,9 @@ jobs:
           RUST_LINES: ${{ steps.artifacts.outputs.rust_lines }}
           RUST_FUNCTIONS: ${{ steps.artifacts.outputs.rust_functions }}
         run: |
-          export COMMIT_SHORT="${GITHUB_SHA:0:7}"
-          export BUILD_DATE="$(date -u +"%Y-%m-%d %H:%M UTC")"
+          COMMIT_SHORT="${GITHUB_SHA:0:7}"
+          BUILD_DATE="$(date -u +"%Y-%m-%d %H:%M UTC")"
+          export COMMIT_SHORT BUILD_DATE
           envsubst < .github/templates/reports-landing.html > site/index.html
 
       - name: Upload reports to Dufs
