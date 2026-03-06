@@ -1,0 +1,44 @@
+name: Setup Rust Toolchain
+description: Install Rust stable with caching for toolchain and optionally dependencies
+
+inputs:
+  components:
+    description: Comma-separated Rust components (e.g. rustfmt, clippy)
+    default: ''
+  targets:
+    description: Comma-separated Rust targets (e.g. wasm32-unknown-unknown)
+    default: ''
+  cache-dependencies:
+    description: Cache ~/.cargo/registry, ~/.cargo/git, and target/
+    default: 'true'
+
+runs:
+  using: composite
+  steps:
+    # Restore toolchain before dtolnay/rust-toolchain so rustup detects
+    # existing installation and skips the download on warm runs.
+    - name: Cache Rust toolchain
+      uses: runs-on/cache@v4
+      with:
+        path: |
+          ~/.rustup/toolchains
+          ~/.rustup/update-hashes
+          ~/.cargo/bin
+        key: rustup-${{ runner.os }}-stable
+
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        components: ${{ inputs.components }}
+        targets: ${{ inputs.targets }}
+
+    - name: Cache Rust dependencies
+      if: inputs.cache-dependencies == 'true'
+      uses: runs-on/cache@v4
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: rust-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+        restore-keys: rust-${{ runner.os }}-
