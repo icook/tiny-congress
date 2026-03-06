@@ -805,6 +805,10 @@ jobs:
           kubectl version --client=true
           kubectl cluster-info
           kubectl get nodes -o wide
+          # Wait for default SA — kube-controller-manager creates it shortly after
+          # API server starts. On slower storage (ARC runners) this can race.
+          kubectl wait serviceaccount default -n default \
+            --for=jsonpath='{.metadata.name}'=default --timeout=60s
 
       - name: Configure registry access for KinD
         run: |
