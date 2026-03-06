@@ -593,10 +593,107 @@ jobs:
           version: 'v0.65.0'
 
   # ============================================================
-  # JOB 2: Run Skaffold test/deploy and host-based integration/E2E tests
+  # JOB 2a: Vitest unit tests + coverage
   # ============================================================
-  integration-tests:
-    name: Integration tests
+  unit-tests:
+    name: Unit tests (Vitest)
+    runs-on: ubuntu-24.04
+    needs:
+      - detect-changes
+    if: >-
+      always() &&
+      (needs.detect-changes.outputs.ui == 'true' || needs.detect-changes.outputs.ci == 'true') &&
+      !contains(needs.*.result, 'failure') &&
+      !contains(needs.*.result, 'cancelled')
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup web toolchain
+        uses: ./.github/actions/setup-web
+
+      - name: Install web dependencies
+        working-directory: web
+        run: yarn install --immutable
+
+      - name: Install wasm-pack
+        uses: taiki-e/install-action@wasm-pack
+
+      - name: Build WASM
+        run: |
+          cd crates/tc-crypto
+          wasm-pack build --target web --release --out-dir ../../web/src/wasm/tc-crypto
+
+      - name: Run Vitest with coverage
+        working-directory: web
+        run: CI=true yarn vitest:coverage
+
+      - name: Upload Vitest coverage
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: vitest-coverage
+          path: web/coverage/vitest/
+          retention-days: 7
+
+  # ============================================================
+  # JOB 2b: Rust unit tests + coverage
+  # ============================================================
+  rust-coverage:
+    name: Rust coverage
+    runs-on: ubuntu-24.04
+    needs:
+      - detect-changes
+      - build-images
+    if: >-
+      always() &&
+      (needs.detect-changes.outputs.api == 'true' || needs.detect-changes.outputs.ci == 'true') &&
+      !contains(needs.*.result, 'failure') &&
+      !contains(needs.*.result, 'cancelled')
+    env:
+      TEST_POSTGRES_IMAGE: ${{ needs.build-images.outputs.postgres-tag || format('ghcr.io/{0}/postgres:{1}', github.repository, github.sha) }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@cargo-llvm-cov
+
+      - name: Generate Rust coverage
+        working-directory: service
+        run: |
+          set -euo pipefail
+          mkdir -p coverage
+          cargo llvm-cov --lcov --output-path coverage/backend-unit.lcov --fail-under-lines 60
+
+      - name: Upload Rust coverage
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: rust-coverage
+          if-no-files-found: warn
+          path: service/coverage/backend-unit.lcov
+
+  # ============================================================
+  # JOB 2c: E2E tests (KinD + Skaffold + Playwright)
+  # ============================================================
+  e2e-tests:
+    name: E2E tests
     runs-on: ubuntu-24.04
     needs:
       - detect-changes
@@ -647,11 +744,6 @@ jobs:
           curl -fsSL -o skaffold "https://storage.googleapis.com/skaffold/releases/${SKAFFOLD_VERSION}/skaffold-linux-amd64"
           sudo install skaffold /usr/local/bin/skaffold
 
-      - name: Verify Skaffold installation
-        run: |
-          echo "Required: v$(cat .skaffold-version)"
-          echo "Installed: $(skaffold version)"
-
       - name: Login to GHCR
         uses: docker/login-action@v3
         with:
@@ -673,17 +765,7 @@ jobs:
             ]
           }
           EOF
-          echo "Artifacts file contents:"
-          cat "$artifacts_file"
           echo "file=${artifacts_file}" >> "$GITHUB_OUTPUT"
-
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          components: llvm-tools-preview
-
-      - name: Install cargo-llvm-cov
-        uses: taiki-e/install-action@cargo-llvm-cov
 
       - name: Setup web toolchain
         uses: ./.github/actions/setup-web
@@ -702,11 +784,6 @@ jobs:
         working-directory: web
         run: yarn playwright install --with-deps chromium
 
-      - name: Prepare test output directories
-        run: |
-          mkdir -p web/reports web/test-results web/coverage/playwright service/coverage
-          rm -f service/coverage/backend-unit.lcov
-
       - name: Install wasm-pack
         uses: taiki-e/install-action@wasm-pack
 
@@ -714,29 +791,6 @@ jobs:
         run: |
           cd crates/tc-crypto
           wasm-pack build --target web --release --out-dir ../../web/src/wasm/tc-crypto
-
-      - name: Run Skaffold tests
-        env:
-          TEST_POSTGRES_IMAGE: ${{ env.REGISTRY }}/postgres:${{ github.sha }}
-        run: |
-          set -euo pipefail
-          skaffold test -p "${SKAFFOLD_PROFILE}" --build-artifacts "${{ steps.artifacts.outputs.file }}"
-
-      - name: Generate Rust coverage
-        env:
-          TEST_POSTGRES_IMAGE: ${{ env.REGISTRY }}/postgres:${{ github.sha }}
-        working-directory: service
-        run: |
-          set -euo pipefail
-          cargo llvm-cov --lcov --output-path coverage/backend-unit.lcov --fail-under-lines 60
-
-      - name: Upload Vitest coverage
-        if: always()
-        uses: actions/upload-artifact@v6
-        with:
-          name: vitest-coverage
-          path: web/coverage/vitest/
-          retention-days: 7
 
       - name: Wait for KinD readiness
         run: |
@@ -856,39 +910,13 @@ jobs:
         working-directory: web
         run: node scripts/analyze-playwright-flakiness.mjs >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Upload Rust coverage artifacts
+      - name: Upload Playwright coverage
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: rust-coverage
+          name: playwright-coverage
           if-no-files-found: warn
-          path: |
-            service/coverage/backend-unit.lcov
-
-      - name: Summarize coverage to job summary
-        if: always()
-        run: |
-          node scripts/summarize-coverage.mjs \
-            --vitest web/coverage/vitest/coverage-summary.json \
-            --playwright web/coverage/playwright/coverage-summary.json \
-            --rust "service/coverage/backend-unit.lcov:unit" \
-            >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Install lcov for HTML generation
-        if: always()
-        run: sudo apt-get update && sudo apt-get install -y lcov
-
-      - name: Build unified coverage report
-        if: always()
-        working-directory: web
-        run: node scripts/build-coverage-report.mjs
-
-      - name: Upload coverage report
-        if: always()
-        uses: actions/upload-artifact@v6
-        with:
-          name: coverage-report
-          path: coverage-report/
+          path: web/coverage/playwright/
           retention-days: 7
 
       - name: Dump diagnostics on failure
@@ -902,6 +930,68 @@ jobs:
           kubectl get events -A --sort-by=.lastTimestamp || true
           echo '--- All Resources ---'
           kubectl get all -n default || true
+
+  # ============================================================
+  # JOB 2d: Assemble unified coverage report from all test jobs
+  # ============================================================
+  coverage-report:
+    name: Coverage report
+    runs-on: ubuntu-latest
+    needs: [unit-tests, rust-coverage, e2e-tests]
+    if: always()
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup web toolchain
+        uses: ./.github/actions/setup-web
+
+      - name: Install web dependencies
+        working-directory: web
+        run: yarn install --immutable
+
+      - name: Download Vitest coverage
+        uses: actions/download-artifact@v7
+        with:
+          name: vitest-coverage
+          path: web/coverage/vitest/
+        continue-on-error: true
+
+      - name: Download Rust coverage
+        uses: actions/download-artifact@v7
+        with:
+          name: rust-coverage
+          path: service/coverage/
+        continue-on-error: true
+
+      - name: Download Playwright coverage
+        uses: actions/download-artifact@v7
+        with:
+          name: playwright-coverage
+          path: web/coverage/playwright/
+        continue-on-error: true
+
+      - name: Summarize coverage to job summary
+        run: |
+          node scripts/summarize-coverage.mjs \
+            --vitest web/coverage/vitest/coverage-summary.json \
+            --playwright web/coverage/playwright/coverage-summary.json \
+            --rust "service/coverage/backend-unit.lcov:unit" \
+            >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Install lcov for HTML generation
+        run: sudo apt-get update && sudo apt-get install -y lcov
+
+      - name: Build unified coverage report
+        working-directory: web
+        run: node scripts/build-coverage-report.mjs
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v6
+        with:
+          name: coverage-report
+          path: coverage-report/
+          retention-days: 7
 
   # ============================================================
   # CI Gate — single required check that aggregates all jobs
@@ -922,7 +1012,10 @@ jobs:
       - sqlx-check
       - build-images
       - scan-images
-      - integration-tests
+      - unit-tests
+      - rust-coverage
+      - e2e-tests
+      - coverage-report
     runs-on: ubuntu-latest
     steps:
       - name: Check results
@@ -943,7 +1036,7 @@ jobs:
       github.event_name == 'push' && github.ref == 'refs/heads/master' &&
       !contains(needs.*.result, 'failure') &&
       !contains(needs.*.result, 'cancelled')
-    needs: [integration-tests, detect-changes]
+    needs: [e2e-tests, detect-changes]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -1059,7 +1152,7 @@ jobs:
   deploy-reports:
     name: Upload CI reports to Dufs
     runs-on: ubuntu-latest
-    needs: [integration-tests, build-storybook, build-docs]
+    needs: [coverage-report, e2e-tests, build-storybook, build-docs]
     if: >-
       always() &&
       !contains(needs.*.result, 'cancelled')
