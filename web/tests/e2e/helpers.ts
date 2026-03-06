@@ -13,8 +13,8 @@ export async function signupUser(
   await page.goto('/signup');
   await expect(page.getByLabel(/username/i)).toBeVisible();
   await page.getByLabel(/username/i).fill(name);
-  await page.getByLabel(/^Backup Password/i).fill(password);
-  await page.getByLabel(/^Confirm Backup Password/i).fill(password);
+  await page.getByLabel('Backup Password', { exact: true }).fill(password);
+  await page.getByLabel('Confirm Backup Password', { exact: true }).fill(password);
   await page.getByRole('button', { name: /sign up/i }).click();
   await expect(page.getByText(/Welcome/i)).toBeVisible({ timeout: 15_000 });
   return name;
