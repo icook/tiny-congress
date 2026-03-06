@@ -4,7 +4,7 @@
 //! 1. A user account (created if missing)
 //! 2. An `authorized_verifier` endorsement with NULL issuer (genesis)
 
-use sqlx::PgPool;
+use sqlx::{PgConnection, PgPool};
 use uuid::Uuid;
 
 use crate::config::VerifierConfig;
@@ -26,8 +26,10 @@ pub async fn bootstrap_verifiers(
     let mut result = Vec::with_capacity(verifiers.len());
 
     for v in verifiers {
-        let account_id = ensure_verifier_account(pool, &v.name, &v.public_key).await?;
-        ensure_authorized_verifier_endorsement(pool, account_id).await?;
+        let mut tx = pool.begin().await?;
+        let account_id = ensure_verifier_account(&mut tx, &v.name, &v.public_key).await?;
+        ensure_authorized_verifier_endorsement(&mut tx, account_id).await?;
+        tx.commit().await?;
         tracing::info!(name = %v.name, account_id = %account_id, "Verifier bootstrapped");
         result.push(BootstrappedVerifier {
             name: v.name.clone(),
@@ -40,7 +42,7 @@ pub async fn bootstrap_verifiers(
 
 /// Ensure an account exists for this verifier. Returns the `account_id`.
 async fn ensure_verifier_account(
-    pool: &PgPool,
+    conn: &mut PgConnection,
     name: &str,
     public_key: &str,
 ) -> Result<Uuid, anyhow::Error> {
@@ -49,29 +51,31 @@ async fn ensure_verifier_account(
         .map_err(|e| anyhow::anyhow!("Invalid verifier public key for {name}: {e}"))?;
     let kid = tc_crypto::Kid::derive(&pubkey_bytes);
 
-    // Try to find existing account by root_kid
-    let existing = sqlx::query_scalar::<_, Uuid>("SELECT id FROM accounts WHERE root_kid = $1")
-        .bind(kid.as_str())
-        .fetch_optional(pool)
-        .await?;
+    // Check for existing account by root_kid OR username (handles both unique constraint cases)
+    let existing = sqlx::query_scalar::<_, Uuid>(
+        "SELECT id FROM accounts WHERE root_kid = $1 OR username = $2",
+    )
+    .bind(kid.as_str())
+    .bind(name)
+    .fetch_optional(&mut *conn)
+    .await?;
 
     if let Some(id) = existing {
         return Ok(id);
     }
 
-    // Create new account, returning the actual id (existing or newly inserted)
+    // Create new account
     let id = Uuid::new_v4();
     let returned_id: (Uuid,) = sqlx::query_as(
         r"INSERT INTO accounts (id, username, root_pubkey, root_kid)
           VALUES ($1, $2, $3, $4)
-          ON CONFLICT (username) DO UPDATE SET root_pubkey = EXCLUDED.root_pubkey, root_kid = EXCLUDED.root_kid
           RETURNING id",
     )
     .bind(id)
     .bind(name)
     .bind(public_key)
     .bind(kid.as_str())
-    .fetch_one(pool)
+    .fetch_one(&mut *conn)
     .await?;
 
     Ok(returned_id.0)
@@ -79,7 +83,7 @@ async fn ensure_verifier_account(
 
 /// Ensure the account has an `authorized_verifier` endorsement (genesis, NULL issuer).
 async fn ensure_authorized_verifier_endorsement(
-    pool: &PgPool,
+    conn: &mut PgConnection,
     account_id: Uuid,
 ) -> Result<(), anyhow::Error> {
     sqlx::query(
@@ -88,7 +92,7 @@ async fn ensure_authorized_verifier_endorsement(
           ON CONFLICT (subject_id, topic) WHERE issuer_id IS NULL DO NOTHING",
     )
     .bind(account_id)
-    .execute(pool)
+    .execute(&mut *conn)
     .await?;
 
     Ok(())
