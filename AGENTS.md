@@ -82,6 +82,7 @@ When a generated file needs changes, edit the source and run the generator. The 
 - Confabulating API names. Verify method signatures against actual code before documenting or calling them (e.g., `Kid::from_str()` exists; `Kid::parse()` does not).
 - "Improving" code adjacent to the task — don't refactor, add docstrings, or clean up surrounding code unless asked.
 - Adding a frontend runtime config value without wiring both layers. A new `window.__TC_ENV__` field requires: (1) `web/src/config.ts` (interface + getter), (2) `kube/app/templates/deployment.yaml` (Helm value → container env var). The entrypoint auto-discovers `TC_*`/`VITE_*` env vars — no script changes needed. Missing the Helm layer means the value is silently empty in production.
+- **Migration number conflicts on long-lived branches.** If another PR lands a migration while your branch is open, your migration number may collide. Always run `ls service/migrations/*.sql | sort -V | tail -1` before finalizing a migration to confirm your number is still the next available. Rebase onto master and rename your file if there's a collision.
 
 ## Documentation
 
