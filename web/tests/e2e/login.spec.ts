@@ -58,7 +58,9 @@ test('login flow recovers account and shows device list', async ({ page, browser
     await expect(device2.page.getByText(/Manage your devices/i)).toBeVisible();
 
     // Device list should load with two devices: the signup device + the login device
-    await expect(device2.page.getByText(/Current/i)).toBeVisible({ timeout: 10_000 });
+    await expect(device2.page.getByText('Current', { exact: true })).toBeVisible({
+      timeout: 10_000,
+    });
     // Both devices show "Active" badge — verify at least one is visible
     await expect(device2.page.getByText(/Active/i).first()).toBeVisible();
 
