@@ -42,9 +42,11 @@ jobs:
           fi
           API="${BASE/https:\/\/tiny-congress-demo./https://tc-api-demo.}"
           VERIFIER="${BASE/https:\/\/tiny-congress-demo./https://tc-verify-demo.}"
-          echo "frontend=$BASE" >> "$GITHUB_OUTPUT"
-          echo "api=$API" >> "$GITHUB_OUTPUT"
-          echo "verifier=$VERIFIER" >> "$GITHUB_OUTPUT"
+          {
+            echo "frontend=$BASE"
+            echo "api=$API"
+            echo "verifier=$VERIFIER"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Check HTTPS — frontend
         run: |
