@@ -603,7 +603,6 @@ jobs:
       - build-images
       - lint
       - lint-web
-      - codegen-check
     # always() is required so this job evaluates its `if` even when
     # path-filtered dependencies are skipped.  Without it, GitHub Actions
     # silently skips this job whenever any `needs` job is skipped, which
