@@ -16,11 +16,67 @@ concurrency:
   group: smoke-test-${{ github.sha }}
 
 jobs:
-  smoke:
-    name: Smoke (${{ matrix.project }})
+  preflight:
+    name: Preflight
     if: >-
       github.event_name == 'workflow_dispatch' ||
       (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'master')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      frontend_url: ${{ steps.urls.outputs.frontend }}
+      api_url: ${{ steps.urls.outputs.api }}
+      verifier_url: ${{ steps.urls.outputs.verifier }}
+    steps:
+      - name: Resolve URLs
+        id: urls
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            BASE="${{ github.event.inputs.url }}"
+          else
+            BASE="https://tiny-congress-demo.ibcook.com"
+          fi
+          if [[ "$BASE" != *"tiny-congress-demo."* ]]; then
+            echo "Non-default URLs must follow the tiny-congress-demo.* pattern for API/verifier derivation"
+            exit 1
+          fi
+          API="${BASE/https:\/\/tiny-congress-demo./https://tc-api-demo.}"
+          VERIFIER="${BASE/https:\/\/tiny-congress-demo./https://tc-verify-demo.}"
+          {
+            echo "frontend=$BASE"
+            echo "api=$API"
+            echo "verifier=$VERIFIER"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Check HTTPS — frontend
+        run: |
+          curl -sSf --max-time 15 "${{ steps.urls.outputs.frontend }}" > /dev/null
+          echo "Frontend reachable"
+
+      - name: Check HTTPS — API
+        run: |
+          curl -sSf --max-time 15 "${{ steps.urls.outputs.api }}/health" > /dev/null
+          echo "API reachable"
+
+      - name: Check HTTPS — demo verifier
+        run: |
+          curl -sSf --max-time 15 "${{ steps.urls.outputs.verifier }}" > /dev/null
+          echo "Demo verifier reachable"
+
+      - name: Check sim worker — rooms exist
+        run: |
+          QUERY='{"query":"{ rooms(first: 1) { edges { node { id } } } }"}'
+          RESP=$(curl -sSf --max-time 15 \
+            -H "Content-Type: application/json" \
+            -d "$QUERY" \
+            "${{ steps.urls.outputs.api }}/graphql")
+          echo "Response: $RESP"
+          echo "$RESP" | grep -q '"id"' || { echo "No rooms found — sim worker may not be running"; exit 1; }
+          echo "Sim worker content verified"
+
+  smoke:
+    name: Smoke (${{ matrix.project }})
+    needs: [preflight]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     continue-on-error: true
@@ -48,40 +104,11 @@ jobs:
         working-directory: web
         run: yarn playwright install --with-deps
 
-      - name: Resolve target URL
-        id: target
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "url=${{ github.event.inputs.url }}" >> "$GITHUB_OUTPUT"
-          else
-            echo "url=https://tiny-congress-demo.ibcook.com" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Wait for target reachable
-        run: |
-          for i in $(seq 1 30); do
-            if curl -sSf --max-time 10 "${{ steps.target.outputs.url }}" > /dev/null 2>&1; then
-              echo "Target is reachable"
-              exit 0
-            fi
-            echo "Attempt $i/30 — waiting 10s..."
-            sleep 10
-          done
-          echo "Target not reachable after 30 attempts"
-          exit 1
-
-      - name: Derive API URL from target
-        id: api
-        run: |
-          BASE="${{ steps.target.outputs.url }}"
-          API_URL="${BASE/https:\/\/tiny-congress-demo./https://tc-api-demo.}/graphql"
-          echo "url=$API_URL" >> "$GITHUB_OUTPUT"
-
       - name: Run Playwright tests
         working-directory: web
         env:
-          PLAYWRIGHT_BASE_URL: ${{ steps.target.outputs.url }}
-          PLAYWRIGHT_API_URL: ${{ steps.api.outputs.url }}
+          PLAYWRIGHT_BASE_URL: ${{ needs.preflight.outputs.frontend_url }}
+          PLAYWRIGHT_API_URL: ${{ needs.preflight.outputs.api_url }}/graphql
           PLAYWRIGHT_SKIP_WEB_SERVER: "true"
         run: yarn playwright:test --project ${{ matrix.project }}
 
