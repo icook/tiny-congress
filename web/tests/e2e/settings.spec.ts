@@ -18,7 +18,7 @@ test('settings page shows device list after signup', async ({ page }) => {
   await page.getByLabel('Backup Password', { exact: true }).fill('test-password-123');
   await page.getByLabel('Confirm Backup Password', { exact: true }).fill('test-password-123');
   await page.getByRole('button', { name: /sign up/i }).click();
-  await expect(page.getByText(/Account Created/i)).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText(/account has been created/i)).toBeVisible({ timeout: 15_000 });
 
   // Navigate to settings via client-side routing (preserves React state)
   await page.evaluate(() => {
@@ -51,7 +51,7 @@ test('current device cannot be revoked or renamed', async ({ page }) => {
   await page.getByLabel('Backup Password', { exact: true }).fill('test-password-123');
   await page.getByLabel('Confirm Backup Password', { exact: true }).fill('test-password-123');
   await page.getByRole('button', { name: /sign up/i }).click();
-  await expect(page.getByText(/Account Created/i)).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText(/account has been created/i)).toBeVisible({ timeout: 15_000 });
 
   // Navigate to settings
   await page.evaluate(() => {
