@@ -36,8 +36,8 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry,id=cargo-registry \
 
 FROM debian:bookworm-slim
 
-RUN apt-get update \
-  && apt-get install -y --no-install-recommends ca-certificates libpq5 libssl3 \
+RUN apt-get -o Acquire::ForceIPv4=true update \
+  && apt-get -o Acquire::ForceIPv4=true install -y --no-install-recommends ca-certificates libpq5 libssl3 \
   && apt-get upgrade -y libpq5 \
   && rm -rf /var/lib/apt/lists/* \
   && groupadd --system --gid 1000 app \
