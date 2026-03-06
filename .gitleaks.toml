@@ -1,0 +1,5 @@
+title = "gitleaks config"
+
+[allowlist]
+  description = "Storybook build artifacts in historical commits — minified React code (e.key, o.key) triggers generic-api-key false positives"
+  paths = ['''pr/\d+/storybook/''']
