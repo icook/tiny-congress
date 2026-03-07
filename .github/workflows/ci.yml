@@ -321,8 +321,6 @@ jobs:
     runs-on: ${{ needs.detect-changes.outputs.runner-medium }}
     needs: [build-images, detect-changes]
     if: needs.detect-changes.outputs.api == 'true' || needs.detect-changes.outputs.ci == 'true'
-    env:
-      DATABASE_URL: postgres://postgres:postgres@localhost:5432/tiny-congress
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -336,20 +334,34 @@ jobs:
 
       - name: Start postgres
         run: |
-          docker run -d --name postgres \
-            -p 5432:5432 \
+          CONTAINER_NAME="postgres-${GITHUB_RUN_ID}"
+          docker run -d --name "$CONTAINER_NAME" \
+            -p 0:5432 \
             -e POSTGRES_USER=postgres \
             -e POSTGRES_PASSWORD=postgres \
             ${{ env.REGISTRY }}/postgres:${{ github.sha }}
+
+          # Resolve Docker host based on runner environment
+          if [ "$RUNNER_ENVIRONMENT" = "self-hosted" ]; then
+            DOCKER_HOSTNAME="dind.dind.svc.cluster.local"
+          else
+            DOCKER_HOSTNAME="127.0.0.1"
+          fi
+
+          PG_PORT=$(docker port "$CONTAINER_NAME" 5432 \
+            | grep '0.0.0.0' | cut -d: -f2)
+
           # Wait for postgres to be ready
           for i in {1..30}; do
-            if docker exec postgres pg_isready -U postgres; then
+            if docker exec "$CONTAINER_NAME" pg_isready -U postgres; then
               echo "Postgres is ready"
               break
             fi
             echo "Waiting for postgres... ($i/30)"
             sleep 1
           done
+
+          echo "DATABASE_URL=postgres://postgres:postgres@${DOCKER_HOSTNAME}:${PG_PORT}/tiny-congress" >> "$GITHUB_ENV"
 
       - name: Setup Rust toolchain
         uses: ./.github/actions/setup-rust

@@ -163,6 +163,8 @@ pub mod test_db {
         pool: PgPool,
         _container: Arc<ContainerAsync<GenericImage>>,
         database_url: String,
+        /// Host for connecting to the container (localhost or remote Docker host)
+        host: String,
         /// Port for connecting to the container
         port: u16,
     }
@@ -175,6 +177,11 @@ pub mod test_db {
 
         pub fn database_url(&self) -> &str {
             &self.database_url
+        }
+
+        /// Get the host for the test container
+        pub fn host(&self) -> &str {
+            &self.host
         }
 
         /// Get the port for the test container
@@ -225,6 +232,12 @@ pub mod test_db {
                     .await
                     .expect("Failed to start postgres container");
 
+                let host = container
+                    .get_host()
+                    .await
+                    .expect("Failed to get container host")
+                    .to_string();
+
                 let port = container
                     .get_host_port_ipv4(5432)
                     .await
@@ -235,7 +248,7 @@ pub mod test_db {
 
                 // Build connection string
                 let database_url =
-                    format!("postgres://postgres:postgres@127.0.0.1:{port}/tiny-congress");
+                    format!("postgres://postgres:postgres@{host}:{port}/tiny-congress");
 
                 // Run migrations using a single connection (not a pool)
                 // so we can close it and create the template before opening the pool
@@ -275,7 +288,7 @@ pub mod test_db {
                 // Create a template database for isolated_db() to use
                 // We do this while no connections exist to tiny-congress
                 let maintenance_url =
-                    format!("postgres://postgres:postgres@127.0.0.1:{port}/postgres");
+                    format!("postgres://postgres:postgres@{host}:{port}/postgres");
                 let mut maint_conn = PgConnection::connect(&maintenance_url)
                     .await
                     .expect("Failed to connect to postgres database for template creation");
@@ -312,6 +325,7 @@ pub mod test_db {
                     pool,
                     _container: container,
                     database_url,
+                    host,
                     port,
                 }
             })
@@ -334,6 +348,8 @@ pub mod test_db {
         pool: PgPool,
         database_name: String,
         database_url: String,
+        /// Host of the shared test container (used for cleanup connection)
+        host: String,
         /// Port of the shared test container (used for cleanup connection)
         port: u16,
     }
@@ -358,13 +374,14 @@ pub mod test_db {
     impl Drop for IsolatedDb {
         fn drop(&mut self) {
             let db_name = self.database_name.clone();
+            let host = self.host.clone();
             let port = self.port;
 
             // Spawn cleanup on the shared runtime to ensure it completes
             TEST_RUNTIME.spawn(async move {
                 // Connect to postgres (maintenance) database to perform cleanup
                 let maintenance_url =
-                    format!("postgres://postgres:postgres@127.0.0.1:{port}/postgres");
+                    format!("postgres://postgres:postgres@{host}:{port}/postgres");
 
                 if let Ok(mut conn) = PgConnection::connect(&maintenance_url).await {
                     // Terminate any remaining connections to the isolated database
@@ -408,13 +425,14 @@ pub mod test_db {
     pub async fn isolated_db() -> IsolatedDb {
         // Ensure shared test DB is initialized (this runs migrations and creates template)
         let test_db = get_test_db().await;
+        let host = test_db.host();
         let port = test_db.port();
 
         // Generate unique database name
         let db_name = format!("test_isolated_{}", uuid::Uuid::new_v4().simple());
 
         // Connect to postgres (maintenance) database to create the isolated DB
-        let maintenance_url = format!("postgres://postgres:postgres@127.0.0.1:{port}/postgres");
+        let maintenance_url = format!("postgres://postgres:postgres@{host}:{port}/postgres");
         let mut maint_conn = PgConnection::connect(&maintenance_url)
             .await
             .expect("Failed to connect to postgres database");
@@ -430,7 +448,7 @@ pub mod test_db {
         .expect("Failed to create isolated database from template");
 
         // Build connection string for the new database
-        let database_url = format!("postgres://postgres:postgres@127.0.0.1:{port}/{db_name}");
+        let database_url = format!("postgres://postgres:postgres@{host}:{port}/{db_name}");
 
         // Connect to the new isolated database
         let pool = PgPoolOptions::new()
@@ -444,6 +462,7 @@ pub mod test_db {
             pool,
             database_name: db_name,
             database_url,
+            host: host.to_string(),
             port,
         }
     }
@@ -477,13 +496,14 @@ pub mod test_db {
     pub async fn empty_db() -> IsolatedDb {
         // Ensure shared test DB is initialized (we need the container port)
         let test_db = get_test_db().await;
+        let host = test_db.host();
         let port = test_db.port();
 
         // Generate unique database name
         let db_name = format!("test_empty_{}", uuid::Uuid::new_v4().simple());
 
         // Connect to postgres (maintenance) database to create the empty DB
-        let maintenance_url = format!("postgres://postgres:postgres@127.0.0.1:{port}/postgres");
+        let maintenance_url = format!("postgres://postgres:postgres@{host}:{port}/postgres");
         let mut maint_conn = PgConnection::connect(&maintenance_url)
             .await
             .expect("Failed to connect to postgres database");
@@ -495,7 +515,7 @@ pub mod test_db {
             .expect("Failed to create empty database");
 
         // Build connection string for the new database
-        let database_url = format!("postgres://postgres:postgres@127.0.0.1:{port}/{db_name}");
+        let database_url = format!("postgres://postgres:postgres@{host}:{port}/{db_name}");
 
         // Connect to the new empty database
         let pool = PgPoolOptions::new()
@@ -509,6 +529,7 @@ pub mod test_db {
             pool,
             database_name: db_name,
             database_url,
+            host: host.to_string(),
             port,
         }
     }
