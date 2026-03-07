@@ -1,6 +1,18 @@
 import { IconChartBar, IconDoor, IconUserPlus } from '@tabler/icons-react';
 import { Link } from '@tanstack/react-router';
-import { Button, Container, Group, SimpleGrid, Stack, Text, ThemeIcon, Title } from '@mantine/core';
+import {
+  Alert,
+  Button,
+  Container,
+  Group,
+  SimpleGrid,
+  Stack,
+  Text,
+  ThemeIcon,
+  Title,
+} from '@mantine/core';
+import { buildVerifierUrl, useVerificationStatus } from '../../features/verification';
+import { useCrypto } from '../../providers/CryptoProvider';
 import { useDevice } from '../../providers/DeviceProvider';
 import classes from './Welcome.module.css';
 
@@ -14,23 +26,32 @@ const steps = [
   },
   {
     icon: IconDoor,
-    title: 'Enter a room',
-    description: 'Join a topic room where decisions are being made.',
+    title: 'Find a poll',
+    description: 'Browse topic rooms and find a question to weigh in on.',
   },
   {
     icon: IconChartBar,
-    title: 'Vote & see results',
-    description: 'Cast multi-dimensional votes and see how the group thinks.',
+    title: 'Vote on a spectrum',
+    description: 'Move sliders to express nuanced positions — not just yes or no.',
   },
 ];
 
 export function Welcome() {
-  const { deviceKid } = useDevice();
+  const { deviceKid, privateKey, username } = useDevice();
+  const { crypto } = useCrypto();
+  const verificationQuery = useVerificationStatus(deviceKid, privateKey, crypto);
   const isLoggedIn = deviceKid !== null;
+  const isVerified = verificationQuery.data?.isVerified ?? false;
 
   return (
     <Container size="md">
       <Stack align="center" gap="xl" mt={100}>
+        {isLoggedIn && username ? (
+          <Text c="dimmed" size="lg">
+            Welcome back, <strong>{username}</strong>.
+          </Text>
+        ) : null}
+
         <Title className={classes.title} ta="center">
           <Text
             inherit
@@ -43,7 +64,8 @@ export function Welcome() {
         </Title>
 
         <Text c="dimmed" ta="center" size="lg" maw={580}>
-          Verified people vote on issues that matter, with more nuance than yes/no.
+          Vote on a spectrum, not just yes or no. Verified people weigh in on issues that matter
+          with nuance.
         </Text>
 
         <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="xl" mt="xl">
@@ -60,16 +82,26 @@ export function Welcome() {
           ))}
         </SimpleGrid>
 
+        {isLoggedIn && !isVerified && !verificationQuery.isLoading
+          ? (() => {
+              const url = buildVerifierUrl(username ?? '');
+              return url ? (
+                <Alert color="yellow" maw={480} w="100%">
+                  Your identity isn&apos;t verified yet — you won&apos;t be able to vote until you
+                  complete verification.{' '}
+                  <a href={url} style={{ fontWeight: 600 }}>
+                    Verify now →
+                  </a>
+                </Alert>
+              ) : null;
+            })()
+          : null}
+
         <Group mt="xl">
           {isLoggedIn ? (
-            <>
-              <Button component={Link} to="/rooms" size="lg">
-                Browse Rooms
-              </Button>
-              <Button component={Link} to="/settings" size="lg" variant="outline">
-                Go to Settings
-              </Button>
-            </>
+            <Button component={Link} to="/rooms" size="lg">
+              Browse Rooms
+            </Button>
           ) : (
             <>
               <Button component={Link} to="/signup" size="lg">
