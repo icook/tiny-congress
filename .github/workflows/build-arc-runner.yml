@@ -5,6 +5,9 @@ on:
     branches: [master]
     paths:
       - 'dockerfiles/Dockerfile.arc-runner'
+  pull_request:
+    paths:
+      - 'dockerfiles/Dockerfile.arc-runner'
   workflow_dispatch:
   schedule:
     # Weekly rebuild to pick up base image security patches (Monday 6am UTC)
@@ -46,7 +49,8 @@ jobs:
         with:
           context: dockerfiles
           file: dockerfiles/Dockerfile.arc-runner
-          push: true
+          # Only push on master/main and manual/scheduled runs; PRs just build.
+          push: ${{ github.event_name != 'pull_request' }}
           platforms: linux/amd64
           tags: |
             ghcr.io/${{ github.repository }}/arc-runner:latest
