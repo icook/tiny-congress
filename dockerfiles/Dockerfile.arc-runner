@@ -63,3 +63,8 @@ RUN set -eux; \
 ENV PATH="/home/runner/.cargo/bin:${PATH}"
 
 USER runner
+
+# Start the GitHub Actions runner binary. ARC runner pods that don't specify
+# a custom command (small/medium/large tiers) rely on this entrypoint.
+# Nano overrides it with a BuildKit setup wrapper that `exec`s run.sh.
+ENTRYPOINT ["/home/runner/run.sh"]
