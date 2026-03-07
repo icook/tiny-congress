@@ -871,6 +871,24 @@ jobs:
           cd crates/tc-crypto
           wasm-pack build --target web --release --out-dir ../../web/src/wasm/tc-crypto
 
+      - name: Log DinD and KinD resource state
+        run: |
+          echo "=== DinD Container (self) ==="
+          # Get DinD container ID from hostname
+          DIND_CONTAINER=$(hostname)
+          docker inspect "$DIND_CONTAINER" 2>/dev/null | \
+            jq -r '.[] | "Memory limit: \(.HostConfig.Memory), CPUs: \(.HostConfig.CpuQuota)"' || \
+            echo "DinD container inspection failed"
+
+          echo "=== KinD Control Plane Container ==="
+          docker inspect skaffold-ci-control-plane 2>/dev/null | \
+            jq -r '.[] | "Memory limit: \(.HostConfig.Memory), CPUs: \(.HostConfig.CpuQuota)"' || \
+            echo "KinD container not yet inspectable"
+
+          echo "=== Docker stats (sampling 5s) ==="
+          timeout 5 docker stats --no-stream skaffold-ci-control-plane 2>/dev/null || \
+            echo "Docker stats not yet available"
+
       - name: Wait for KinD readiness
         run: |
           set -euo pipefail
