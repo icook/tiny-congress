@@ -14,10 +14,14 @@ runs:
       shell: bash
       run: corepack enable
 
-    # Re-run with cache now that yarn is available via corepack
-    - name: Set up Node cache
-      uses: actions/setup-node@v6
+    - name: Get yarn cache directory
+      id: yarn-cache-dir
+      shell: bash
+      run: echo "dir=$(yarn config get cacheFolder)" >> "$GITHUB_OUTPUT"
+
+    - name: Cache yarn dependencies
+      uses: runs-on/cache@v4
       with:
-        node-version-file: web/.nvmrc
-        cache: yarn
-        cache-dependency-path: web/yarn.lock
+        path: ${{ steps.yarn-cache-dir.outputs.dir }}
+        key: yarn-${{ runner.os }}-${{ hashFiles('web/yarn.lock') }}
+        restore-keys: yarn-${{ runner.os }}-

@@ -8,7 +8,7 @@ import {
   RouterProvider,
   useParams,
 } from '@tanstack/react-router';
-import { Button, Group, Stack, Text, Title } from '@mantine/core';
+import { Button, Center, Group, Loader, Stack, Text, Title } from '@mantine/core';
 import { AuthRequiredOutlet } from './components/AuthRequiredOutlet';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { AboutPage } from './pages/About.page';
@@ -156,7 +156,11 @@ export function Router() {
   const { deviceKid, isLoading } = useDevice();
 
   if (isLoading) {
-    return null;
+    return (
+      <Center style={{ height: '100vh' }}>
+        <Loader size="sm" />
+      </Center>
+    );
   }
 
   return (

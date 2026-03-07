@@ -17,25 +17,20 @@ env:
   REGISTRY: ghcr.io/${{ github.repository }}
 
 jobs:
-  # ============================================================
-  # JOB 0: Lint Rust formatting
-  # ============================================================
+  # ── Lint Rust formatting ──────────────────────────────────
   lint:
     name: Lint Rust formatting
     needs: [detect-changes]
     if: needs.detect-changes.outputs.api == 'true' || needs.detect-changes.outputs.ci == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ${{ needs.detect-changes.outputs.runner-nano }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
+      - name: Setup Rust toolchain
+        uses: ./.github/actions/setup-rust
         with:
           components: rustfmt, clippy
-
-      - name: Cache Rust dependencies
-        uses: Swatinem/rust-cache@v2
 
       - name: Install just
         uses: extractions/setup-just@v3
@@ -43,14 +38,12 @@ jobs:
       - name: Lint backend
         run: just lint-backend
 
-  # ============================================================
-  # JOB 0a: Lint Kubernetes manifests
-  # ============================================================
+  # ── Lint Kubernetes manifests ─────────────────────────────
   lint-kube:
     name: Lint Kubernetes manifests
     needs: [detect-changes]
     if: needs.detect-changes.outputs.chart == 'true' || needs.detect-changes.outputs.ci == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ${{ needs.detect-changes.outputs.runner-nano }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -76,14 +69,12 @@ jobs:
             echo "::endgroup::"
           done
 
-  # ============================================================
-  # JOB 0a1: Validate Grafana dashboards
-  # ============================================================
+  # ── Validate Grafana dashboards ──────────────────────────
   check-dashboards:
     name: Validate Grafana dashboards
     needs: [detect-changes]
     if: needs.detect-changes.outputs.dashboards == 'true' || needs.detect-changes.outputs.ci == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ${{ needs.detect-changes.outputs.runner-nano }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -92,8 +83,13 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-          cache: pip
-          cache-dependency-path: kube/dashboards/requirements.txt
+
+      - name: Cache pip dependencies
+        uses: runs-on/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-${{ hashFiles('kube/dashboards/requirements.txt') }}
+          restore-keys: pip-${{ runner.os }}-
 
       - name: Install dependencies
         run: pip install -r kube/dashboards/requirements.txt
@@ -110,14 +106,12 @@ jobs:
             exit 1
           fi
 
-  # ============================================================
-  # JOB 0b: Lint web
-  # ============================================================
+  # ── Lint web ─────────────────────────────────────────────
   lint-web:
     name: Lint web
     needs: [detect-changes]
     if: needs.detect-changes.outputs.ui == 'true' || needs.detect-changes.outputs.ci == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ${{ needs.detect-changes.outputs.runner-small }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -134,12 +128,16 @@ jobs:
       - name: Run Linters
         run: just lint-frontend
 
-  # ============================================================
-  # JOB 0b1: Static Analysis (typos, Dockerfiles, workflows, scripts)
-  # ============================================================
+  # ── Static analysis (typos, Dockerfiles, workflows, scripts)
   static-analysis:
     name: Static Analysis
-    runs-on: ubuntu-latest
+    needs: [detect-changes]
+    if: >-
+      needs.detect-changes.outputs.api == 'true' ||
+      needs.detect-changes.outputs.ui == 'true' ||
+      needs.detect-changes.outputs.chart == 'true' ||
+      needs.detect-changes.outputs.ci == 'true'
+    runs-on: ${{ needs.detect-changes.outputs.runner-nano }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -165,14 +163,12 @@ jobs:
       - name: Run static analysis
         run: just lint-static
 
-  # ============================================================
-  # JOB 0b2: Build Storybook
-  # ============================================================
+  # ── Build Storybook ──────────────────────────────────────
   build-storybook:
     name: Build Storybook
     needs: [detect-changes]
     if: needs.detect-changes.outputs.ui == 'true' || needs.detect-changes.outputs.ci == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ${{ needs.detect-changes.outputs.runner-small }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -196,23 +192,18 @@ jobs:
           path: web/storybook-static/
           retention-days: 30
 
-  # ============================================================
-  # JOB 0b3: Build API Documentation
-  # ============================================================
+  # ── Build API documentation ──────────────────────────────
   build-docs:
     name: Build documentation
     needs: [detect-changes]
     if: needs.detect-changes.outputs.api == 'true' || needs.detect-changes.outputs.ui == 'true' || needs.detect-changes.outputs.ci == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ${{ needs.detect-changes.outputs.runner-medium }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Cache Rust dependencies
-        uses: Swatinem/rust-cache@v2
+      - name: Setup Rust toolchain
+        uses: ./.github/actions/setup-rust
 
       - name: Setup web toolchain
         uses: ./.github/actions/setup-web
@@ -235,23 +226,18 @@ jobs:
             web/docs
           retention-days: 7
 
-  # ============================================================
-  # JOB 0c: Verify codegen is up-to-date (GraphQL + OpenAPI)
-  # ============================================================
+  # ── Verify codegen is up-to-date (GraphQL + OpenAPI) ─────
   codegen-check:
     name: Check codegen
     needs: [detect-changes]
     if: needs.detect-changes.outputs.api == 'true' || needs.detect-changes.outputs.ui == 'true' || needs.detect-changes.outputs.ci == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ${{ needs.detect-changes.outputs.runner-medium }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Cache Rust dependencies
-        uses: Swatinem/rust-cache@v2
+      - name: Setup Rust toolchain
+        uses: ./.github/actions/setup-rust
 
       - name: Setup web toolchain
         uses: ./.github/actions/setup-web
@@ -274,14 +260,12 @@ jobs:
           fi
           echo "✓ Codegen is up to date"
 
-  # ============================================================
-  # JOB 0d: Security & Dependency Audit
-  # ============================================================
+  # ── Security & dependency audit ──────────────────────────
   security-audit:
     name: Security & Dependency Audit
     needs: [detect-changes]
     if: needs.detect-changes.outputs.api == 'true' || needs.detect-changes.outputs.ui == 'true' || needs.detect-changes.outputs.ci == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ${{ needs.detect-changes.outputs.runner-small }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -315,12 +299,10 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  # ============================================================
-  # JOB 0e: Verify SQLx query snapshots are up-to-date
-  # ============================================================
+  # ── Verify SQLx query snapshots ──────────────────────────
   sqlx-check:
     name: Check SQLx snapshots
-    runs-on: ubuntu-latest
+    runs-on: ${{ needs.detect-changes.outputs.runner-medium }}
     needs: [build-images, detect-changes]
     if: needs.detect-changes.outputs.api == 'true' || needs.detect-changes.outputs.ci == 'true'
     env:
@@ -353,11 +335,8 @@ jobs:
             sleep 1
           done
 
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Cache Rust dependencies
-        uses: Swatinem/rust-cache@v2
+      - name: Setup Rust toolchain
+        uses: ./.github/actions/setup-rust
 
       - name: Install sqlx-cli
         run: cargo install sqlx-cli --locked --no-default-features --features postgres
@@ -381,9 +360,7 @@ jobs:
           fi
           echo "✓ SQLx snapshots are up to date"
 
-  # ============================================================
-  # JOB 0f: Detect which paths changed (skip unnecessary builds)
-  # ============================================================
+  # ── Detect which paths changed (skip unnecessary builds) ─
   detect-changes:
     name: Detect changed paths
     runs-on: ubuntu-latest
@@ -394,8 +371,37 @@ jobs:
       chart: ${{ steps.filter.outputs.chart }}
       dashboards: ${{ steps.filter.outputs.dashboards }}
       ci: ${{ steps.filter.outputs.ci }}
+      # Runner tier outputs — set all at once, each job picks the right size.
+      # Toggle: gh variable set USE_ARC_RUNNERS --body "false" --repo icook/tiny-congress
+      runner-nano: ${{ steps.runner.outputs.nano }}
+      runner-small: ${{ steps.runner.outputs.small }}
+      runner-medium: ${{ steps.runner.outputs.medium }}
+      runner-large: ${{ steps.runner.outputs.large }}
     steps:
       - uses: actions/checkout@v6
+      - name: Select runner
+        id: runner
+        run: |
+          # Three ways to enable ARC runners (in priority order):
+          #   1. Commit message contains [arc]  — per-commit, good for iteration
+          #   2. Repo var USE_ARC_RUNNERS=true   — global override
+          # Default: ubuntu-latest (GHA hosted)
+          commit_msg=$(git log -1 --format=%s HEAD)
+          if echo "$commit_msg" | grep -qF '[arc]' || [ "${{ vars.USE_ARC_RUNNERS }}" = "true" ]; then
+            {
+              echo "nano=arc-runner-nano"
+              echo "small=arc-runner-small"
+              echo "medium=arc-runner-medium"
+              echo "large=arc-runner-large"
+            } >> "$GITHUB_OUTPUT"
+          else
+            {
+              echo "nano=ubuntu-latest"
+              echo "small=ubuntu-latest"
+              echo "medium=ubuntu-latest"
+              echo "large=ubuntu-latest"
+            } >> "$GITHUB_OUTPUT"
+          fi
       - uses: dorny/paths-filter@v3
         id: filter
         with:
@@ -421,13 +427,11 @@ jobs:
               - 'skaffold.yaml'
               - 'justfile'
 
-  # ============================================================
-  # JOB 1: Build all container images in parallel
-  # ============================================================
+  # ── Build all container images in parallel ────────────────
   build-images:
     name: Build ${{ matrix.image }}
     needs: [detect-changes]
-    runs-on: ubuntu-24.04
+    runs-on: ${{ needs.detect-changes.outputs.runner-nano }}
     permissions:
       contents: read
       packages: write
@@ -452,8 +456,29 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Set up Docker Buildx
+      # BuildKit + cache registry adapt to the runner environment:
+      # - ARC (self-hosted): remote BuildKit daemon + Zot in-cluster registry
+      # - GHA (hosted):      local buildx driver + GHCR for layer cache
+      # This lets the same workflow work on both without conditional runs-on.
+      - name: Set up Docker Buildx (remote in-cluster BuildKit)
+        if: runner.environment == 'self-hosted'
         uses: docker/setup-buildx-action@v3
+        with:
+          driver: remote
+          endpoint: tcp://buildkitd.buildkit.svc.cluster.local:1234
+
+      - name: Set up Docker Buildx
+        if: runner.environment != 'self-hosted'
+        uses: docker/setup-buildx-action@v3
+
+      - name: Configure cache registry
+        id: cache
+        run: |
+          if [ "$RUNNER_ENVIRONMENT" = "self-hosted" ]; then
+            echo "registry=zot.zot.svc.cluster.local:5000/cache" >> "$GITHUB_OUTPUT"
+          else
+            echo "registry=${{ env.REGISTRY }}" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Login to GHCR
         uses: docker/login-action@v3
@@ -524,21 +549,19 @@ jobs:
             ${{ steps.tags.outputs.sha_tag }}
             ${{ steps.tags.outputs.branch_tag }}
           cache-from: |
-            type=registry,ref=${{ env.REGISTRY }}/${{ matrix.image }}:cache
+            type=registry,ref=${{ steps.cache.outputs.registry }}/${{ matrix.image }}:cache
           cache-to: |
-            type=registry,ref=${{ env.REGISTRY }}/${{ matrix.image }}:cache,mode=max
+            type=registry,ref=${{ steps.cache.outputs.registry }}/${{ matrix.image }}:cache,mode=max
 
       - name: Export image metadata
         id: meta
         run: |
           echo "${{ matrix.image }}-tag=${{ steps.tags.outputs.sha_tag }}" >> "$GITHUB_OUTPUT"
 
-  # ============================================================
-  # JOB 1b: Scan container images for vulnerabilities
-  # ============================================================
+  # ── Scan container images for vulnerabilities ─────────────
   scan-images:
     name: Scan ${{ matrix.image }}
-    runs-on: ubuntu-latest
+    runs-on: ${{ needs.detect-changes.outputs.runner-nano }}
     needs: [build-images, detect-changes]
     strategy:
       fail-fast: false
@@ -586,24 +609,100 @@ jobs:
           trivyignores: '.trivyignore'
           version: 'v0.65.0'
 
-  # ============================================================
-  # JOB 2: Run Skaffold test/deploy and host-based integration/E2E tests
-  # ============================================================
-  integration-tests:
-    name: Integration tests
-    runs-on: ubuntu-24.04
+  # ── Vitest unit tests + coverage ─────────────────────────
+  unit-tests:
+    name: Unit tests (Vitest)
+    runs-on: ${{ needs.detect-changes.outputs.runner-medium }}
+    needs: [detect-changes]
+    if: needs.detect-changes.outputs.ui == 'true' || needs.detect-changes.outputs.ci == 'true'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup web toolchain
+        uses: ./.github/actions/setup-web
+
+      - name: Install web dependencies
+        working-directory: web
+        run: yarn install --immutable
+
+      - name: Setup Rust toolchain
+        uses: ./.github/actions/setup-rust
+        with:
+          targets: wasm32-unknown-unknown
+          cache-dependencies: 'false'
+
+      - name: Install wasm-pack
+        uses: taiki-e/install-action@wasm-pack
+
+      - name: Build WASM
+        run: |
+          cd crates/tc-crypto
+          wasm-pack build --target web --release --out-dir ../../web/src/wasm/tc-crypto
+
+      - name: Run Vitest with coverage
+        working-directory: web
+        run: CI=true yarn vitest:coverage
+
+      - name: Upload Vitest coverage
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: vitest-coverage
+          path: web/coverage/vitest/
+          retention-days: 7
+
+  # ── Rust unit tests + coverage ───────────────────────────
+  rust-coverage:
+    name: Rust coverage
+    runs-on: ${{ needs.detect-changes.outputs.runner-large }}
+    needs: [detect-changes, build-images]
+    if: needs.detect-changes.outputs.api == 'true' || needs.detect-changes.outputs.ci == 'true'
+    env:
+      TEST_POSTGRES_IMAGE: ${{ needs.build-images.outputs.postgres-tag || format('ghcr.io/{0}/postgres:{1}', github.repository, github.sha) }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Rust toolchain
+        uses: ./.github/actions/setup-rust
+        with:
+          components: llvm-tools-preview
+
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@cargo-llvm-cov
+
+      - name: Generate Rust coverage
+        working-directory: service
+        run: |
+          set -euo pipefail
+          mkdir -p coverage
+          cargo llvm-cov --lcov --output-path coverage/backend-unit.lcov --fail-under-lines 60
+
+      - name: Upload Rust coverage
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: rust-coverage
+          if-no-files-found: warn
+          path: service/coverage/backend-unit.lcov
+
+  # ── E2E tests (KinD + Skaffold + Playwright) ─────────────
+  e2e-tests:
+    name: E2E tests
+    runs-on: ${{ needs.detect-changes.outputs.runner-large }}
     needs:
       - detect-changes
       - build-images
-      - scan-images
       - lint
-      - lint-kube
       - lint-web
-      - build-storybook
-      - static-analysis
-      - codegen-check
-      - sqlx-check
-      - security-audit
     # always() is required so this job evaluates its `if` even when
     # path-filtered dependencies are skipped.  Without it, GitHub Actions
     # silently skips this job whenever any `needs` job is skipped, which
@@ -631,6 +730,10 @@ jobs:
           install_only: true
           cluster_name: skaffold-ci
 
+      # GHA ubuntu-24.04 pre-installs Helm; catthehacker ARC runners do not.
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+
       - name: Start KinD cluster in background
         run: |
           set -euo pipefail
@@ -647,11 +750,6 @@ jobs:
           SKAFFOLD_VERSION="v$(cat .skaffold-version)"
           curl -fsSL -o skaffold "https://storage.googleapis.com/skaffold/releases/${SKAFFOLD_VERSION}/skaffold-linux-amd64"
           sudo install skaffold /usr/local/bin/skaffold
-
-      - name: Verify Skaffold installation
-        run: |
-          echo "Required: v$(cat .skaffold-version)"
-          echo "Installed: $(skaffold version)"
 
       - name: Login to GHCR
         uses: docker/login-action@v3
@@ -674,17 +772,7 @@ jobs:
             ]
           }
           EOF
-          echo "Artifacts file contents:"
-          cat "$artifacts_file"
           echo "file=${artifacts_file}" >> "$GITHUB_OUTPUT"
-
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          components: llvm-tools-preview
-
-      - name: Install cargo-llvm-cov
-        uses: taiki-e/install-action@cargo-llvm-cov
 
       - name: Setup web toolchain
         uses: ./.github/actions/setup-web
@@ -693,45 +781,29 @@ jobs:
         working-directory: web
         run: yarn install --immutable
 
+      - name: Cache Playwright browsers
+        uses: runs-on/cache@v4
+        with:
+          path: ${{ env.PLAYWRIGHT_BROWSERS_PATH }}
+          key: playwright-chromium-${{ hashFiles('web/yarn.lock') }}
+
       - name: Install Playwright browsers
         working-directory: web
         run: yarn playwright install --with-deps chromium
 
-      - name: Prepare test output directories
-        run: |
-          mkdir -p web/reports web/test-results web/coverage/playwright service/coverage
-          rm -f service/coverage/backend-unit.lcov
+      - name: Setup Rust toolchain
+        uses: ./.github/actions/setup-rust
+        with:
+          targets: wasm32-unknown-unknown
+          cache-dependencies: 'false'
 
       - name: Install wasm-pack
-        run: cargo install wasm-pack --locked
+        uses: taiki-e/install-action@wasm-pack
 
       - name: Build WASM
         run: |
           cd crates/tc-crypto
           wasm-pack build --target web --release --out-dir ../../web/src/wasm/tc-crypto
-
-      - name: Run Skaffold tests
-        env:
-          TEST_POSTGRES_IMAGE: ${{ env.REGISTRY }}/postgres:${{ github.sha }}
-        run: |
-          set -euo pipefail
-          skaffold test -p "${SKAFFOLD_PROFILE}" --build-artifacts "${{ steps.artifacts.outputs.file }}"
-
-      - name: Generate Rust coverage
-        env:
-          TEST_POSTGRES_IMAGE: ${{ env.REGISTRY }}/postgres:${{ github.sha }}
-        working-directory: service
-        run: |
-          set -euo pipefail
-          cargo llvm-cov --lcov --output-path coverage/backend-unit.lcov --fail-under-lines 60
-
-      - name: Upload Vitest coverage
-        if: always()
-        uses: actions/upload-artifact@v6
-        with:
-          name: vitest-coverage
-          path: web/coverage/vitest/
-          retention-days: 7
 
       - name: Wait for KinD readiness
         run: |
@@ -746,6 +818,10 @@ jobs:
           kubectl version --client=true
           kubectl cluster-info
           kubectl get nodes -o wide
+          # Wait for default SA — kube-controller-manager creates it shortly after
+          # API server starts. On slower storage (ARC runners) this can race.
+          kubectl wait serviceaccount default -n default \
+            --for=jsonpath='{.metadata.name}'=default --timeout=60s
 
       - name: Configure registry access for KinD
         run: |
@@ -851,39 +927,13 @@ jobs:
         working-directory: web
         run: node scripts/analyze-playwright-flakiness.mjs >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Upload Rust coverage artifacts
+      - name: Upload Playwright coverage
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: rust-coverage
+          name: playwright-coverage
           if-no-files-found: warn
-          path: |
-            service/coverage/backend-unit.lcov
-
-      - name: Summarize coverage to job summary
-        if: always()
-        run: |
-          node scripts/summarize-coverage.mjs \
-            --vitest web/coverage/vitest/coverage-summary.json \
-            --playwright web/coverage/playwright/coverage-summary.json \
-            --rust "service/coverage/backend-unit.lcov:unit" \
-            >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Install lcov for HTML generation
-        if: always()
-        run: sudo apt-get update && sudo apt-get install -y lcov
-
-      - name: Build unified coverage report
-        if: always()
-        working-directory: web
-        run: node scripts/build-coverage-report.mjs
-
-      - name: Upload coverage report
-        if: always()
-        uses: actions/upload-artifact@v6
-        with:
-          name: coverage-report
-          path: coverage-report/
+          path: web/coverage/playwright/
           retention-days: 7
 
       - name: Dump diagnostics on failure
@@ -898,17 +948,17 @@ jobs:
           echo '--- All Resources ---'
           kubectl get all -n default || true
 
-  # ============================================================
-  # CI Gate — single required check that aggregates all jobs
-  # ============================================================
+  # ── CI gate (single required check) ─────────────────────
   ci-gate:
     name: CI Gate
     if: always()
     needs:
+      - detect-changes
       - lint
       - lint-kube
       - lint-web
       - static-analysis
+      - check-dashboards
       - build-storybook
       - build-docs
       - codegen-check
@@ -916,8 +966,10 @@ jobs:
       - sqlx-check
       - build-images
       - scan-images
-      - integration-tests
-    runs-on: ubuntu-latest
+      - unit-tests
+      - rust-coverage
+      - e2e-tests
+    runs-on: ${{ needs.detect-changes.outputs.runner-nano }}
     steps:
       - name: Check results
         run: |
@@ -927,9 +979,7 @@ jobs:
             exit 1
           fi
 
-  # ============================================================
-  # JOB 2b: Update gitops repo with image digests (master only)
-  # ============================================================
+  # ── Update gitops image digests (master only) ────────────
   deploy-gitops:
     name: Update gitops image digests
     if: >-
@@ -937,8 +987,8 @@ jobs:
       github.event_name == 'push' && github.ref == 'refs/heads/master' &&
       !contains(needs.*.result, 'failure') &&
       !contains(needs.*.result, 'cancelled')
-    needs: [integration-tests, detect-changes]
-    runs-on: ubuntu-latest
+    needs: [unit-tests, rust-coverage, e2e-tests, detect-changes]
+    runs-on: ${{ needs.detect-changes.outputs.runner-nano }}
     permissions:
       contents: read
       packages: read
@@ -1047,13 +1097,11 @@ jobs:
           ${BODY}"
           git push
 
-  # ============================================================
-  # JOB 3: Upload CI reports to Dufs
-  # ============================================================
+  # ── Upload CI reports to Dufs ────────────────────────────
   deploy-reports:
     name: Upload CI reports to Dufs
-    runs-on: ubuntu-latest
-    needs: [integration-tests, build-storybook, build-docs]
+    runs-on: ${{ needs.detect-changes.outputs.runner-small }}
+    needs: [detect-changes, unit-tests, rust-coverage, e2e-tests, build-storybook, build-docs]
     if: >-
       always() &&
       !contains(needs.*.result, 'cancelled')
@@ -1061,13 +1109,15 @@ jobs:
       contents: read
       pull-requests: write
     steps:
-      - name: Checkout for assets
+      - name: Checkout
         uses: actions/checkout@v6
-        with:
-          sparse-checkout: |
-            web/src/logo-dark.svg
-            web/src/favicon.ico
-          sparse-checkout-cone-mode: false
+
+      - name: Setup web toolchain
+        uses: ./.github/actions/setup-web
+
+      - name: Install web dependencies
+        working-directory: web
+        run: yarn install --immutable
 
       - name: Create site directory
         run: |
@@ -1075,11 +1125,18 @@ jobs:
           cp web/src/logo-dark.svg site/logo.svg
           cp web/src/favicon.ico site/favicon.ico
 
-      - name: Download coverage report
+      - name: Download Vitest coverage
         uses: actions/download-artifact@v7
         with:
-          name: coverage-report
-          path: site/coverage
+          name: vitest-coverage
+          path: web/coverage/vitest/
+        continue-on-error: true
+
+      - name: Download Playwright coverage
+        uses: actions/download-artifact@v7
+        with:
+          name: playwright-coverage
+          path: web/coverage/playwright/
         continue-on-error: true
 
       - name: Download Storybook
@@ -1107,410 +1164,50 @@ jobs:
         uses: actions/download-artifact@v7
         with:
           name: rust-coverage
-          path: artifacts/rust-coverage
+          path: service/coverage/
         continue-on-error: true
 
-      - name: Organize artifacts
+      - name: Summarize coverage to job summary
         id: artifacts
         run: |
-          # Playwright report is nested
-          if [ -d artifacts/playwright/playwright-report ]; then
-            mv artifacts/playwright/playwright-report site/playwright
-          fi
+          node scripts/summarize-coverage.mjs \
+            --vitest web/coverage/vitest/coverage-summary.json \
+            --playwright web/coverage/playwright/coverage-summary.json \
+            --rust "service/coverage/backend-unit.lcov:unit" \
+            --github-output "$GITHUB_OUTPUT" \
+            >> "$GITHUB_STEP_SUMMARY"
 
-          # Rust docs
-          if [ -d artifacts/docs/target/doc ]; then
-            mv artifacts/docs/target/doc site/rust-docs
-          fi
+      - name: Install lcov for HTML generation
+        run: sudo apt-get update && sudo apt-get install -y lcov
 
-          # TypeScript docs
-          if [ -d artifacts/docs/web/docs ]; then
-            mv artifacts/docs/web/docs site/ts-docs
-          fi
+      - name: Build unified coverage report
+        working-directory: web
+        run: node scripts/build-coverage-report.mjs
 
-          # Extract coverage percentages from all test types
-          # Vitest
-          if [ -f site/coverage/vitest/coverage-summary.json ]; then
-            VITEST_LINES=$(jq -r '.total.lines.pct // 0' site/coverage/vitest/coverage-summary.json)
-            VITEST_BRANCHES=$(jq -r '.total.branches.pct // 0' site/coverage/vitest/coverage-summary.json)
-            VITEST_FUNCTIONS=$(jq -r '.total.functions.pct // 0' site/coverage/vitest/coverage-summary.json)
-          else
-            VITEST_LINES=0; VITEST_BRANCHES=0; VITEST_FUNCTIONS=0
-          fi
-          {
-            echo "vitest_lines=${VITEST_LINES}"
-            echo "vitest_branches=${VITEST_BRANCHES}"
-            echo "vitest_functions=${VITEST_FUNCTIONS}"
-          } >> "$GITHUB_OUTPUT"
-
-          # Playwright
-          if [ -f site/coverage/playwright/coverage-summary.json ]; then
-            PW_LINES=$(jq -r '.total.lines.pct // 0' site/coverage/playwright/coverage-summary.json)
-            PW_BRANCHES=$(jq -r '.total.branches.pct // 0' site/coverage/playwright/coverage-summary.json)
-            PW_FUNCTIONS=$(jq -r '.total.functions.pct // 0' site/coverage/playwright/coverage-summary.json)
-          else
-            PW_LINES=0; PW_BRANCHES=0; PW_FUNCTIONS=0
-          fi
-          {
-            echo "pw_lines=${PW_LINES}"
-            echo "pw_branches=${PW_BRANCHES}"
-            echo "pw_functions=${PW_FUNCTIONS}"
-          } >> "$GITHUB_OUTPUT"
-
-          # Rust (parse lcov file directly - must happen before artifacts cleanup)
-          RUST_LCOV="artifacts/rust-coverage/backend-unit.lcov"
-          if [ -f "$RUST_LCOV" ]; then
-            # Sum up LF (lines found) and LH (lines hit) from lcov
-            LINES_FOUND=$(grep "^LF:" "$RUST_LCOV" | cut -d: -f2 | awk '{s+=$1} END {print s+0}')
-            LINES_HIT=$(grep "^LH:" "$RUST_LCOV" | cut -d: -f2 | awk '{s+=$1} END {print s+0}')
-            FUNCS_FOUND=$(grep "^FNF:" "$RUST_LCOV" | cut -d: -f2 | awk '{s+=$1} END {print s+0}')
-            FUNCS_HIT=$(grep "^FNH:" "$RUST_LCOV" | cut -d: -f2 | awk '{s+=$1} END {print s+0}')
-
-            if [ "$LINES_FOUND" -gt 0 ]; then
-              RUST_LINES=$(echo "scale=1; $LINES_HIT * 100 / $LINES_FOUND" | bc)
-            else
-              RUST_LINES=0
-            fi
-            if [ "$FUNCS_FOUND" -gt 0 ]; then
-              RUST_FUNCTIONS=$(echo "scale=1; $FUNCS_HIT * 100 / $FUNCS_FOUND" | bc)
-            else
-              RUST_FUNCTIONS=0
-            fi
-          else
-            RUST_LINES=0; RUST_FUNCTIONS=0
-          fi
-          {
-            echo "rust_lines=${RUST_LINES}"
-            echo "rust_functions=${RUST_FUNCTIONS}"
-          } >> "$GITHUB_OUTPUT"
-
-          # Cleanup artifacts
+      - name: Organize artifacts
+        run: |
+          if [ -d coverage-report ]; then mv coverage-report site/coverage; fi
+          if [ -d artifacts/playwright/playwright-report ]; then mv artifacts/playwright/playwright-report site/playwright; fi
+          if [ -d artifacts/docs/target/doc ]; then mv artifacts/docs/target/doc site/rust-docs; fi
+          if [ -d artifacts/docs/web/docs ]; then mv artifacts/docs/web/docs site/ts-docs; fi
           rm -rf artifacts
 
-          # Overall coverage (vitest lines as primary)
-          echo "coverage_pct=${VITEST_LINES}" >> "$GITHUB_OUTPUT"
-
       - name: Generate landing page
+        env:
+          COVERAGE_PCT: ${{ steps.artifacts.outputs.coverage_pct }}
+          VITEST_LINES: ${{ steps.artifacts.outputs.vitest_lines }}
+          VITEST_BRANCHES: ${{ steps.artifacts.outputs.vitest_branches }}
+          VITEST_FUNCTIONS: ${{ steps.artifacts.outputs.vitest_functions }}
+          PW_LINES: ${{ steps.artifacts.outputs.pw_lines }}
+          PW_BRANCHES: ${{ steps.artifacts.outputs.pw_branches }}
+          PW_FUNCTIONS: ${{ steps.artifacts.outputs.pw_functions }}
+          RUST_LINES: ${{ steps.artifacts.outputs.rust_lines }}
+          RUST_FUNCTIONS: ${{ steps.artifacts.outputs.rust_functions }}
         run: |
           COMMIT_SHORT="${GITHUB_SHA:0:7}"
           BUILD_DATE="$(date -u +"%Y-%m-%d %H:%M UTC")"
-          COVERAGE_PCT="${{ steps.artifacts.outputs.coverage_pct }}"
-
-          # Coverage by test type
-          VITEST_LINES="${{ steps.artifacts.outputs.vitest_lines }}"
-          VITEST_BRANCHES="${{ steps.artifacts.outputs.vitest_branches }}"
-          VITEST_FUNCTIONS="${{ steps.artifacts.outputs.vitest_functions }}"
-          PW_LINES="${{ steps.artifacts.outputs.pw_lines }}"
-          PW_BRANCHES="${{ steps.artifacts.outputs.pw_branches }}"
-          PW_FUNCTIONS="${{ steps.artifacts.outputs.pw_functions }}"
-          RUST_LINES="${{ steps.artifacts.outputs.rust_lines }}"
-          RUST_FUNCTIONS="${{ steps.artifacts.outputs.rust_functions }}"
-
-          cat > site/index.html <<EOF
-          <!DOCTYPE html>
-          <html lang="en">
-          <head>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>Tiny Congress - Developer Resources</title>
-            <link rel="icon" href="favicon.ico">
-            <meta name="color-scheme" content="light dark">
-            <style>
-              :root {
-                --bg: #f8fafc;
-                --bg-card: #ffffff;
-                --bg-hover: #f1f5f9;
-                --text: #0f172a;
-                --text-secondary: #64748b;
-                --text-muted: #94a3b8;
-                --link: #2563eb;
-                --border: #e2e8f0;
-                --accent: #3b82f6;
-                --success: #22c55e;
-                --shadow: 0 1px 3px rgba(0,0,0,0.1), 0 1px 2px rgba(0,0,0,0.06);
-              }
-              @media (prefers-color-scheme: dark) {
-                :root {
-                  --bg: #0f172a;
-                  --bg-card: #1e293b;
-                  --bg-hover: #334155;
-                  --text: #f1f5f9;
-                  --text-secondary: #94a3b8;
-                  --text-muted: #64748b;
-                  --link: #60a5fa;
-                  --border: #334155;
-                  --accent: #3b82f6;
-                  --success: #22c55e;
-                  --shadow: 0 1px 3px rgba(0,0,0,0.3);
-                }
-              }
-              * { box-sizing: border-box; }
-              body {
-                font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-                max-width: 800px;
-                margin: 0 auto;
-                padding: 24px;
-                line-height: 1.6;
-                background: var(--bg);
-                color: var(--text);
-              }
-
-              /* Header with build context */
-              .header {
-                background: var(--bg-card);
-                border-radius: 12px;
-                padding: 24px;
-                margin-bottom: 24px;
-                box-shadow: var(--shadow);
-                border: 1px solid var(--border);
-              }
-              .header-top {
-                display: flex;
-                align-items: center;
-                gap: 16px;
-                margin-bottom: 16px;
-              }
-              .logo { height: 48px; width: auto; }
-              .header h1 {
-                margin: 0;
-                font-size: 1.75rem;
-                font-weight: 600;
-              }
-              .build-context {
-                display: grid;
-                grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-                gap: 12px;
-                padding-top: 16px;
-                border-top: 1px solid var(--border);
-              }
-              .build-item {
-                display: flex;
-                flex-direction: column;
-                gap: 2px;
-              }
-              .build-label {
-                font-size: 0.75rem;
-                text-transform: uppercase;
-                letter-spacing: 0.05em;
-                color: var(--text-muted);
-                font-weight: 500;
-              }
-              .build-value {
-                font-family: ui-monospace, 'SF Mono', monospace;
-                font-size: 0.875rem;
-                color: var(--text-secondary);
-              }
-              .build-value a {
-                color: var(--link);
-                text-decoration: none;
-              }
-              .build-value a:hover { text-decoration: underline; }
-
-              /* Coverage highlight */
-              .coverage-badge {
-                background: linear-gradient(135deg, var(--accent), #8b5cf6);
-                color: white;
-                padding: 4px 12px;
-                border-radius: 20px;
-                font-weight: 600;
-                font-size: 0.875rem;
-                display: inline-flex;
-                align-items: center;
-                gap: 6px;
-              }
-
-              /* Sections */
-              .section {
-                background: var(--bg-card);
-                border-radius: 12px;
-                padding: 20px;
-                margin-bottom: 16px;
-                box-shadow: var(--shadow);
-                border: 1px solid var(--border);
-              }
-              .section h2 {
-                margin: 0 0 16px 0;
-                font-size: 1rem;
-                font-weight: 600;
-                color: var(--text-secondary);
-                display: flex;
-                align-items: center;
-                gap: 8px;
-              }
-
-              /* Link grid */
-              .link-grid {
-                display: grid;
-                grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-                gap: 10px;
-              }
-              .link-card {
-                display: flex;
-                align-items: center;
-                gap: 10px;
-                padding: 12px 16px;
-                background: var(--bg);
-                border: 1px solid var(--border);
-                border-radius: 8px;
-                color: var(--text);
-                text-decoration: none;
-                transition: all 0.15s ease;
-              }
-              .link-card:hover {
-                background: var(--bg-hover);
-                border-color: var(--accent);
-                transform: translateY(-1px);
-              }
-              .link-icon { font-size: 1.25rem; }
-              .link-label { font-weight: 500; }
-
-              /* Coverage table */
-              .coverage-table {
-                width: 100%;
-                border-collapse: collapse;
-                margin-top: 16px;
-                font-size: 0.875rem;
-                background: var(--bg-card);
-                border-radius: 8px;
-                overflow: hidden;
-              }
-              .coverage-table th {
-                text-align: left;
-                padding: 10px 14px;
-                background: var(--bg-hover);
-                color: var(--text-muted);
-                font-weight: 500;
-                text-transform: uppercase;
-                font-size: 0.75rem;
-                letter-spacing: 0.05em;
-              }
-              .coverage-table td {
-                padding: 12px 14px;
-                border-bottom: 1px solid var(--border);
-              }
-              .coverage-table tr:last-child td {
-                border-bottom: none;
-              }
-              .coverage-table .test-type {
-                display: flex;
-                align-items: center;
-                gap: 8px;
-              }
-              .coverage-table .pct {
-                font-weight: 600;
-                font-family: ui-monospace, monospace;
-              }
-              .coverage-table .pct.good { color: #22c55e; }
-              .coverage-table .pct.ok { color: #eab308; }
-              .coverage-table .pct.low { color: #ef4444; }
-              .coverage-table a {
-                color: var(--link);
-                text-decoration: none;
-                font-size: 0.85rem;
-              }
-              .coverage-table a:hover { text-decoration: underline; }
-            </style>
-          </head>
-          <body>
-            <header class="header">
-              <div class="header-top">
-                <img src="logo.svg" alt="Tiny Congress" class="logo">
-                <h1>Tiny Congress</h1>
-                <span class="coverage-badge">
-                  📊 ${COVERAGE_PCT}% coverage
-                </span>
-              </div>
-              <div class="build-context">
-                <div class="build-item">
-                  <span class="build-label">Commit</span>
-                  <span class="build-value"><a href="https://github.com/icook/tiny-congress/commit/${GITHUB_SHA}">${COMMIT_SHORT}</a></span>
-                </div>
-                <div class="build-item">
-                  <span class="build-label">Branch</span>
-                  <span class="build-value">${GITHUB_REF_NAME}</span>
-                </div>
-                <div class="build-item">
-                  <span class="build-label">Built</span>
-                  <span class="build-value">${BUILD_DATE}</span>
-                </div>
-                <div class="build-item">
-                  <span class="build-label">Workflow</span>
-                  <span class="build-value"><a href="https://github.com/icook/tiny-congress/actions/runs/${GITHUB_RUN_ID}">#${GITHUB_RUN_NUMBER}</a></span>
-                </div>
-              </div>
-            </header>
-
-            <section class="section">
-              <h2>📚 API Documentation</h2>
-              <div class="link-grid">
-                <a href="rust-docs/tinycongress_api/" class="link-card">
-                  <span class="link-icon">🦀</span>
-                  <span class="link-label">Rust API Docs</span>
-                </a>
-                <a href="ts-docs/" class="link-card">
-                  <span class="link-icon">📘</span>
-                  <span class="link-label">TypeScript Docs</span>
-                </a>
-              </div>
-            </section>
-
-            <section class="section">
-              <h2>📊 Coverage Reports</h2>
-              <table class="coverage-table">
-                <thead>
-                  <tr>
-                    <th>Test Type</th>
-                    <th>Lines</th>
-                    <th>Branches</th>
-                    <th>Functions</th>
-                    <th>Details</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr>
-                    <td><span class="test-type">🧪 Vitest Unit Tests</span></td>
-                    <td class="pct">${VITEST_LINES}%</td>
-                    <td class="pct">${VITEST_BRANCHES}%</td>
-                    <td class="pct">${VITEST_FUNCTIONS}%</td>
-                    <td><a href="coverage/vitest/">View Report</a></td>
-                  </tr>
-                  <tr>
-                    <td><span class="test-type">🎭 Playwright E2E</span></td>
-                    <td class="pct">${PW_LINES}%</td>
-                    <td class="pct">${PW_BRANCHES}%</td>
-                    <td class="pct">${PW_FUNCTIONS}%</td>
-                    <td><a href="coverage/playwright/">View Report</a></td>
-                  </tr>
-                  <tr>
-                    <td><span class="test-type">🦀 Rust Backend</span></td>
-                    <td class="pct">${RUST_LINES}%</td>
-                    <td class="pct">N/A</td>
-                    <td class="pct">${RUST_FUNCTIONS}%</td>
-                    <td><a href="coverage/rust/">View Report</a></td>
-                  </tr>
-                </tbody>
-              </table>
-              <div style="margin-top: 12px; text-align: right;">
-                <a href="coverage/" style="color: var(--link); font-size: 0.875rem;">View Full Coverage Report →</a>
-              </div>
-            </section>
-
-            <section class="section">
-              <h2>🧪 Test Reports</h2>
-              <div class="link-grid">
-                <a href="storybook/" class="link-card">
-                  <span class="link-icon">📚</span>
-                  <span class="link-label">Storybook</span>
-                </a>
-                <a href="playwright/" class="link-card">
-                  <span class="link-icon">🎭</span>
-                  <span class="link-label">Playwright E2E</span>
-                </a>
-              </div>
-            </section>
-          </body>
-          </html>
-          EOF
+          export COMMIT_SHORT BUILD_DATE
+          envsubst < .github/templates/reports-landing.html > site/index.html
 
       - name: Upload reports to Dufs
         env:
@@ -1522,17 +1219,40 @@ jobs:
 
           upload_dir() {
             local target="$1"
+            local config
+            config=$(mktemp)
+            local count=0
+            local first=true
             while IFS= read -r -d '' file; do
               rel="${file#site/}"
-              echo "Uploading ${rel} → ${target}/${rel}"
-              curl --fail-with-body --retry 2 -u "ci:${DUFS_PASSWORD}" \
-                -T "$file" \
-                "${BASE}/${target}/${rel}"
+              if $first; then first=false; else printf 'next\n' >> "$config"; fi
+              printf 'url = "%s/%s/%s"\nupload-file = "%s"\nuser = "ci:%s"\nmax-time = 60\nsilent\nfail-with-body\n' \
+                "$BASE" "$target" "$rel" "$file" "$DUFS_PASSWORD" >> "$config"
+              count=$((count + 1))
             done < <(find site -type f -print0)
+            local total_bytes start elapsed mb speed
+            total_bytes=$(du -sb site | cut -f1)
+            start=$(date +%s%3N)
+            curl --parallel --parallel-max 8 --retry 2 --config "$config"
+            rm "$config"
+            elapsed=$(( $(date +%s%3N) - start ))
+            mb=$(echo "scale=1; $total_bytes / 1048576" | bc)
+            speed=$(echo "scale=1; $total_bytes / 1024 / $elapsed" | bc)
+            echo "Uploaded ${count} files (${mb} MB) to ${target}/ in ${elapsed}ms (${speed} MB/s)"
           }
 
-          upload_dir "$DEST"
-          upload_dir "latest"
+          for attempt in 1 2 3; do
+            if upload_dir "$DEST" && upload_dir "latest"; then
+              break
+            fi
+            if [ "$attempt" -lt 3 ]; then
+              echo "Upload failed (attempt ${attempt}/3), retrying in $((attempt * 60))s..."
+              sleep $((attempt * 60))
+            else
+              echo "Upload failed after 3 attempts"
+              exit 1
+            fi
+          done
 
           {
             echo "### 📋 CI Reports"
