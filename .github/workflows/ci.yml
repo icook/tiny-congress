@@ -167,8 +167,7 @@ jobs:
       # GHA ubuntu-24.04 pre-installs shellcheck; it's not in catthehacker's apt sources.
       - name: Install shellcheck
         run: |
-          VERSION=$(curl -fsSL https://api.github.com/repos/koalaman/shellcheck/releases/latest \
-            | grep '"tag_name"' | cut -d'"' -f4)
+          VERSION=v0.10.0
           curl -fsSL "https://github.com/koalaman/shellcheck/releases/download/${VERSION}/shellcheck-${VERSION}.linux.x86_64.tar.xz" \
             | sudo tar -xJ --strip-components=1 -C /usr/local/bin/ "shellcheck-${VERSION}/shellcheck"
 
