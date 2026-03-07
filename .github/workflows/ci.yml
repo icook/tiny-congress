@@ -901,6 +901,7 @@ jobs:
         run: |
           set -euo pipefail
           skaffold deploy -p "${SKAFFOLD_PROFILE}" --status-check=true \
+            --kube-context "kind-${KIND_CLUSTER_NAME}" \
             --build-artifacts "${{ steps.artifacts.outputs.file }}"
 
       - name: Build instrumented frontend for E2E tests
