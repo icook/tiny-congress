@@ -45,3 +45,4 @@ Run `just --list` for all available commands. See [docs/README.md](docs/README.m
 ## Status
 
 Pre-launch. Building toward a friends-and-family demo. Core flow (signup, rooms, voting, results) is functional. See `objectives.md` for the current readiness checklist.
+# Burn test run 1
