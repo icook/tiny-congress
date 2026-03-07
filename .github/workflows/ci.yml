@@ -502,14 +502,18 @@ jobs:
       - name: Check if build needed
         id: should-build
         run: |
+          # CI changes (workflows, justfile) force a full rebuild — the build
+          # process itself may have changed, so retagging stale images is wrong.
+          ci_changed="${{ needs.detect-changes.outputs.ci }}"
           case "${{ matrix.image }}" in
             tc-api-release) changed="${{ needs.detect-changes.outputs.api }}" ;;
             tc-ui-release)  changed="${{ needs.detect-changes.outputs.ui }}" ;;
             postgres)       changed="${{ needs.detect-changes.outputs.postgres }}" ;;
             *)              changed="true" ;;
           esac
+          if [ "$ci_changed" = "true" ]; then changed="true"; fi
           echo "changed=${changed}" >> "$GITHUB_OUTPUT"
-          echo "${{ matrix.image }}: changed=${changed}"
+          echo "${{ matrix.image }}: changed=${changed} (ci=${ci_changed})"
 
       - name: Retag existing image
         if: steps.should-build.outputs.changed == 'false'
