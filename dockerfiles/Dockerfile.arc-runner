@@ -20,6 +20,8 @@ ARG HADOLINT_VERSION=v2.12.0
 ARG ACTIONLINT_VERSION=1.7.7
 ARG SHELLCHECK_VERSION=v0.10.0
 ARG HELM_VERSION=v3.17.1
+ARG YQ_VERSION=v4.44.3
+ARG KUBECTL_VERSION=v1.32.0
 
 USER root
 
@@ -27,7 +29,8 @@ RUN set -eux; \
     apt-get update; \
     apt-get install -y --no-install-recommends \
       python3 python3-pip python3-venv \
-      xz-utils; \
+      xz-utils \
+      gettext-base; \
     rm -rf /var/lib/apt/lists/*; \
     # just (used in 7+ CI jobs)
     curl -fsSL "https://github.com/casey/just/releases/download/${JUST_VERSION}/just-${JUST_VERSION}-x86_64-unknown-linux-musl.tar.gz" \
@@ -44,9 +47,16 @@ RUN set -eux; \
     # helm (lint-kube, e2e-tests jobs)
     curl -fsSL "https://get.helm.sh/helm-${HELM_VERSION}-linux-amd64.tar.gz" \
       | tar xz --strip-components=1 -C /usr/local/bin linux-amd64/helm; \
+    # yq (deploy-gitops job; catthehacker included this, actions-runner does not)
+    curl -fsSL "https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/yq_linux_amd64" \
+      -o /usr/local/bin/yq && chmod +x /usr/local/bin/yq; \
+    # kubectl (e2e-tests job; kind-action installs kind but not kubectl)
+    curl -fsSL "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl" \
+      -o /usr/local/bin/kubectl && chmod +x /usr/local/bin/kubectl; \
     # smoke-test all installations
     just --version && hadolint --version && actionlint --version && \
-    shellcheck --version && helm version --short && python3 --version
+    shellcheck --version && helm version --short && python3 --version && \
+    yq --version && kubectl version --client
 
 # Ensure ~/.cargo/bin is on PATH so taiki-e/install-action binaries are
 # immediately usable without a separate "Add Cargo to PATH" step.
