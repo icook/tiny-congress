@@ -24,7 +24,7 @@ jobs:
     name: Lint Rust formatting
     needs: [detect-changes]
     if: needs.detect-changes.outputs.api == 'true' || needs.detect-changes.outputs.ci == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ${{ needs.detect-changes.outputs.runner-nano }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -50,7 +50,7 @@ jobs:
     name: Lint Kubernetes manifests
     needs: [detect-changes]
     if: needs.detect-changes.outputs.chart == 'true' || needs.detect-changes.outputs.ci == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ${{ needs.detect-changes.outputs.runner-nano }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -83,7 +83,7 @@ jobs:
     name: Validate Grafana dashboards
     needs: [detect-changes]
     if: needs.detect-changes.outputs.dashboards == 'true' || needs.detect-changes.outputs.ci == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ${{ needs.detect-changes.outputs.runner-nano }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -117,7 +117,7 @@ jobs:
     name: Lint web
     needs: [detect-changes]
     if: needs.detect-changes.outputs.ui == 'true' || needs.detect-changes.outputs.ci == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ${{ needs.detect-changes.outputs.runner-small }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -139,7 +139,7 @@ jobs:
   # ============================================================
   static-analysis:
     name: Static Analysis
-    runs-on: ubuntu-latest
+    runs-on: ${{ needs.detect-changes.outputs.runner-nano }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -172,7 +172,7 @@ jobs:
     name: Build Storybook
     needs: [detect-changes]
     if: needs.detect-changes.outputs.ui == 'true' || needs.detect-changes.outputs.ci == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ${{ needs.detect-changes.outputs.runner-small }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -203,7 +203,7 @@ jobs:
     name: Build documentation
     needs: [detect-changes]
     if: needs.detect-changes.outputs.api == 'true' || needs.detect-changes.outputs.ui == 'true' || needs.detect-changes.outputs.ci == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ${{ needs.detect-changes.outputs.runner-nano }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -242,7 +242,7 @@ jobs:
     name: Check codegen
     needs: [detect-changes]
     if: needs.detect-changes.outputs.api == 'true' || needs.detect-changes.outputs.ui == 'true' || needs.detect-changes.outputs.ci == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ${{ needs.detect-changes.outputs.runner-nano }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -281,7 +281,7 @@ jobs:
     name: Security & Dependency Audit
     needs: [detect-changes]
     if: needs.detect-changes.outputs.api == 'true' || needs.detect-changes.outputs.ui == 'true' || needs.detect-changes.outputs.ci == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ${{ needs.detect-changes.outputs.runner-small }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -933,7 +933,7 @@ jobs:
       - build-images
       - scan-images
       - integration-tests
-    runs-on: ubuntu-latest
+    runs-on: ${{ needs.detect-changes.outputs.runner-nano }}
     steps:
       - name: Check results
         run: |
@@ -1068,8 +1068,8 @@ jobs:
   # ============================================================
   deploy-reports:
     name: Upload CI reports to Dufs
-    runs-on: ubuntu-latest
-    needs: [integration-tests, build-storybook, build-docs]
+    runs-on: ${{ needs.detect-changes.outputs.runner-small }}
+    needs: [detect-changes, integration-tests, build-storybook, build-docs]
     if: >-
       always() &&
       !contains(needs.*.result, 'cancelled')
