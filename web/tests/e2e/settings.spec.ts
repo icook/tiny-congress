@@ -17,7 +17,7 @@ test('settings page shows device list after signup', async ({ page }) => {
   await page.getByLabel(/username/i).fill(username);
   await page.getByLabel(/backup password/i).fill('test-password-123');
   await page.getByRole('button', { name: /sign up/i }).click();
-  await expect(page.getByText(/Account Created/i)).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText(/account has been created/i)).toBeVisible({ timeout: 15_000 });
 
   // Navigate to settings via client-side routing (preserves React state)
   await page.evaluate(() => {
@@ -30,7 +30,7 @@ test('settings page shows device list after signup', async ({ page }) => {
   await expect(page.getByText(/Manage your devices/i)).toBeVisible();
 
   // Device list should load and show the current device
-  await expect(page.getByText(/Current/i)).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByText('Current', { exact: true })).toBeVisible({ timeout: 10_000 });
   await expect(page.getByText(/Active/i)).toBeVisible();
 
   // Screenshot: authenticated settings with device list
@@ -49,7 +49,7 @@ test('current device cannot be revoked or renamed', async ({ page }) => {
   await page.getByLabel(/username/i).fill(username);
   await page.getByLabel(/backup password/i).fill('test-password-123');
   await page.getByRole('button', { name: /sign up/i }).click();
-  await expect(page.getByText(/Account Created/i)).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText(/account has been created/i)).toBeVisible({ timeout: 15_000 });
 
   // Navigate to settings
   await page.evaluate(() => {
@@ -58,7 +58,7 @@ test('current device cannot be revoked or renamed', async ({ page }) => {
   });
 
   // Wait for device list to load
-  await expect(page.getByText(/Current/i)).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByText('Current', { exact: true })).toBeVisible({ timeout: 10_000 });
 
   // The current device row should NOT have rename or revoke action icons
   // With only one device (current), the Actions column should be empty

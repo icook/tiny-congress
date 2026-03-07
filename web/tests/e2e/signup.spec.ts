@@ -20,16 +20,14 @@ test('signup flow creates account with device key @smoke', async ({ page }) => {
   await page.getByRole('button', { name: /sign up/i }).click();
 
   // Wait for success — timeout accounts for WASM loading + key generation + API call
-  await expect(page.getByText(/Account Created/i)).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText(/account has been created/i)).toBeVisible({ timeout: 15_000 });
 
   // Verify post-signup UX shows next steps
   await expect(page.getByText(/What's next/i)).toBeVisible();
   await expect(page.getByRole('link', { name: /Browse Rooms/i })).toBeVisible();
 
-  // Verify the session storage message
-  await expect(
-    page.getByText(/keys were generated locally and stored in this browser session/i)
-  ).toBeVisible();
+  // Verify the keys explanation card is visible
+  await expect(page.getByText(/Your keys were issued/i)).toBeVisible();
 
   // Screenshot 2: Success state
   await test.info().attach('signup-success', {
@@ -48,7 +46,7 @@ test('signup shows error for duplicate username @smoke', async ({ page, browser 
   await page.getByLabel(/username/i).fill(username);
   await page.getByLabel(/backup password/i).fill('test-password-123');
   await page.getByRole('button', { name: /sign up/i }).click();
-  await expect(page.getByText(/Account Created/i)).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText(/account has been created/i)).toBeVisible({ timeout: 15_000 });
 
   // Fresh context simulates a new device — no IDB clearing needed, avoids
   // the webkit race where deleteDatabase hasn't completed before the new
