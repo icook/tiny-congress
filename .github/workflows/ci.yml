@@ -732,7 +732,7 @@ jobs:
         if: always()
         run: |
           {
-            for i in {1..60}; do
+            for _ in {1..60}; do
               echo "=== Memory sample $(date -u +%H:%M:%S) ==="
               docker stats --no-stream skaffold-ci-control-plane 2>/dev/null | tail -1 || true
               sleep 5
@@ -1045,7 +1045,7 @@ jobs:
         if: always()
         run: |
           {
-            for i in {1..60}; do
+            for _ in {1..60}; do
               echo "=== Memory sample $(date -u +%H:%M:%S) ==="
               docker stats --no-stream skaffold-ci-control-plane 2>/dev/null | tail -1 || true
               sleep 5
