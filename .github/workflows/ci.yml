@@ -286,10 +286,10 @@ jobs:
       - name: Install just
         uses: extractions/setup-just@v3
 
-      # GHA ubuntu-24.04 adds ~/.cargo/bin to PATH automatically; catthehacker ARC runners do not.
-      # Must run before taiki-e/install-action so installed binaries are in PATH for subsequent steps.
-      - name: Add Cargo to PATH
-        run: echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+      - name: Setup Rust toolchain
+        uses: ./.github/actions/setup-rust
+        with:
+          cache-dependencies: 'false'
 
       - name: Install cargo-deny
         uses: taiki-e/install-action@cargo-deny
