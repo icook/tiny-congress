@@ -335,11 +335,19 @@ jobs:
       - name: Start postgres
         run: |
           CONTAINER_NAME="postgres-${GITHUB_RUN_ID}"
-          docker run -d --name "$CONTAINER_NAME" \
-            -p 0:5432 \
-            -e POSTGRES_USER=postgres \
-            -e POSTGRES_PASSWORD=postgres \
-            ${{ env.REGISTRY }}/postgres:${{ github.sha }}
+
+          # Check if container already exists
+          if docker ps -a --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
+            echo "Container exists, starting it..."
+            docker start "$CONTAINER_NAME"
+          else
+            echo "Creating new postgres container..."
+            docker run -d --name "$CONTAINER_NAME" \
+              -p 0:5432 \
+              -e POSTGRES_USER=postgres \
+              -e POSTGRES_PASSWORD=postgres \
+              ${{ env.REGISTRY }}/postgres:${{ github.sha }}
+          fi
 
           # Resolve Docker host based on runner environment
           if [ "$RUNNER_ENVIRONMENT" = "self-hosted" ]; then
@@ -387,6 +395,10 @@ jobs:
             exit 1
           fi
           echo "✓ SQLx snapshots are up to date"
+
+      - name: Cleanup postgres (best effort)
+        if: always()
+        run: docker rm -f "postgres-${GITHUB_RUN_ID}" 2>/dev/null || true
 
   # ── Detect which paths changed (skip unnecessary builds) ─
   detect-changes:
