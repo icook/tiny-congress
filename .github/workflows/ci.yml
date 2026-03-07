@@ -791,7 +791,24 @@ jobs:
           echo "KIND_LOG=${KIND_LOG}" >> "$GITHUB_ENV"
 
           echo "Starting KinD cluster skaffold-ci (logs: ${KIND_LOG})"
-          kind create cluster --name skaffold-ci --wait 0s >"${KIND_LOG}" 2>&1 &
+          kind create cluster \
+            --name skaffold-ci \
+            --config kind-config.yaml \
+            --wait 0s \
+            >"${KIND_LOG}" 2>&1 &
+
+          # Wait for KinD control plane container to be created (max 30s)
+          for i in {1..30}; do
+            if docker inspect skaffold-ci-control-plane >/dev/null 2>&1; then
+              echo "KinD container created (attempt $i)"
+              break
+            fi
+            sleep 1
+          done
+
+          # Apply resource limits to prevent monopolizing DinD
+          docker update --memory 3g --cpus 2 skaffold-ci-control-plane 2>/dev/null || \
+            echo "WARNING: Failed to apply resource limits to KinD container"
 
       - name: Install Skaffold
         run: |
