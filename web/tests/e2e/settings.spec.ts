@@ -41,7 +41,7 @@ test('settings page shows device list after signup', async ({ page }) => {
 });
 
 test('current device cannot be revoked or renamed', async ({ page }) => {
-  const username = `no-self-revoke-${String(Date.now())}`;
+  const username = `device-guard-${String(Date.now())}`;
 
   // Sign up
   await page.goto('/signup');
