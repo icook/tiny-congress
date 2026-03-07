@@ -440,7 +440,6 @@ jobs:
               - 'kube/app/files/dashboards/**'
             ci:
               - '.github/workflows/**'
-              - '!.github/workflows/build-arc-runner.yml'
               - 'skaffold.yaml'
               - 'justfile'
 
