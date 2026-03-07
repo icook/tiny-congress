@@ -518,14 +518,18 @@ jobs:
       - name: Check if build needed
         id: should-build
         run: |
+          # CI changes (workflows, justfile) force a full rebuild — the build
+          # process itself may have changed, so retagging stale images is wrong.
+          ci_changed="${{ needs.detect-changes.outputs.ci }}"
           case "${{ matrix.image }}" in
             tc-api-release) changed="${{ needs.detect-changes.outputs.api }}" ;;
             tc-ui-release)  changed="${{ needs.detect-changes.outputs.ui }}" ;;
             postgres)       changed="${{ needs.detect-changes.outputs.postgres }}" ;;
             *)              changed="true" ;;
           esac
+          if [ "$ci_changed" = "true" ]; then changed="true"; fi
           echo "changed=${changed}" >> "$GITHUB_OUTPUT"
-          echo "${{ matrix.image }}: changed=${changed}"
+          echo "${{ matrix.image }}: changed=${changed} (ci=${ci_changed})"
 
       - name: Retag existing image
         if: steps.should-build.outputs.changed == 'false'
@@ -536,6 +540,11 @@ jobs:
           docker pull "${SOURCE}"
           docker tag "${SOURCE}" "${{ steps.tags.outputs.sha_tag }}"
           docker push "${{ steps.tags.outputs.sha_tag }}"
+
+      - name: Set build metadata
+        if: steps.should-build.outputs.changed != 'false'
+        id: buildmeta
+        run: echo "build_time=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_OUTPUT"
 
       - name: Extract versions from mise.toml
         if: steps.should-build.outputs.changed != 'false'
@@ -560,7 +569,7 @@ jobs:
             NODE_VERSION=${{ steps.versions.outputs.node }}
             GIT_SHA=${{ github.sha }}
             APP_VERSION=${{ github.ref_name }}@${{ github.sha }}
-            BUILD_TIME=${{ github.event.head_commit.timestamp || github.event.pull_request.updated_at }}
+            BUILD_TIME=${{ steps.buildmeta.outputs.build_time }}
           tags: |
             ${{ steps.tags.outputs.sha_tag }}
             ${{ steps.tags.outputs.branch_tag }}
