@@ -728,6 +728,19 @@ jobs:
       - name: Install cargo-llvm-cov
         uses: taiki-e/install-action@cargo-llvm-cov
 
+      - name: Sample memory usage (background monitor)
+        if: always()
+        run: |
+          {
+            for i in {1..60}; do
+              echo "=== Memory sample $(date -u +%H:%M:%S) ==="
+              docker stats --no-stream skaffold-ci-control-plane 2>/dev/null | tail -1 || true
+              sleep 5
+            done
+          } > /tmp/memory-samples-rust-coverage.log 2>&1 &
+          echo $! > /tmp/sampler.pid
+        shell: bash
+
       - name: Generate Rust coverage
         working-directory: service
         run: |
@@ -742,6 +755,14 @@ jobs:
           name: rust-coverage
           if-no-files-found: warn
           path: service/coverage/backend-unit.lcov
+
+      - name: Upload memory samples
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: memory-samples-rust-coverage
+          path: /tmp/memory-samples-*.log
+          retention-days: 7
 
   # ── E2E tests (KinD + Skaffold + Playwright) ─────────────
   e2e-tests:
@@ -1018,6 +1039,27 @@ jobs:
           name: playwright-coverage
           if-no-files-found: warn
           path: web/coverage/playwright/
+          retention-days: 7
+
+      - name: Sample memory usage (background monitor)
+        if: always()
+        run: |
+          {
+            for i in {1..60}; do
+              echo "=== Memory sample $(date -u +%H:%M:%S) ==="
+              docker stats --no-stream skaffold-ci-control-plane 2>/dev/null | tail -1 || true
+              sleep 5
+            done
+          } > /tmp/memory-samples-e2e-tests.log 2>&1 &
+          echo $! > /tmp/sampler.pid
+        shell: bash
+
+      - name: Upload memory samples
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: memory-samples-e2e-tests
+          path: /tmp/memory-samples-*.log
           retention-days: 7
 
       - name: Dump diagnostics on failure
