@@ -25,6 +25,7 @@ pub struct RoomResponse {
     pub description: Option<String>,
     pub eligibility_topic: String,
     pub status: String,
+    pub poll_duration_secs: Option<i32>,
     pub created_at: String,
 }
 
@@ -35,6 +36,7 @@ pub struct PollResponse {
     pub question: String,
     pub description: Option<String>,
     pub status: String,
+    pub closes_at: Option<String>,
     pub created_at: String,
 }
 
@@ -102,6 +104,7 @@ pub struct CreateRoomRequest {
     pub description: Option<String>,
     #[serde(default = "default_eligibility_topic")]
     pub eligibility_topic: String,
+    pub poll_duration_secs: Option<i32>,
 }
 
 fn default_eligibility_topic() -> String {
@@ -143,7 +146,9 @@ pub fn router() -> Router {
     Router::new()
         // Room endpoints
         .route("/rooms", get(list_rooms).post(create_room))
+        .route("/rooms/capacity", get(get_capacity))
         .route("/rooms/{room_id}", get(get_room))
+        .route("/rooms/{room_id}/agenda", get(get_agenda))
         // Poll endpoints
         .route("/rooms/{room_id}/polls", get(list_polls).post(create_poll))
         .route("/rooms/{room_id}/polls/{poll_id}", get(get_poll_detail))
@@ -194,11 +199,35 @@ async fn create_room(
             &req.name,
             req.description.as_deref(),
             &req.eligibility_topic,
+            req.poll_duration_secs,
         )
         .await
     {
         Ok(room) => (StatusCode::CREATED, Json(room_to_response(room))).into_response(),
         Err(e) => room_error_response(e),
+    }
+}
+
+async fn get_capacity(Extension(service): Extension<Arc<dyn RoomsService>>) -> impl IntoResponse {
+    match service.rooms_needing_content().await {
+        Ok(rooms) => {
+            let rooms: Vec<_> = rooms.into_iter().map(room_to_response).collect();
+            (StatusCode::OK, Json(rooms)).into_response()
+        }
+        Err(e) => room_error_response(e),
+    }
+}
+
+async fn get_agenda(
+    Extension(service): Extension<Arc<dyn RoomsService>>,
+    Path(room_id): Path<Uuid>,
+) -> impl IntoResponse {
+    match service.get_agenda(room_id).await {
+        Ok(polls) => {
+            let polls: Vec<_> = polls.into_iter().map(poll_to_response).collect();
+            (StatusCode::OK, Json(polls)).into_response()
+        }
+        Err(e) => poll_error_response(e),
     }
 }
 
@@ -442,6 +471,7 @@ fn room_to_response(r: super::repo::RoomRecord) -> RoomResponse {
         description: r.description,
         eligibility_topic: r.eligibility_topic,
         status: r.status,
+        poll_duration_secs: r.poll_duration_secs,
         created_at: r.created_at.to_rfc3339(),
     }
 }
@@ -453,6 +483,7 @@ fn poll_to_response(p: super::repo::PollRecord) -> PollResponse {
         question: p.question,
         description: p.description,
         status: p.status,
+        closes_at: p.closes_at.map(|t| t.to_rfc3339()),
         created_at: p.created_at.to_rfc3339(),
     }
 }
