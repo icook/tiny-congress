@@ -3,17 +3,20 @@
  * Renders the signup form UI based on props, no hooks or side effects
  */
 
-import { IconAlertTriangle, IconCheck } from '@tabler/icons-react';
+import { IconAlertTriangle, IconCheck, IconKey, IconShield } from '@tabler/icons-react';
 import { Link } from '@tanstack/react-router';
 import {
   Alert,
+  Anchor,
   Button,
   Card,
   Group,
+  List,
   PasswordInput,
   Stack,
   Text,
   TextInput,
+  ThemeIcon,
   Title,
 } from '@mantine/core';
 
@@ -21,8 +24,10 @@ export interface SignupFormProps {
   // Form state
   username: string;
   password: string;
+  passwordConfirm: string;
   onUsernameChange: (value: string) => void;
   onPasswordChange: (value: string) => void;
+  onPasswordConfirmChange: (value: string) => void;
   onSubmit: (e: React.FormEvent) => void;
 
   // Loading states
@@ -46,8 +51,10 @@ export interface SignupFormProps {
 export function SignupForm({
   username,
   password,
+  passwordConfirm,
   onUsernameChange,
   onPasswordChange,
+  onPasswordConfirmChange,
   onSubmit,
   isLoading,
   loadingText,
@@ -58,17 +65,61 @@ export function SignupForm({
   if (successData) {
     return (
       <Stack gap="md" maw={500} mx="auto" mt="xl">
-        <Alert icon={<IconCheck size={16} />} title="Account Created" color="green">
+        <Alert icon={<IconCheck size={16} />} title={`Welcome, ${username}!`} color="green">
           Your account has been created successfully.
         </Alert>
 
+        <Card shadow="sm" padding="lg" radius="md" withBorder>
+          <Stack gap="sm">
+            <Title order={4}>Your keys were issued</Title>
+            <List spacing="sm" size="sm">
+              <List.Item
+                icon={
+                  <ThemeIcon color="blue" size={20} radius="xl">
+                    <IconShield size={12} />
+                  </ThemeIcon>
+                }
+              >
+                <Text size="sm">
+                  <strong>Root key</strong> — your account recovery key. It was generated locally,
+                  encrypted with your backup password, and stored on the server. You&apos;ll need
+                  your backup password to log in on a new browser or device.
+                </Text>
+              </List.Item>
+              <List.Item
+                icon={
+                  <ThemeIcon color="teal" size={20} radius="xl">
+                    <IconKey size={12} />
+                  </ThemeIcon>
+                }
+              >
+                <Text size="sm">
+                  <strong>Device key</strong> — a key specific to this browser, approved by your
+                  root key. This device will stay approved until you revoke it.
+                </Text>
+              </List.Item>
+            </List>
+            <Anchor
+              href="https://github.com/icook/tiny-congress/blob/master/docs/domain-model.md"
+              target="_blank"
+              rel="noopener noreferrer"
+              size="xs"
+            >
+              Learn more about how TinyCongress keys work →
+            </Anchor>
+          </Stack>
+        </Card>
+
         <Stack gap="sm">
           <Title order={3}>What&apos;s next?</Title>
-          <Text size="sm">
-            {verifierUrl
-              ? 'Verify your identity so we know you\u0027re a real person, not a bot. Verified users can vote in rooms.'
-              : 'You\u0027re all set! Start exploring rooms and voting on polls.'}
-          </Text>
+          {verifierUrl ? (
+            <Text size="sm">
+              Verify your identity so we know you&apos;re a real person, not a bot. Without
+              verification, you can browse rooms but cannot vote.
+            </Text>
+          ) : (
+            <Text size="sm">You&apos;re all set! Start exploring rooms and voting on polls.</Text>
+          )}
           <Group mt="xs">
             {verifierUrl ? (
               <Button component="a" href={verifierUrl}>
@@ -78,18 +129,16 @@ export function SignupForm({
             <Button component={Link} to="/rooms" variant={verifierUrl ? 'outline' : 'filled'}>
               Browse Rooms
             </Button>
-            <Button component={Link} to="/settings" variant="outline">
-              View Settings
-            </Button>
           </Group>
         </Stack>
-
-        <Text size="xs" c="dimmed" ta="center">
-          Your keys were generated locally and stored in this browser session.
-        </Text>
       </Stack>
     );
   }
+
+  const passwordMismatch =
+    passwordConfirm.length > 0 && password !== passwordConfirm
+      ? 'Passwords do not match'
+      : undefined;
 
   return (
     <Stack gap="md" maw={500} mx="auto" mt="xl">
@@ -116,12 +165,23 @@ export function SignupForm({
 
             <PasswordInput
               label="Backup Password"
-              description="Used to encrypt your root key backup. You'll need this to log in on new devices."
+              description="Used to encrypt your root key backup. You'll need this to log in on new browsers or devices."
               required
               value={password}
               onChange={(e) => {
                 onPasswordChange(e.currentTarget.value);
               }}
+              disabled={isLoading}
+            />
+
+            <PasswordInput
+              label="Confirm Backup Password"
+              required
+              value={passwordConfirm}
+              onChange={(e) => {
+                onPasswordConfirmChange(e.currentTarget.value);
+              }}
+              error={passwordMismatch}
               disabled={isLoading}
             />
 
@@ -132,7 +192,7 @@ export function SignupForm({
             ) : null}
 
             <Group justify="flex-end">
-              <Button type="submit" loading={isLoading}>
+              <Button type="submit" loading={isLoading} disabled={!!passwordMismatch}>
                 {loadingText ?? 'Sign Up'}
               </Button>
             </Group>

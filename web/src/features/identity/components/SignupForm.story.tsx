@@ -16,8 +16,10 @@ export const Default = () => (
   <SignupForm
     username=""
     password=""
+    passwordConfirm=""
     onUsernameChange={noOp}
     onPasswordChange={noOp}
+    onPasswordConfirmChange={noOp}
     onSubmit={preventSubmit}
     isLoading={false}
   />
@@ -28,8 +30,24 @@ export const Filled = () => (
   <SignupForm
     username="alice"
     password="my-secret-password"
+    passwordConfirm="my-secret-password"
     onUsernameChange={noOp}
     onPasswordChange={noOp}
+    onPasswordConfirmChange={noOp}
+    onSubmit={preventSubmit}
+    isLoading={false}
+  />
+);
+
+// Password mismatch
+export const PasswordMismatch = () => (
+  <SignupForm
+    username="alice"
+    password="my-secret-password"
+    passwordConfirm="different-password"
+    onUsernameChange={noOp}
+    onPasswordChange={noOp}
+    onPasswordConfirmChange={noOp}
     onSubmit={preventSubmit}
     isLoading={false}
   />
@@ -40,8 +58,10 @@ export const GeneratingKeys = () => (
   <SignupForm
     username="alice"
     password="my-secret-password"
+    passwordConfirm="my-secret-password"
     onUsernameChange={noOp}
     onPasswordChange={noOp}
+    onPasswordConfirmChange={noOp}
     onSubmit={preventSubmit}
     isLoading
     loadingText="Generating keys and encrypting backup..."
@@ -53,8 +73,10 @@ export const Submitting = () => (
   <SignupForm
     username="alice"
     password="my-secret-password"
+    passwordConfirm="my-secret-password"
     onUsernameChange={noOp}
     onPasswordChange={noOp}
+    onPasswordConfirmChange={noOp}
     onSubmit={preventSubmit}
     isLoading
   />
@@ -65,8 +87,10 @@ export const Error = () => (
   <SignupForm
     username="alice"
     password="my-secret-password"
+    passwordConfirm="my-secret-password"
     onUsernameChange={noOp}
     onPasswordChange={noOp}
+    onPasswordConfirmChange={noOp}
     onSubmit={preventSubmit}
     isLoading={false}
     error="Username already taken"
@@ -76,10 +100,12 @@ export const Error = () => (
 // Success state with account details
 export const Success = () => (
   <SignupForm
-    username=""
+    username="alice"
     password=""
+    passwordConfirm=""
     onUsernameChange={noOp}
     onPasswordChange={noOp}
+    onPasswordConfirmChange={noOp}
     onSubmit={preventSubmit}
     isLoading={false}
     successData={{
