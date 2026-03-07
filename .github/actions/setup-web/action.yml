@@ -1,23 +1,29 @@
 name: Setup Web Toolchain
-description: Configure Node.js with yarn caching and enable corepack
+description: Configure Node.js and yarn (from committed binary) with dependency caching
 
 runs:
   using: composite
   steps:
-    # Install Node first so corepack is available (ARC runners have no pre-installed Node)
     - name: Set up Node
       uses: actions/setup-node@v6
       with:
         node-version-file: web/.nvmrc
 
-    - name: Enable corepack
+    # yarn 4.x is committed at web/.yarn/releases/ (yarnPath in .yarnrc.yml).
+    # Create a /usr/local/bin/yarn shim so 'yarn' works from any directory
+    # without corepack or any network download.
+    - name: Bootstrap yarn from committed binary
       shell: bash
-      run: corepack enable
+      run: |
+        YARN_VER=$(node -p "require('./web/package.json').packageManager.split('@')[1]")
+        YARN_BIN="$GITHUB_WORKSPACE/web/.yarn/releases/yarn-${YARN_VER}.cjs"
+        printf '#!/bin/sh\nexec node "%s" "$@"\n' "$YARN_BIN" | sudo tee /usr/local/bin/yarn > /dev/null
+        sudo chmod +x /usr/local/bin/yarn
 
     - name: Get yarn cache directory
       id: yarn-cache-dir
       shell: bash
-      run: echo "dir=$(yarn config get cacheFolder)" >> "$GITHUB_OUTPUT"
+      run: echo "dir=$(cd web && yarn config get cacheFolder)" >> "$GITHUB_OUTPUT"
 
     - name: Cache yarn dependencies
       uses: runs-on/cache@v4
