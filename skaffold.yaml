@@ -201,11 +201,9 @@ profiles:
               - "tc-ui-release:cache-main"
               - "tc-ui-release:cache"
     deploy:
-      # Explicitly target the KinD cluster context. Without this, Skaffold
-      # running inside an ARC runner pod (which has KUBERNETES_SERVICE_HOST
-      # set) can pick up the pod's in-cluster namespace ("arc-runners") as
-      # the default Helm namespace, causing install to fail in KinD.
-      kubeContext: kind-skaffold-ci
+      # For ARC runners with in-cluster KUBERNETES_SERVICE_HOST, we explicitly
+      # set namespace to prevent Skaffold from falling back to "arc-runners".
+      # kubeContext is set via --kube-context CLI flag by the workflow.
       helm:
         releases:
           - name: tc
