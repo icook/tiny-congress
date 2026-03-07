@@ -792,21 +792,27 @@ jobs:
           {
             echo "### Bundle Size"
             echo ""
-            echo "| Asset | Size | Gzip |"
-            echo "|-------|------|------|"
-            find dist -type f \( -name "*.js" -o -name "*.css" \) -exec sh -c '
-              file="$1"
-              size=$(stat -f%z "$file" 2>/dev/null || stat -c%s "$file")
-              gzip_size=$(gzip -c "$file" | wc -c)
-              printf "| %s | %s | %s |\n" \
-                "$(basename "$file")" \
-                "$(numfmt --to=iec-i --suffix=B "$size" 2>/dev/null || echo "${size}B")" \
-                "$(numfmt --to=iec-i --suffix=B "$gzip_size" 2>/dev/null || echo "${gzip_size}B")"
-            ' _ {} \; | sort -k3 -h -r
-            echo ""
-            total_size=$(find dist -type f \( -name "*.js" -o -name "*.css" \) -exec stat -f%z {} + 2>/dev/null | awk '{sum+=$1} END {print sum}' || \
-                         find dist -type f \( -name "*.js" -o -name "*.css" \) -exec stat -c%s {} + | awk '{sum+=$1} END {print sum}')
-            echo "**Total:** $(numfmt --to=iec-i --suffix=B "$total_size" 2>/dev/null || echo "${total_size}B")"
+            if [ ! -d dist ]; then
+              echo "No dist directory found"
+            elif ! find dist -type f \( -name "*.js" -o -name "*.css" \) | grep -q .; then
+              echo "No JS or CSS files found in dist"
+            else
+              echo "| Asset | Size | Gzip |"
+              echo "|-------|------|------|"
+              find dist -type f \( -name "*.js" -o -name "*.css" \) -exec sh -c '
+                file="$1"
+                size=$(stat -f%z "$file" 2>/dev/null || stat -c%s "$file")
+                gzip_size=$(gzip -c "$file" | wc -c)
+                printf "| %s | %s | %s |\n" \
+                  "$(basename "$file")" \
+                  "$(numfmt --to=iec-i --suffix=B "$size" 2>/dev/null || echo "${size}B")" \
+                  "$(numfmt --to=iec-i --suffix=B "$gzip_size" 2>/dev/null || echo "${gzip_size}B")"
+              ' _ {} \; | sort -k3 -h -r
+              echo ""
+              total_size=$(find dist -type f \( -name "*.js" -o -name "*.css" \) -exec stat -f%z {} + 2>/dev/null | awk '{sum+=$1} END {print sum}' || \
+                           find dist -type f \( -name "*.js" -o -name "*.css" \) -exec stat -c%s {} + | awk '{sum+=$1} END {print sum}')
+              echo "**Total:** $(numfmt --to=iec-i --suffix=B "$total_size" 2>/dev/null || echo "${total_size}B")"
+            fi
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Start frontend preview server
