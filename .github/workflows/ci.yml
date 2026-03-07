@@ -688,7 +688,7 @@ jobs:
         run: |
           set -euo pipefail
           cargo build --release
-          echo "API_BINARY_PATH=$(pwd)/target/release/tinycongress_api" >> $GITHUB_ENV
+          echo "API_BINARY_PATH=$(pwd)/target/release/tinycongress_api" >> "$GITHUB_ENV"
 
       - name: Start PostgreSQL testcontainer
         id: postgres
@@ -705,7 +705,7 @@ jobs:
 
           # Wait for database to be ready (poll with repeated attempts)
           echo "Waiting for PostgreSQL to be ready..."
-          for i in {1..60}; do
+          for _ in {1..60}; do
             if docker exec "${CONTAINER_ID}" pg_isready -U postgres >/dev/null 2>&1; then
               echo "PostgreSQL is ready"
               exit 0
@@ -904,7 +904,7 @@ jobs:
         if: failure()
         run: |
           echo '--- Running processes ---'
-          ps aux | grep -E 'tinycongress-api|postgres|node' || true
+          pgrep -a -f 'tinycongress-api|postgres|node' || true
           echo '--- Docker containers ---'
           docker ps -a || true
           echo '--- Network connections ---'
