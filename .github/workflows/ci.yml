@@ -139,6 +139,7 @@ jobs:
   # ============================================================
   static-analysis:
     name: Static Analysis
+    needs: [detect-changes]
     runs-on: ${{ needs.detect-changes.outputs.runner-nano }}
     steps:
       - name: Checkout
@@ -394,8 +395,31 @@ jobs:
       chart: ${{ steps.filter.outputs.chart }}
       dashboards: ${{ steps.filter.outputs.dashboards }}
       ci: ${{ steps.filter.outputs.ci }}
+      # Runner tier outputs — set all at once, each job picks the right size.
+      # Toggle: gh variable set USE_ARC_RUNNERS --body "false" --repo icook/tiny-congress
+      runner-nano: ${{ steps.runner.outputs.nano }}
+      runner-small: ${{ steps.runner.outputs.small }}
     steps:
       - uses: actions/checkout@v6
+      - name: Select runner
+        id: runner
+        run: |
+          # Two ways to enable ARC runners (in priority order):
+          #   1. Commit message contains [arc]  — per-commit, good for iteration
+          #   2. Repo var USE_ARC_RUNNERS=true  — global override
+          # Default: ubuntu-latest (GHA hosted)
+          commit_msg=$(git log -1 --format=%s HEAD)
+          if echo "$commit_msg" | grep -qF '[arc]' || [ "${{ vars.USE_ARC_RUNNERS }}" = "true" ]; then
+            {
+              echo "nano=arc-runner-nano"
+              echo "small=arc-runner-small"
+            } >> "$GITHUB_OUTPUT"
+          else
+            {
+              echo "nano=ubuntu-latest"
+              echo "small=ubuntu-latest"
+            } >> "$GITHUB_OUTPUT"
+          fi
       - uses: dorny/paths-filter@v3
         id: filter
         with:
@@ -921,6 +945,7 @@ jobs:
     name: CI Gate
     if: always()
     needs:
+      - detect-changes
       - lint
       - lint-kube
       - lint-web
