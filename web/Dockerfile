@@ -51,6 +51,12 @@ FROM nginxinc/nginx-unprivileged:alpine
 # Upgrade system packages to pick up security patches (e.g. zlib CVE-2026-22184)
 USER root
 RUN apk upgrade --no-cache
+
+# Entrypoint generates /tmp/config.js from env vars, then starts nginx
+# Must be copied as root to ensure correct permissions and ownership
+COPY --chmod=755 web/docker-entrypoint.sh /docker-entrypoint.sh
+
+# Switch to nginx user for remaining setup and runtime
 USER 101
 WORKDIR /usr/share/nginx/html
 
@@ -59,13 +65,6 @@ COPY web/nginx.conf /etc/nginx/conf.d/default.conf
 
 # Copy static assets from builder
 COPY --from=builder /app/dist/ ./
-
-# Entrypoint generates /tmp/config.js from env vars, then starts nginx
-COPY --chmod=755 web/docker-entrypoint.sh /docker-entrypoint.sh
-
-# Explicitly run as non-root (nginx user, UID 101 in nginx-unprivileged base image)
-# This satisfies Kubernetes Pod Security Standards and pod securityContext.runAsNonRoot
-USER nginx
 
 EXPOSE 8080
 ENTRYPOINT ["/docker-entrypoint.sh"]
