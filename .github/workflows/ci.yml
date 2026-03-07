@@ -774,6 +774,7 @@ jobs:
       SKAFFOLD_DEFAULT_REPO: ghcr.io/${{ github.repository }}
       SKAFFOLD_PROFILE: ci
       PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.cache/ms-playwright
+      KIND_CLUSTER_NAME: skaffold-ci-${{ github.run_id }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -782,7 +783,7 @@ jobs:
         uses: helm/kind-action@v1.13.0
         with:
           install_only: true
-          cluster_name: skaffold-ci
+          cluster_name: ${{ env.KIND_CLUSTER_NAME }}
 
       # GHA ubuntu-24.04 pre-installs Helm; catthehacker ARC runners do not.
       # azure/setup-helm relies on GHA tool cache infrastructure absent on ARC runners.
@@ -799,8 +800,8 @@ jobs:
 
           echo "KIND_LOG=${KIND_LOG}" >> "$GITHUB_ENV"
 
-          echo "Starting KinD cluster skaffold-ci (logs: ${KIND_LOG})"
-          kind create cluster --name skaffold-ci --wait 0s >"${KIND_LOG}" 2>&1 &
+          echo "Starting KinD cluster ${KIND_CLUSTER_NAME} (logs: ${KIND_LOG})"
+          kind create cluster --name "${KIND_CLUSTER_NAME}" --wait 0s >"${KIND_LOG}" 2>&1 &
 
       - name: Install Skaffold
         run: |
@@ -868,7 +869,7 @@ jobs:
           set -euo pipefail
           : "${KIND_LOG:?KIND_LOG not set}"
           echo "Waiting for cluster API to become available..."
-          if ! timeout 180 bash -c 'until kubectl cluster-info --context kind-skaffold-ci >/dev/null 2>&1; do sleep 5; done'; then
+          if ! timeout 180 bash -c "until kubectl cluster-info --context kind-${KIND_CLUSTER_NAME} >/dev/null 2>&1; do sleep 5; done"; then
             echo "KinD did not finish starting in time; dumping logs."
             cat "${KIND_LOG}" || true
             exit 1
@@ -1005,6 +1006,10 @@ jobs:
           kubectl get events -A --sort-by=.lastTimestamp || true
           echo '--- All Resources ---'
           kubectl get all -n default || true
+
+      - name: Cleanup KinD cluster
+        if: always()
+        run: kind delete cluster --name "${KIND_CLUSTER_NAME}" || true
 
   # ── CI gate (single required check) ─────────────────────
   ci-gate:
