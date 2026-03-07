@@ -1,0 +1,54 @@
+# Custom ARC runner image for tiny-congress CI.
+#
+# Based on the official actions-runner image so the GitHub Actions runner binary
+# is baked in — no init container needed to copy it at pod startup.
+#
+# Pre-installs small, stable CLI tools that are used across many CI jobs.
+# Heavy toolchains (Rust, Node) are excluded — they are cached effectively by
+# runs-on/cache@v4 and are version-pinned in mise.toml / .nvmrc.
+#
+# Rebuilt automatically:
+#   - On changes to this file (via build-arc-runner.yml workflow)
+#   - Weekly (to pick up base image security patches)
+#   - When Dependabot opens a PR bumping RUNNER_VERSION
+
+ARG RUNNER_VERSION=2.332.0
+FROM ghcr.io/actions/actions-runner:${RUNNER_VERSION}
+
+ARG JUST_VERSION=1.40.0
+ARG HADOLINT_VERSION=v2.12.0
+ARG ACTIONLINT_VERSION=1.7.7
+ARG SHELLCHECK_VERSION=v0.10.0
+ARG HELM_VERSION=v3.17.1
+
+USER root
+
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends \
+      python3 python3-pip python3-venv; \
+    rm -rf /var/lib/apt/lists/*; \
+    # just (used in 7+ CI jobs)
+    curl -fsSL "https://github.com/casey/just/releases/download/${JUST_VERSION}/just-${JUST_VERSION}-x86_64-unknown-linux-musl.tar.gz" \
+      | tar xz -C /usr/local/bin just; \
+    # hadolint (static-analysis job, Dockerfile linter)
+    curl -fsSL "https://github.com/hadolint/hadolint/releases/download/${HADOLINT_VERSION}/hadolint-Linux-x86_64" \
+      -o /usr/local/bin/hadolint && chmod +x /usr/local/bin/hadolint; \
+    # actionlint (static-analysis job, GitHub Actions workflow linter)
+    curl -fsSL "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz" \
+      | tar xz -C /usr/local/bin actionlint; \
+    # shellcheck (static-analysis job; not in catthehacker apt sources)
+    curl -fsSL "https://github.com/koalaman/shellcheck/releases/download/${SHELLCHECK_VERSION}/shellcheck-${SHELLCHECK_VERSION}.linux.x86_64.tar.xz" \
+      | tar xJ --strip-components=1 -C /usr/local/bin "shellcheck-${SHELLCHECK_VERSION}/shellcheck"; \
+    # helm (lint-kube, e2e-tests jobs)
+    curl -fsSL "https://get.helm.sh/helm-${HELM_VERSION}-linux-amd64.tar.gz" \
+      | tar xz --strip-components=1 -C /usr/local/bin linux-amd64/helm; \
+    # smoke-test all installations
+    just --version && hadolint --version && actionlint --version && \
+    shellcheck --version && helm version --short && python3 --version
+
+# Ensure ~/.cargo/bin is on PATH so taiki-e/install-action binaries are
+# immediately usable without a separate "Add Cargo to PATH" step.
+ENV PATH="/home/runner/.cargo/bin:${PATH}"
+
+USER runner
