@@ -7,7 +7,9 @@ FROM rust:${RUST_VERSION}-slim AS wasm-builder
 WORKDIR /build
 
 # Install wasm-pack
-RUN cargo install wasm-pack
+RUN --mount=type=cache,target=/usr/local/cargo/registry,id=cargo-registry \
+    --mount=type=cache,target=/usr/local/cargo/git,id=cargo-git \
+    cargo install wasm-pack
 
 # Copy workspace root and tc-crypto crate
 COPY Cargo.toml ./
@@ -18,7 +20,8 @@ RUN sed -i 's/members = \[.*\]/members = ["crates\/tc-crypto"]/' Cargo.toml
 
 # Build WASM
 WORKDIR /build/crates/tc-crypto
-RUN wasm-pack build --target web --release --out-dir /wasm-out
+RUN --mount=type=cache,target=/build/target,id=wasm-build-target \
+    wasm-pack build --target web --release --out-dir /wasm-out
 
 # Node build stage
 FROM node:${NODE_VERSION}-slim AS builder
@@ -27,7 +30,8 @@ WORKDIR /app
 # Install dependencies
 COPY web/.yarn ./.yarn
 COPY web/package.json web/yarn.lock web/.yarnrc.yml ./
-RUN yarn install --immutable
+RUN --mount=type=cache,target=/usr/local/share/.cache/yarn,sharing=locked \
+    yarn install --immutable
 
 # Copy WASM output from wasm-builder
 COPY --from=wasm-builder /wasm-out ./src/wasm/tc-crypto
