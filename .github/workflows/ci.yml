@@ -537,9 +537,9 @@ jobs:
           # Always retag from branch-master (last successful master build)
           SOURCE="${{ env.REGISTRY }}/${{ matrix.image }}:branch-master"
           echo "No source changes for ${{ matrix.image }} — retagging ${SOURCE} as ${{ github.sha }}"
-          docker pull "${SOURCE}"
-          docker tag "${SOURCE}" "${{ steps.tags.outputs.sha_tag }}"
-          docker push "${{ steps.tags.outputs.sha_tag }}"
+          docker buildx imagetools create \
+            --tag "${{ steps.tags.outputs.sha_tag }}" \
+            "${SOURCE}"
 
       - name: Set build metadata
         if: steps.should-build.outputs.changed != 'false'
