@@ -697,7 +697,8 @@ jobs:
         working-directory: service
         run: |
           set -euo pipefail
-          cargo llvm-cov --lib --lcov --output-path coverage/backend-unit.lcov --fail-under-lines 60
+          mkdir -p coverage
+          cargo llvm-cov --lcov --output-path coverage/backend-unit.lcov --fail-under-lines 60
 
       - name: Upload Vitest coverage
         if: always()
