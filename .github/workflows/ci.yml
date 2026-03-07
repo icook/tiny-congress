@@ -55,8 +55,12 @@ jobs:
           config: .kube-linter.yaml
 
       # GHA ubuntu-24.04 pre-installs Helm; catthehacker ARC runners do not.
+      # azure/setup-helm relies on GHA tool cache infrastructure absent on ARC runners.
       - name: Install Helm
-        uses: azure/setup-helm@v4
+        run: |
+          HELM_VERSION=v3.17.3
+          curl -fsSL "https://get.helm.sh/helm-${HELM_VERSION}-linux-amd64.tar.gz" \
+            | sudo tar -xz --strip-components=1 -C /usr/local/bin linux-amd64/helm
 
       - name: Validate environment values
         run: |
@@ -756,8 +760,12 @@ jobs:
           cluster_name: skaffold-ci
 
       # GHA ubuntu-24.04 pre-installs Helm; catthehacker ARC runners do not.
+      # azure/setup-helm relies on GHA tool cache infrastructure absent on ARC runners.
       - name: Install Helm
-        uses: azure/setup-helm@v4
+        run: |
+          HELM_VERSION=v3.17.3
+          curl -fsSL "https://get.helm.sh/helm-${HELM_VERSION}-linux-amd64.tar.gz" \
+            | sudo tar -xz --strip-components=1 -C /usr/local/bin linux-amd64/helm
 
       - name: Start KinD cluster in background
         run: |
