@@ -54,6 +54,10 @@ jobs:
           directory: kube/
           config: .kube-linter.yaml
 
+      # GHA ubuntu-24.04 pre-installs Helm; catthehacker ARC runners do not.
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+
       - name: Validate environment values
         run: |
           # Render the chart with each environment values file to catch drift.
@@ -159,6 +163,13 @@ jobs:
         run: |
           bash <(curl -fsSL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
           sudo install actionlint /usr/local/bin/
+
+      # GHA ubuntu-24.04 pre-installs shellcheck; it's not in catthehacker's apt sources.
+      - name: Install shellcheck
+        run: |
+          VERSION=v0.10.0
+          curl -fsSL "https://github.com/koalaman/shellcheck/releases/download/${VERSION}/shellcheck-${VERSION}.linux.x86_64.tar.xz" \
+            | sudo tar -xJ --strip-components=1 -C /usr/local/bin/ "shellcheck-${VERSION}/shellcheck"
 
       - name: Run static analysis
         run: just lint-static
@@ -274,6 +285,11 @@ jobs:
 
       - name: Install just
         uses: extractions/setup-just@v3
+
+      # GHA ubuntu-24.04 adds ~/.cargo/bin to PATH automatically; catthehacker ARC runners do not.
+      # Must run before taiki-e/install-action so installed binaries are in PATH for subsequent steps.
+      - name: Add Cargo to PATH
+        run: echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
 
       - name: Install cargo-deny
         uses: taiki-e/install-action@cargo-deny
@@ -502,14 +518,18 @@ jobs:
       - name: Check if build needed
         id: should-build
         run: |
+          # CI changes (workflows, justfile) force a full rebuild — the build
+          # process itself may have changed, so retagging stale images is wrong.
+          ci_changed="${{ needs.detect-changes.outputs.ci }}"
           case "${{ matrix.image }}" in
             tc-api-release) changed="${{ needs.detect-changes.outputs.api }}" ;;
             tc-ui-release)  changed="${{ needs.detect-changes.outputs.ui }}" ;;
             postgres)       changed="${{ needs.detect-changes.outputs.postgres }}" ;;
             *)              changed="true" ;;
           esac
+          if [ "$ci_changed" = "true" ]; then changed="true"; fi
           echo "changed=${changed}" >> "$GITHUB_OUTPUT"
-          echo "${{ matrix.image }}: changed=${changed}"
+          echo "${{ matrix.image }}: changed=${changed} (ci=${ci_changed})"
 
       - name: Retag existing image
         if: steps.should-build.outputs.changed == 'false'
@@ -520,6 +540,11 @@ jobs:
           docker buildx imagetools create \
             --tag "${{ steps.tags.outputs.sha_tag }}" \
             "${SOURCE}"
+
+      - name: Set build metadata
+        if: steps.should-build.outputs.changed != 'false'
+        id: buildmeta
+        run: echo "build_time=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_OUTPUT"
 
       - name: Extract versions from mise.toml
         if: steps.should-build.outputs.changed != 'false'
@@ -544,7 +569,7 @@ jobs:
             NODE_VERSION=${{ steps.versions.outputs.node }}
             GIT_SHA=${{ github.sha }}
             APP_VERSION=${{ github.ref_name }}@${{ github.sha }}
-            BUILD_TIME=${{ github.event.head_commit.timestamp || github.event.pull_request.updated_at }}
+            BUILD_TIME=${{ steps.buildmeta.outputs.build_time }}
           tags: |
             ${{ steps.tags.outputs.sha_tag }}
             ${{ steps.tags.outputs.branch_tag }}
@@ -1118,6 +1143,10 @@ jobs:
       - name: Install web dependencies
         working-directory: web
         run: yarn install --immutable
+
+      # GHA ubuntu-24.04 pre-installs gettext (envsubst); catthehacker ARC runners do not.
+      - name: Install envsubst
+        run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends gettext-base
 
       - name: Create site directory
         run: |

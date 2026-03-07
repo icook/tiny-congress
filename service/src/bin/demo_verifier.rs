@@ -595,18 +595,20 @@ async fn main() -> Result<(), anyhow::Error> {
                     if status == 201 {
                         tracing::info!("demo verifier device key registered via login");
                         bg_state.ready.store(true, Ordering::Relaxed);
+                        return;
                     } else if status == 409 {
                         tracing::debug!("demo verifier device key already registered");
                         bg_state.ready.store(true, Ordering::Relaxed);
-                    } else {
-                        let body = resp.text().await.unwrap_or_default();
-                        tracing::warn!(
-                            status,
-                            body = %body,
-                            "demo verifier login returned unexpected status"
-                        );
+                        return;
                     }
-                    return;
+                    let body = resp.text().await.unwrap_or_default();
+                    tracing::warn!(
+                        attempt,
+                        status,
+                        body = %body,
+                        "demo verifier login returned unexpected status — retrying in 5s"
+                    );
+                    tokio::time::sleep(delay).await;
                 }
                 Err(e) => {
                     tracing::warn!(
