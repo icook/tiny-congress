@@ -63,5 +63,9 @@ COPY --from=builder /app/dist/ ./
 # Entrypoint generates /tmp/config.js from env vars, then starts nginx
 COPY --chmod=755 web/docker-entrypoint.sh /docker-entrypoint.sh
 
+# Explicitly run as non-root (nginx user, UID 101 in nginx-unprivileged base image)
+# This satisfies Kubernetes Pod Security Standards and pod securityContext.runAsNonRoot
+USER nginx
+
 EXPOSE 8080
 ENTRYPOINT ["/docker-entrypoint.sh"]
