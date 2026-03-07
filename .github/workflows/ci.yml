@@ -22,7 +22,7 @@ jobs:
     name: Lint Rust formatting
     needs: [detect-changes]
     if: needs.detect-changes.outputs.api == 'true' || needs.detect-changes.outputs.ci == 'true'
-    runs-on: ${{ needs.detect-changes.outputs.runner-nano }}
+    runs-on: ${{ needs.detect-changes.outputs.runner-small }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
