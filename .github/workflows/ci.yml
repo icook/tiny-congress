@@ -771,44 +771,10 @@ jobs:
       packages: read
       checks: write
     env:
-      SKAFFOLD_DEFAULT_REPO: ghcr.io/${{ github.repository }}
-      SKAFFOLD_PROFILE: ci
       PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.cache/ms-playwright
-      KIND_CLUSTER_NAME: skaffold-ci-${{ github.run_id }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
-
-      - name: Install KinD tooling
-        uses: helm/kind-action@v1.13.0
-        with:
-          install_only: true
-          cluster_name: ${{ env.KIND_CLUSTER_NAME }}
-
-      # GHA ubuntu-24.04 pre-installs Helm; catthehacker ARC runners do not.
-      # azure/setup-helm relies on GHA tool cache infrastructure absent on ARC runners.
-      - name: Install Helm
-        run: |
-          HELM_VERSION=v3.17.3
-          curl -fsSL "https://get.helm.sh/helm-${HELM_VERSION}-linux-amd64.tar.gz" \
-            | sudo tar -xz --strip-components=1 -C /usr/local/bin linux-amd64/helm
-
-      - name: Start KinD cluster in background
-        run: |
-          set -euo pipefail
-          KIND_LOG="${RUNNER_TEMP}/kind.log"
-
-          echo "KIND_LOG=${KIND_LOG}" >> "$GITHUB_ENV"
-
-          echo "Starting KinD cluster ${KIND_CLUSTER_NAME} (logs: ${KIND_LOG})"
-          kind create cluster --name "${KIND_CLUSTER_NAME}" --wait 0s >"${KIND_LOG}" 2>&1 &
-
-      - name: Install Skaffold
-        run: |
-          set -euo pipefail
-          SKAFFOLD_VERSION="v$(cat .skaffold-version)"
-          curl -fsSL -o skaffold "https://storage.googleapis.com/skaffold/releases/${SKAFFOLD_VERSION}/skaffold-linux-amd64"
-          sudo install skaffold /usr/local/bin/skaffold
 
       - name: Login to GHCR
         uses: docker/login-action@v3
@@ -816,22 +782,6 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Write Skaffold artifacts file
-        id: artifacts
-        run: |
-          set -euo pipefail
-          artifacts_file="${RUNNER_TEMP}/skaffold-artifacts.json"
-          cat > "$artifacts_file" <<'EOF'
-          {
-            "builds": [
-              {"imageName": "tc-api-release", "tag": "${{ env.REGISTRY }}/tc-api-release:${{ github.sha }}"},
-              {"imageName": "tc-ui-release", "tag": "${{ env.REGISTRY }}/tc-ui-release:${{ github.sha }}"},
-              {"imageName": "postgres", "tag": "${{ env.REGISTRY }}/postgres:${{ github.sha }}"}
-            ]
-          }
-          EOF
-          echo "file=${artifacts_file}" >> "$GITHUB_OUTPUT"
 
       - name: Setup web toolchain
         uses: ./.github/actions/setup-web
@@ -864,45 +814,75 @@ jobs:
           cd crates/tc-crypto
           wasm-pack build --target web --release --out-dir ../../web/src/wasm/tc-crypto
 
-      - name: Wait for KinD readiness
+      - name: Build API binary
+        working-directory: service
         run: |
           set -euo pipefail
-          : "${KIND_LOG:?KIND_LOG not set}"
-          echo "Waiting for cluster API to become available..."
-          if ! timeout 180 bash -c "until kubectl cluster-info --context kind-${KIND_CLUSTER_NAME} >/dev/null 2>&1; do sleep 5; done"; then
-            echo "KinD did not finish starting in time; dumping logs."
-            cat "${KIND_LOG}" || true
+          cargo build --release
+          echo "API_BINARY_PATH=${GITHUB_WORKSPACE}/target/release/tinycongress-api" >> "$GITHUB_ENV"
+
+      - name: Start PostgreSQL
+        id: postgres
+        run: |
+          set -euo pipefail
+          CONTAINER_ID=$(docker run -d \
+            -e POSTGRES_USER=postgres \
+            -e POSTGRES_PASSWORD=postgres \
+            -e POSTGRES_DB=tiny-congress \
+            -p 5432:5432 \
+            "${REGISTRY}/postgres:${{ github.sha }}")
+          echo "POSTGRES_CONTAINER_ID=${CONTAINER_ID}" >> "$GITHUB_OUTPUT"
+
+          echo "Waiting for PostgreSQL to be ready..."
+          for _ in {1..60}; do
+            if docker exec "${CONTAINER_ID}" pg_isready -U postgres >/dev/null 2>&1; then
+              echo "PostgreSQL is ready"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "PostgreSQL failed to start within 60 seconds"
+          docker logs "${CONTAINER_ID}" || true
+          exit 1
+
+      - name: Start API
+        id: api
+        run: |
+          set -euo pipefail
+          API_LOG="${RUNNER_TEMP}/api.log"
+          echo "API_LOG=${API_LOG}" >> "$GITHUB_ENV"
+
+          # figment's Env provider cannot parse a JSON array string into Vec<T>;
+          # write verifiers to a YAML file that figment reads from the CWD instead.
+          API_DIR="${RUNNER_TEMP}/tc-api"
+          mkdir -p "${API_DIR}"
+          cat > "${API_DIR}/config.yaml" <<'EOF'
+verifiers:
+  - name: sim_verifier
+    public_key: ovySo2At7yyERm9siRnjP_txpqBLLRwIjDbH5qVAjG0
+EOF
+
+          TC_DATABASE__HOST=127.0.0.1 \
+          TC_DATABASE__PORT=5432 \
+          TC_DATABASE__NAME=tiny-congress \
+          TC_DATABASE__USER=postgres \
+          TC_DATABASE__PASSWORD=postgres \
+          TC_DATABASE__MAX_CONNECTIONS=10 \
+          TC_DATABASE__MIGRATIONS_DIR="${GITHUB_WORKSPACE}/service/migrations" \
+          TC_SYNTHETIC_BACKUP_KEY=dev-local-synthetic-backup-key-0123456789abcdef \
+          TC_CORS__ALLOWED_ORIGINS=http://localhost:5173,http://127.0.0.1:5173 \
+          TC_GRAPHQL__PLAYGROUND_ENABLED=false \
+          TC_SWAGGER__ENABLED=false \
+          TC_SERVER__PORT=8080 \
+            bash -c "cd '${API_DIR}' && exec '${API_BINARY_PATH}'" >"${API_LOG}" 2>&1 &
+          echo "API_PID=$!" >> "$GITHUB_OUTPUT"
+
+          timeout 60 bash -c 'until curl -sf http://localhost:8080/health >/dev/null 2>&1; do sleep 1; done' || {
+            echo "API failed to start within 60 seconds"
+            tail -50 "${API_LOG}" || true
             exit 1
-          fi
-          kubectl version --client=true
-          kubectl cluster-info
-          kubectl get nodes -o wide
-          # Wait for default SA — kube-controller-manager creates it shortly after
-          # API server starts. On slower storage (ARC runners) this can race.
-          kubectl wait serviceaccount default -n default \
-            --for=jsonpath='{.metadata.name}'=default --timeout=60s
-
-      - name: Configure registry access for KinD
-        run: |
-          set -euo pipefail
-          kubectl create secret docker-registry ghcr-cred \
-            --namespace default \
-            --docker-server=ghcr.io \
-            --docker-username="${{ github.actor }}" \
-            --docker-password="${{ secrets.GITHUB_TOKEN }}" \
-            --dry-run=client -o yaml | kubectl apply -f -
-
-          kubectl patch serviceaccount default \
-            -n default \
-            --type merge \
-            -p '{"imagePullSecrets":[{"name":"ghcr-cred"}]}'
-
-      - name: Deploy with Skaffold
-        run: |
-          set -euo pipefail
-          skaffold deploy -p "${SKAFFOLD_PROFILE}" --status-check=true \
-            --kube-context "kind-${KIND_CLUSTER_NAME}" \
-            --build-artifacts "${{ steps.artifacts.outputs.file }}"
+          }
+          echo "API is ready"
 
       - name: Build instrumented frontend for E2E tests
         working-directory: web
@@ -912,26 +892,42 @@ jobs:
         if: always()
         working-directory: web
         run: |
-          set -euo pipefail
           {
             echo "### Bundle Size"
             echo ""
-            echo "| Asset | Size | Gzip |"
-            echo "|-------|------|------|"
-            find dist -type f \( -name "*.js" -o -name "*.css" \) -exec sh -c '
-              file="$1"
-              size=$(stat -f%z "$file" 2>/dev/null || stat -c%s "$file")
-              gzip_size=$(gzip -c "$file" | wc -c)
-              printf "| %s | %s | %s |\n" \
-                "$(basename "$file")" \
-                "$(numfmt --to=iec-i --suffix=B "$size" 2>/dev/null || echo "${size}B")" \
-                "$(numfmt --to=iec-i --suffix=B "$gzip_size" 2>/dev/null || echo "${gzip_size}B")"
-            ' _ {} \; | sort -k3 -h -r
-            echo ""
-            total_size=$(find dist -type f \( -name "*.js" -o -name "*.css" \) -exec stat -f%z {} + 2>/dev/null | awk '{sum+=$1} END {print sum}' || \
-                         find dist -type f \( -name "*.js" -o -name "*.css" \) -exec stat -c%s {} + | awk '{sum+=$1} END {print sum}')
-            echo "**Total:** $(numfmt --to=iec-i --suffix=B "$total_size" 2>/dev/null || echo "${total_size}B")"
+            if [ ! -d dist ] || ! find dist -type f \( -name "*.js" -o -name "*.css" \) | grep -q .; then
+              echo "No build output found"
+            else
+              echo "| Asset | Size | Gzip |"
+              echo "|-------|------|------|"
+              find dist -type f \( -name "*.js" -o -name "*.css" \) -exec sh -c '
+                file="$1"
+                size=$(stat -f%z "$file" 2>/dev/null || stat -c%s "$file")
+                gzip_size=$(gzip -c "$file" | wc -c)
+                printf "| %s | %s | %s |\n" \
+                  "$(basename "$file")" \
+                  "$(numfmt --to=iec-i --suffix=B "$size" 2>/dev/null || echo "${size}B")" \
+                  "$(numfmt --to=iec-i --suffix=B "$gzip_size" 2>/dev/null || echo "${gzip_size}B")"
+              ' _ {} \; | sort -k3 -h -r
+              echo ""
+              total_size=$(find dist -type f \( -name "*.js" -o -name "*.css" \) -exec stat -f%z {} + 2>/dev/null | awk '{sum+=$1} END {print sum}' || \
+                           find dist -type f \( -name "*.js" -o -name "*.css" \) -exec stat -c%s {} + | awk '{sum+=$1} END {print sum}')
+              echo "**Total:** $(numfmt --to=iec-i --suffix=B "$total_size" 2>/dev/null || echo "${total_size}B")"
+            fi
           } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Start frontend preview server
+        id: preview
+        working-directory: web
+        run: |
+          set -euo pipefail
+          yarn preview --host 0.0.0.0 --port 5173 --strictPort &
+          echo "PREVIEW_PID=$!" >> "$GITHUB_OUTPUT"
+          timeout 60 bash -c 'until curl -sf http://localhost:5173 >/dev/null 2>&1; do sleep 1; done' || {
+            echo "Frontend preview server failed to start within 60 seconds"
+            exit 1
+          }
+          echo "Frontend is ready"
 
       - name: Run Playwright E2E tests
         working-directory: web
@@ -942,24 +938,17 @@ jobs:
           PLAYWRIGHT_API_URL: http://localhost:8080/graphql
         run: |
           set -euo pipefail
-
-          # Port-forward API from cluster
-          kubectl port-forward service/tc 8080:8080 &
-          PF_API_PID=$!
-          timeout 60 bash -c 'until curl -sf http://localhost:8080/health >/dev/null; do sleep 1; done'
-
-          # Start local preview server with instrumented build
-          yarn preview --host 0.0.0.0 --port 5173 --strictPort &
-          PREVIEW_PID=$!
-          timeout 60 bash -c 'until curl -sf http://localhost:5173 >/dev/null; do sleep 1; done'
-
-          # Run tests - coverage report generated in Playwright global teardown
           yarn playwright:clean
           yarn playwright:test --project chromium || TEST_EXIT=$?
-
-          # Cleanup
-          kill "$PREVIEW_PID" "$PF_API_PID" 2>/dev/null || true
           exit "${TEST_EXIT:-0}"
+
+      - name: Cleanup services
+        if: always()
+        run: |
+          kill "${{ steps.api.outputs.API_PID }}" 2>/dev/null || true
+          kill "${{ steps.preview.outputs.PREVIEW_PID }}" 2>/dev/null || true
+          docker stop "${{ steps.postgres.outputs.POSTGRES_CONTAINER_ID }}" 2>/dev/null || true
+          docker rm "${{ steps.postgres.outputs.POSTGRES_CONTAINER_ID }}" 2>/dev/null || true
 
       - name: Publish Playwright test report
         if: always() && hashFiles('web/reports/playwright.xml') != ''
@@ -999,18 +988,14 @@ jobs:
       - name: Dump diagnostics on failure
         if: failure()
         run: |
-          echo '--- Pods ---'
-          kubectl get pods -A -o wide || true
-          echo '--- Services ---'
-          kubectl get svc -A || true
-          echo '--- Events ---'
-          kubectl get events -A --sort-by=.lastTimestamp || true
-          echo '--- All Resources ---'
-          kubectl get all -n default || true
-
-      - name: Cleanup KinD cluster
-        if: always()
-        run: kind delete cluster --name "${KIND_CLUSTER_NAME}" || true
+          echo '--- Running processes ---'
+          pgrep -a -f 'tinycongress_api|node' || true
+          echo '--- Docker containers ---'
+          docker ps -a || true
+          echo '--- Network ports ---'
+          netstat -tuln 2>/dev/null | grep -E '5432|8080|5173' || true
+          echo '--- API logs (last 50 lines) ---'
+          tail -50 "${API_LOG}" 2>/dev/null || echo "No API log found"
 
   # ── CI gate (single required check) ─────────────────────
   ci-gate:
