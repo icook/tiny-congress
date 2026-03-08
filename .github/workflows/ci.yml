@@ -822,12 +822,25 @@ jobs:
           echo "Starting KinD cluster ${KIND_CLUSTER_NAME} (logs: ${KIND_LOG})"
           kind create cluster --name "${KIND_CLUSTER_NAME}" --wait 0s >"${KIND_LOG}" 2>&1 &
 
+      - name: Cache Skaffold binary
+        id: cache-skaffold
+        uses: runs-on/cache@v4
+        with:
+          path: ${{ runner.temp }}/skaffold-bin
+          key: skaffold-${{ runner.os }}-${{ hashFiles('.skaffold-version') }}
+
       - name: Install Skaffold
         run: |
           set -euo pipefail
-          SKAFFOLD_VERSION="v$(cat .skaffold-version)"
-          curl -fsSL -o skaffold "https://storage.googleapis.com/skaffold/releases/${SKAFFOLD_VERSION}/skaffold-linux-amd64"
-          sudo install skaffold /usr/local/bin/skaffold
+          SKAFFOLD_BIN="${RUNNER_TEMP}/skaffold-bin/skaffold"
+          if [ ! -f "$SKAFFOLD_BIN" ]; then
+            mkdir -p "${RUNNER_TEMP}/skaffold-bin"
+            SKAFFOLD_VERSION="v$(cat .skaffold-version)"
+            curl -fsSL -o "$SKAFFOLD_BIN" \
+              "https://storage.googleapis.com/skaffold/releases/${SKAFFOLD_VERSION}/skaffold-linux-amd64"
+            chmod +x "$SKAFFOLD_BIN"
+          fi
+          sudo install "$SKAFFOLD_BIN" /usr/local/bin/skaffold
 
       - name: Login to GHCR
         uses: docker/login-action@v3
