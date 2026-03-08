@@ -62,3 +62,35 @@ runs:
           target
         key: rust-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
         restore-keys: rust-${{ runner.os }}-
+
+    # sccache: compile-time caching via Garage S3 (ARC runners only).
+    # GHA-hosted runners cannot reach the in-cluster Garage endpoint, so
+    # sccache is skipped there — compilation falls back to the dependency
+    # cache above with no other changes needed.
+    - name: Install sccache
+      if: runner.name != 'ubuntu-latest' && startsWith(runner.name, 'arc-runner')
+      uses: taiki-e/install-action@v2
+      with:
+        tool: sccache
+
+    - name: Configure sccache (ARC runners → Garage S3)
+      if: runner.name != 'ubuntu-latest' && startsWith(runner.name, 'arc-runner')
+      shell: bash
+      run: |
+        # Validate that Garage credentials are available before enabling sccache.
+        # Missing credentials produce a clear error rather than silent cache misses.
+        : "${GARAGE_ACCESS_KEY:?GARAGE_ACCESS_KEY secret is not set for this job}"
+        : "${GARAGE_SECRET_KEY:?GARAGE_SECRET_KEY secret is not set for this job}"
+
+        {
+          echo "SCCACHE_BUCKET=sccache"
+          echo "SCCACHE_ENDPOINT=http://garage.garage.svc.cluster.local:3900"
+          echo "SCCACHE_REGION=garage"
+          echo "SCCACHE_S3_USE_SSL=false"
+          echo "AWS_ACCESS_KEY_ID=${GARAGE_ACCESS_KEY}"
+          echo "AWS_SECRET_ACCESS_KEY=${GARAGE_SECRET_KEY}"
+          # Keep the daemon alive for the full job (default 600 s is too short
+          # for heavy compilation jobs like rust-coverage and codegen-check).
+          echo "SCCACHE_IDLE_TIMEOUT=0"
+          echo "RUSTC_WRAPPER=sccache"
+        } >> "$GITHUB_ENV"
