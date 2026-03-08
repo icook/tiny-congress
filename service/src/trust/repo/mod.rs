@@ -49,12 +49,17 @@ pub struct InfluenceRecord {
 }
 
 /// A queued trust action awaiting batch processing.
+#[derive(Debug, Clone, sqlx::FromRow)]
 pub struct ActionRecord {
     pub id: Uuid,
     pub actor_id: Uuid,
     pub action_type: String,
     pub payload: serde_json::Value,
     pub status: String,
+    pub quota_date: chrono::NaiveDate,
+    pub error_message: Option<String>,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub processed_at: Option<chrono::DateTime<chrono::Utc>>,
 }
 
 /// A denouncement filed by one user against another.
@@ -221,23 +226,23 @@ impl TrustRepo for PgTrustRepo {
         action_type: &str,
         payload: &serde_json::Value,
     ) -> Result<ActionRecord, TrustRepoError> {
-        action_queue::enqueue_action(&self.pool, actor_id, action_type, payload)
+        action_queue::enqueue_action(&self.pool, actor_id, action_type, payload).await
     }
 
     async fn count_daily_actions(&self, actor_id: Uuid) -> Result<i64, TrustRepoError> {
-        action_queue::count_daily_actions(&self.pool, actor_id)
+        action_queue::count_daily_actions(&self.pool, actor_id).await
     }
 
     async fn claim_pending_actions(&self, limit: i64) -> Result<Vec<ActionRecord>, TrustRepoError> {
-        action_queue::claim_pending_actions(&self.pool, limit)
+        action_queue::claim_pending_actions(&self.pool, limit).await
     }
 
     async fn complete_action(&self, action_id: Uuid) -> Result<(), TrustRepoError> {
-        action_queue::complete_action(&self.pool, action_id)
+        action_queue::complete_action(&self.pool, action_id).await
     }
 
     async fn fail_action(&self, action_id: Uuid, error: &str) -> Result<(), TrustRepoError> {
-        action_queue::fail_action(&self.pool, action_id, error)
+        action_queue::fail_action(&self.pool, action_id, error).await
     }
 
     async fn create_denouncement(
