@@ -829,14 +829,26 @@ jobs:
             -e POSTGRES_USER=postgres \
             -e POSTGRES_PASSWORD=postgres \
             -e POSTGRES_DB=tiny-congress \
-            -p 5432:5432 \
+            -p 0:5432 \
             "${REGISTRY}/postgres:${{ github.sha }}")
           echo "POSTGRES_CONTAINER_ID=${CONTAINER_ID}" >> "$GITHUB_OUTPUT"
+
+          # On ARC runners Docker runs on a remote DinD pod; extract its hostname
+          # from DOCKER_HOST (e.g. tcp://dind.dind.svc.cluster.local:2375).
+          # On GHA-hosted runners DOCKER_HOST is unset and postgres binds to localhost.
+          if [ -n "${DOCKER_HOST:-}" ]; then
+            PG_HOST=$(echo "$DOCKER_HOST" | sed 's|tcp://||;s|:[0-9]*$||')
+          else
+            PG_HOST="127.0.0.1"
+          fi
+          PG_PORT=$(docker port "${CONTAINER_ID}" 5432 | grep '0.0.0.0' | cut -d: -f2)
+          echo "POSTGRES_HOST=${PG_HOST}" >> "$GITHUB_OUTPUT"
+          echo "POSTGRES_PORT=${PG_PORT}" >> "$GITHUB_OUTPUT"
 
           echo "Waiting for PostgreSQL to be ready..."
           for _ in {1..60}; do
             if docker exec "${CONTAINER_ID}" pg_isready -U postgres >/dev/null 2>&1; then
-              echo "PostgreSQL is ready"
+              echo "PostgreSQL is ready at ${PG_HOST}:${PG_PORT}"
               exit 0
             fi
             sleep 1
@@ -859,8 +871,8 @@ jobs:
           printf 'verifiers:\n  - name: sim_verifier\n    public_key: ovySo2At7yyERm9siRnjP_txpqBLLRwIjDbH5qVAjG0\n' \
             > "${API_DIR}/config.yaml"
 
-          TC_DATABASE__HOST=127.0.0.1 \
-          TC_DATABASE__PORT=5432 \
+          TC_DATABASE__HOST=${{ steps.postgres.outputs.POSTGRES_HOST }} \
+          TC_DATABASE__PORT=${{ steps.postgres.outputs.POSTGRES_PORT }} \
           TC_DATABASE__NAME=tiny-congress \
           TC_DATABASE__USER=postgres \
           TC_DATABASE__PASSWORD=postgres \
