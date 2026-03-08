@@ -434,14 +434,12 @@ jobs:
           commit_msg=$(git log -1 --format=%s HEAD)
           if echo "$commit_msg" | grep -qF '[arc]' || [ "${{ vars.USE_ARC_RUNNERS }}" = "true" ]; then
             {
-              echo "nano=arc-runner-small"
               echo "small=arc-runner-small"
               echo "medium=arc-runner-medium"
               echo "large=arc-runner-large"
             } >> "$GITHUB_OUTPUT"
           else
             {
-              echo "nano=ubuntu-latest"
               echo "small=ubuntu-latest"
               echo "medium=ubuntu-latest"
               echo "large=ubuntu-latest"
@@ -796,6 +794,7 @@ jobs:
         with:
           path: ${{ env.PLAYWRIGHT_BROWSERS_PATH }}
           key: playwright-chromium-${{ hashFiles('web/yarn.lock') }}
+          save-always: true
 
       - name: Install Playwright browsers
         working-directory: web
