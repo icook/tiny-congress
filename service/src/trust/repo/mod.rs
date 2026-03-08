@@ -39,10 +39,13 @@ impl From<sqlx::Error> for TrustRepoError {
 }
 
 /// Influence balance for a user.
+#[derive(Debug, Clone, sqlx::FromRow)]
 pub struct InfluenceRecord {
     pub user_id: Uuid,
-    pub staked: f32,
-    pub spent: f32,
+    pub total_influence: f32,
+    pub staked_influence: f32,
+    pub spent_influence: f32,
+    pub updated_at: chrono::DateTime<chrono::Utc>,
 }
 
 /// A queued trust action awaiting batch processing.
@@ -200,7 +203,7 @@ impl TrustRepo for PgTrustRepo {
         &self,
         user_id: Uuid,
     ) -> Result<InfluenceRecord, TrustRepoError> {
-        influence::get_or_create_influence(&self.pool, user_id)
+        influence::get_or_create_influence(&self.pool, user_id).await
     }
 
     async fn update_influence(
@@ -209,7 +212,7 @@ impl TrustRepo for PgTrustRepo {
         staked_delta: f32,
         spent_delta: f32,
     ) -> Result<InfluenceRecord, TrustRepoError> {
-        influence::update_influence(&self.pool, user_id, staked_delta, spent_delta)
+        influence::update_influence(&self.pool, user_id, staked_delta, spent_delta).await
     }
 
     async fn enqueue_action(
