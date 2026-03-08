@@ -852,6 +852,16 @@ jobs:
           API_LOG="${RUNNER_TEMP}/api.log"
           echo "API_LOG=${API_LOG}" >> "$GITHUB_ENV"
 
+          # figment's Env provider cannot parse a JSON array string into Vec<T>;
+          # write verifiers to a YAML file that figment reads from the CWD instead.
+          API_DIR="${RUNNER_TEMP}/tc-api"
+          mkdir -p "${API_DIR}"
+          cat > "${API_DIR}/config.yaml" <<'EOF'
+verifiers:
+  - name: sim_verifier
+    public_key: ovySo2At7yyERm9siRnjP_txpqBLLRwIjDbH5qVAjG0
+EOF
+
           TC_DATABASE__HOST=127.0.0.1 \
           TC_DATABASE__PORT=5432 \
           TC_DATABASE__NAME=tiny-congress \
@@ -864,8 +874,7 @@ jobs:
           TC_GRAPHQL__PLAYGROUND_ENABLED=false \
           TC_SWAGGER__ENABLED=false \
           TC_SERVER__PORT=8080 \
-          TC_VERIFIERS='[{"name":"sim_verifier","public_key":"ovySo2At7yyERm9siRnjP_txpqBLLRwIjDbH5qVAjG0"}]' \
-            "${API_BINARY_PATH}" >"${API_LOG}" 2>&1 &
+            bash -c "cd '${API_DIR}' && exec '${API_BINARY_PATH}'" >"${API_LOG}" 2>&1 &
           echo "API_PID=$!" >> "$GITHUB_OUTPUT"
 
           timeout 60 bash -c 'until curl -sf http://localhost:8080/health >/dev/null 2>&1; do sleep 1; done' || {
