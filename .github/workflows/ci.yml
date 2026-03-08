@@ -347,21 +347,22 @@ jobs:
           else
             echo "Creating new postgres container..."
             docker run -d --name "$CONTAINER_NAME" \
-              -p 0:5432 \
+              --network host \
               -e POSTGRES_USER=postgres \
               -e POSTGRES_PASSWORD=postgres \
               ${{ env.REGISTRY }}/postgres:${{ github.sha }}
           fi
 
-          # Resolve Docker host based on runner environment
-          if [ "$RUNNER_ENVIRONMENT" = "self-hosted" ]; then
-            DOCKER_HOSTNAME="dind.dind.svc.cluster.local"
+          # On ARC runners Docker runs on a remote DinD pod; postgres uses host network
+          # so it's directly accessible on the DinD service IP at port 5432.
+          # On GHA-hosted runners DOCKER_HOST is unset and postgres binds to localhost.
+          if [ -n "${DOCKER_HOST:-}" ]; then
+            DOCKER_HOSTNAME=$(echo "$DOCKER_HOST" | sed 's|tcp://||;s|:[0-9]*$||')
           else
             DOCKER_HOSTNAME="127.0.0.1"
           fi
 
-          PG_PORT=$(docker port "$CONTAINER_NAME" 5432 \
-            | grep '0.0.0.0' | cut -d: -f2 | cut -d/ -f1)
+          PG_PORT="5432"
 
           # Wait for postgres to be ready
           for i in {1..30}; do
@@ -826,22 +827,23 @@ jobs:
         run: |
           set -euo pipefail
           CONTAINER_ID=$(docker run -d \
+            --network host \
             -e POSTGRES_USER=postgres \
             -e POSTGRES_PASSWORD=postgres \
             -e POSTGRES_DB=tiny-congress \
-            -p 0:5432 \
             "${REGISTRY}/postgres:${{ github.sha }}")
           echo "POSTGRES_CONTAINER_ID=${CONTAINER_ID}" >> "$GITHUB_OUTPUT"
 
-          # On ARC runners Docker runs on a remote DinD pod; extract its hostname
-          # from DOCKER_HOST (e.g. tcp://dind.dind.svc.cluster.local:2375).
+          # On ARC runners Docker runs on a remote DinD pod; postgres uses host network
+          # so it's directly accessible on the DinD service IP at port 5432.
           # On GHA-hosted runners DOCKER_HOST is unset and postgres binds to localhost.
           if [ -n "${DOCKER_HOST:-}" ]; then
             PG_HOST=$(echo "$DOCKER_HOST" | sed 's|tcp://||;s|:[0-9]*$||')
+            PG_PORT="5432"
           else
             PG_HOST="127.0.0.1"
+            PG_PORT="5432"
           fi
-          PG_PORT=$(docker port "${CONTAINER_ID}" 5432 | grep '0.0.0.0' | cut -d: -f2 | cut -d/ -f1)
           echo "POSTGRES_HOST=${PG_HOST}" >> "$GITHUB_OUTPUT"
           echo "POSTGRES_PORT=${PG_PORT}" >> "$GITHUB_OUTPUT"
 
