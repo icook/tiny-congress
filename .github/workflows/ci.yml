@@ -856,11 +856,8 @@ jobs:
           # write verifiers to a YAML file that figment reads from the CWD instead.
           API_DIR="${RUNNER_TEMP}/tc-api"
           mkdir -p "${API_DIR}"
-          cat > "${API_DIR}/config.yaml" <<'EOF'
-verifiers:
-  - name: sim_verifier
-    public_key: ovySo2At7yyERm9siRnjP_txpqBLLRwIjDbH5qVAjG0
-EOF
+          printf 'verifiers:\n  - name: sim_verifier\n    public_key: ovySo2At7yyERm9siRnjP_txpqBLLRwIjDbH5qVAjG0\n' \
+            > "${API_DIR}/config.yaml"
 
           TC_DATABASE__HOST=127.0.0.1 \
           TC_DATABASE__PORT=5432 \
