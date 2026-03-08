@@ -99,7 +99,7 @@ async fn my_endorsements(
                         id: e.id,
                         subject_id: e.subject_id,
                         topic: e.topic,
-                        issuer_id: e.issuer_id,
+                        issuer_id: e.endorser_id,
                         created_at: e.created_at.to_rfc3339(),
                         revoked: e.revoked_at.is_some(),
                     })

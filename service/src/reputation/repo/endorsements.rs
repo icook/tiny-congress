@@ -10,7 +10,7 @@ pub struct EndorsementRecord {
     pub id: Uuid,
     pub subject_id: Uuid,
     pub topic: String,
-    pub issuer_id: Option<Uuid>,
+    pub endorser_id: Option<Uuid>,
     pub evidence: Option<serde_json::Value>,
     pub created_at: DateTime<Utc>,
     pub revoked_at: Option<DateTime<Utc>>,
@@ -42,7 +42,7 @@ struct EndorsementRow {
     id: Uuid,
     subject_id: Uuid,
     topic: String,
-    issuer_id: Option<Uuid>,
+    endorser_id: Option<Uuid>,
     evidence: Option<serde_json::Value>,
     created_at: DateTime<Utc>,
     revoked_at: Option<DateTime<Utc>>,
@@ -53,7 +53,7 @@ fn row_to_record(row: EndorsementRow) -> EndorsementRecord {
         id: row.id,
         subject_id: row.subject_id,
         topic: row.topic,
-        issuer_id: row.issuer_id,
+        endorser_id: row.endorser_id,
         evidence: row.evidence,
         created_at: row.created_at,
         revoked_at: row.revoked_at,
@@ -70,7 +70,7 @@ pub async fn create_endorsement<'e, E>(
     executor: E,
     subject_id: Uuid,
     topic: &str,
-    issuer_id: Option<Uuid>,
+    endorser_id: Option<Uuid>,
     evidence: Option<&serde_json::Value>,
 ) -> Result<CreatedEndorsement, EndorsementRepoError>
 where
@@ -80,14 +80,14 @@ where
 
     let result = sqlx::query(
         r"
-        INSERT INTO reputation__endorsements (id, subject_id, topic, issuer_id, evidence)
+        INSERT INTO reputation__endorsements (id, subject_id, topic, endorser_id, evidence)
         VALUES ($1, $2, $3, $4, $5)
         ",
     )
     .bind(id)
     .bind(subject_id)
     .bind(topic)
-    .bind(issuer_id)
+    .bind(endorser_id)
     .bind(evidence)
     .execute(executor)
     .await;
@@ -101,7 +101,7 @@ where
         Err(e) => {
             if let sqlx::Error::Database(ref db_err) = e {
                 if let Some(constraint) = db_err.constraint() {
-                    if constraint == "uq_endorsements_subject_topic_issuer"
+                    if constraint == "uq_endorsements_subject_topic_endorser"
                         || constraint == "uq_endorsements_genesis"
                     {
                         return Err(EndorsementRepoError::Duplicate);
@@ -152,7 +152,7 @@ where
 {
     let rows = sqlx::query_as::<_, EndorsementRow>(
         r"
-        SELECT id, subject_id, topic, issuer_id, evidence, created_at, revoked_at
+        SELECT id, subject_id, topic, endorser_id, evidence, created_at, revoked_at
         FROM reputation__endorsements
         WHERE subject_id = $1
         ORDER BY created_at DESC
@@ -179,7 +179,7 @@ where
 {
     let row = sqlx::query_as::<_, EndorsementRow>(
         r"
-        SELECT id, subject_id, topic, issuer_id, evidence, created_at, revoked_at
+        SELECT id, subject_id, topic, endorser_id, evidence, created_at, revoked_at
         FROM reputation__endorsements
         WHERE subject_id = $1 AND topic = $2
         ",

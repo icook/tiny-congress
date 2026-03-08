@@ -34,7 +34,7 @@ pub trait EndorsementService: Send + Sync {
         &self,
         subject_id: Uuid,
         topic: &str,
-        issuer_id: Option<Uuid>,
+        endorser_id: Option<Uuid>,
         evidence: Option<&serde_json::Value>,
     ) -> Result<CreatedEndorsement, EndorsementError>;
 
@@ -71,7 +71,7 @@ impl EndorsementService for DefaultEndorsementService {
         &self,
         subject_id: Uuid,
         topic: &str,
-        issuer_id: Option<Uuid>,
+        endorser_id: Option<Uuid>,
         evidence: Option<&serde_json::Value>,
     ) -> Result<CreatedEndorsement, EndorsementError> {
         if topic.is_empty() {
@@ -81,7 +81,7 @@ impl EndorsementService for DefaultEndorsementService {
         }
 
         self.repo
-            .create_endorsement(subject_id, topic, issuer_id, evidence)
+            .create_endorsement(subject_id, topic, endorser_id, evidence)
             .await
             .map_err(|e| match e {
                 EndorsementRepoError::Duplicate => EndorsementError::Duplicate,

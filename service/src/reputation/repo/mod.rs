@@ -25,7 +25,7 @@ pub trait ReputationRepo: Send + Sync {
         &self,
         subject_id: Uuid,
         topic: &str,
-        issuer_id: Option<Uuid>,
+        endorser_id: Option<Uuid>,
         evidence: Option<&serde_json::Value>,
     ) -> Result<CreatedEndorsement, EndorsementRepoError>;
 
@@ -74,10 +74,10 @@ impl ReputationRepo for PgReputationRepo {
         &self,
         subject_id: Uuid,
         topic: &str,
-        issuer_id: Option<Uuid>,
+        endorser_id: Option<Uuid>,
         evidence: Option<&serde_json::Value>,
     ) -> Result<CreatedEndorsement, EndorsementRepoError> {
-        endorsements::create_endorsement(&self.pool, subject_id, topic, issuer_id, evidence).await
+        endorsements::create_endorsement(&self.pool, subject_id, topic, endorser_id, evidence).await
     }
 
     async fn has_endorsement(
