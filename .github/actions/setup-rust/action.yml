@@ -77,18 +77,17 @@ runs:
       if: runner.name != 'ubuntu-latest' && startsWith(runner.name, 'arc-runner')
       shell: bash
       run: |
-        # Validate that Garage credentials are available before enabling sccache.
-        # Missing credentials produce a clear error rather than silent cache misses.
-        : "${GARAGE_ACCESS_KEY:?GARAGE_ACCESS_KEY secret is not set for this job}"
-        : "${GARAGE_SECRET_KEY:?GARAGE_SECRET_KEY secret is not set for this job}"
+        # AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY are injected into ARC runner
+        # pods via the gha-cache-s3-runner-credentials Kubernetes secret (same
+        # credentials used by runs-on/cache). No GitHub Actions secrets needed.
+        : "${AWS_ACCESS_KEY_ID:?AWS_ACCESS_KEY_ID not set — check arc runner pod spec}"
+        : "${AWS_SECRET_ACCESS_KEY:?AWS_SECRET_ACCESS_KEY not set — check arc runner pod spec}"
 
         {
           echo "SCCACHE_BUCKET=sccache"
           echo "SCCACHE_ENDPOINT=http://garage.garage.svc.cluster.local:3900"
           echo "SCCACHE_REGION=garage"
           echo "SCCACHE_S3_USE_SSL=false"
-          echo "AWS_ACCESS_KEY_ID=${GARAGE_ACCESS_KEY}"
-          echo "AWS_SECRET_ACCESS_KEY=${GARAGE_SECRET_KEY}"
           # Keep the daemon alive for the full job (default 600 s is too short
           # for heavy compilation jobs like rust-coverage and codegen-check).
           echo "SCCACHE_IDLE_TIMEOUT=0"
