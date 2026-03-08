@@ -417,7 +417,7 @@ jobs:
       ci: ${{ steps.filter.outputs.ci }}
       # Runner tier outputs — set all at once, each job picks the right size.
       # Toggle: gh variable set USE_ARC_RUNNERS --body "false" --repo icook/tiny-congress
-      runner-nano: ${{ steps.runner.outputs.nano }}
+      runner-nano: ${{ steps.runner.outputs.small }}
       runner-small: ${{ steps.runner.outputs.small }}
       runner-medium: ${{ steps.runner.outputs.medium }}
       runner-large: ${{ steps.runner.outputs.large }}
@@ -433,7 +433,7 @@ jobs:
           commit_msg=$(git log -1 --format=%s HEAD)
           if echo "$commit_msg" | grep -qF '[arc]' || [ "${{ vars.USE_ARC_RUNNERS }}" = "true" ]; then
             {
-              echo "nano=arc-runner-nano"
+              echo "nano=arc-runner-small"
               echo "small=arc-runner-small"
               echo "medium=arc-runner-medium"
               echo "large=arc-runner-large"
