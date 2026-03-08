@@ -44,7 +44,7 @@ export interface paths {
      *
      *     # Errors
      *
-     *     Returns an error response for unauthorized, forbidden, not-found, conflict, or internal errors.
+     *     Returns an error response for unauthorized, forbidden, not-found, or internal errors.
      */
     post: operations['create_endorsement_as_verifier'];
     delete?: never;
@@ -179,13 +179,6 @@ export interface operations {
       };
       /** @description User not found */
       404: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-      /** @description Duplicate endorsement */
-      409: {
         headers: {
           [name: string]: unknown;
         };

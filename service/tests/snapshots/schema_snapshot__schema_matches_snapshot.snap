@@ -85,8 +85,8 @@ CREATE TABLE rooms__rooms (
     status TEXT NOT NULL DEFAULT 'open'::text,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     closed_at TIMESTAMPTZ,
-    constraint_type TEXT DEFAULT 'endorsed_by'::text,
-    constraint_config JSONB);
+    constraint_type TEXT NOT NULL DEFAULT 'endorsed_by'::text,
+    constraint_config JSONB NOT NULL DEFAULT '{}'::jsonb);
 
 CREATE TABLE rooms__votes (
     id UUID NOT NULL DEFAULT gen_random_uuid(),
@@ -350,6 +350,8 @@ CREATE UNIQUE INDEX trust__user_influence_pkey ON public.trust__user_influence U
 -- rooms__polls: rooms__polls_room_id_not_null (CHECK)
 -- rooms__polls: rooms__polls_status_check (CHECK)
 -- rooms__polls: rooms__polls_status_not_null (CHECK)
+-- rooms__rooms: rooms__rooms_constraint_config_not_null (CHECK)
+-- rooms__rooms: rooms__rooms_constraint_type_not_null (CHECK)
 -- rooms__rooms: rooms__rooms_created_at_not_null (CHECK)
 -- rooms__rooms: rooms__rooms_eligibility_topic_not_null (CHECK)
 -- rooms__rooms: rooms__rooms_id_not_null (CHECK)

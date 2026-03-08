@@ -43,6 +43,7 @@ use tinycongress_api::{
         service::{DefaultRoomsService, RoomsService},
     },
     trust::{
+        self,
         engine::TrustEngine,
         repo::{PgTrustRepo, TrustRepo},
         service::{DefaultTrustService, TrustService},
@@ -162,10 +163,11 @@ async fn build_app(
         None
     };
 
-    // Trust repo (needed for room constraint evaluation and trust worker)
+    // Trust repo (needed for room constraint evaluation, trust worker, and HTTP endpoints)
     let trust_repo = Arc::new(PgTrustRepo::new(pool.clone())) as Arc<dyn TrustRepo>;
     let trust_repo_for_worker = trust_repo.clone();
     let trust_repo_for_service = trust_repo.clone();
+    let trust_repo_for_http = trust_repo.clone();
 
     // Trust engine and service
     let trust_engine = Arc::new(TrustEngine::new(pool.clone()));
@@ -198,6 +200,7 @@ async fn build_app(
         .merge(identity::http::router())
         .merge(reputation::http::router())
         .merge(rooms::http::router())
+        .merge(trust::http::trust_router())
         .route("/health", get(health_check))
         .route("/ready", get(readiness_check))
         .route("/metrics", get(|| async move { metric_handle.render() }))
@@ -208,6 +211,7 @@ async fn build_app(
         .layer(Extension(reputation_repo_ext))
         .layer(Extension(rooms_service))
         .layer(Extension(trust_service))
+        .layer(Extension(trust_repo_for_http))
         .layer(Extension(trust_engine.clone()))
         .layer(Extension(synthetic_backup_key))
         .layer(Extension(build_info))
