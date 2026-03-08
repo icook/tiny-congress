@@ -42,6 +42,7 @@ use tinycongress_api::{
         repo::{PgRoomsRepo, RoomsRepo},
         service::{DefaultRoomsService, RoomsService},
     },
+    trust::repo::{PgTrustRepo, TrustRepo},
 };
 use tower_http::cors::{AllowOrigin, Any, CorsLayer};
 use utoipa::OpenApi;
@@ -155,11 +156,14 @@ async fn build_app(
         None
     };
 
+    // Trust repo (needed for room constraint evaluation)
+    let trust_repo = Arc::new(PgTrustRepo::new(pool.clone())) as Arc<dyn TrustRepo>;
+
     // Rooms wiring
     let rooms_repo = Arc::new(PgRoomsRepo::new(pool.clone()));
     let rooms_service = Arc::new(DefaultRoomsService::new(
         rooms_repo as Arc<dyn RoomsRepo>,
-        endorsement_service.clone(),
+        trust_repo,
     )) as Arc<dyn RoomsService>;
 
     let (prometheus_layer, metric_handle) = PrometheusMetricLayer::pair();

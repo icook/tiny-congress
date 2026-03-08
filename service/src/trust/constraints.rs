@@ -16,10 +16,11 @@ pub struct Eligibility {
 #[async_trait]
 pub trait RoomConstraint: Send + Sync {
     /// Check whether `user_id` may participate in a room whose anchor/context is `room_anchor_id`.
+    /// Pass `None` when there is no specific anchor (global-context lookup).
     async fn check(
         &self,
         user_id: Uuid,
-        room_anchor_id: Uuid,
+        room_anchor_id: Option<Uuid>,
         trust_repo: &dyn TrustRepo,
     ) -> Result<Eligibility, anyhow::Error>;
 }
@@ -36,11 +37,11 @@ impl RoomConstraint for EndorsedByConstraint {
     async fn check(
         &self,
         user_id: Uuid,
-        room_anchor_id: Uuid,
+        room_anchor_id: Option<Uuid>,
         trust_repo: &dyn TrustRepo,
     ) -> Result<Eligibility, anyhow::Error> {
         let snapshot = trust_repo
-            .get_score(user_id, Some(room_anchor_id))
+            .get_score(user_id, room_anchor_id)
             .await
             .map_err(|e| anyhow::anyhow!("trust repo error: {e}"))?;
 
@@ -102,11 +103,11 @@ impl RoomConstraint for CommunityConstraint {
     async fn check(
         &self,
         user_id: Uuid,
-        room_anchor_id: Uuid,
+        room_anchor_id: Option<Uuid>,
         trust_repo: &dyn TrustRepo,
     ) -> Result<Eligibility, anyhow::Error> {
         let snapshot = trust_repo
-            .get_score(user_id, Some(room_anchor_id))
+            .get_score(user_id, room_anchor_id)
             .await
             .map_err(|e| anyhow::anyhow!("trust repo error: {e}"))?;
 
@@ -185,11 +186,11 @@ impl RoomConstraint for CongressConstraint {
     async fn check(
         &self,
         user_id: Uuid,
-        room_anchor_id: Uuid,
+        room_anchor_id: Option<Uuid>,
         trust_repo: &dyn TrustRepo,
     ) -> Result<Eligibility, anyhow::Error> {
         let snapshot = trust_repo
-            .get_score(user_id, Some(room_anchor_id))
+            .get_score(user_id, room_anchor_id)
             .await
             .map_err(|e| anyhow::anyhow!("trust repo error: {e}"))?;
 

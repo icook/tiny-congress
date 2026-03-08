@@ -54,13 +54,26 @@ async fn signup_and_get_account(
     (app, keys, account_id)
 }
 
-/// Helper: create a genesis endorsement for a user (no verifier account needed).
+/// Helper: create a genesis endorsement for a user (used for reputation endpoint tests).
 async fn endorse_user(pool: &sqlx::PgPool, account_id: uuid::Uuid, topic: &str) {
     use tinycongress_api::reputation::repo::create_endorsement;
 
     create_endorsement(pool, account_id, topic, None, None)
         .await
         .expect("endorsement");
+}
+
+/// Helper: seed a global trust score snapshot that makes `account_id` eligible to vote.
+///
+/// The `EndorsedByConstraint` with a nil anchor checks `trust_repo.get_score(user_id, None)`.
+/// Seeding a score with `trust_distance = Some(1.0)` makes the user reachable and eligible.
+async fn make_eligible(pool: &sqlx::PgPool, account_id: uuid::Uuid, _room_id: uuid::Uuid) {
+    use tinycongress_api::trust::repo::{PgTrustRepo, TrustRepo};
+    let trust_repo = PgTrustRepo::new(pool.clone());
+    trust_repo
+        .upsert_score(account_id, None, Some(1.0), Some(1), None)
+        .await
+        .expect("trust score");
 }
 
 /// Helper: parse JSON response body.
@@ -346,7 +359,7 @@ async fn test_activate_and_close_poll() {
 // ─── Voting ──────────────────────────────────────────────────────────────────
 
 #[shared_runtime_test]
-async fn test_cast_vote_with_endorsement() {
+async fn test_cast_vote_eligible_user() {
     let db = isolated_db().await;
     let (app, keys, account_id) = signup_and_get_account("voter1", db.pool()).await;
 
@@ -399,8 +412,9 @@ async fn test_cast_vote_with_endorsement() {
         StatusCode::NO_CONTENT
     );
 
-    // Endorse user
-    endorse_user(db.pool(), account_id, "identity_verified").await;
+    // Seed trust score so user is eligible to vote in this room
+    let room_uuid: uuid::Uuid = room_id.parse().expect("room uuid");
+    make_eligible(db.pool(), account_id, room_uuid).await;
 
     // Cast vote
     let vote_body = serde_json::json!({
@@ -451,7 +465,7 @@ async fn test_cast_vote_with_endorsement() {
 }
 
 #[shared_runtime_test]
-async fn test_cast_vote_without_endorsement_returns_403() {
+async fn test_cast_vote_ineligible_user_returns_403() {
     let db = isolated_db().await;
     let (app, keys, _account_id) = signup_and_get_account("unverified", db.pool()).await;
 
@@ -559,8 +573,9 @@ async fn test_cast_vote_on_draft_poll_returns_409() {
     let dim = json_body(app.clone().oneshot(req).await.expect("response")).await;
     let dim_id = dim["id"].as_str().expect("dim_id");
 
-    // Endorse user so eligibility passes
-    endorse_user(db.pool(), account_id, "identity_verified").await;
+    // Seed trust score so eligibility passes (poll status is the gate, not eligibility)
+    let room_uuid: uuid::Uuid = room_id.parse().expect("room uuid");
+    make_eligible(db.pool(), account_id, room_uuid).await;
 
     // Try to vote on a draft poll
     let vote_body = serde_json::json!({
@@ -628,7 +643,9 @@ async fn test_vote_value_out_of_range_returns_400() {
     );
     app.clone().oneshot(req).await.expect("response");
 
-    endorse_user(db.pool(), account_id, "identity_verified").await;
+    // Seed trust score so eligibility passes (value range is the gate)
+    let room_uuid: uuid::Uuid = room_id.parse().expect("room uuid");
+    make_eligible(db.pool(), account_id, room_uuid).await;
 
     // Vote with out-of-range value
     let vote_body = serde_json::json!({
@@ -701,9 +718,10 @@ async fn test_poll_results_with_multiple_voters() {
     );
     app.clone().oneshot(req).await.expect("response");
 
-    // Endorse both users
-    endorse_user(db.pool(), account_id1, "identity_verified").await;
-    endorse_user(db.pool(), account_id2, "identity_verified").await;
+    // Seed trust scores so both users are eligible to vote in this room
+    let room_uuid: uuid::Uuid = room_id.parse().expect("room uuid");
+    make_eligible(db.pool(), account_id1, room_uuid).await;
+    make_eligible(db.pool(), account_id2, room_uuid).await;
 
     // Voter 1 votes 8.0
     let vote_body =

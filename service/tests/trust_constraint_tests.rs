@@ -49,7 +49,7 @@ async fn test_endorsed_by_eligible() {
 
     let constraint = EndorsedByConstraint;
     let result = constraint
-        .check(user.id, anchor.id, &repo)
+        .check(user.id, Some(anchor.id), &repo)
         .await
         .expect("check should not error");
 
@@ -83,7 +83,7 @@ async fn test_endorsed_by_ineligible() {
     let repo = PgTrustRepo::new(pool.clone());
     let constraint = EndorsedByConstraint;
     let result = constraint
-        .check(user.id, anchor.id, &repo)
+        .check(user.id, Some(anchor.id), &repo)
         .await
         .expect("check should not error");
 
@@ -124,7 +124,7 @@ async fn test_community_eligible() {
 
     let constraint = CommunityConstraint::new(5.0, 2).unwrap();
     let result = constraint
-        .check(user.id, anchor.id, &repo)
+        .check(user.id, Some(anchor.id), &repo)
         .await
         .expect("check should not error");
 
@@ -160,7 +160,7 @@ async fn test_community_ineligible_distance() {
 
     let constraint = CommunityConstraint::new(5.0, 2).unwrap();
     let result = constraint
-        .check(user.id, anchor.id, &repo)
+        .check(user.id, Some(anchor.id), &repo)
         .await
         .expect("check should not error");
 
@@ -201,7 +201,7 @@ async fn test_community_ineligible_diversity() {
 
     let constraint = CommunityConstraint::new(5.0, 2).unwrap();
     let result = constraint
-        .check(user.id, anchor.id, &repo)
+        .check(user.id, Some(anchor.id), &repo)
         .await
         .expect("check should not error");
 
@@ -274,7 +274,7 @@ async fn test_community_both_fail() {
 
     let constraint = CommunityConstraint::new(5.0, 2).unwrap();
     let result = constraint
-        .check(user.id, anchor.id, &repo)
+        .check(user.id, Some(anchor.id), &repo)
         .await
         .expect("check should not error");
 
@@ -319,7 +319,7 @@ async fn test_congress_eligible() {
 
     let constraint = CongressConstraint::new(3).unwrap();
     let result = constraint
-        .check(user.id, anchor.id, &repo)
+        .check(user.id, Some(anchor.id), &repo)
         .await
         .expect("check should not error");
 
@@ -353,7 +353,7 @@ async fn test_congress_ineligible() {
     let repo = PgTrustRepo::new(pool.clone());
     let constraint = CongressConstraint::new(3).unwrap();
     let result = constraint
-        .check(user.id, anchor.id, &repo)
+        .check(user.id, Some(anchor.id), &repo)
         .await
         .expect("check should not error");
 

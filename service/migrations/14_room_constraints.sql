@@ -15,6 +15,9 @@ SET
     constraint_config = jsonb_build_object('topic', eligibility_topic)
 WHERE constraint_type IS NULL;
 
--- Set default for future inserts after migration is complete.
+-- Set defaults and NOT NULL after backfill so future inserts are consistent.
 ALTER TABLE rooms__rooms
-    ALTER COLUMN constraint_type SET DEFAULT 'endorsed_by';
+    ALTER COLUMN constraint_type SET DEFAULT 'endorsed_by',
+    ALTER COLUMN constraint_type SET NOT NULL,
+    ALTER COLUMN constraint_config SET DEFAULT '{}',
+    ALTER COLUMN constraint_config SET NOT NULL;

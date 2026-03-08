@@ -12,6 +12,8 @@ pub struct RoomRecord {
     pub status: String,
     pub created_at: DateTime<Utc>,
     pub closed_at: Option<DateTime<Utc>>,
+    pub constraint_type: String,
+    pub constraint_config: serde_json::Value,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -33,6 +35,8 @@ struct RoomRow {
     status: String,
     created_at: DateTime<Utc>,
     closed_at: Option<DateTime<Utc>>,
+    constraint_type: String,
+    constraint_config: serde_json::Value,
 }
 
 fn row_to_record(row: RoomRow) -> RoomRecord {
@@ -44,6 +48,8 @@ fn row_to_record(row: RoomRow) -> RoomRecord {
         status: row.status,
         created_at: row.created_at,
         closed_at: row.closed_at,
+        constraint_type: row.constraint_type,
+        constraint_config: row.constraint_config,
     }
 }
 
@@ -61,9 +67,11 @@ where
 {
     let result = sqlx::query_as::<_, RoomRow>(
         r"
-        INSERT INTO rooms__rooms (name, description, eligibility_topic)
-        VALUES ($1, $2, $3)
-        RETURNING id, name, description, eligibility_topic, status, created_at, closed_at
+        INSERT INTO rooms__rooms
+            (name, description, eligibility_topic, constraint_type, constraint_config)
+        VALUES ($1, $2, $3, 'endorsed_by', jsonb_build_object('topic', $3))
+        RETURNING id, name, description, eligibility_topic, status, created_at, closed_at,
+                  constraint_type, constraint_config
         ",
     )
     .bind(name)
@@ -98,7 +106,8 @@ where
     let rows = if let Some(status) = status_filter {
         sqlx::query_as::<_, RoomRow>(
             r"
-            SELECT id, name, description, eligibility_topic, status, created_at, closed_at
+            SELECT id, name, description, eligibility_topic, status, created_at, closed_at,
+                   constraint_type, constraint_config
             FROM rooms__rooms WHERE status = $1 ORDER BY created_at DESC
             ",
         )
@@ -108,7 +117,8 @@ where
     } else {
         sqlx::query_as::<_, RoomRow>(
             r"
-            SELECT id, name, description, eligibility_topic, status, created_at, closed_at
+            SELECT id, name, description, eligibility_topic, status, created_at, closed_at,
+                   constraint_type, constraint_config
             FROM rooms__rooms ORDER BY created_at DESC
             ",
         )
@@ -128,7 +138,8 @@ where
 {
     sqlx::query_as::<_, RoomRow>(
         r"
-        SELECT id, name, description, eligibility_topic, status, created_at, closed_at
+        SELECT id, name, description, eligibility_topic, status, created_at, closed_at,
+               constraint_type, constraint_config
         FROM rooms__rooms WHERE id = $1
         ",
     )
