@@ -157,7 +157,7 @@ async fn check_endorsement(
 ///
 /// # Errors
 ///
-/// Returns an error response for unauthorized, forbidden, not-found, conflict, or internal errors.
+/// Returns an error response for unauthorized, forbidden, not-found, or internal errors.
 #[utoipa::path(
     post,
     path = "/verifiers/endorsements",
@@ -168,7 +168,6 @@ async fn check_endorsement(
         (status = 401, description = "Unauthorized"),
         (status = 403, description = "Not an authorized verifier"),
         (status = 404, description = "User not found"),
-        (status = 409, description = "Duplicate endorsement"),
         (status = 500, description = "Internal server error")
     )
 )]
@@ -257,13 +256,6 @@ fn endorsement_error_response(e: EndorsementError) -> axum::response::Response {
         EndorsementError::Validation(msg) => {
             (StatusCode::BAD_REQUEST, Json(ErrorResponse { error: msg })).into_response()
         }
-        EndorsementError::Duplicate => (
-            StatusCode::CONFLICT,
-            Json(ErrorResponse {
-                error: "Endorsement already exists".to_string(),
-            }),
-        )
-            .into_response(),
         EndorsementError::Internal(ref msg) => {
             tracing::error!("Endorsement error: {msg}");
             (

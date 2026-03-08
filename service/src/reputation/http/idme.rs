@@ -329,10 +329,6 @@ async fn create_verification_endorsement(
             tracing::info!(account_id = %account_id, idme_sub = %idme_sub, "ID.me verification successful");
             Ok(())
         }
-        Err(crate::reputation::service::EndorsementError::Duplicate) => {
-            tracing::info!(account_id = %account_id, "Endorsement already exists (re-verification)");
-            Ok(())
-        }
         Err(e) => {
             tracing::error!("Failed to create endorsement: {e}");
             Err("Verification failed".to_string())

@@ -58,7 +58,7 @@ async fn signup_and_get_account(
 async fn endorse_user(pool: &sqlx::PgPool, account_id: uuid::Uuid, topic: &str) {
     use tinycongress_api::reputation::repo::create_endorsement;
 
-    create_endorsement(pool, account_id, topic, None, None)
+    create_endorsement(pool, account_id, topic, None, None, 1.0, None)
         .await
         .expect("endorsement");
 }

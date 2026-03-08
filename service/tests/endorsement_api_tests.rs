@@ -58,9 +58,17 @@ async fn test_verifier_can_create_endorsement() {
     let (_user_keys, user_id) = signup_user(&app, "target-user").await;
 
     // Bootstrap verifier endorsement (genesis)
-    create_endorsement(db.pool(), verifier_id, "authorized_verifier", None, None)
-        .await
-        .expect("bootstrap");
+    create_endorsement(
+        db.pool(),
+        verifier_id,
+        "authorized_verifier",
+        None,
+        None,
+        1.0,
+        None,
+    )
+    .await
+    .expect("bootstrap");
 
     // Call POST /verifiers/endorsements
     let body = json!({
@@ -125,9 +133,17 @@ async fn test_endorsement_unknown_user_returns_404() {
     let (verifier_keys, verifier_id) = signup_user(&app, "test-verifier").await;
 
     // Bootstrap verifier
-    create_endorsement(db.pool(), verifier_id, "authorized_verifier", None, None)
-        .await
-        .expect("bootstrap");
+    create_endorsement(
+        db.pool(),
+        verifier_id,
+        "authorized_verifier",
+        None,
+        None,
+        1.0,
+        None,
+    )
+    .await
+    .expect("bootstrap");
 
     let body = json!({
         "username": "nonexistent-user",
@@ -148,7 +164,7 @@ async fn test_endorsement_unknown_user_returns_404() {
 }
 
 #[shared_runtime_test]
-async fn test_duplicate_endorsement_returns_409() {
+async fn test_duplicate_endorsement_is_idempotent() {
     let db = isolated_db().await;
     let app = TestAppBuilder::new()
         .with_rooms_pool(db.pool().clone())
@@ -157,9 +173,17 @@ async fn test_duplicate_endorsement_returns_409() {
     let (verifier_keys, verifier_id) = signup_user(&app, "test-verifier").await;
     let _ = signup_user(&app, "target-user").await;
 
-    create_endorsement(db.pool(), verifier_id, "authorized_verifier", None, None)
-        .await
-        .expect("bootstrap");
+    create_endorsement(
+        db.pool(),
+        verifier_id,
+        "authorized_verifier",
+        None,
+        None,
+        1.0,
+        None,
+    )
+    .await
+    .expect("bootstrap");
 
     let body = json!({
         "username": "target-user",
@@ -178,7 +202,7 @@ async fn test_duplicate_endorsement_returns_409() {
     let response = app.clone().oneshot(request).await.expect("response");
     assert_eq!(response.status(), StatusCode::CREATED);
 
-    // Second call — same verifier, same subject+topic → 409
+    // Second call — same verifier, same subject+topic → idempotent upsert, returns 201
     let request = build_authed_request(
         Method::POST,
         "/verifiers/endorsements",
@@ -187,5 +211,5 @@ async fn test_duplicate_endorsement_returns_409() {
         &verifier_keys.device_kid,
     );
     let response = app.clone().oneshot(request).await.expect("response");
-    assert_eq!(response.status(), StatusCode::CONFLICT);
+    assert_eq!(response.status(), StatusCode::CREATED);
 }
