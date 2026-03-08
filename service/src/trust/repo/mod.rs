@@ -63,15 +63,19 @@ pub struct ActionRecord {
 }
 
 /// A denouncement filed by one user against another.
+#[derive(Debug, Clone, sqlx::FromRow)]
 pub struct DenouncementRecord {
     pub id: Uuid,
     pub accuser_id: Uuid,
     pub target_id: Uuid,
     pub reason: String,
     pub influence_spent: f32,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub resolved_at: Option<chrono::DateTime<chrono::Utc>>,
 }
 
 /// An invite issued by an endorser.
+#[derive(Debug, Clone, sqlx::FromRow)]
 pub struct InviteRecord {
     pub id: Uuid,
     pub endorser_id: Uuid,
@@ -80,15 +84,19 @@ pub struct InviteRecord {
     pub attestation: serde_json::Value,
     pub accepted_by: Option<Uuid>,
     pub expires_at: chrono::DateTime<chrono::Utc>,
+    pub accepted_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
 /// A cached trust score snapshot for a user.
+#[derive(Debug, Clone, sqlx::FromRow)]
 pub struct ScoreSnapshot {
     pub user_id: Uuid,
     pub context_user_id: Option<Uuid>,
-    pub distance: Option<f32>,
-    pub diversity: Option<i32>,
-    pub centrality: Option<f32>,
+    pub trust_distance: Option<f32>,
+    pub path_diversity: Option<i32>,
+    pub eigenvector_centrality: Option<f32>,
+    pub computed_at: chrono::DateTime<chrono::Utc>,
 }
 
 /// Consolidated repository trait for trust persistence.
@@ -259,17 +267,18 @@ impl TrustRepo for PgTrustRepo {
             reason,
             influence_spent,
         )
+        .await
     }
 
     async fn list_denouncements_against(
         &self,
         target_id: Uuid,
     ) -> Result<Vec<DenouncementRecord>, TrustRepoError> {
-        denouncements::list_denouncements_against(&self.pool, target_id)
+        denouncements::list_denouncements_against(&self.pool, target_id).await
     }
 
     async fn count_active_denouncements_by(&self, accuser_id: Uuid) -> Result<i64, TrustRepoError> {
-        denouncements::count_active_denouncements_by(&self.pool, accuser_id)
+        denouncements::count_active_denouncements_by(&self.pool, accuser_id).await
     }
 
     async fn create_invite(
@@ -288,10 +297,11 @@ impl TrustRepo for PgTrustRepo {
             attestation,
             expires_at,
         )
+        .await
     }
 
     async fn get_invite(&self, invite_id: Uuid) -> Result<InviteRecord, TrustRepoError> {
-        invites::get_invite(&self.pool, invite_id)
+        invites::get_invite(&self.pool, invite_id).await
     }
 
     async fn accept_invite(
@@ -299,14 +309,14 @@ impl TrustRepo for PgTrustRepo {
         invite_id: Uuid,
         accepted_by: Uuid,
     ) -> Result<InviteRecord, TrustRepoError> {
-        invites::accept_invite(&self.pool, invite_id, accepted_by)
+        invites::accept_invite(&self.pool, invite_id, accepted_by).await
     }
 
     async fn list_invites_by_endorser(
         &self,
         endorser_id: Uuid,
     ) -> Result<Vec<InviteRecord>, TrustRepoError> {
-        invites::list_invites_by_endorser(&self.pool, endorser_id)
+        invites::list_invites_by_endorser(&self.pool, endorser_id).await
     }
 
     async fn upsert_score(
@@ -325,6 +335,7 @@ impl TrustRepo for PgTrustRepo {
             diversity,
             centrality,
         )
+        .await
     }
 
     async fn get_score(
@@ -332,10 +343,10 @@ impl TrustRepo for PgTrustRepo {
         user_id: Uuid,
         context_user_id: Option<Uuid>,
     ) -> Result<Option<ScoreSnapshot>, TrustRepoError> {
-        scores::get_score(&self.pool, user_id, context_user_id)
+        scores::get_score(&self.pool, user_id, context_user_id).await
     }
 
     async fn get_all_scores(&self, user_id: Uuid) -> Result<Vec<ScoreSnapshot>, TrustRepoError> {
-        scores::get_all_scores(&self.pool, user_id)
+        scores::get_all_scores(&self.pool, user_id).await
     }
 }
