@@ -500,6 +500,40 @@ jobs:
               - 'skaffold.yaml'
               - 'justfile'
 
+  # ── Build WASM tc-crypto (shared artifact) ────────────────
+  build-wasm:
+    name: Build WASM
+    runs-on: ${{ needs.detect-changes.outputs.runner-medium }}
+    needs: [detect-changes]
+    if: >-
+      needs.detect-changes.outputs.ui == 'true' ||
+      needs.detect-changes.outputs.api == 'true' ||
+      needs.detect-changes.outputs.ci == 'true'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Rust toolchain
+        uses: ./.github/actions/setup-rust
+        with:
+          targets: wasm32-unknown-unknown
+          cache-dependencies: 'false'
+
+      - name: Install wasm-pack
+        uses: taiki-e/install-action@wasm-pack
+
+      - name: Build WASM
+        run: |
+          cd crates/tc-crypto
+          wasm-pack build --target web --release --out-dir ../../web/src/wasm/tc-crypto
+
+      - name: Upload WASM artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: tc-crypto-wasm
+          path: web/src/wasm/tc-crypto/
+          retention-days: 1
+
   # ── Build all container images in parallel ────────────────
   build-images:
     name: Build ${{ matrix.image }}
@@ -695,7 +729,7 @@ jobs:
   unit-tests:
     name: Unit tests (Vitest)
     runs-on: ${{ needs.detect-changes.outputs.runner-small }}
-    needs: [detect-changes]
+    needs: [detect-changes, build-wasm]
     if: needs.detect-changes.outputs.ui == 'true' || needs.detect-changes.outputs.ci == 'true'
     steps:
       - name: Checkout
@@ -704,19 +738,11 @@ jobs:
       - name: Setup web toolchain
         uses: ./.github/actions/setup-web
 
-      - name: Setup Rust toolchain
-        uses: ./.github/actions/setup-rust
+      - name: Download WASM artifact
+        uses: actions/download-artifact@v4
         with:
-          targets: wasm32-unknown-unknown
-          cache-dependencies: 'false'
-
-      - name: Install wasm-pack
-        uses: taiki-e/install-action@wasm-pack
-
-      - name: Build WASM
-        run: |
-          cd crates/tc-crypto
-          wasm-pack build --target web --release --out-dir ../../web/src/wasm/tc-crypto
+          name: tc-crypto-wasm
+          path: web/src/wasm/tc-crypto/
 
       - name: Run Vitest with coverage
         working-directory: web
@@ -779,6 +805,7 @@ jobs:
     needs:
       - detect-changes
       - build-images
+      - build-wasm
       - lint
       - lint-web
     # always() is required so this job evaluates its `if` even when
@@ -875,19 +902,11 @@ jobs:
         working-directory: web
         run: yarn playwright install --with-deps chromium
 
-      - name: Setup Rust toolchain
-        uses: ./.github/actions/setup-rust
+      - name: Download WASM artifact
+        uses: actions/download-artifact@v4
         with:
-          targets: wasm32-unknown-unknown
-          cache-dependencies: 'false'
-
-      - name: Install wasm-pack
-        uses: taiki-e/install-action@wasm-pack
-
-      - name: Build WASM
-        run: |
-          cd crates/tc-crypto
-          wasm-pack build --target web --release --out-dir ../../web/src/wasm/tc-crypto
+          name: tc-crypto-wasm
+          path: web/src/wasm/tc-crypto/
 
       - name: Wait for KinD readiness
         run: |
@@ -1057,6 +1076,7 @@ jobs:
       - security-audit
       - sqlx-check
       - build-images
+      - build-wasm
       - scan-images
       - unit-tests
       - rust-coverage
