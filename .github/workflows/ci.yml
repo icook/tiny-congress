@@ -347,21 +347,22 @@ jobs:
           else
             echo "Creating new postgres container..."
             docker run -d --name "$CONTAINER_NAME" \
-              -p 0:5432 \
+              --network host \
               -e POSTGRES_USER=postgres \
               -e POSTGRES_PASSWORD=postgres \
               ${{ env.REGISTRY }}/postgres:${{ github.sha }}
           fi
 
-          # Resolve Docker host based on runner environment
-          if [ "$RUNNER_ENVIRONMENT" = "self-hosted" ]; then
-            DOCKER_HOSTNAME="dind.dind.svc.cluster.local"
+          # On ARC runners Docker runs on a remote DinD pod; postgres uses host network
+          # so it's directly accessible on the DinD service IP at port 5432.
+          # On GHA-hosted runners DOCKER_HOST is unset and postgres binds to localhost.
+          if [ -n "${DOCKER_HOST:-}" ]; then
+            DOCKER_HOSTNAME=$(echo "$DOCKER_HOST" | sed 's|tcp://||;s|:[0-9]*$||')
           else
             DOCKER_HOSTNAME="127.0.0.1"
           fi
 
-          PG_PORT=$(docker port "$CONTAINER_NAME" 5432 \
-            | grep '0.0.0.0' | cut -d: -f2)
+          PG_PORT="5432"
 
           # Wait for postgres to be ready
           for i in {1..30}; do
@@ -417,7 +418,7 @@ jobs:
       ci: ${{ steps.filter.outputs.ci }}
       # Runner tier outputs — set all at once, each job picks the right size.
       # Toggle: gh variable set USE_ARC_RUNNERS --body "false" --repo icook/tiny-congress
-      runner-nano: ${{ steps.runner.outputs.nano }}
+      runner-nano: ${{ steps.runner.outputs.small }}
       runner-small: ${{ steps.runner.outputs.small }}
       runner-medium: ${{ steps.runner.outputs.medium }}
       runner-large: ${{ steps.runner.outputs.large }}
@@ -433,14 +434,12 @@ jobs:
           commit_msg=$(git log -1 --format=%s HEAD)
           if echo "$commit_msg" | grep -qF '[arc]' || [ "${{ vars.USE_ARC_RUNNERS }}" = "true" ]; then
             {
-              echo "nano=arc-runner-nano"
               echo "small=arc-runner-small"
               echo "medium=arc-runner-medium"
               echo "large=arc-runner-large"
             } >> "$GITHUB_OUTPUT"
           else
             {
-              echo "nano=ubuntu-latest"
               echo "small=ubuntu-latest"
               echo "medium=ubuntu-latest"
               echo "large=ubuntu-latest"
@@ -822,15 +821,11 @@ jobs:
         run: |
           set -euo pipefail
           artifacts_file="${RUNNER_TEMP}/skaffold-artifacts.json"
-          cat > "$artifacts_file" <<'EOF'
-          {
-            "builds": [
-              {"imageName": "tc-api-release", "tag": "${{ env.REGISTRY }}/tc-api-release:${{ github.sha }}"},
-              {"imageName": "tc-ui-release", "tag": "${{ env.REGISTRY }}/tc-ui-release:${{ github.sha }}"},
-              {"imageName": "postgres", "tag": "${{ env.REGISTRY }}/postgres:${{ github.sha }}"}
-            ]
-          }
-          EOF
+          printf '{\n  "builds": [\n    {"imageName": "tc-api-release", "tag": "%s/tc-api-release:%s"},\n    {"imageName": "tc-ui-release", "tag": "%s/tc-ui-release:%s"},\n    {"imageName": "postgres", "tag": "%s/postgres:%s"}\n  ]\n}\n' \
+            "${{ env.REGISTRY }}" "${{ github.sha }}" \
+            "${{ env.REGISTRY }}" "${{ github.sha }}" \
+            "${{ env.REGISTRY }}" "${{ github.sha }}" \
+            > "$artifacts_file"
           echo "file=${artifacts_file}" >> "$GITHUB_OUTPUT"
 
       - name: Setup web toolchain
@@ -845,6 +840,7 @@ jobs:
         with:
           path: ${{ env.PLAYWRIGHT_BROWSERS_PATH }}
           key: playwright-chromium-${{ hashFiles('web/yarn.lock') }}
+          save-always: true
 
       - name: Install Playwright browsers
         working-directory: web
@@ -912,25 +908,28 @@ jobs:
         if: always()
         working-directory: web
         run: |
-          set -euo pipefail
           {
             echo "### Bundle Size"
             echo ""
-            echo "| Asset | Size | Gzip |"
-            echo "|-------|------|------|"
-            find dist -type f \( -name "*.js" -o -name "*.css" \) -exec sh -c '
-              file="$1"
-              size=$(stat -f%z "$file" 2>/dev/null || stat -c%s "$file")
-              gzip_size=$(gzip -c "$file" | wc -c)
-              printf "| %s | %s | %s |\n" \
-                "$(basename "$file")" \
-                "$(numfmt --to=iec-i --suffix=B "$size" 2>/dev/null || echo "${size}B")" \
-                "$(numfmt --to=iec-i --suffix=B "$gzip_size" 2>/dev/null || echo "${gzip_size}B")"
-            ' _ {} \; | sort -k3 -h -r
-            echo ""
-            total_size=$(find dist -type f \( -name "*.js" -o -name "*.css" \) -exec stat -f%z {} + 2>/dev/null | awk '{sum+=$1} END {print sum}' || \
-                         find dist -type f \( -name "*.js" -o -name "*.css" \) -exec stat -c%s {} + | awk '{sum+=$1} END {print sum}')
-            echo "**Total:** $(numfmt --to=iec-i --suffix=B "$total_size" 2>/dev/null || echo "${total_size}B")"
+            if [ ! -d dist ] || ! find dist -type f \( -name "*.js" -o -name "*.css" \) | grep -q .; then
+              echo "No build output found"
+            else
+              echo "| Asset | Size | Gzip |"
+              echo "|-------|------|------|"
+              find dist -type f \( -name "*.js" -o -name "*.css" \) -exec sh -c '
+                file="$1"
+                size=$(stat -f%z "$file" 2>/dev/null || stat -c%s "$file")
+                gzip_size=$(gzip -c "$file" | wc -c)
+                printf "| %s | %s | %s |\n" \
+                  "$(basename "$file")" \
+                  "$(numfmt --to=iec-i --suffix=B "$size" 2>/dev/null || echo "${size}B")" \
+                  "$(numfmt --to=iec-i --suffix=B "$gzip_size" 2>/dev/null || echo "${gzip_size}B")"
+              ' _ {} \; | sort -k3 -h -r
+              echo ""
+              total_size=$(find dist -type f \( -name "*.js" -o -name "*.css" \) -exec stat -f%z {} + 2>/dev/null | awk '{sum+=$1} END {print sum}' || \
+                           find dist -type f \( -name "*.js" -o -name "*.css" \) -exec stat -c%s {} + | awk '{sum+=$1} END {print sum}')
+              echo "**Total:** $(numfmt --to=iec-i --suffix=B "$total_size" 2>/dev/null || echo "${total_size}B")"
+            fi
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Run Playwright E2E tests
