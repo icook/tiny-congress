@@ -713,7 +713,7 @@ jobs:
     needs: [detect-changes, build-images]
     if: needs.detect-changes.outputs.api == 'true' || needs.detect-changes.outputs.ci == 'true'
     env:
-      TEST_POSTGRES_IMAGE: ghcr.io/${{ github.repository }}/postgres:${{ github.sha }}
+      TEST_POSTGRES_IMAGE: ${{ needs.build-images.outputs.postgres-tag || format('ghcr.io/{0}/postgres:{1}', github.repository, github.sha) }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -819,7 +819,7 @@ jobs:
         run: |
           set -euo pipefail
           cargo build --release
-          echo "API_BINARY_PATH=$(pwd)/target/release/tinycongress_api" >> "$GITHUB_ENV"
+          echo "API_BINARY_PATH=$(pwd)/target/release/tinycongress-api" >> "$GITHUB_ENV"
 
       - name: Start PostgreSQL
         id: postgres
@@ -830,7 +830,7 @@ jobs:
             -e POSTGRES_PASSWORD=postgres \
             -e POSTGRES_DB=tiny-congress \
             -p 5432:5432 \
-            "ghcr.io/${{ github.repository }}/postgres:${{ github.sha }}")
+            "${REGISTRY}/postgres:${{ github.sha }}")
           echo "POSTGRES_CONTAINER_ID=${CONTAINER_ID}" >> "$GITHUB_OUTPUT"
 
           echo "Waiting for PostgreSQL to be ready..."
