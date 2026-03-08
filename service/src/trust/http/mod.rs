@@ -131,6 +131,16 @@ async fn endorse_handler(
         Err(e) => return e,
     };
 
+    if body.weight <= 0.0 || body.weight > 1.0 {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: "weight must be in range (0.0, 1.0]".to_string(),
+            }),
+        )
+            .into_response();
+    }
+
     match trust_service
         .endorse(
             auth.account_id,

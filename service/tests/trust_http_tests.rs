@@ -359,3 +359,79 @@ async fn test_create_invite_returns_201() {
     assert!(json["id"].is_string());
     assert!(json["expires_at"].is_string());
 }
+
+// ─── Endorse weight validation ────────────────────────────────────────────────
+
+#[shared_runtime_test]
+async fn endorse_rejects_weight_zero() {
+    let db = isolated_db().await;
+    let (app, keys, _account_id) = signup_and_get_account("weightzeroendorser", db.pool()).await;
+
+    let (json2, _) = valid_signup_with_keys("weightzerosubject");
+    let resp2 = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/auth/signup")
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(json2))
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+    let body2 = axum::body::to_bytes(resp2.into_body(), 1024 * 1024)
+        .await
+        .expect("body2");
+    let j2: Value = serde_json::from_slice(&body2).expect("json2");
+    let subject_id = j2["account_id"].as_str().expect("account_id");
+
+    let body = serde_json::json!({ "subject_id": subject_id, "weight": 0.0 }).to_string();
+    let request = build_authed_request(
+        Method::POST,
+        "/trust/endorse",
+        &body,
+        &keys.device_signing_key,
+        &keys.device_kid,
+    );
+
+    let response = app.oneshot(request).await.expect("response");
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}
+
+#[shared_runtime_test]
+async fn endorse_rejects_weight_above_one() {
+    let db = isolated_db().await;
+    let (app, keys, _account_id) = signup_and_get_account("weightaboveendorser", db.pool()).await;
+
+    let (json2, _) = valid_signup_with_keys("weightabovesubject");
+    let resp2 = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/auth/signup")
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(json2))
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+    let body2 = axum::body::to_bytes(resp2.into_body(), 1024 * 1024)
+        .await
+        .expect("body2");
+    let j2: Value = serde_json::from_slice(&body2).expect("json2");
+    let subject_id = j2["account_id"].as_str().expect("account_id");
+
+    let body = serde_json::json!({ "subject_id": subject_id, "weight": 1.5 }).to_string();
+    let request = build_authed_request(
+        Method::POST,
+        "/trust/endorse",
+        &body,
+        &keys.device_signing_key,
+        &keys.device_kid,
+    );
+
+    let response = app.oneshot(request).await.expect("response");
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}
