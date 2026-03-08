@@ -47,7 +47,13 @@ async fn test_process_batch_endorse_action() {
     let trust_repo = Arc::new(PgTrustRepo::new(pool.clone()));
     let reputation_repo = Arc::new(PgReputationRepo::new(pool.clone()));
     let engine = Arc::new(TrustEngine::new(pool.clone()));
-    let worker = Arc::new(TrustWorker::new(trust_repo, reputation_repo, engine));
+    let worker = Arc::new(TrustWorker::new(
+        trust_repo,
+        reputation_repo,
+        engine,
+        50,
+        30,
+    ));
 
     let processed = worker.process_batch().await.expect("process_batch");
     assert_eq!(processed, 1);
@@ -134,7 +140,13 @@ async fn test_process_batch_revoke_action() {
     let trust_repo = Arc::new(PgTrustRepo::new(pool.clone()));
     let reputation_repo = Arc::new(PgReputationRepo::new(pool.clone()));
     let engine = Arc::new(TrustEngine::new(pool.clone()));
-    let worker = Arc::new(TrustWorker::new(trust_repo, reputation_repo, engine));
+    let worker = Arc::new(TrustWorker::new(
+        trust_repo,
+        reputation_repo,
+        engine,
+        50,
+        30,
+    ));
 
     let processed = worker.process_batch().await.expect("process_batch");
     assert_eq!(processed, 1);
@@ -208,7 +220,13 @@ async fn test_process_batch_denounce_action() {
     let trust_repo = Arc::new(PgTrustRepo::new(pool.clone()));
     let reputation_repo = Arc::new(PgReputationRepo::new(pool.clone()));
     let engine = Arc::new(TrustEngine::new(pool.clone()));
-    let worker = Arc::new(TrustWorker::new(trust_repo, reputation_repo, engine));
+    let worker = Arc::new(TrustWorker::new(
+        trust_repo,
+        reputation_repo,
+        engine,
+        50,
+        30,
+    ));
 
     let processed = worker.process_batch().await.expect("process_batch");
     assert_eq!(processed, 1);
@@ -266,7 +284,13 @@ async fn test_process_batch_invalid_payload_fails() {
     let trust_repo = Arc::new(PgTrustRepo::new(pool.clone()));
     let reputation_repo = Arc::new(PgReputationRepo::new(pool.clone()));
     let engine = Arc::new(TrustEngine::new(pool.clone()));
-    let worker = Arc::new(TrustWorker::new(trust_repo, reputation_repo, engine));
+    let worker = Arc::new(TrustWorker::new(
+        trust_repo,
+        reputation_repo,
+        engine,
+        50,
+        30,
+    ));
 
     let processed = worker.process_batch().await.expect("process_batch");
     assert_eq!(processed, 1);

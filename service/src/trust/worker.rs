@@ -15,21 +15,25 @@ pub struct TrustWorker {
     reputation_repo: Arc<dyn ReputationRepo>,
     trust_engine: Arc<TrustEngine>,
     batch_size: i64,
+    batch_interval_secs: u64,
 }
 
 impl TrustWorker {
-    /// Create a new `TrustWorker` with a default batch size of 50.
+    /// Create a new `TrustWorker`.
     #[must_use]
     pub fn new(
         trust_repo: Arc<dyn TrustRepo>,
         reputation_repo: Arc<dyn ReputationRepo>,
         trust_engine: Arc<TrustEngine>,
+        batch_size: i64,
+        batch_interval_secs: u64,
     ) -> Self {
         Self {
             trust_repo,
             reputation_repo,
             trust_engine,
-            batch_size: 50,
+            batch_size,
+            batch_interval_secs,
         }
     }
 
@@ -147,23 +151,15 @@ impl TrustWorker {
         Ok(())
     }
 
-    /// Run the worker loop, processing a batch immediately on startup then every 30 seconds.
-    pub async fn run(self: Arc<Self>, mut shutdown: tokio::sync::watch::Receiver<bool>) {
+    /// Run the worker loop indefinitely, processing a batch immediately on startup
+    /// then sleeping for `batch_interval_secs` between runs.
+    pub async fn run(self: Arc<Self>) {
         loop {
             if let Err(e) = self.process_batch().await {
                 tracing::error!("trust worker batch error: {e}");
             }
-
-            tokio::select! {
-                () = tokio::time::sleep(Duration::from_secs(30)) => {}
-                _ = shutdown.changed() => {
-                    if *shutdown.borrow() {
-                        break;
-                    }
-                }
-            }
+            tokio::time::sleep(Duration::from_secs(self.batch_interval_secs)).await;
         }
-        tracing::info!("trust worker shutting down");
     }
 }
 
