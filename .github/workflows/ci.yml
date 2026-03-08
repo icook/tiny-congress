@@ -361,7 +361,7 @@ jobs:
           fi
 
           PG_PORT=$(docker port "$CONTAINER_NAME" 5432 \
-            | grep '0.0.0.0' | cut -d: -f2)
+            | grep '0.0.0.0' | cut -d: -f2 | cut -d/ -f1)
 
           # Wait for postgres to be ready
           for i in {1..30}; do
@@ -841,7 +841,7 @@ jobs:
           else
             PG_HOST="127.0.0.1"
           fi
-          PG_PORT=$(docker port "${CONTAINER_ID}" 5432 | grep '0.0.0.0' | cut -d: -f2)
+          PG_PORT=$(docker port "${CONTAINER_ID}" 5432 | grep '0.0.0.0' | cut -d: -f2 | cut -d/ -f1)
           echo "POSTGRES_HOST=${PG_HOST}" >> "$GITHUB_OUTPUT"
           echo "POSTGRES_PORT=${PG_PORT}" >> "$GITHUB_OUTPUT"
 
