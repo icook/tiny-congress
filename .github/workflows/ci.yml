@@ -872,6 +872,9 @@ jobs:
           printf 'verifiers:\n  - name: sim_verifier\n    public_key: ovySo2At7yyERm9siRnjP_txpqBLLRwIjDbH5qVAjG0\n' \
             > "${API_DIR}/config.yaml"
 
+          GIT_SHA=${{ github.sha }} \
+          APP_VERSION=${{ github.ref_name }}@${{ github.sha }} \
+          BUILD_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ) \
           TC_DATABASE__HOST=${{ steps.postgres.outputs.POSTGRES_HOST }} \
           TC_DATABASE__PORT=${{ steps.postgres.outputs.POSTGRES_PORT }} \
           TC_DATABASE__NAME=tiny-congress \
