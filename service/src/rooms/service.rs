@@ -13,7 +13,8 @@ use super::repo::{
     DimensionDistribution, DimensionRecord, DimensionStats, PollRecord, PollRepoError, RoomRecord,
     RoomRepoError, RoomsRepo, VoteRecord,
 };
-use crate::reputation::service::EndorsementService;
+use crate::trust::constraints::build_constraint;
+use crate::trust::repo::TrustRepo;
 
 // ─── Request types ─────────────────────────────────────────────────────────
 
@@ -142,16 +143,13 @@ pub struct PollDistribution {
 
 pub struct DefaultRoomsService {
     repo: Arc<dyn RoomsRepo>,
-    endorsement_service: Arc<dyn EndorsementService>,
+    trust_repo: Arc<dyn TrustRepo>,
 }
 
 impl DefaultRoomsService {
     #[must_use]
-    pub fn new(repo: Arc<dyn RoomsRepo>, endorsement_service: Arc<dyn EndorsementService>) -> Self {
-        Self {
-            repo,
-            endorsement_service,
-        }
+    pub fn new(repo: Arc<dyn RoomsRepo>, trust_repo: Arc<dyn TrustRepo>) -> Self {
+        Self { repo, trust_repo }
     }
 }
 
@@ -335,26 +333,35 @@ impl RoomsService for DefaultRoomsService {
             return Err(VoteError::PollNotActive);
         }
 
-        // Get room to check eligibility topic
+        // Get room to check eligibility constraint
         let room = self.repo.get_room(poll.room_id).await.map_err(|e| {
             tracing::error!("Room lookup for vote failed: {e}");
             VoteError::Internal("Internal server error".to_string())
         })?;
 
-        // Eligibility check via endorsement service
-        let eligible = self
-            .endorsement_service
-            .has_endorsement(user_id, &room.eligibility_topic)
+        // Build the room's constraint from its config and evaluate eligibility
+        let constraint =
+            build_constraint(&room.constraint_type, &room.constraint_config).map_err(|e| {
+                tracing::error!("Failed to build room constraint: {e}");
+                VoteError::Internal("Internal server error".to_string())
+            })?;
+
+        // Rooms do not currently have a creator account to serve as anchor.
+        // Pass None — constraints interpret this as a global-context lookup.
+        let eligibility = constraint
+            .check(user_id, None, self.trust_repo.as_ref())
             .await
             .map_err(|e| {
                 tracing::error!("Eligibility check failed: {e}");
                 VoteError::Internal("Internal server error".to_string())
             })?;
 
-        if !eligible {
+        if !eligibility.is_eligible {
+            let reason = eligibility
+                .reason
+                .unwrap_or_else(|| "not eligible to vote in this room".to_string());
             return Err(VoteError::NotEligible(format!(
-                "You must be verified to vote. Complete identity verification first. Required: {}",
-                room.eligibility_topic,
+                "You must be verified to vote. Complete identity verification first. {reason}",
             )));
         }
 

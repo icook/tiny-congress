@@ -16,8 +16,6 @@ use super::repo::{CreatedEndorsement, EndorsementRecord, EndorsementRepoError, R
 pub enum EndorsementError {
     #[error("{0}")]
     Validation(String),
-    #[error("endorsement already exists for this subject and topic")]
-    Duplicate,
     #[error("internal error: {0}")]
     Internal(String),
 }
@@ -34,7 +32,7 @@ pub trait EndorsementService: Send + Sync {
         &self,
         subject_id: Uuid,
         topic: &str,
-        issuer_id: Option<Uuid>,
+        endorser_id: Option<Uuid>,
         evidence: Option<&serde_json::Value>,
     ) -> Result<CreatedEndorsement, EndorsementError>;
 
@@ -71,7 +69,7 @@ impl EndorsementService for DefaultEndorsementService {
         &self,
         subject_id: Uuid,
         topic: &str,
-        issuer_id: Option<Uuid>,
+        endorser_id: Option<Uuid>,
         evidence: Option<&serde_json::Value>,
     ) -> Result<CreatedEndorsement, EndorsementError> {
         if topic.is_empty() {
@@ -81,10 +79,9 @@ impl EndorsementService for DefaultEndorsementService {
         }
 
         self.repo
-            .create_endorsement(subject_id, topic, issuer_id, evidence)
+            .create_endorsement(subject_id, topic, endorser_id, evidence, 1.0, None)
             .await
             .map_err(|e| match e {
-                EndorsementRepoError::Duplicate => EndorsementError::Duplicate,
                 EndorsementRepoError::NotFound => {
                     tracing::error!("Unexpected NotFound during endorsement creation");
                     EndorsementError::Internal("Internal server error".to_string())
@@ -109,7 +106,9 @@ impl EndorsementService for DefaultEndorsementService {
                     tracing::error!("Endorsement check failed: {e}");
                     EndorsementError::Internal("Internal server error".to_string())
                 }
-                _ => EndorsementError::Internal("Internal server error".to_string()),
+                EndorsementRepoError::NotFound => {
+                    EndorsementError::Internal("Internal server error".to_string())
+                }
             })
     }
 
@@ -125,7 +124,9 @@ impl EndorsementService for DefaultEndorsementService {
                     tracing::error!("Endorsement list failed: {e}");
                     EndorsementError::Internal("Internal server error".to_string())
                 }
-                _ => EndorsementError::Internal("Internal server error".to_string()),
+                EndorsementRepoError::NotFound => {
+                    EndorsementError::Internal("Internal server error".to_string())
+                }
             })
     }
 }

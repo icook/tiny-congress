@@ -4,8 +4,8 @@ pub mod endorsements;
 pub mod external_identities;
 
 pub use endorsements::{
-    create_endorsement, has_endorsement, list_endorsements_by_subject, CreatedEndorsement,
-    EndorsementRecord, EndorsementRepoError,
+    create_endorsement, has_endorsement, list_endorsements_by_subject, revoke_endorsement,
+    CreatedEndorsement, EndorsementRecord, EndorsementRepoError,
 };
 pub use external_identities::{
     get_external_identity_by_provider, link_external_identity, ExternalIdentityRecord,
@@ -25,8 +25,10 @@ pub trait ReputationRepo: Send + Sync {
         &self,
         subject_id: Uuid,
         topic: &str,
-        issuer_id: Option<Uuid>,
+        endorser_id: Option<Uuid>,
         evidence: Option<&serde_json::Value>,
+        weight: f32,
+        attestation: Option<&serde_json::Value>,
     ) -> Result<CreatedEndorsement, EndorsementRepoError>;
 
     async fn has_endorsement(
@@ -39,6 +41,13 @@ pub trait ReputationRepo: Send + Sync {
         &self,
         subject_id: Uuid,
     ) -> Result<Vec<EndorsementRecord>, EndorsementRepoError>;
+
+    async fn revoke_endorsement(
+        &self,
+        endorser_id: Uuid,
+        subject_id: Uuid,
+        topic: &str,
+    ) -> Result<(), EndorsementRepoError>;
 
     // External identity operations
 
@@ -74,10 +83,21 @@ impl ReputationRepo for PgReputationRepo {
         &self,
         subject_id: Uuid,
         topic: &str,
-        issuer_id: Option<Uuid>,
+        endorser_id: Option<Uuid>,
         evidence: Option<&serde_json::Value>,
+        weight: f32,
+        attestation: Option<&serde_json::Value>,
     ) -> Result<CreatedEndorsement, EndorsementRepoError> {
-        endorsements::create_endorsement(&self.pool, subject_id, topic, issuer_id, evidence).await
+        endorsements::create_endorsement(
+            &self.pool,
+            subject_id,
+            topic,
+            endorser_id,
+            evidence,
+            weight,
+            attestation,
+        )
+        .await
     }
 
     async fn has_endorsement(
@@ -93,6 +113,15 @@ impl ReputationRepo for PgReputationRepo {
         subject_id: Uuid,
     ) -> Result<Vec<EndorsementRecord>, EndorsementRepoError> {
         endorsements::list_endorsements_by_subject(&self.pool, subject_id).await
+    }
+
+    async fn revoke_endorsement(
+        &self,
+        endorser_id: Uuid,
+        subject_id: Uuid,
+        topic: &str,
+    ) -> Result<(), EndorsementRepoError> {
+        endorsements::revoke_endorsement(&self.pool, endorser_id, subject_id, topic).await
     }
 
     async fn link_external_identity(

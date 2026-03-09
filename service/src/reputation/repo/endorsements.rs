@@ -10,7 +10,7 @@ pub struct EndorsementRecord {
     pub id: Uuid,
     pub subject_id: Uuid,
     pub topic: String,
-    pub issuer_id: Option<Uuid>,
+    pub endorser_id: Option<Uuid>,
     pub evidence: Option<serde_json::Value>,
     pub created_at: DateTime<Utc>,
     pub revoked_at: Option<DateTime<Utc>>,
@@ -27,8 +27,6 @@ pub struct CreatedEndorsement {
 
 #[derive(Debug, thiserror::Error)]
 pub enum EndorsementRepoError {
-    #[error("endorsement already exists for this subject and topic")]
-    Duplicate,
     #[error("endorsement not found")]
     NotFound,
     #[error("database error: {0}")]
@@ -42,7 +40,7 @@ struct EndorsementRow {
     id: Uuid,
     subject_id: Uuid,
     topic: String,
-    issuer_id: Option<Uuid>,
+    endorser_id: Option<Uuid>,
     evidence: Option<serde_json::Value>,
     created_at: DateTime<Utc>,
     revoked_at: Option<DateTime<Utc>>,
@@ -53,7 +51,7 @@ fn row_to_record(row: EndorsementRow) -> EndorsementRecord {
         id: row.id,
         subject_id: row.subject_id,
         topic: row.topic,
-        issuer_id: row.issuer_id,
+        endorser_id: row.endorser_id,
         evidence: row.evidence,
         created_at: row.created_at,
         revoked_at: row.revoked_at,
@@ -64,53 +62,55 @@ fn row_to_record(row: EndorsementRow) -> EndorsementRecord {
 
 /// # Errors
 ///
-/// Returns `Duplicate` if the subject already has an endorsement for this topic.
 /// Returns `Database` on connection or query failure.
+///
+/// # Idempotency
+///
+/// Uses `ON CONFLICT DO UPDATE` on `(endorser_id, subject_id, topic)`, so re-running
+/// with the same arguments updates the weight and attestation atomically instead of
+/// returning an error. This idempotency applies only to non-genesis endorsements
+/// (`endorser_id IS NOT NULL`). Genesis endorsements (`endorser_id = None`) use a
+/// separate partial index and do not participate in this upsert path.
 pub async fn create_endorsement<'e, E>(
     executor: E,
     subject_id: Uuid,
     topic: &str,
-    issuer_id: Option<Uuid>,
+    endorser_id: Option<Uuid>,
     evidence: Option<&serde_json::Value>,
+    weight: f32,
+    attestation: Option<&serde_json::Value>,
 ) -> Result<CreatedEndorsement, EndorsementRepoError>
 where
     E: sqlx::Executor<'e, Database = sqlx::Postgres>,
 {
     let id = Uuid::new_v4();
 
-    let result = sqlx::query(
+    let row: (Uuid,) = sqlx::query_as(
         r"
-        INSERT INTO reputation__endorsements (id, subject_id, topic, issuer_id, evidence)
-        VALUES ($1, $2, $3, $4, $5)
+        INSERT INTO reputation__endorsements
+            (id, subject_id, topic, endorser_id, evidence, weight, attestation)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        ON CONFLICT (subject_id, topic, endorser_id)
+            DO UPDATE SET weight = EXCLUDED.weight, attestation = EXCLUDED.attestation
+        RETURNING id
         ",
     )
     .bind(id)
     .bind(subject_id)
     .bind(topic)
-    .bind(issuer_id)
+    .bind(endorser_id)
     .bind(evidence)
-    .execute(executor)
-    .await;
+    .bind(weight)
+    .bind(attestation)
+    .fetch_one(executor)
+    .await
+    .map_err(EndorsementRepoError::Database)?;
 
-    match result {
-        Ok(_) => Ok(CreatedEndorsement {
-            id,
-            subject_id,
-            topic: topic.to_string(),
-        }),
-        Err(e) => {
-            if let sqlx::Error::Database(ref db_err) = e {
-                if let Some(constraint) = db_err.constraint() {
-                    if constraint == "uq_endorsements_subject_topic_issuer"
-                        || constraint == "uq_endorsements_genesis"
-                    {
-                        return Err(EndorsementRepoError::Duplicate);
-                    }
-                }
-            }
-            Err(EndorsementRepoError::Database(e))
-        }
-    }
+    Ok(CreatedEndorsement {
+        id: row.0,
+        subject_id,
+        topic: topic.to_string(),
+    })
 }
 
 /// # Errors
@@ -152,7 +152,7 @@ where
 {
     let rows = sqlx::query_as::<_, EndorsementRow>(
         r"
-        SELECT id, subject_id, topic, issuer_id, evidence, created_at, revoked_at
+        SELECT id, subject_id, topic, endorser_id, evidence, created_at, revoked_at
         FROM reputation__endorsements
         WHERE subject_id = $1
         ORDER BY created_at DESC
@@ -163,6 +163,37 @@ where
     .await?;
 
     Ok(rows.into_iter().map(row_to_record).collect())
+}
+
+/// Revoke the active endorsement from `endorser_id` to `subject_id` on `topic`.
+///
+/// A no-op if no active endorsement exists.
+///
+/// # Errors
+///
+/// Returns `Database` on connection or query failure.
+pub async fn revoke_endorsement<'e, E>(
+    executor: E,
+    endorser_id: Uuid,
+    subject_id: Uuid,
+    topic: &str,
+) -> Result<(), EndorsementRepoError>
+where
+    E: sqlx::Executor<'e, Database = sqlx::Postgres>,
+{
+    sqlx::query(
+        r"
+        UPDATE reputation__endorsements
+        SET revoked_at = NOW()
+        WHERE endorser_id = $1 AND subject_id = $2 AND topic = $3 AND revoked_at IS NULL
+        ",
+    )
+    .bind(endorser_id)
+    .bind(subject_id)
+    .bind(topic)
+    .execute(executor)
+    .await?;
+    Ok(())
 }
 
 /// # Errors
@@ -179,7 +210,7 @@ where
 {
     let row = sqlx::query_as::<_, EndorsementRow>(
         r"
-        SELECT id, subject_id, topic, issuer_id, evidence, created_at, revoked_at
+        SELECT id, subject_id, topic, endorser_id, evidence, created_at, revoked_at
         FROM reputation__endorsements
         WHERE subject_id = $1 AND topic = $2
         ",

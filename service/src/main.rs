@@ -42,6 +42,13 @@ use tinycongress_api::{
         repo::{PgRoomsRepo, RoomsRepo},
         service::{DefaultRoomsService, RoomsService},
     },
+    trust::{
+        self,
+        engine::TrustEngine,
+        repo::{PgTrustRepo, TrustRepo},
+        service::{DefaultTrustService, TrustService},
+        worker::TrustWorker,
+    },
 };
 use tower_http::cors::{AllowOrigin, Any, CorsLayer};
 use utoipa::OpenApi;
@@ -137,6 +144,7 @@ async fn build_app(
     let reputation_repo = Arc::new(PgReputationRepo::new(pool.clone()));
     let endorsement_service = Arc::new(DefaultEndorsementService::new(reputation_repo.clone()))
         as Arc<dyn EndorsementService>;
+    let reputation_repo_for_worker = reputation_repo.clone() as Arc<dyn ReputationRepo>;
     let reputation_repo_ext = reputation_repo as Arc<dyn ReputationRepo>;
 
     // Bootstrap configured verifier accounts
@@ -155,11 +163,22 @@ async fn build_app(
         None
     };
 
+    // Trust repo (needed for room constraint evaluation, trust worker, and HTTP endpoints)
+    let trust_repo = Arc::new(PgTrustRepo::new(pool.clone())) as Arc<dyn TrustRepo>;
+    let trust_repo_for_worker = trust_repo.clone();
+    let trust_repo_for_service = trust_repo.clone();
+    let trust_repo_for_http = trust_repo.clone();
+
+    // Trust engine and service
+    let trust_engine = Arc::new(TrustEngine::new(pool.clone()));
+    let trust_service: Arc<dyn TrustService> =
+        Arc::new(DefaultTrustService::new(trust_repo_for_service));
+
     // Rooms wiring
     let rooms_repo = Arc::new(PgRoomsRepo::new(pool.clone()));
     let rooms_service = Arc::new(DefaultRoomsService::new(
         rooms_repo as Arc<dyn RoomsRepo>,
-        endorsement_service.clone(),
+        trust_repo,
     )) as Arc<dyn RoomsService>;
 
     let (prometheus_layer, metric_handle) = PrometheusMetricLayer::pair();
@@ -181,6 +200,7 @@ async fn build_app(
         .merge(identity::http::router())
         .merge(reputation::http::router())
         .merge(rooms::http::router())
+        .merge(trust::http::trust_router())
         .route("/health", get(health_check))
         .route("/ready", get(readiness_check))
         .route("/metrics", get(|| async move { metric_handle.render() }))
@@ -190,6 +210,9 @@ async fn build_app(
         .layer(Extension(endorsement_service))
         .layer(Extension(reputation_repo_ext))
         .layer(Extension(rooms_service))
+        .layer(Extension(trust_service))
+        .layer(Extension(trust_repo_for_http))
+        .layer(Extension(trust_engine.clone()))
         .layer(Extension(synthetic_backup_key))
         .layer(Extension(build_info))
         .layer(Extension(pool.clone()));
@@ -224,6 +247,16 @@ async fn build_app(
     );
 
     let app = app.layer(prometheus_layer);
+
+    // Spawn trust background worker
+    let trust_worker = Arc::new(TrustWorker::new(
+        trust_repo_for_worker,
+        reputation_repo_for_worker,
+        trust_engine,
+        config.trust.batch_size,
+        config.trust.batch_interval_secs,
+    ));
+    tokio::spawn(async move { trust_worker.run().await });
 
     Ok((app, pool))
 }

@@ -37,10 +37,13 @@ CREATE TABLE reputation__endorsements (
     id UUID NOT NULL DEFAULT gen_random_uuid(),
     subject_id UUID NOT NULL,
     topic TEXT NOT NULL,
-    issuer_id UUID,
+    endorser_id UUID,
     evidence JSONB,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    revoked_at TIMESTAMPTZ);
+    revoked_at TIMESTAMPTZ,
+    weight FLOAT4 NOT NULL DEFAULT 1.0,
+    influence_staked FLOAT4 NOT NULL DEFAULT 0,
+    attestation JSONB);
 
 CREATE TABLE reputation__external_identities (
     id UUID NOT NULL DEFAULT gen_random_uuid(),
@@ -81,7 +84,9 @@ CREATE TABLE rooms__rooms (
     eligibility_topic TEXT NOT NULL DEFAULT 'identity_verified'::text,
     status TEXT NOT NULL DEFAULT 'open'::text,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    closed_at TIMESTAMPTZ);
+    closed_at TIMESTAMPTZ,
+    constraint_type TEXT NOT NULL DEFAULT 'endorsed_by'::text,
+    constraint_config JSONB NOT NULL DEFAULT '{}'::jsonb);
 
 CREATE TABLE rooms__votes (
     id UUID NOT NULL DEFAULT gen_random_uuid(),
@@ -90,6 +95,53 @@ CREATE TABLE rooms__votes (
     user_id UUID NOT NULL,
     value FLOAT4 NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now());
+
+CREATE TABLE trust__action_queue (
+    id UUID NOT NULL DEFAULT gen_random_uuid(),
+    actor_id UUID NOT NULL,
+    action_type TEXT NOT NULL,
+    payload JSONB NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending'::text,
+    quota_date DATE NOT NULL DEFAULT CURRENT_DATE,
+    error_message TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    processed_at TIMESTAMPTZ);
+
+CREATE TABLE trust__denouncements (
+    id UUID NOT NULL DEFAULT gen_random_uuid(),
+    accuser_id UUID NOT NULL,
+    target_id UUID NOT NULL,
+    reason TEXT NOT NULL,
+    influence_spent FLOAT4 NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    resolved_at TIMESTAMPTZ);
+
+CREATE TABLE trust__invites (
+    id UUID NOT NULL DEFAULT gen_random_uuid(),
+    endorser_id UUID NOT NULL,
+    envelope BYTEA NOT NULL,
+    delivery_method TEXT NOT NULL,
+    attestation JSONB NOT NULL,
+    accepted_by UUID,
+    expires_at TIMESTAMPTZ NOT NULL,
+    accepted_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now());
+
+CREATE TABLE trust__score_snapshots (
+    id UUID NOT NULL DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL,
+    context_user_id UUID,
+    trust_distance FLOAT4,
+    path_diversity INT4,
+    eigenvector_centrality FLOAT4,
+    computed_at TIMESTAMPTZ NOT NULL DEFAULT now());
+
+CREATE TABLE trust__user_influence (
+    user_id UUID NOT NULL,
+    total_influence FLOAT4 NOT NULL DEFAULT 10.0,
+    staked_influence FLOAT4 NOT NULL DEFAULT 0,
+    spent_influence FLOAT4 NOT NULL DEFAULT 0,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -131,10 +183,10 @@ CREATE INDEX idx_endorsements_topic ON public.reputation__endorsements USING btr
 CREATE UNIQUE INDEX reputation__endorsements_pkey ON public.reputation__endorsements USING btree (id)
 
 -- reputation__endorsements.uq_endorsements_genesis
-CREATE UNIQUE INDEX uq_endorsements_genesis ON public.reputation__endorsements USING btree (subject_id, topic) WHERE (issuer_id IS NULL)
+CREATE UNIQUE INDEX uq_endorsements_genesis ON public.reputation__endorsements USING btree (subject_id, topic) WHERE (endorser_id IS NULL)
 
--- reputation__endorsements.uq_endorsements_subject_topic_issuer
-CREATE UNIQUE INDEX uq_endorsements_subject_topic_issuer ON public.reputation__endorsements USING btree (subject_id, topic, issuer_id)
+-- reputation__endorsements.uq_endorsements_subject_topic_endorser
+CREATE UNIQUE INDEX uq_endorsements_subject_topic_endorser ON public.reputation__endorsements USING btree (subject_id, topic, endorser_id)
 
 -- reputation__external_identities.idx_external_identities_account
 CREATE INDEX idx_external_identities_account ON public.reputation__external_identities USING btree (account_id)
@@ -184,10 +236,43 @@ CREATE UNIQUE INDEX rooms__votes_pkey ON public.rooms__votes USING btree (id)
 -- rooms__votes.uq_votes_poll_dimension_user
 CREATE UNIQUE INDEX uq_votes_poll_dimension_user ON public.rooms__votes USING btree (poll_id, dimension_id, user_id)
 
+-- trust__action_queue.idx_action_queue_actor_date
+CREATE INDEX idx_action_queue_actor_date ON public.trust__action_queue USING btree (actor_id, quota_date)
+
+-- trust__action_queue.idx_action_queue_pending
+CREATE INDEX idx_action_queue_pending ON public.trust__action_queue USING btree (status) WHERE (status = 'pending'::text)
+
+-- trust__action_queue.trust__action_queue_pkey
+CREATE UNIQUE INDEX trust__action_queue_pkey ON public.trust__action_queue USING btree (id)
+
+-- trust__denouncements.trust__denouncements_pkey
+CREATE UNIQUE INDEX trust__denouncements_pkey ON public.trust__denouncements USING btree (id)
+
+-- trust__denouncements.uq_denouncement_accuser_target
+CREATE UNIQUE INDEX uq_denouncement_accuser_target ON public.trust__denouncements USING btree (accuser_id, target_id)
+
+-- trust__invites.idx_invites_endorser
+CREATE INDEX idx_invites_endorser ON public.trust__invites USING btree (endorser_id)
+
+-- trust__invites.trust__invites_pkey
+CREATE UNIQUE INDEX trust__invites_pkey ON public.trust__invites USING btree (id)
+
+-- trust__score_snapshots.trust__score_snapshots_pkey
+CREATE UNIQUE INDEX trust__score_snapshots_pkey ON public.trust__score_snapshots USING btree (id)
+
+-- trust__score_snapshots.uq_score_snapshot_user_context
+CREATE UNIQUE INDEX uq_score_snapshot_user_context ON public.trust__score_snapshots USING btree (user_id, context_user_id)
+
+-- trust__score_snapshots.uq_score_snapshot_user_global
+CREATE UNIQUE INDEX uq_score_snapshot_user_global ON public.trust__score_snapshots USING btree (user_id) WHERE (context_user_id IS NULL)
+
+-- trust__user_influence.trust__user_influence_pkey
+CREATE UNIQUE INDEX trust__user_influence_pkey ON public.trust__user_influence USING btree (user_id)
+
 -- Foreign Keys
 -- account_backups.account_id -> accounts.id (ON UPDATE NO ACTION, ON DELETE CASCADE)
 -- device_keys.account_id -> accounts.id (ON UPDATE NO ACTION, ON DELETE CASCADE)
--- reputation__endorsements.issuer_id -> accounts.id (ON UPDATE NO ACTION, ON DELETE NO ACTION)
+-- reputation__endorsements.endorser_id -> accounts.id (ON UPDATE NO ACTION, ON DELETE NO ACTION)
 -- reputation__endorsements.subject_id -> accounts.id (ON UPDATE NO ACTION, ON DELETE CASCADE)
 -- reputation__external_identities.account_id -> accounts.id (ON UPDATE NO ACTION, ON DELETE CASCADE)
 -- rooms__poll_dimensions.poll_id -> rooms__polls.id (ON UPDATE NO ACTION, ON DELETE CASCADE)
@@ -195,6 +280,14 @@ CREATE UNIQUE INDEX uq_votes_poll_dimension_user ON public.rooms__votes USING bt
 -- rooms__votes.dimension_id -> rooms__poll_dimensions.id (ON UPDATE NO ACTION, ON DELETE CASCADE)
 -- rooms__votes.poll_id -> rooms__polls.id (ON UPDATE NO ACTION, ON DELETE CASCADE)
 -- rooms__votes.user_id -> accounts.id (ON UPDATE NO ACTION, ON DELETE CASCADE)
+-- trust__action_queue.actor_id -> accounts.id (ON UPDATE NO ACTION, ON DELETE CASCADE)
+-- trust__denouncements.accuser_id -> accounts.id (ON UPDATE NO ACTION, ON DELETE CASCADE)
+-- trust__denouncements.target_id -> accounts.id (ON UPDATE NO ACTION, ON DELETE CASCADE)
+-- trust__invites.accepted_by -> accounts.id (ON UPDATE NO ACTION, ON DELETE NO ACTION)
+-- trust__invites.endorser_id -> accounts.id (ON UPDATE NO ACTION, ON DELETE CASCADE)
+-- trust__score_snapshots.context_user_id -> accounts.id (ON UPDATE NO ACTION, ON DELETE CASCADE)
+-- trust__score_snapshots.user_id -> accounts.id (ON UPDATE NO ACTION, ON DELETE CASCADE)
+-- trust__user_influence.user_id -> accounts.id (ON UPDATE NO ACTION, ON DELETE CASCADE)
 
 -- Constraints
 -- account_backups: account_backups_account_id_not_null (CHECK)
@@ -226,9 +319,12 @@ CREATE UNIQUE INDEX uq_votes_poll_dimension_user ON public.rooms__votes USING bt
 -- device_keys: uq_device_keys_kid (UNIQUE)
 -- reputation__endorsements: reputation__endorsements_created_at_not_null (CHECK)
 -- reputation__endorsements: reputation__endorsements_id_not_null (CHECK)
+-- reputation__endorsements: reputation__endorsements_influence_staked_not_null (CHECK)
 -- reputation__endorsements: reputation__endorsements_pkey (PRIMARY KEY)
 -- reputation__endorsements: reputation__endorsements_subject_id_not_null (CHECK)
 -- reputation__endorsements: reputation__endorsements_topic_not_null (CHECK)
+-- reputation__endorsements: reputation__endorsements_weight_check (CHECK)
+-- reputation__endorsements: reputation__endorsements_weight_not_null (CHECK)
 -- reputation__external_identities: reputation__external_identities_account_id_not_null (CHECK)
 -- reputation__external_identities: reputation__external_identities_id_not_null (CHECK)
 -- reputation__external_identities: reputation__external_identities_linked_at_not_null (CHECK)
@@ -254,6 +350,8 @@ CREATE UNIQUE INDEX uq_votes_poll_dimension_user ON public.rooms__votes USING bt
 -- rooms__polls: rooms__polls_room_id_not_null (CHECK)
 -- rooms__polls: rooms__polls_status_check (CHECK)
 -- rooms__polls: rooms__polls_status_not_null (CHECK)
+-- rooms__rooms: rooms__rooms_constraint_config_not_null (CHECK)
+-- rooms__rooms: rooms__rooms_constraint_type_not_null (CHECK)
 -- rooms__rooms: rooms__rooms_created_at_not_null (CHECK)
 -- rooms__rooms: rooms__rooms_eligibility_topic_not_null (CHECK)
 -- rooms__rooms: rooms__rooms_id_not_null (CHECK)
@@ -271,3 +369,45 @@ CREATE UNIQUE INDEX uq_votes_poll_dimension_user ON public.rooms__votes USING bt
 -- rooms__votes: rooms__votes_user_id_not_null (CHECK)
 -- rooms__votes: rooms__votes_value_not_null (CHECK)
 -- rooms__votes: uq_votes_poll_dimension_user (UNIQUE)
+-- trust__action_queue: trust__action_queue_action_type_check (CHECK)
+-- trust__action_queue: trust__action_queue_action_type_not_null (CHECK)
+-- trust__action_queue: trust__action_queue_actor_id_not_null (CHECK)
+-- trust__action_queue: trust__action_queue_created_at_not_null (CHECK)
+-- trust__action_queue: trust__action_queue_id_not_null (CHECK)
+-- trust__action_queue: trust__action_queue_payload_not_null (CHECK)
+-- trust__action_queue: trust__action_queue_pkey (PRIMARY KEY)
+-- trust__action_queue: trust__action_queue_quota_date_not_null (CHECK)
+-- trust__action_queue: trust__action_queue_status_check (CHECK)
+-- trust__action_queue: trust__action_queue_status_not_null (CHECK)
+-- trust__denouncements: chk_denouncement_not_self (CHECK)
+-- trust__denouncements: trust__denouncements_accuser_id_not_null (CHECK)
+-- trust__denouncements: trust__denouncements_created_at_not_null (CHECK)
+-- trust__denouncements: trust__denouncements_id_not_null (CHECK)
+-- trust__denouncements: trust__denouncements_influence_spent_check (CHECK)
+-- trust__denouncements: trust__denouncements_influence_spent_not_null (CHECK)
+-- trust__denouncements: trust__denouncements_pkey (PRIMARY KEY)
+-- trust__denouncements: trust__denouncements_reason_not_null (CHECK)
+-- trust__denouncements: trust__denouncements_target_id_not_null (CHECK)
+-- trust__denouncements: uq_denouncement_accuser_target (UNIQUE)
+-- trust__invites: trust__invites_attestation_not_null (CHECK)
+-- trust__invites: trust__invites_created_at_not_null (CHECK)
+-- trust__invites: trust__invites_delivery_method_check (CHECK)
+-- trust__invites: trust__invites_delivery_method_not_null (CHECK)
+-- trust__invites: trust__invites_endorser_id_not_null (CHECK)
+-- trust__invites: trust__invites_envelope_not_null (CHECK)
+-- trust__invites: trust__invites_expires_at_not_null (CHECK)
+-- trust__invites: trust__invites_id_not_null (CHECK)
+-- trust__invites: trust__invites_pkey (PRIMARY KEY)
+-- trust__score_snapshots: trust__score_snapshots_computed_at_not_null (CHECK)
+-- trust__score_snapshots: trust__score_snapshots_id_not_null (CHECK)
+-- trust__score_snapshots: trust__score_snapshots_pkey (PRIMARY KEY)
+-- trust__score_snapshots: trust__score_snapshots_user_id_not_null (CHECK)
+-- trust__user_influence: trust__user_influence_pkey (PRIMARY KEY)
+-- trust__user_influence: trust__user_influence_spent_influence_check (CHECK)
+-- trust__user_influence: trust__user_influence_spent_influence_not_null (CHECK)
+-- trust__user_influence: trust__user_influence_staked_influence_check (CHECK)
+-- trust__user_influence: trust__user_influence_staked_influence_not_null (CHECK)
+-- trust__user_influence: trust__user_influence_total_influence_check (CHECK)
+-- trust__user_influence: trust__user_influence_total_influence_not_null (CHECK)
+-- trust__user_influence: trust__user_influence_updated_at_not_null (CHECK)
+-- trust__user_influence: trust__user_influence_user_id_not_null (CHECK)

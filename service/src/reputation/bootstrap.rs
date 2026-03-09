@@ -87,9 +87,9 @@ async fn ensure_authorized_verifier_endorsement(
     account_id: Uuid,
 ) -> Result<(), anyhow::Error> {
     sqlx::query(
-        r"INSERT INTO reputation__endorsements (id, subject_id, topic, issuer_id)
+        r"INSERT INTO reputation__endorsements (id, subject_id, topic, endorser_id)
           VALUES (gen_random_uuid(), $1, 'authorized_verifier', NULL)
-          ON CONFLICT (subject_id, topic) WHERE issuer_id IS NULL DO NOTHING",
+          ON CONFLICT (subject_id, topic) WHERE endorser_id IS NULL DO NOTHING",
     )
     .bind(account_id)
     .execute(&mut *conn)

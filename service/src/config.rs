@@ -39,6 +39,9 @@ pub struct Config {
     /// Set via `TC_VERIFIERS` as a JSON array.
     #[serde(default)]
     pub verifiers: Vec<VerifierConfig>,
+    /// Trust background worker configuration.
+    #[serde(default)]
+    pub trust: TrustConfig,
 }
 
 /// Configuration for a platform-bootstrapped verifier account.
@@ -326,6 +329,38 @@ pub struct SwaggerConfig {
     pub enabled: bool,
 }
 
+/// Configuration for the trust background worker.
+///
+/// Set via `TC_TRUST__*` environment variables.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct TrustConfig {
+    /// Seconds between worker batch runs (default: 30).
+    #[serde(default = "default_trust_batch_interval_secs")]
+    pub batch_interval_secs: u64,
+    /// Maximum number of actions processed per batch run (default: 50).
+    #[serde(default = "default_trust_batch_size")]
+    pub batch_size: i64,
+}
+
+#[allow(clippy::missing_const_for_fn)]
+fn default_trust_batch_interval_secs() -> u64 {
+    30
+}
+
+#[allow(clippy::missing_const_for_fn)]
+fn default_trust_batch_size() -> i64 {
+    50
+}
+
+impl Default for TrustConfig {
+    fn default() -> Self {
+        Self {
+            batch_interval_secs: default_trust_batch_interval_secs(),
+            batch_size: default_trust_batch_size(),
+        }
+    }
+}
+
 impl Default for Config {
     fn default() -> Self {
         Self {
@@ -353,6 +388,7 @@ impl Default for Config {
             synthetic_backup_key: String::new(),
             idme: None,
             verifiers: Vec::new(),
+            trust: TrustConfig::default(),
         }
     }
 }
@@ -469,6 +505,18 @@ impl Config {
             )));
         }
 
+        // Trust worker: batch_interval_secs and batch_size must be positive
+        if self.trust.batch_interval_secs == 0 {
+            return Err(ConfigError::Validation(
+                "trust.batch_interval_secs cannot be 0".into(),
+            ));
+        }
+        if self.trust.batch_size == 0 {
+            return Err(ConfigError::Validation(
+                "trust.batch_size cannot be 0".into(),
+            ));
+        }
+
         // Synthetic backup HMAC key is required and must be at least 32 bytes
         if self.synthetic_backup_key.is_empty() {
             return Err(ConfigError::Validation(
@@ -509,6 +557,8 @@ mod tests {
         assert_eq!(config.database.name, "tiny-congress");
         assert!(config.database.user.is_empty());
         assert!(config.database.password.is_empty());
+        assert_eq!(config.trust.batch_interval_secs, 30);
+        assert_eq!(config.trust.batch_size, 50);
     }
 
     #[test]

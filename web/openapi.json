@@ -53,7 +53,7 @@
           "Verifiers"
         ],
         "summary": "Create an endorsement as an authorized verifier.",
-        "description": "Checks that the authenticated caller has the `authorized_verifier` endorsement,\nresolves the target username to an account, and creates the endorsement.\n\n# Errors\n\nReturns an error response for unauthorized, forbidden, not-found, conflict, or internal errors.",
+        "description": "Checks that the authenticated caller has the `authorized_verifier` endorsement,\nresolves the target username to an account, and creates the endorsement.\n\n# Errors\n\nReturns an error response for unauthorized, forbidden, not-found, or internal errors.",
         "operationId": "create_endorsement_as_verifier",
         "requestBody": {
           "content": {
@@ -84,9 +84,6 @@
           },
           "404": {
             "description": "User not found"
-          },
-          "409": {
-            "description": "Duplicate endorsement"
           },
           "500": {
             "description": "Internal server error"

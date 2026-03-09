@@ -60,6 +60,11 @@ use tinycongress_api::{
         repo::{PgRoomsRepo, RoomsRepo},
         service::{DefaultRoomsService, RoomsService},
     },
+    trust::{
+        self,
+        repo::{PgTrustRepo, TrustRepo},
+        service::{DefaultTrustService, TrustService},
+    },
 };
 use tower_http::cors::{AllowOrigin, Any, CorsLayer};
 use utoipa::OpenApi;
@@ -100,6 +105,8 @@ pub struct TestAppBuilder {
     include_reputation: bool,
     /// Whether to include rooms routes
     include_rooms: bool,
+    /// Whether to include trust routes
+    include_trust: bool,
     /// Whether to include health check route
     include_health: bool,
     /// Whether to include Swagger UI
@@ -119,6 +126,10 @@ pub struct TestAppBuilder {
     reputation_repo: Option<Arc<dyn ReputationRepo>>,
     /// Rooms service for room/poll routes
     rooms_service: Option<Arc<dyn RoomsService>>,
+    /// Trust service for trust routes
+    trust_service: Option<Arc<dyn TrustService>>,
+    /// Trust repo for trust routes
+    trust_repo: Option<Arc<dyn TrustRepo>>,
     /// CORS allowed origins (None means no CORS layer)
     cors_origins: Option<Vec<String>>,
     /// Security headers config (None means disabled)
@@ -141,6 +152,7 @@ impl TestAppBuilder {
             include_identity: false,
             include_reputation: false,
             include_rooms: false,
+            include_trust: false,
             include_health: false,
             include_swagger: false,
             build_info: None,
@@ -150,6 +162,8 @@ impl TestAppBuilder {
             endorsement_service: None,
             reputation_repo: None,
             rooms_service: None,
+            trust_service: None,
+            trust_repo: None,
             cors_origins: None,
             security_headers: None,
         }
@@ -264,13 +278,41 @@ impl TestAppBuilder {
         self.reputation_repo = Some(reputation_repo as Arc<dyn ReputationRepo>);
         self.endorsement_service = Some(endorsement_service.clone());
 
+        // Trust repo (needed for room constraint evaluation)
+        let trust_repo = Arc::new(PgTrustRepo::new(pool.clone())) as Arc<dyn TrustRepo>;
+
         // Rooms wiring
         self.include_rooms = true;
         let rooms_repo = Arc::new(PgRoomsRepo::new(pool.clone()));
         self.rooms_service = Some(Arc::new(DefaultRoomsService::new(
             rooms_repo as Arc<dyn RoomsRepo>,
-            endorsement_service,
+            trust_repo,
         )) as Arc<dyn RoomsService>);
+
+        self.pool = Some(pool);
+        self
+    }
+
+    /// Include trust routes with a real database pool.
+    ///
+    /// Wires identity (for auth), trust repo, and trust service. Used for
+    /// integration tests against the trust HTTP endpoints.
+    #[must_use]
+    pub fn with_trust_pool(mut self, pool: PgPool) -> Self {
+        // Identity wiring (needed for auth)
+        self.include_identity = true;
+        let identity_repo = Arc::new(PgIdentityRepo::new(pool.clone()));
+        self.identity_repo = Some(Arc::clone(&identity_repo) as Arc<dyn IdentityRepo>);
+        self.identity_service =
+            Some(Arc::new(DefaultIdentityService::new(identity_repo)) as Arc<dyn IdentityService>);
+
+        // Trust wiring
+        self.include_trust = true;
+        let trust_repo = Arc::new(PgTrustRepo::new(pool.clone())) as Arc<dyn TrustRepo>;
+        let trust_service =
+            Arc::new(DefaultTrustService::new(trust_repo.clone())) as Arc<dyn TrustService>;
+        self.trust_repo = Some(trust_repo);
+        self.trust_service = Some(trust_service);
 
         self.pool = Some(pool);
         self
@@ -389,6 +431,10 @@ impl TestAppBuilder {
             app = app.merge(rooms::http::router());
         }
 
+        if self.include_trust {
+            app = app.merge(trust::http::trust_router());
+        }
+
         if self.include_health {
             app = app
                 .route("/health", get(health_check))
@@ -420,6 +466,14 @@ impl TestAppBuilder {
 
         if let Some(service) = self.rooms_service {
             app = app.layer(Extension(service));
+        }
+
+        if let Some(service) = self.trust_service {
+            app = app.layer(Extension(service));
+        }
+
+        if let Some(repo) = self.trust_repo {
+            app = app.layer(Extension(repo));
         }
 
         // Always provide a synthetic backup HMAC key when identity routes are active
