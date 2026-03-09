@@ -224,9 +224,6 @@ jobs:
       - name: Setup web toolchain
         uses: ./.github/actions/setup-web
 
-      - name: Install dependencies
-        run: cd web && yarn install --immutable
-
       - name: Install just
         uses: extractions/setup-just@v3
 
@@ -304,9 +301,6 @@ jobs:
 
       - name: Setup web toolchain
         uses: ./.github/actions/setup-web
-
-      - name: Install frontend dependencies
-        run: cd web && yarn install --immutable
 
       - name: Run dependency audit
         run: just audit-deps
@@ -694,10 +688,6 @@ jobs:
       - name: Setup web toolchain
         uses: ./.github/actions/setup-web
 
-      - name: Install web dependencies
-        working-directory: web
-        run: yarn install --immutable
-
       - name: Setup Rust toolchain
         uses: ./.github/actions/setup-rust
         with:
@@ -849,10 +839,6 @@ jobs:
 
       - name: Setup web toolchain
         uses: ./.github/actions/setup-web
-
-      - name: Install web dependencies
-        working-directory: web
-        run: yarn install --immutable
 
       - name: Cache Playwright browsers
         uses: runs-on/cache@v4
@@ -1192,10 +1178,6 @@ jobs:
 
       - name: Setup web toolchain
         uses: ./.github/actions/setup-web
-
-      - name: Install web dependencies
-        working-directory: web
-        run: yarn install --immutable
 
       # GHA ubuntu-24.04 pre-installs gettext (envsubst); catthehacker ARC runners do not.
       - name: Install envsubst

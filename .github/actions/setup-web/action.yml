@@ -4,10 +4,22 @@ description: Configure Node.js and yarn (from committed binary) with dependency 
 runs:
   using: composite
   steps:
+    # Cache Node.js binary — self-hosted runners have no pre-installed tool
+    # cache, so setup-node downloads it from GitHub on every run without this.
+    - name: Cache Node.js toolchain
+      uses: runs-on/cache@v4
+      with:
+        path: ${{ runner.tool_cache }}
+        key: node-toolcache-${{ runner.os }}-${{ hashFiles('web/.nvmrc') }}
+        save-always: true
+
     - name: Set up Node
       uses: actions/setup-node@v6
       with:
         node-version-file: web/.nvmrc
+        # Disable built-in package-manager cache — we manage yarn cache below
+        # via runs-on/cache to avoid conflicts on self-hosted ARC runners.
+        cache: ''
 
     # yarn 4.x is committed at web/.yarn/releases/ (yarnPath in .yarnrc.yml).
     # Create a /usr/local/bin/yarn shim so 'yarn' works from any directory
@@ -20,14 +32,17 @@ runs:
         printf '#!/bin/sh\nexec node "%s" "$@"\n' "$YARN_BIN" | sudo tee /usr/local/bin/yarn > /dev/null
         sudo chmod +x /usr/local/bin/yarn
 
-    - name: Get yarn cache directory
-      id: yarn-cache-dir
-      shell: bash
-      run: echo "dir=$(cd web && yarn config get cacheFolder)" >> "$GITHUB_OUTPUT"
-
-    - name: Cache yarn dependencies
+    - name: Cache node_modules
+      id: nm-cache
       uses: runs-on/cache@v4
       with:
-        path: ${{ steps.yarn-cache-dir.outputs.dir }}
-        key: yarn-${{ runner.os }}-${{ hashFiles('web/yarn.lock') }}
-        restore-keys: yarn-${{ runner.os }}-
+        path: web/node_modules
+        key: node-modules-${{ runner.os }}-${{ hashFiles('web/yarn.lock') }}
+        save-always: true
+
+    - name: Install frontend dependencies
+      if: steps.nm-cache.outputs.cache-hit != 'true'
+      shell: bash
+      working-directory: web
+      run: yarn install --immutable
+
