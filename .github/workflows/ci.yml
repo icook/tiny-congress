@@ -942,6 +942,24 @@ jobs:
         run: |
           set -euo pipefail
           NODE="${KIND_CLUSTER_NAME}-control-plane"
+          : "${KIND_LOG:?KIND_LOG not set}"
+
+          # On ARC runners KinD runs inside DinD. KinD writes the kubeconfig with
+          # server: https://127.0.0.1:<port>, but 127.0.0.1 on the runner refers
+          # to the runner pod itself, not the DinD pod where the KinD API server
+          # actually lives. Rewrite the server address to the DinD hostname.
+          if [ -n "${DOCKER_HOST:-}" ]; then
+            DIND_HOSTNAME=$(echo "$DOCKER_HOST" | sed 's|tcp://||;s|:[0-9]*$||')
+            KUBECONFIG_FILE="${KUBECONFIG:-${HOME}/.kube/config}"
+            echo "Waiting for KinD to write kubeconfig..."
+            timeout 120 bash -c \
+              "until [ -f '${KUBECONFIG_FILE}' ] && \
+               kubectl config get-contexts kind-${KIND_CLUSTER_NAME} >/dev/null 2>&1; \
+               do sleep 2; done"
+            echo "Rewriting kubeconfig server from 127.0.0.1 to ${DIND_HOSTNAME}..."
+            sed -i "s|server: https://127\.0\.0\.1:|server: https://${DIND_HOSTNAME}:|g" \
+              "$KUBECONFIG_FILE"
+          fi
 
           # 1. Wait for API server
           echo "Waiting for cluster API..."
