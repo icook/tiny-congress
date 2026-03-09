@@ -1065,11 +1065,9 @@ jobs:
   deploy-gitops:
     name: Update gitops image digests
     if: >-
-      always() &&
       github.event_name == 'push' && github.ref == 'refs/heads/master' &&
-      !contains(needs.*.result, 'failure') &&
-      !contains(needs.*.result, 'cancelled')
-    needs: [unit-tests, rust-coverage, e2e-tests, detect-changes]
+      needs.ci-gate.result == 'success'
+    needs: [ci-gate, detect-changes]
     runs-on: ${{ needs.detect-changes.outputs.runner-small }}
     permissions:
       contents: read
