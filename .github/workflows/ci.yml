@@ -433,9 +433,12 @@ jobs:
           #   1. Commit message contains [arc]  — per-commit, good for iteration
           #   2. Repo var USE_ARC_RUNNERS=true   — global override
           # Default: ubuntu-latest (GHA hosted)
-          # For pull_request events checkout creates a synthetic merge commit
-          # (HEAD). HEAD^2 is the PR branch tip; fall back to HEAD for push events.
-          commit_msg=$(git log -1 --format=%s HEAD^2 2>/dev/null || git log -1 --format=%s HEAD)
+          # For pull_request events checkout creates a synthetic merge commit so
+          # git log HEAD shows the merge message, not the branch commit. Fetch
+          # the actual head SHA (depth=1) and read its message directly.
+          head_sha="${{ github.event.pull_request.head.sha || github.sha }}"
+          git fetch origin "$head_sha" --depth=1 2>/dev/null || true
+          commit_msg=$(git log -1 --format=%s "$head_sha" 2>/dev/null || git log -1 --format=%s HEAD)
           if echo "$commit_msg" | grep -qF '[arc]' || [ "${{ vars.USE_ARC_RUNNERS }}" = "true" ]; then
             {
               echo "use-arc=true"
