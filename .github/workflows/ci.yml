@@ -281,6 +281,175 @@ jobs:
             web/docs
           retention-days: 7
 
+  # ── Verify codegen is up-to-date (GraphQL + OpenAPI) ─────
+  codegen-check:
+    name: Check codegen
+    needs: [detect-changes]
+    if: needs.detect-changes.outputs.api == 'true' || needs.detect-changes.outputs.ui == 'true' || needs.detect-changes.outputs.ci == 'true'
+    runs-on: ${{ needs.detect-changes.outputs.runner-small }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Rust toolchain
+        uses: ./.github/actions/setup-rust
+
+      - name: Setup web toolchain
+        uses: ./.github/actions/setup-web
+
+      - name: Install just
+        uses: extractions/setup-just@v3
+
+      - name: Install frontend dependencies
+        run: just _ensure-frontend-deps
+
+      - name: Run codegen
+        run: just codegen
+
+      - name: Check for uncommitted changes
+        run: |
+          if ! git diff --quiet web/schema.graphql web/openapi.json web/src/api/generated/; then
+            echo "::error::Codegen is out of date. Run 'just codegen' and commit the changes."
+            git diff web/schema.graphql web/openapi.json web/src/api/generated/
+            exit 1
+          fi
+          echo "✓ Codegen is up to date"
+
+  # ── Security & dependency audit ──────────────────────────
+  security-audit:
+    name: Security & Dependency Audit
+    needs: [detect-changes]
+    if: needs.detect-changes.outputs.api == 'true' || needs.detect-changes.outputs.ui == 'true' || needs.detect-changes.outputs.ci == 'true'
+    runs-on: ${{ needs.detect-changes.outputs.runner-small }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0  # Full history for gitleaks
+
+      - name: Install just
+        uses: extractions/setup-just@v3
+
+      - name: Setup Rust toolchain
+        uses: ./.github/actions/setup-rust
+        with:
+          cache-dependencies: 'false'
+
+      - name: Install cargo-deny
+        uses: taiki-e/install-action@cargo-deny
+
+      - name: Install cargo-machete
+        uses: taiki-e/install-action@cargo-machete
+
+      - name: Setup web toolchain
+        uses: ./.github/actions/setup-web
+
+      - name: Install frontend dependencies
+        run: cd web && yarn install --immutable
+
+      - name: Run dependency audit
+        run: just audit-deps
+
+      - name: Check for unused dependencies
+        run: just audit-unused
+
+      # gitleaks GitHub Action provides richer integration than the CLI
+      - name: Run gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ── Verify SQLx query snapshots ──────────────────────────
+  sqlx-check:
+    name: Check SQLx snapshots
+    runs-on: ${{ needs.detect-changes.outputs.runner-small }}
+    needs: [build-images, detect-changes]
+    if: needs.detect-changes.outputs.api == 'true' || needs.detect-changes.outputs.ci == 'true'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Login to GHCR
+        if: runner.environment != 'self-hosted'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Start postgres
+        run: |
+          CONTAINER_NAME="postgres-${GITHUB_RUN_ID}"
+
+          # Check if container already exists
+          if docker ps -a --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
+            echo "Container exists, starting it..."
+            docker start "$CONTAINER_NAME"
+          else
+            echo "Creating new postgres container..."
+            # Use -p 5432 (no host port) so Docker assigns a random host port.
+            # This avoids port collisions when multiple workflow runs share the
+            # same DinD pod's network namespace.
+            docker run -d --name "$CONTAINER_NAME" \
+              -p 5432 \
+              -e POSTGRES_USER=postgres \
+              -e POSTGRES_PASSWORD=postgres \
+              ${{ needs.detect-changes.outputs.image-registry }}/postgres:${{ github.sha }}
+          fi
+
+          # Discover the mapped host port via docker port.
+          # On ARC runners DOCKER_HOST is set to the remote DinD TCP address;
+          # extract the hostname so we can reach the mapped port.
+          # On GHA-hosted runners DOCKER_HOST is unset and everything is local.
+          if [ -n "${DOCKER_HOST:-}" ]; then
+            DOCKER_HOSTNAME=$(echo "$DOCKER_HOST" | sed 's|tcp://||;s|:[0-9]*$||')
+          else
+            DOCKER_HOSTNAME="127.0.0.1"
+          fi
+
+          PG_PORT=$(docker port "$CONTAINER_NAME" 5432 | head -1 | sed 's/.*://')
+
+          # Wait for postgres to be ready (docker exec avoids needing network access)
+          for i in {1..30}; do
+            if docker exec "$CONTAINER_NAME" pg_isready -U postgres; then
+              echo "Postgres is ready"
+              break
+            fi
+            echo "Waiting for postgres... ($i/30)"
+            sleep 1
+          done
+
+          echo "DATABASE_URL=postgres://postgres:postgres@${DOCKER_HOSTNAME}:${PG_PORT}/tiny-congress" >> "$GITHUB_ENV"
+
+      - name: Setup Rust toolchain
+        uses: ./.github/actions/setup-rust
+
+      - name: Install sqlx-cli
+        run: cargo install sqlx-cli --locked --no-default-features --features postgres
+
+      - name: Run migrations
+        working-directory: service
+        run: cargo sqlx migrate run
+
+      - name: Check SQLx snapshots
+        working-directory: service
+        run: |
+          output=$(cargo sqlx prepare --check 2>&1) || {
+            echo "$output"
+            echo "::error::SQLx query snapshots are out of date. Run 'just sqlx-prepare' and commit the changes in service/.sqlx/"
+            exit 1
+          }
+          echo "$output"
+          if echo "$output" | grep -q "potentially unused queries"; then
+            echo "::error::Unused SQLx query snapshots found in .sqlx/. Run 'just sqlx-prepare' to remove stale entries."
+            exit 1
+          fi
+          echo "✓ SQLx snapshots are up to date"
+
+      - name: Cleanup postgres (best effort)
+        if: always()
+        run: docker rm -f "postgres-${GITHUB_RUN_ID}" 2>/dev/null || true
+
   # ── Detect which paths changed (skip unnecessary builds) ─
   detect-changes:
     name: Detect changed paths
