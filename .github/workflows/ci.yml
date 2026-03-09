@@ -43,7 +43,7 @@ jobs:
     name: Lint Kubernetes manifests
     needs: [detect-changes]
     if: needs.detect-changes.outputs.chart == 'true' || needs.detect-changes.outputs.ci == 'true'
-    runs-on: ${{ needs.detect-changes.outputs.runner-nano }}
+    runs-on: ${{ needs.detect-changes.outputs.runner-small }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -82,7 +82,7 @@ jobs:
     name: Validate Grafana dashboards
     needs: [detect-changes]
     if: needs.detect-changes.outputs.dashboards == 'true' || needs.detect-changes.outputs.ci == 'true'
-    runs-on: ${{ needs.detect-changes.outputs.runner-nano }}
+    runs-on: ${{ needs.detect-changes.outputs.runner-small }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -145,7 +145,7 @@ jobs:
       needs.detect-changes.outputs.ui == 'true' ||
       needs.detect-changes.outputs.chart == 'true' ||
       needs.detect-changes.outputs.ci == 'true'
-    runs-on: ${{ needs.detect-changes.outputs.runner-nano }}
+    runs-on: ${{ needs.detect-changes.outputs.runner-small }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -212,7 +212,7 @@ jobs:
     name: Build documentation
     needs: [detect-changes]
     if: needs.detect-changes.outputs.api == 'true' || needs.detect-changes.outputs.ui == 'true' || needs.detect-changes.outputs.ci == 'true'
-    runs-on: ${{ needs.detect-changes.outputs.runner-medium }}
+    runs-on: ${{ needs.detect-changes.outputs.runner-small }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -246,7 +246,7 @@ jobs:
     name: Check codegen
     needs: [detect-changes]
     if: needs.detect-changes.outputs.api == 'true' || needs.detect-changes.outputs.ui == 'true' || needs.detect-changes.outputs.ci == 'true'
-    runs-on: ${{ needs.detect-changes.outputs.runner-medium }}
+    runs-on: ${{ needs.detect-changes.outputs.runner-small }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -322,7 +322,7 @@ jobs:
   # ── Verify SQLx query snapshots ──────────────────────────
   sqlx-check:
     name: Check SQLx snapshots
-    runs-on: ${{ needs.detect-changes.outputs.runner-medium }}
+    runs-on: ${{ needs.detect-changes.outputs.runner-small }}
     needs: [build-images, detect-changes]
     if: needs.detect-changes.outputs.api == 'true' || needs.detect-changes.outputs.ci == 'true'
     steps:
@@ -346,25 +346,29 @@ jobs:
             docker start "$CONTAINER_NAME"
           else
             echo "Creating new postgres container..."
+            # Use -p 5432 (no host port) so Docker assigns a random host port.
+            # This avoids port collisions when multiple workflow runs share the
+            # same DinD pod's network namespace.
             docker run -d --name "$CONTAINER_NAME" \
-              --network host \
+              -p 5432 \
               -e POSTGRES_USER=postgres \
               -e POSTGRES_PASSWORD=postgres \
               ${{ env.REGISTRY }}/postgres:${{ github.sha }}
           fi
 
-          # On ARC runners Docker runs on a remote DinD pod; postgres uses host network
-          # so it's directly accessible on the DinD service IP at port 5432.
-          # On GHA-hosted runners DOCKER_HOST is unset and postgres binds to localhost.
+          # Discover the mapped host port via docker port.
+          # On ARC runners DOCKER_HOST is set to the remote DinD TCP address;
+          # extract the hostname so we can reach the mapped port.
+          # On GHA-hosted runners DOCKER_HOST is unset and everything is local.
           if [ -n "${DOCKER_HOST:-}" ]; then
             DOCKER_HOSTNAME=$(echo "$DOCKER_HOST" | sed 's|tcp://||;s|:[0-9]*$||')
           else
             DOCKER_HOSTNAME="127.0.0.1"
           fi
 
-          PG_PORT="5432"
+          PG_PORT=$(docker port "$CONTAINER_NAME" 5432 | head -1 | sed 's/.*://')
 
-          # Wait for postgres to be ready
+          # Wait for postgres to be ready (docker exec avoids needing network access)
           for i in {1..30}; do
             if docker exec "$CONTAINER_NAME" pg_isready -U postgres; then
               echo "Postgres is ready"
@@ -422,6 +426,8 @@ jobs:
       runner-small: ${{ steps.runner.outputs.small }}
       runner-medium: ${{ steps.runner.outputs.medium }}
       runner-large: ${{ steps.runner.outputs.large }}
+      # 'true' when running on ARC self-hosted runners, 'false' for GHA-hosted.
+      use-arc: ${{ steps.runner.outputs.use-arc }}
     steps:
       - uses: actions/checkout@v6
       - name: Select runner
@@ -431,19 +437,31 @@ jobs:
           #   1. Commit message contains [arc]  — per-commit, good for iteration
           #   2. Repo var USE_ARC_RUNNERS=true   — global override
           # Default: ubuntu-latest (GHA hosted)
-          commit_msg=$(git log -1 --format=%s HEAD)
+          # For pull_request events checkout creates a synthetic merge commit so
+          # git log HEAD shows the merge message, not the branch commit. Fetch
+          # the actual head SHA (depth=1) and read its message directly.
+          head_sha="${{ github.event.pull_request.head.sha || github.sha }}"
+          git fetch origin "$head_sha" --depth=1 2>/dev/null || true
+          commit_msg=$(git log -1 --format=%s "$head_sha" 2>/dev/null || git log -1 --format=%s HEAD)
           if echo "$commit_msg" | grep -qF '[arc]' || [ "${{ vars.USE_ARC_RUNNERS }}" = "true" ]; then
             {
+              echo "use-arc=true"
               echo "small=arc-runner-small"
-              echo "medium=arc-runner-medium"
               echo "large=arc-runner-large"
             } >> "$GITHUB_OUTPUT"
           else
             {
+              echo "use-arc=false"
               echo "small=ubuntu-latest"
-              echo "medium=ubuntu-latest"
               echo "large=ubuntu-latest"
             } >> "$GITHUB_OUTPUT"
+          fi
+      - name: Print runner mode
+        run: |
+          if [ "${{ steps.runner.outputs.use-arc }}" = "true" ]; then
+            echo "::notice title=Runner Mode::🚀 ARC SELF-HOSTED RUNNERS"
+          else
+            echo "::notice title=Runner Mode::☁️  GHA-HOSTED RUNNERS (ubuntu-latest)"
           fi
       - uses: dorny/paths-filter@v3
         id: filter
@@ -475,7 +493,7 @@ jobs:
   build-images:
     name: Build ${{ matrix.image }}
     needs: [detect-changes]
-    runs-on: ${{ needs.detect-changes.outputs.runner-nano }}
+    runs-on: ${{ needs.detect-changes.outputs.runner-small }}
     permissions:
       contents: read
       packages: write
@@ -614,7 +632,7 @@ jobs:
   # ── Scan container images for vulnerabilities ─────────────
   scan-images:
     name: Scan ${{ matrix.image }}
-    runs-on: ${{ needs.detect-changes.outputs.runner-nano }}
+    runs-on: ${{ needs.detect-changes.outputs.runner-small }}
     needs: [build-images, detect-changes]
     strategy:
       fail-fast: false
@@ -665,7 +683,7 @@ jobs:
   # ── Vitest unit tests + coverage ─────────────────────────
   unit-tests:
     name: Unit tests (Vitest)
-    runs-on: ${{ needs.detect-changes.outputs.runner-medium }}
+    runs-on: ${{ needs.detect-changes.outputs.runner-small }}
     needs: [detect-changes]
     if: needs.detect-changes.outputs.ui == 'true' || needs.detect-changes.outputs.ci == 'true'
     steps:
@@ -1032,7 +1050,7 @@ jobs:
       - unit-tests
       - rust-coverage
       - e2e-tests
-    runs-on: ${{ needs.detect-changes.outputs.runner-nano }}
+    runs-on: ${{ needs.detect-changes.outputs.runner-small }}
     steps:
       - name: Check results
         run: |
@@ -1051,7 +1069,7 @@ jobs:
       !contains(needs.*.result, 'failure') &&
       !contains(needs.*.result, 'cancelled')
     needs: [unit-tests, rust-coverage, e2e-tests, detect-changes]
-    runs-on: ${{ needs.detect-changes.outputs.runner-nano }}
+    runs-on: ${{ needs.detect-changes.outputs.runner-small }}
     permissions:
       contents: read
       packages: read
@@ -1164,10 +1182,8 @@ jobs:
   deploy-reports:
     name: Upload CI reports to Dufs
     runs-on: ${{ needs.detect-changes.outputs.runner-small }}
-    needs: [detect-changes, unit-tests, rust-coverage, e2e-tests, build-storybook, build-docs]
-    if: >-
-      always() &&
-      !contains(needs.*.result, 'cancelled')
+    needs: [detect-changes, ci-gate, unit-tests, rust-coverage, e2e-tests, build-storybook, build-docs]
+    if: needs.ci-gate.result == 'success'
     permissions:
       contents: read
       pull-requests: write
