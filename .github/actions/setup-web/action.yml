@@ -31,6 +31,14 @@ runs:
         printf '#!/bin/sh\nexec node "%s" "$@"\n' "$YARN_BIN" | sudo tee /usr/local/bin/yarn > /dev/null
         sudo chmod +x /usr/local/bin/yarn
 
+    # Disable hardened mode: it makes network calls during resolution to verify
+    # the lockfile against the registry. We use --immutable which already prevents
+    # lockfile manipulation, making the extra round-trip redundant and harmful on
+    # runners with unreliable egress.
+    - name: Disable yarn hardened mode
+      shell: bash
+      run: echo "YARN_ENABLE_HARDENED_MODE=0" >> "$GITHUB_ENV"
+
     - name: Restore node_modules cache
       id: nm-cache
       uses: runs-on/cache/restore@v4
