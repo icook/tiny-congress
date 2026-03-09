@@ -60,6 +60,19 @@ RUN set -eux; \
     shellcheck --version && helm version --short && python3 --version && \
     yq --version && kubectl version --client
 
+# Pre-cache GitHub Action archives so runners skip the per-job download.
+# The runner checks ACTIONS_RUNNER_ACTION_ARCHIVE_CACHE for
+# {owner}-{repo}-{sha}.tar.gz before fetching from GitHub.
+# GITHUB_TOKEN is injected at build time via BuildKit secret (never in image).
+ENV ACTIONS_RUNNER_ACTION_ARCHIVE_CACHE=/opt/actions-archive-cache
+COPY cache-actions.sh /tmp/cache-actions.sh
+RUN --mount=type=secret,id=github_token \
+    GITHUB_TOKEN=$(cat /run/secrets/github_token 2>/dev/null || true) \
+    CACHE_DIR="${ACTIONS_RUNNER_ACTION_ARCHIVE_CACHE}" \
+    bash /tmp/cache-actions.sh && \
+    chmod -R a+r "${ACTIONS_RUNNER_ACTION_ARCHIVE_CACHE}" && \
+    rm /tmp/cache-actions.sh
+
 # Ensure ~/.cargo/bin is on PATH so taiki-e/install-action binaries are
 # immediately usable without a separate "Add Cargo to PATH" step.
 ENV PATH="/home/runner/.cargo/bin:${PATH}"
