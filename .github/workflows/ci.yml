@@ -422,6 +422,8 @@ jobs:
       runner-small: ${{ steps.runner.outputs.small }}
       runner-medium: ${{ steps.runner.outputs.medium }}
       runner-large: ${{ steps.runner.outputs.large }}
+      # 'true' when running on ARC self-hosted runners, 'false' for GHA-hosted.
+      use-arc: ${{ steps.runner.outputs.use-arc }}
     steps:
       - uses: actions/checkout@v6
       - name: Select runner
@@ -434,11 +436,13 @@ jobs:
           commit_msg=$(git log -1 --format=%s HEAD)
           if echo "$commit_msg" | grep -qF '[arc]' || [ "${{ vars.USE_ARC_RUNNERS }}" = "true" ]; then
             {
+              echo "use-arc=true"
               echo "small=arc-runner-small"
               echo "large=arc-runner-large"
             } >> "$GITHUB_OUTPUT"
           else
             {
+              echo "use-arc=false"
               echo "small=ubuntu-latest"
               echo "large=ubuntu-latest"
             } >> "$GITHUB_OUTPUT"
