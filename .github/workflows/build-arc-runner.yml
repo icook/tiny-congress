@@ -5,9 +5,11 @@ on:
     branches: [master]
     paths:
       - 'dockerfiles/Dockerfile.arc-runner'
+      - 'dockerfiles/cache-actions.sh'
   pull_request:
     paths:
       - 'dockerfiles/Dockerfile.arc-runner'
+      - 'dockerfiles/cache-actions.sh'
   workflow_dispatch:
   schedule:
     # Weekly rebuild to pick up base image security patches (Monday 6am UTC)
@@ -58,3 +60,8 @@ jobs:
             ghcr.io/${{ github.repository }}/arc-runner:${{ steps.versions.outputs.date }}
           cache-from: type=registry,ref=ghcr.io/${{ github.repository }}/arc-runner:cache
           cache-to: type=registry,ref=ghcr.io/${{ github.repository }}/arc-runner:cache,mode=max
+          # Pass GITHUB_TOKEN as a BuildKit secret so cache-actions.sh can call
+          # the GitHub API without rate limiting. The token never lands in the
+          # image layer — it's only available during the RUN step that uses it.
+          secrets: |
+            github_token=${{ secrets.GITHUB_TOKEN }}
