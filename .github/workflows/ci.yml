@@ -53,6 +53,7 @@ jobs:
         with:
           directory: kube/
           config: .kube-linter.yaml
+          version: "v0.8.1"
 
       # GHA ubuntu-24.04 pre-installs Helm; catthehacker ARC runners do not.
       # azure/setup-helm relies on GHA tool cache infrastructure absent on ARC runners.
