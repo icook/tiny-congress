@@ -993,7 +993,7 @@ jobs:
       packages: read
       checks: write
     env:
-      SKAFFOLD_DEFAULT_REPO: ghcr.io/${{ github.repository }}
+      SKAFFOLD_DEFAULT_REPO: ${{ needs.detect-changes.outputs.image-registry }}
       SKAFFOLD_PROFILE: ci
       PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.cache/ms-playwright
       KIND_CLUSTER_NAME: skaffold-ci-${{ github.run_id }}
@@ -1025,9 +1025,10 @@ jobs:
           KIND_LOG="${RUNNER_TEMP}/kind.log"
           echo "KIND_LOG=${KIND_LOG}" >> "$GITHUB_ENV"
 
-          echo "Starting KinD cluster ${KIND_CLUSTER_NAME} (logs: ${KIND_LOG})"
-          kind create cluster --name "${KIND_CLUSTER_NAME}" \
-            --wait 0s --config - >"${KIND_LOG}" 2>&1 <<'EOF' &
+          # On ARC, configure KinD's containerd to use zot as a mirror
+          # so pods can pull CI-built images without egress.
+          KIND_CONFIG="${RUNNER_TEMP}/kind-config.yaml"
+          cat > "$KIND_CONFIG" <<'KINDEOF'
           kind: Cluster
           apiVersion: kind.x-k8s.io/v1alpha4
           networking:
@@ -1044,7 +1045,19 @@ jobs:
                   nodeRegistration:
                     kubeletExtraArgs:
                       node-labels: "ingress-ready=true"
-          EOF
+          KINDEOF
+
+          if [ "$RUNNER_ENVIRONMENT" = "self-hosted" ]; then
+            cat >> "$KIND_CONFIG" <<'KINDEOF'
+          containerdConfigPatches:
+            - |-
+              [plugins."io.containerd.grpc.v1.cri".registry.mirrors."zot.zot.svc.cluster.local:5000"]
+                endpoint = ["http://zot.zot.svc.cluster.local:5000"]
+          KINDEOF
+          fi
+
+          echo "Starting KinD cluster ${KIND_CLUSTER_NAME} (logs: ${KIND_LOG})"
+          kind create cluster --name "${KIND_CLUSTER_NAME}" --config "${KIND_CONFIG}" --wait 0s >"${KIND_LOG}" 2>&1 &
 
       - name: Cache Skaffold binary
         id: cache-skaffold
@@ -1067,6 +1080,7 @@ jobs:
           sudo install "$SKAFFOLD_BIN" /usr/local/bin/skaffold
 
       - name: Login to GHCR
+        if: runner.environment != 'self-hosted'
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -1077,11 +1091,12 @@ jobs:
         id: artifacts
         run: |
           set -euo pipefail
+          IMAGE_REG="${{ needs.detect-changes.outputs.image-registry }}"
           artifacts_file="${RUNNER_TEMP}/skaffold-artifacts.json"
           printf '{\n  "builds": [\n    {"imageName": "tc-api-release", "tag": "%s/tc-api-release:%s"},\n    {"imageName": "tc-ui-release", "tag": "%s/tc-ui-release:%s"},\n    {"imageName": "postgres", "tag": "%s/postgres:%s"}\n  ]\n}\n' \
-            "${{ env.REGISTRY }}" "${{ github.sha }}" \
-            "${{ env.REGISTRY }}" "${{ github.sha }}" \
-            "${{ env.REGISTRY }}" "${{ github.sha }}" \
+            "$IMAGE_REG" "${{ github.sha }}" \
+            "$IMAGE_REG" "${{ github.sha }}" \
+            "$IMAGE_REG" "${{ github.sha }}" \
             > "$artifacts_file"
           echo "file=${artifacts_file}" >> "$GITHUB_OUTPUT"
 
@@ -1145,6 +1160,7 @@ jobs:
           echo "KinD cluster ready."
 
       - name: Configure registry access for KinD
+        if: runner.environment != 'self-hosted'
         run: |
           set -euo pipefail
           kubectl create secret docker-registry ghcr-cred \
