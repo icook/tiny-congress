@@ -603,7 +603,7 @@ jobs:
           sparse-checkout-cone-mode: false
 
       - name: Login to GHCR
-        if: steps.should-scan.outputs.changed != 'false'
+        if: steps.should-scan.outputs.changed != 'false' && runner.environment != 'self-hosted'
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -648,8 +648,10 @@ jobs:
       - name: Run Trivy vulnerability scanner
         if: steps.should-scan.outputs.changed != 'false'
         uses: aquasecurity/trivy-action@0.34.0
+        env:
+          TRIVY_INSECURE: ${{ runner.environment == 'self-hosted' && 'true' || 'false' }}
         with:
-          image-ref: ${{ env.REGISTRY }}/${{ matrix.image }}:${{ github.sha }}
+          image-ref: ${{ needs.detect-changes.outputs.image-registry }}/${{ matrix.image }}:${{ github.sha }}
           format: 'table'
           exit-code: '1'
           ignore-unfixed: true
