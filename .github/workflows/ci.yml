@@ -869,16 +869,7 @@ jobs:
     needs: [detect-changes]
     if: needs.detect-changes.outputs.api == 'true' || needs.detect-changes.outputs.ci == 'true'
     env:
-      # Use the branch-master tag (last successful master build) so rust-checks
-      # can start in wave 1 without waiting for build-images.
-      # Migrations run from the working tree (cargo sqlx migrate run), so this
-      # is valid for all migration-only changes.
-      # Known gap: a PR that simultaneously modifies Dockerfile.postgres (adding
-      # a new extension) AND adds a migration that requires that extension will
-      # fail here. That's rare; when it happens, re-run after build-images pushes
-      # the new postgres image to branch-<pr-branch> and retag manually, or
-      # temporarily restore build-images to rust-checks needs.
-      TEST_POSTGRES_IMAGE: ghcr.io/${{ github.repository }}/postgres:branch-master
+      TEST_POSTGRES_IMAGE: ${{ needs.detect-changes.outputs.image-registry }}/postgres:${{ github.sha }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -889,6 +880,7 @@ jobs:
         run: until docker info >/dev/null 2>&1; do sleep 1; done
 
       - name: Login to GHCR
+        if: runner.environment != 'self-hosted'
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
