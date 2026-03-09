@@ -303,6 +303,8 @@ jobs:
       runner-large: ${{ steps.runner.outputs.large }}
       # 'true' when running on ARC self-hosted runners, 'false' for GHA-hosted.
       use-arc: ${{ steps.runner.outputs.use-arc }}
+      # Image registry — where built images are pushed/pulled during CI.
+      image-registry: ${{ steps.runner.outputs.image-registry }}
     steps:
       - uses: actions/checkout@v6
 
@@ -322,12 +324,14 @@ jobs:
               echo "use-arc=true"
               echo "small=arc-runner-small"
               echo "large=arc-runner-large"
+              echo "image-registry=zot.zot.svc.cluster.local:5000/images"
             } >> "$GITHUB_OUTPUT"
           else
             {
               echo "use-arc=false"
               echo "small=ubuntu-latest"
               echo "large=ubuntu-latest"
+              echo "image-registry=ghcr.io/icook/tiny-congress"
             } >> "$GITHUB_OUTPUT"
           fi
       - name: Set CI runners check
@@ -351,6 +355,8 @@ jobs:
                   : 'Add `[arc]` to the PR title or set `USE_ARC_RUNNERS=true` to switch to ARC.',
               },
             });
+      - name: Print image registry
+        run: echo "::notice title=Image Registry::${{ steps.runner.outputs.image-registry }}"
       - uses: dorny/paths-filter@v3
         id: filter
         with:
