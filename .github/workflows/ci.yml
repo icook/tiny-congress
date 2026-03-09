@@ -1331,7 +1331,7 @@ jobs:
     permissions:
       contents: read
       actions: read
-      packages: read
+      packages: write
     steps:
       - name: Checkout gitops repo
         uses: actions/checkout@v6
@@ -1341,6 +1341,36 @@ jobs:
           ref: main
 
       - uses: ./.github/actions/collect-telemetry
+
+      - name: Install crane
+        if: needs.detect-changes.outputs.use-arc == 'true'
+        run: |
+          CRANE_VERSION=0.20.3
+          curl -fsSL "https://github.com/google/go-containerregistry/releases/download/v${CRANE_VERSION}/go-containerregistry_Linux_x86_64.tar.gz" \
+            | sudo tar -xz -C /usr/local/bin crane
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Promote images from zot to GHCR
+        if: needs.detect-changes.outputs.use-arc == 'true'
+        run: |
+          set -euo pipefail
+          ZOT="${{ needs.detect-changes.outputs.image-registry }}"
+          GHCR="${{ env.REGISTRY }}"
+          SHA="${{ github.sha }}"
+          ref="${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}"
+          branch="${ref//[^a-zA-Z0-9_.-]/-}"
+          branch="${branch,,}"
+          for IMAGE in tc-api-release tc-ui-release postgres; do
+            echo "Promoting ${IMAGE}..."
+            crane copy --insecure "${ZOT}/${IMAGE}:${SHA}" "${GHCR}/${IMAGE}:${SHA}"
+            crane copy --insecure "${ZOT}/${IMAGE}:branch-${branch}" "${GHCR}/${IMAGE}:branch-${branch}"
+          done
 
       - name: Get image digests from GHCR
         id: digests
