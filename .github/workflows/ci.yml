@@ -1178,10 +1178,8 @@ jobs:
   deploy-reports:
     name: Upload CI reports to Dufs
     runs-on: ${{ needs.detect-changes.outputs.runner-small }}
-    needs: [detect-changes, unit-tests, rust-coverage, e2e-tests, build-storybook, build-docs]
-    if: >-
-      always() &&
-      !contains(needs.*.result, 'cancelled')
+    needs: [detect-changes, ci-gate, unit-tests, rust-coverage, e2e-tests, build-storybook, build-docs]
+    if: needs.ci-gate.result == 'success'
     permissions:
       contents: read
       pull-requests: write
