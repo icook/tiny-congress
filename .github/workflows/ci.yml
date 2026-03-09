@@ -466,16 +466,19 @@ jobs:
         if: runner.environment != 'self-hosted'
         uses: docker/setup-buildx-action@v3
 
-      - name: Configure cache registry
-        id: cache
+      - name: Configure registries
+        id: registries
         run: |
+          IMAGE_REGISTRY="${{ needs.detect-changes.outputs.image-registry }}"
           if [ "$RUNNER_ENVIRONMENT" = "self-hosted" ]; then
-            echo "registry=zot.zot.svc.cluster.local:5000/cache" >> "$GITHUB_OUTPUT"
+            echo "cache=zot.zot.svc.cluster.local:5000/cache" >> "$GITHUB_OUTPUT"
           else
-            echo "registry=${{ env.REGISTRY }}" >> "$GITHUB_OUTPUT"
+            echo "cache=${IMAGE_REGISTRY}" >> "$GITHUB_OUTPUT"
           fi
+          echo "images=${IMAGE_REGISTRY}" >> "$GITHUB_OUTPUT"
 
       - name: Login to GHCR
+        if: runner.environment != 'self-hosted'
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -485,13 +488,14 @@ jobs:
       - name: Compute tags
         id: tags
         run: |
+          IMAGES="${{ steps.registries.outputs.images }}"
           ref="${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}"
           branch="${ref//[^a-zA-Z0-9_.-]/-}"
           branch="${branch,,}"
           {
             echo "branch_slug=${branch}"
-            echo "sha_tag=${{ env.REGISTRY }}/${{ matrix.image }}:${{ github.sha }}"
-            echo "branch_tag=${{ env.REGISTRY }}/${{ matrix.image }}:branch-${branch}"
+            echo "sha_tag=${IMAGES}/${{ matrix.image }}:${{ github.sha }}"
+            echo "branch_tag=${IMAGES}/${{ matrix.image }}:branch-${branch}"
           } >> "$GITHUB_OUTPUT"
 
       - name: Check if build needed
@@ -514,7 +518,7 @@ jobs:
         if: steps.should-build.outputs.changed == 'false'
         run: |
           # Always retag from branch-master (last successful master build)
-          SOURCE="${{ env.REGISTRY }}/${{ matrix.image }}:branch-master"
+          SOURCE="${{ steps.registries.outputs.images }}/${{ matrix.image }}:branch-master"
           echo "No source changes for ${{ matrix.image }} — retagging ${SOURCE} as ${{ github.sha }}"
           docker buildx imagetools create \
             --tag "${{ steps.tags.outputs.sha_tag }}" \
@@ -553,9 +557,9 @@ jobs:
             ${{ steps.tags.outputs.sha_tag }}
             ${{ steps.tags.outputs.branch_tag }}
           cache-from: |
-            type=registry,ref=${{ steps.cache.outputs.registry }}/${{ matrix.image }}:cache
+            type=registry,ref=${{ steps.registries.outputs.cache }}/${{ matrix.image }}:cache
           cache-to: |
-            type=registry,ref=${{ steps.cache.outputs.registry }}/${{ matrix.image }}:cache,mode=max
+            type=registry,ref=${{ steps.registries.outputs.cache }}/${{ matrix.image }}:cache,mode=max
 
       - name: Export image metadata
         id: meta
