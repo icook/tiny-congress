@@ -447,6 +447,13 @@ jobs:
               echo "large=ubuntu-latest"
             } >> "$GITHUB_OUTPUT"
           fi
+      - name: Print runner mode
+        run: |
+          if [ "${{ steps.runner.outputs.use-arc }}" = "true" ]; then
+            echo "::notice title=Runner Mode::🚀 ARC SELF-HOSTED RUNNERS"
+          else
+            echo "::notice title=Runner Mode::☁️  GHA-HOSTED RUNNERS (ubuntu-latest)"
+          fi
       - uses: dorny/paths-filter@v3
         id: filter
         with:
