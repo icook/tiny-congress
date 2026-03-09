@@ -346,25 +346,29 @@ jobs:
             docker start "$CONTAINER_NAME"
           else
             echo "Creating new postgres container..."
+            # Use -p 5432 (no host port) so Docker assigns a random host port.
+            # This avoids port collisions when multiple workflow runs share the
+            # same DinD pod's network namespace.
             docker run -d --name "$CONTAINER_NAME" \
-              --network host \
+              -p 5432 \
               -e POSTGRES_USER=postgres \
               -e POSTGRES_PASSWORD=postgres \
               ${{ env.REGISTRY }}/postgres:${{ github.sha }}
           fi
 
-          # On ARC runners Docker runs on a remote DinD pod; postgres uses host network
-          # so it's directly accessible on the DinD service IP at port 5432.
-          # On GHA-hosted runners DOCKER_HOST is unset and postgres binds to localhost.
+          # Discover the mapped host port via docker port.
+          # On ARC runners DOCKER_HOST is set to the remote DinD TCP address;
+          # extract the hostname so we can reach the mapped port.
+          # On GHA-hosted runners DOCKER_HOST is unset and everything is local.
           if [ -n "${DOCKER_HOST:-}" ]; then
             DOCKER_HOSTNAME=$(echo "$DOCKER_HOST" | sed 's|tcp://||;s|:[0-9]*$||')
           else
             DOCKER_HOSTNAME="127.0.0.1"
           fi
 
-          PG_PORT="5432"
+          PG_PORT=$(docker port "$CONTAINER_NAME" 5432 | head -1 | sed 's/.*://')
 
-          # Wait for postgres to be ready
+          # Wait for postgres to be ready (docker exec avoids needing network access)
           for i in {1..30}; do
             if docker exec "$CONTAINER_NAME" pg_isready -U postgres; then
               echo "Postgres is ready"
