@@ -503,7 +503,7 @@ jobs:
   # ── Build WASM tc-crypto (shared artifact) ────────────────
   build-wasm:
     name: Build WASM
-    runs-on: ${{ needs.detect-changes.outputs.runner-medium }}
+    runs-on: ${{ needs.detect-changes.outputs.runner-small }}
     needs: [detect-changes]
     if: >-
       needs.detect-changes.outputs.ui == 'true' ||
