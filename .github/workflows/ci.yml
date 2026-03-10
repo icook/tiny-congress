@@ -705,6 +705,10 @@ jobs:
             echo "Waiting for postgres... ($i/30)"
             sleep 1
           done
+          if ! docker exec "$CONTAINER_NAME" pg_isready -U postgres 2>/dev/null; then
+            echo "::error::Postgres did not become ready in 30s"
+            exit 1
+          fi
 
           echo "DATABASE_URL=postgres://postgres:postgres@${DOCKER_HOSTNAME}:${PG_PORT}/tiny-congress" >> "$GITHUB_ENV"
 
