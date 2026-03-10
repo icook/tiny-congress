@@ -27,15 +27,12 @@ jobs:
       needs.detect-changes.outputs.ci == 'true'
     runs-on: ${{ needs.detect-changes.outputs.runner-small }}
     steps:
-      - name: Collect workflow telemetry
-        uses: catchpoint/workflow-telemetry-action@v2
-        with:
-          comment_on_pr: false
-
       - name: Checkout
         uses: actions/checkout@v6
         with:
           fetch-depth: 0  # Full history for gitleaks
+
+      - uses: ./.github/actions/collect-telemetry
 
       - name: Setup Rust toolchain
         uses: ./.github/actions/setup-rust
@@ -99,13 +96,10 @@ jobs:
     if: needs.detect-changes.outputs.chart == 'true' || needs.detect-changes.outputs.ci == 'true'
     runs-on: ${{ needs.detect-changes.outputs.runner-small }}
     steps:
-      - name: Collect workflow telemetry
-        uses: catchpoint/workflow-telemetry-action@v2
-        with:
-          comment_on_pr: false
-
       - name: Checkout
         uses: actions/checkout@v6
+
+      - uses: ./.github/actions/collect-telemetry
 
       - name: Run kube-linter
         uses: stackrox/kube-linter-action@v1
@@ -139,13 +133,10 @@ jobs:
     if: needs.detect-changes.outputs.dashboards == 'true' || needs.detect-changes.outputs.ci == 'true'
     runs-on: ${{ needs.detect-changes.outputs.runner-small }}
     steps:
-      - name: Collect workflow telemetry
-        uses: catchpoint/workflow-telemetry-action@v2
-        with:
-          comment_on_pr: false
-
       - name: Checkout
         uses: actions/checkout@v6
+
+      - uses: ./.github/actions/collect-telemetry
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -181,13 +172,10 @@ jobs:
     if: needs.detect-changes.outputs.ui == 'true' || needs.detect-changes.outputs.ci == 'true'
     runs-on: ${{ needs.detect-changes.outputs.runner-small }}
     steps:
-      - name: Collect workflow telemetry
-        uses: catchpoint/workflow-telemetry-action@v2
-        with:
-          comment_on_pr: false
-
       - name: Checkout
         uses: actions/checkout@v6
+
+      - uses: ./.github/actions/collect-telemetry
 
       - name: Setup web toolchain
         uses: ./.github/actions/setup-web
@@ -222,13 +210,10 @@ jobs:
       needs.detect-changes.outputs.ci == 'true'
     runs-on: ${{ needs.detect-changes.outputs.runner-small }}
     steps:
-      - name: Collect workflow telemetry
-        uses: catchpoint/workflow-telemetry-action@v2
-        with:
-          comment_on_pr: false
-
       - name: Checkout
         uses: actions/checkout@v6
+
+      - uses: ./.github/actions/collect-telemetry
 
       - name: Install just
         uses: extractions/setup-just@v3
@@ -265,13 +250,10 @@ jobs:
     if: needs.detect-changes.outputs.api == 'true' || needs.detect-changes.outputs.ui == 'true' || needs.detect-changes.outputs.ci == 'true'
     runs-on: ${{ needs.detect-changes.outputs.runner-small }}
     steps:
-      - name: Collect workflow telemetry
-        uses: catchpoint/workflow-telemetry-action@v2
-        with:
-          comment_on_pr: false
-
       - name: Checkout
         uses: actions/checkout@v6
+
+      - uses: ./.github/actions/collect-telemetry
 
       - name: Setup Rust toolchain
         uses: ./.github/actions/setup-rust
@@ -316,12 +298,10 @@ jobs:
       # 'true' when running on ARC self-hosted runners, 'false' for GHA-hosted.
       use-arc: ${{ steps.runner.outputs.use-arc }}
     steps:
-      - name: Collect workflow telemetry
-        uses: catchpoint/workflow-telemetry-action@v2
-        with:
-          comment_on_pr: false
-
       - uses: actions/checkout@v6
+
+      - uses: ./.github/actions/collect-telemetry
+
       - name: Select runner
         id: runner
         env:
@@ -401,13 +381,10 @@ jobs:
       needs.detect-changes.outputs.api == 'true' ||
       needs.detect-changes.outputs.ci == 'true'
     steps:
-      - name: Collect workflow telemetry
-        uses: catchpoint/workflow-telemetry-action@v2
-        with:
-          comment_on_pr: false
-
       - name: Checkout
         uses: actions/checkout@v6
+
+      - uses: ./.github/actions/collect-telemetry
 
       - name: Setup Rust toolchain
         uses: ./.github/actions/setup-rust
@@ -456,13 +433,10 @@ jobs:
       tc-ui-release-tag: ${{ steps.meta.outputs.tc-ui-release-tag }}
       postgres-tag: ${{ steps.meta.outputs.postgres-tag }}
     steps:
-      - name: Collect workflow telemetry
-        uses: catchpoint/workflow-telemetry-action@v2
-        with:
-          comment_on_pr: false
-
       - name: Checkout
         uses: actions/checkout@v6
+
+      - uses: ./.github/actions/collect-telemetry
 
       # BuildKit + cache registry adapt to the runner environment:
       # - ARC (self-hosted): remote BuildKit daemon + Zot in-cluster registry
@@ -638,13 +612,10 @@ jobs:
     needs: [detect-changes, build-wasm]
     if: needs.detect-changes.outputs.ui == 'true' || needs.detect-changes.outputs.ci == 'true'
     steps:
-      - name: Collect workflow telemetry
-        uses: catchpoint/workflow-telemetry-action@v2
-        with:
-          comment_on_pr: false
-
       - name: Checkout
         uses: actions/checkout@v6
+
+      - uses: ./.github/actions/collect-telemetry
 
       - name: Setup web toolchain
         uses: ./.github/actions/setup-web
@@ -685,13 +656,10 @@ jobs:
       # temporarily restore build-images to rust-checks needs.
       TEST_POSTGRES_IMAGE: ghcr.io/${{ github.repository }}/postgres:branch-master
     steps:
-      - name: Collect workflow telemetry
-        uses: catchpoint/workflow-telemetry-action@v2
-        with:
-          comment_on_pr: false
-
       - name: Checkout
         uses: actions/checkout@v6
+
+      - uses: ./.github/actions/collect-telemetry
 
       - name: Wait for Docker sidecar
         run: until docker info >/dev/null 2>&1; do sleep 1; done
@@ -813,13 +781,10 @@ jobs:
       PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.cache/ms-playwright
       KIND_CLUSTER_NAME: skaffold-ci-${{ github.run_id }}
     steps:
-      - name: Collect workflow telemetry
-        uses: catchpoint/workflow-telemetry-action@v2
-        with:
-          comment_on_pr: false
-
       - name: Checkout
         uses: actions/checkout@v6
+
+      - uses: ./.github/actions/collect-telemetry
 
       - name: Wait for Docker sidecar
         run: until docker info >/dev/null 2>&1; do sleep 1; done
@@ -1114,11 +1079,6 @@ jobs:
       - e2e-tests
     runs-on: ${{ needs.detect-changes.outputs.runner-small }}
     steps:
-      - name: Collect workflow telemetry
-        uses: catchpoint/workflow-telemetry-action@v2
-        with:
-          comment_on_pr: false
-
       - name: Check results
         run: |
           results='${{ toJson(needs.*.result) }}'
@@ -1139,17 +1099,14 @@ jobs:
       contents: read
       packages: read
     steps:
-      - name: Collect workflow telemetry
-        uses: catchpoint/workflow-telemetry-action@v2
-        with:
-          comment_on_pr: false
-
       - name: Checkout gitops repo
         uses: actions/checkout@v6
         with:
           repository: icook/homelab-gitops
           ssh-key: ${{ secrets.GITOPS_DEPLOY_KEY }}
           ref: main
+
+      - uses: ./.github/actions/collect-telemetry
 
       - name: Get image digests from GHCR
         id: digests
@@ -1258,13 +1215,10 @@ jobs:
       contents: read
       pull-requests: write
     steps:
-      - name: Collect workflow telemetry
-        uses: catchpoint/workflow-telemetry-action@v2
-        with:
-          comment_on_pr: false
-
       - name: Checkout
         uses: actions/checkout@v6
+
+      - uses: ./.github/actions/collect-telemetry
 
       - name: Setup web toolchain
         uses: ./.github/actions/setup-web

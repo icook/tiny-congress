@@ -28,11 +28,6 @@ jobs:
       api_url: ${{ steps.urls.outputs.api }}
       verifier_url: ${{ steps.urls.outputs.verifier }}
     steps:
-      - name: Collect workflow telemetry
-        uses: catchpoint/workflow-telemetry-action@v2
-        with:
-          comment_on_pr: false
-
       - name: Resolve URLs
         id: urls
         run: |
@@ -95,13 +90,10 @@ jobs:
           - mobile-chrome
           - mobile-safari
     steps:
-      - name: Collect workflow telemetry
-        uses: catchpoint/workflow-telemetry-action@v2
-        with:
-          comment_on_pr: false
-
       - name: Checkout
         uses: actions/checkout@v6
+
+      - uses: ./.github/actions/collect-telemetry
 
       - name: Setup web toolchain
         uses: ./.github/actions/setup-web

@@ -1,0 +1,11 @@
+name: Collect workflow telemetry
+description: >
+  Emit CPU, memory, disk I/O, and network I/O charts to the job summary.
+  Samples at 5s intervals. Must run after checkout (local action).
+runs:
+  using: composite
+  steps:
+    - name: Collect workflow telemetry
+      uses: catchpoint/workflow-telemetry-action@v2
+      with:
+        comment_on_pr: false
