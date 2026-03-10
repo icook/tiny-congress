@@ -969,21 +969,26 @@ jobs:
           kubectl wait serviceaccount default -n default \
             --for=jsonpath='{.metadata.name}'=default --timeout=60s
 
-      - name: Fix CoreDNS upstream in DinD
+      - name: Fix KinD networking in DinD
         run: |
           set -euo pipefail
           if [ -z "${DOCKER_HOST:-}" ]; then
-            echo "Not running under DinD; skipping CoreDNS patch."
+            echo "Not running under DinD; skipping."
             exit 0
           fi
-          # Inside DinD, CoreDNS's readiness probe returns 503 because the
-          # kubernetes plugin can't reach the API server ClusterIP. The DNS
-          # port 53 itself works fine. publishNotReadyAddresses=true makes
-          # kube-dns route to CoreDNS pods regardless of readiness status,
-          # so in-cluster DNS resolution works even while CoreDNS reports not-ready.
-          kubectl patch service kube-dns -n kube-system \
-            -p '{"spec":{"publishNotReadyAddresses":true}}'
-          echo "kube-dns patched to publish not-ready addresses."
+          # Docker sets iptables FORWARD policy to DROP inside the DinD
+          # container. This breaks all ClusterIP routing in KinD: CoreDNS
+          # can't reach the API server, and pods can't reach services.
+          # Fix by accepting forwarded traffic on the KinD node.
+          NODE="${KIND_CLUSTER_NAME}-control-plane"
+          docker exec "$NODE" iptables -P FORWARD ACCEPT
+          echo "iptables FORWARD policy set to ACCEPT on ${NODE}."
+
+          # Wait for CoreDNS to become Ready now that ClusterIP works.
+          echo "Waiting for CoreDNS pods to become Ready..."
+          kubectl wait pods -n kube-system -l k8s-app=kube-dns \
+            --for=condition=Ready --timeout=120s
+          echo "CoreDNS is Ready."
 
       - name: Configure registry access for KinD
         run: |
