@@ -1,44 +1,45 @@
-# Measure warm pod boot penalty: shared DinD vs per-pod sidecar DinD.
-# Both pools have minRunners > 0, so pods are pre-scheduled.
-# The question: how much does the init-dind-externals + dockerd sidecar startup add?
+# Measure warm pod boot penalty and scale-up cold start penalty.
+# Both pools: minRunners=2, maxRunners=4. 3 concurrent jobs forces 1 cold start per pool.
 name: Benchmark DinD boot penalty
 
 on:
   workflow_dispatch:
 
 jobs:
-  shared-1:
-    name: "Shared DinD #1"
-    runs-on: arc-runner-small
+  # ── Shared DinD (arc-runner-small-style, no sidecar) ─────
+  nodind-1:
+    name: "No-DinD #1 (warm)"
+    runs-on: arc-runner-nodind-bench
     steps:
       - run: echo "::notice::Runner ready at $(date -u +%Y-%m-%dT%H:%M:%S.%3NZ)"
 
-  shared-2:
-    name: "Shared DinD #2"
-    runs-on: arc-runner-small
+  nodind-2:
+    name: "No-DinD #2 (warm)"
+    runs-on: arc-runner-nodind-bench
     steps:
       - run: echo "::notice::Runner ready at $(date -u +%Y-%m-%dT%H:%M:%S.%3NZ)"
 
-  shared-3:
-    name: "Shared DinD #3"
-    runs-on: arc-runner-small
+  nodind-3:
+    name: "No-DinD #3 (cold scale-up)"
+    runs-on: arc-runner-nodind-bench
     steps:
       - run: echo "::notice::Runner ready at $(date -u +%Y-%m-%dT%H:%M:%S.%3NZ)"
 
+  # ── Sidecar DinD ─────────────────────────────────────────
   sidecar-1:
-    name: "Sidecar DinD #1"
+    name: "Sidecar DinD #1 (warm)"
     runs-on: arc-runner-dind-bench
     steps:
       - run: echo "::notice::Runner ready at $(date -u +%Y-%m-%dT%H:%M:%S.%3NZ)"
 
   sidecar-2:
-    name: "Sidecar DinD #2"
+    name: "Sidecar DinD #2 (warm)"
     runs-on: arc-runner-dind-bench
     steps:
       - run: echo "::notice::Runner ready at $(date -u +%Y-%m-%dT%H:%M:%S.%3NZ)"
 
   sidecar-3:
-    name: "Sidecar DinD #3"
+    name: "Sidecar DinD #3 (cold scale-up)"
     runs-on: arc-runner-dind-bench
     steps:
       - run: echo "::notice::Runner ready at $(date -u +%Y-%m-%dT%H:%M:%S.%3NZ)"
