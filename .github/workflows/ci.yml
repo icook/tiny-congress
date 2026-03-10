@@ -922,7 +922,7 @@ jobs:
           fi
 
       - name: Save Playwright browser cache
-        if: always()
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
         uses: runs-on/cache/save@v4
         with:
           path: ${{ env.PLAYWRIGHT_BROWSERS_PATH }}
