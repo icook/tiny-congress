@@ -319,6 +319,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
+      - name: Docker environment diagnostics
+        run: |
+          echo "DOCKER_HOST=${DOCKER_HOST:-<unset>}"
+          docker version --format '{{.Server.Version}}' || echo "docker not reachable"
+
       - name: Login to GHCR
         uses: docker/login-action@v3
         with:
@@ -347,15 +352,9 @@ jobs:
           fi
 
           # Discover the mapped host port via docker port.
-          # On ARC runners DOCKER_HOST is set to the remote DinD TCP address;
-          # extract the hostname so we can reach the mapped port.
-          # On GHA-hosted runners DOCKER_HOST is unset and everything is local.
-          if [ -n "${DOCKER_HOST:-}" ]; then
-            DOCKER_HOSTNAME=$(echo "$DOCKER_HOST" | sed 's|tcp://||;s|:[0-9]*$||')
-          else
-            DOCKER_HOSTNAME="127.0.0.1"
-          fi
-
+          # Sidecar DinD shares the runner's network namespace, so containers
+          # are always reachable on 127.0.0.1.
+          DOCKER_HOSTNAME="127.0.0.1"
           PG_PORT=$(docker port "$CONTAINER_NAME" 5432 | head -1 | sed 's/.*://')
 
           # Wait for postgres to be ready (docker exec avoids needing network access)
@@ -808,15 +807,8 @@ jobs:
       - detect-changes
       - build-images
       - build-wasm
-      - lint
-      - lint-web
-    # always() is required so this job evaluates its `if` even when
-    # path-filtered dependencies are skipped.  Without it, GitHub Actions
-    # silently skips this job whenever any `needs` job is skipped, which
-    # allowed broken E2E tests to reach master undetected.
     if: >-
       always() &&
-      (needs.detect-changes.outputs.api == 'true' || needs.detect-changes.outputs.ui == 'true' || needs.detect-changes.outputs.ci == 'true') &&
       !contains(needs.*.result, 'failure') &&
       !contains(needs.*.result, 'cancelled')
     permissions:
@@ -832,33 +824,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Restore KinD binary cache
-        id: cache-kind
-        uses: runs-on/cache/restore@v4
+      - name: Wait for Docker sidecar
+        run: until docker info >/dev/null 2>&1; do sleep 1; done
+
+      - name: Install KinD tooling
+        uses: helm/kind-action@v1.13.0
         with:
-          path: ${{ runner.temp }}/kind-bin
-          key: kind-${{ runner.os }}-${{ hashFiles('.kind-version') }}
-
-      - name: Install KinD
-        if: steps.cache-kind.outputs.cache-hit != 'true'
-        run: |
-          set -euo pipefail
-          KIND_BIN="${RUNNER_TEMP}/kind-bin/kind"
-          mkdir -p "${RUNNER_TEMP}/kind-bin"
-          KIND_VERSION="$(cat .kind-version)"
-          curl -fsSL -o "$KIND_BIN" \
-            "https://kind.sigs.k8s.io/dl/${KIND_VERSION}/kind-linux-amd64"
-          chmod +x "$KIND_BIN"
-
-      - name: Save KinD binary cache
-        if: steps.cache-kind.outputs.cache-hit != 'true'
-        uses: runs-on/cache/save@v4
-        with:
-          path: ${{ runner.temp }}/kind-bin
-          key: kind-${{ runner.os }}-${{ hashFiles('.kind-version') }}
-
-      - name: Install KinD to PATH
-        run: sudo install "${RUNNER_TEMP}/kind-bin/kind" /usr/local/bin/kind
+          install_only: true
+          cluster_name: ${{ env.KIND_CLUSTER_NAME }}
 
       # Helm is pre-installed in the ARC runner image (dockerfiles/Dockerfile.arc-runner).
       # To upgrade, bump ARG HELM_VERSION there and rebuild via build-arc-runner.yml.
@@ -866,40 +839,53 @@ jobs:
       - name: Start KinD cluster in background
         run: |
           set -euo pipefail
-          KIND_LOG="${RUNNER_TEMP}/kind.log"
 
+          # Docker sets iptables FORWARD to DROP; fix before cluster creation.
+          sudo iptables -P FORWARD ACCEPT 2>/dev/null || true
+
+          KIND_LOG="${RUNNER_TEMP}/kind.log"
           echo "KIND_LOG=${KIND_LOG}" >> "$GITHUB_ENV"
 
           echo "Starting KinD cluster ${KIND_CLUSTER_NAME} (logs: ${KIND_LOG})"
-          kind create cluster --name "${KIND_CLUSTER_NAME}" --wait 0s >"${KIND_LOG}" 2>&1 &
+          kind create cluster --name "${KIND_CLUSTER_NAME}" \
+            --wait 0s --config - >"${KIND_LOG}" 2>&1 <<'EOF' &
+          kind: Cluster
+          apiVersion: kind.x-k8s.io/v1alpha4
+          networking:
+            # Avoid CIDR overlap with the parent Talos cluster (default 10.96.0.0/12).
+            # Without this, KinD CoreDNS traffic to 10.96.0.1 escapes the Docker
+            # bridge and hits the parent API server (wrong CA → x509 errors).
+            serviceSubnet: "10.11.0.0/16"
+            podSubnet: "10.12.0.0/16"
+          nodes:
+            - role: control-plane
+              kubeadmConfigPatches:
+                - |
+                  kind: InitConfiguration
+                  nodeRegistration:
+                    kubeletExtraArgs:
+                      node-labels: "ingress-ready=true"
+          EOF
 
-      - name: Restore Skaffold binary cache
+      - name: Cache Skaffold binary
         id: cache-skaffold
-        uses: runs-on/cache/restore@v4
+        uses: runs-on/cache@v4
         with:
           path: ${{ runner.temp }}/skaffold-bin
           key: skaffold-${{ runner.os }}-${{ hashFiles('.skaffold-version') }}
 
       - name: Install Skaffold
-        if: steps.cache-skaffold.outputs.cache-hit != 'true'
         run: |
           set -euo pipefail
           SKAFFOLD_BIN="${RUNNER_TEMP}/skaffold-bin/skaffold"
-          mkdir -p "${RUNNER_TEMP}/skaffold-bin"
-          SKAFFOLD_VERSION="v$(cat .skaffold-version)"
-          curl -fsSL -o "$SKAFFOLD_BIN" \
-            "https://storage.googleapis.com/skaffold/releases/${SKAFFOLD_VERSION}/skaffold-linux-amd64"
-          chmod +x "$SKAFFOLD_BIN"
-
-      - name: Save Skaffold binary cache
-        if: steps.cache-skaffold.outputs.cache-hit != 'true'
-        uses: runs-on/cache/save@v4
-        with:
-          path: ${{ runner.temp }}/skaffold-bin
-          key: skaffold-${{ runner.os }}-${{ hashFiles('.skaffold-version') }}
-
-      - name: Install Skaffold to PATH
-        run: sudo install "${RUNNER_TEMP}/skaffold-bin/skaffold" /usr/local/bin/skaffold
+          if [ ! -f "$SKAFFOLD_BIN" ]; then
+            mkdir -p "${RUNNER_TEMP}/skaffold-bin"
+            SKAFFOLD_VERSION="v$(cat .skaffold-version)"
+            curl -fsSL -o "$SKAFFOLD_BIN" \
+              "https://storage.googleapis.com/skaffold/releases/${SKAFFOLD_VERSION}/skaffold-linux-amd64"
+            chmod +x "$SKAFFOLD_BIN"
+          fi
+          sudo install "$SKAFFOLD_BIN" /usr/local/bin/skaffold
 
       - name: Login to GHCR
         uses: docker/login-action@v3
@@ -924,7 +910,6 @@ jobs:
         uses: ./.github/actions/setup-web
 
       - name: Restore Playwright browser cache
-        id: playwright-cache
         uses: runs-on/cache/restore@v4
         with:
           path: ${{ env.PLAYWRIGHT_BROWSERS_PATH }}
@@ -932,19 +917,10 @@ jobs:
 
       - name: Install Playwright browsers
         working-directory: web
-        run: |
-          if [ "${{ steps.playwright-cache.outputs.cache-hit }}" = "true" ] && [ "$RUNNER_ENVIRONMENT" = "self-hosted" ]; then
-            # ARC runner: deps pre-installed in image, binary from cache — nothing to do.
-            yarn playwright install chromium
-          elif [ "${{ steps.playwright-cache.outputs.cache-hit }}" = "true" ]; then
-            # GHA hosted: binary from cache, but still need OS deps from apt.
-            yarn playwright install-deps chromium
-          else
-            yarn playwright install --with-deps chromium
-          fi
+        run: yarn playwright install --with-deps chromium
 
       - name: Save Playwright browser cache
-        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        if: always()
         uses: runs-on/cache/save@v4
         with:
           path: ${{ env.PLAYWRIGHT_BROWSERS_PATH }}
@@ -959,20 +935,35 @@ jobs:
       - name: Wait for KinD readiness
         run: |
           set -euo pipefail
-          : "${KIND_LOG:?KIND_LOG not set}"
-          echo "Waiting for cluster API to become available..."
+          NODE="${KIND_CLUSTER_NAME}-control-plane"
+
+          # 1. Wait for API server
+          echo "Waiting for cluster API..."
           if ! timeout 180 bash -c "until kubectl cluster-info --context kind-${KIND_CLUSTER_NAME} >/dev/null 2>&1; do sleep 5; done"; then
-            echo "KinD did not finish starting in time; dumping logs."
-            cat "${KIND_LOG}" || true
+            echo "KinD did not start in time; dumping logs."
+            cat "${KIND_LOG:?}" || true
             exit 1
           fi
-          kubectl version --client=true
-          kubectl cluster-info
+
+          # 2. Fix iptables FORWARD on KinD node (Docker sets DROP)
+          kubectl wait node "$NODE" --for=condition=Ready --timeout=180s
+          docker exec "$NODE" iptables -P FORWARD ACCEPT
+
+          # 3. Wait for CoreDNS ready (with non-overlapping subnets, CoreDNS
+          # should reach the correct API server without CA issues)
+          kubectl wait pods -n kube-system -l k8s-app=kube-dns \
+            --for=condition=Ready --timeout=240s
+
+          # 4. Wait for default SA (can race on slower storage)
+          timeout 60 bash -c \
+            'until kubectl get sa default -n default >/dev/null 2>&1; do sleep 2; done'
+
+          # Pin kubectl context to 'default' namespace so every kubectl call
+          # in later steps targets KinD, not the parent cluster's arc-runners ns.
+          kubectl config set-context --current --namespace=default
+
           kubectl get nodes -o wide
-          # Wait for default SA — kube-controller-manager creates it shortly after
-          # API server starts. On slower storage (ARC runners) this can race.
-          kubectl wait serviceaccount default -n default \
-            --for=jsonpath='{.metadata.name}'=default --timeout=60s
+          echo "KinD cluster ready."
 
       - name: Configure registry access for KinD
         run: |
