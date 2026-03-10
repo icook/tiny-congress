@@ -82,6 +82,7 @@ When a generated file needs changes, edit the source and run the generator. The 
 - Confabulating API names. Verify method signatures against actual code before documenting or calling them (e.g., `Kid::from_str()` exists; `Kid::parse()` does not).
 - "Improving" code adjacent to the task — don't refactor, add docstrings, or clean up surrounding code unless asked.
 - Adding a frontend runtime config value without wiring both layers. A new `window.__TC_ENV__` field requires: (1) `web/src/config.ts` (interface + getter), (2) `kube/app/templates/deployment.yaml` (Helm value → container env var). The entrypoint auto-discovers `TC_*`/`VITE_*` env vars — no script changes needed. Missing the Helm layer means the value is silently empty in production.
+- Forgetting to run `just lint-static` before committing changes to Dockerfiles, GitHub Actions workflows, or shell scripts. `just lint` only covers Rust and TypeScript — static analysis (hadolint, actionlint, shellcheck) catches a different class of issues.
 - **Migration number conflicts on long-lived branches.** If another PR lands a migration while your branch is open, your migration number may collide. Always run `ls service/migrations/*.sql | sort -V | tail -1` before finalizing a migration to confirm your number is still the next available. Rebase onto master and rename your file if there's a collision.
 
 ## Documentation
@@ -118,8 +119,10 @@ Use the `justfile` as the single source of truth for all commands. Run `just --l
 | **Dep vulnerabilities** | `just audit-deps` | cargo-deny + yarn audit |
 | **Secret detection** | `just audit-secrets` | gitleaks scan |
 | **Unused deps** | `just audit-unused` | cargo-machete |
+| **Static analysis** | `just lint-static` | hadolint, actionlint, shellcheck, typos |
 
 Additional notes:
+- **Before committing:** Run `just lint-static` in addition to `just lint` and `just test`. Static analysis catches Dockerfile, workflow, and shell script issues that `just lint` doesn't cover.
 - CI monitoring: after pushing a branch, run `gh run watch --branch $(git rev-parse --abbrev-ref HEAD)` to stream workflow progress.
 - Rust Docker builds use cargo-chef stages by default; keep the planner/cacher/builder structure intact when editing `service/Dockerfile*` assets.
 - **Local Kubernetes:** `just dev` requires KinD (`kind create cluster`). Use KinD for CI parity. See `docs/playbooks/local-dev-setup.md`.

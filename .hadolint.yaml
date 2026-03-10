@@ -9,6 +9,9 @@ ignored:
   # exact version expires from repos and prevents security patches.
   - DL3008  # apt pin
   - DL3018  # apk pin
+  # BuildKit cache mounts (--mount=type=cache) are ephemeral and don't persist
+  # in image layers, so "yarn cache clean" after install is unnecessary.
+  - DL3060  # yarn cache clean
 
 trustedRegistries:
   - docker.io

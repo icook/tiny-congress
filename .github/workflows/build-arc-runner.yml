@@ -46,9 +46,11 @@ jobs:
         run: |
           RUNNER_VER=$(grep 'ARG RUNNER_VERSION=' dockerfiles/Dockerfile.arc-runner | cut -d= -f2)
           RUST_VER=$(grep '^rust' mise.toml | sed 's/.*= *"\([^"]*\)".*/\1/')
-          echo "runner=${RUNNER_VER}" >> "$GITHUB_OUTPUT"
-          echo "rust=${RUST_VER}" >> "$GITHUB_OUTPUT"
-          echo "date=$(date -u +%Y%m%d)" >> "$GITHUB_OUTPUT"
+          {
+            echo "runner=${RUNNER_VER}"
+            echo "rust=${RUST_VER}"
+            echo "date=$(date -u +%Y%m%d)"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Build and push
         uses: docker/build-push-action@v6
