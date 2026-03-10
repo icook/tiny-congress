@@ -55,13 +55,8 @@ jobs:
           config: .kube-linter.yaml
           version: "v0.8.1"
 
-      # GHA ubuntu-24.04 pre-installs Helm; catthehacker ARC runners do not.
-      # azure/setup-helm relies on GHA tool cache infrastructure absent on ARC runners.
-      - name: Install Helm
-        run: |
-          HELM_VERSION=v3.17.3
-          curl -fsSL "https://get.helm.sh/helm-${HELM_VERSION}-linux-amd64.tar.gz" \
-            | sudo tar -xz --strip-components=1 -C /usr/local/bin linux-amd64/helm
+      # Helm is pre-installed in the ARC runner image (dockerfiles/Dockerfile.arc-runner).
+      # To upgrade, bump ARG HELM_VERSION there and rebuild via build-arc-runner.yml.
 
       - name: Validate environment values
         run: |
@@ -378,8 +373,17 @@ jobs:
       - name: Setup Rust toolchain
         uses: ./.github/actions/setup-rust
 
+      # Version must match sqlx in service/Cargo.lock
+      - name: Cache sqlx-cli binary
+        id: cache-sqlx-cli
+        uses: runs-on/cache@v4
+        with:
+          path: ~/.cargo/bin/sqlx
+          key: sqlx-cli-${{ runner.os }}-0.8.6
+
       - name: Install sqlx-cli
-        run: cargo install sqlx-cli --locked --no-default-features --features postgres
+        if: steps.cache-sqlx-cli.outputs.cache-hit != 'true'
+        run: cargo install sqlx-cli --version 0.8.6 --locked --no-default-features --features postgres
 
       - name: Run migrations
         working-directory: service
@@ -495,6 +499,40 @@ jobs:
               - '!.github/workflows/build-arc-runner.yml'
               - 'skaffold.yaml'
               - 'justfile'
+
+  # ── Build WASM tc-crypto (shared artifact) ────────────────
+  build-wasm:
+    name: Build WASM
+    runs-on: ${{ needs.detect-changes.outputs.runner-small }}
+    needs: [detect-changes]
+    if: >-
+      needs.detect-changes.outputs.ui == 'true' ||
+      needs.detect-changes.outputs.api == 'true' ||
+      needs.detect-changes.outputs.ci == 'true'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Rust toolchain
+        uses: ./.github/actions/setup-rust
+        with:
+          targets: wasm32-unknown-unknown
+          cache-dependencies: 'false'
+
+      - name: Install wasm-pack
+        uses: taiki-e/install-action@wasm-pack
+
+      - name: Build WASM
+        run: |
+          cd crates/tc-crypto
+          wasm-pack build --target web --release --out-dir ../../web/src/wasm/tc-crypto
+
+      - name: Upload WASM artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: tc-crypto-wasm
+          path: web/src/wasm/tc-crypto/
+          retention-days: 1
 
   # ── Build all container images in parallel ────────────────
   build-images:
@@ -691,7 +729,7 @@ jobs:
   unit-tests:
     name: Unit tests (Vitest)
     runs-on: ${{ needs.detect-changes.outputs.runner-small }}
-    needs: [detect-changes]
+    needs: [detect-changes, build-wasm]
     if: needs.detect-changes.outputs.ui == 'true' || needs.detect-changes.outputs.ci == 'true'
     steps:
       - name: Checkout
@@ -700,19 +738,11 @@ jobs:
       - name: Setup web toolchain
         uses: ./.github/actions/setup-web
 
-      - name: Setup Rust toolchain
-        uses: ./.github/actions/setup-rust
+      - name: Download WASM artifact
+        uses: actions/download-artifact@v4
         with:
-          targets: wasm32-unknown-unknown
-          cache-dependencies: 'false'
-
-      - name: Install wasm-pack
-        uses: taiki-e/install-action@wasm-pack
-
-      - name: Build WASM
-        run: |
-          cd crates/tc-crypto
-          wasm-pack build --target web --release --out-dir ../../web/src/wasm/tc-crypto
+          name: tc-crypto-wasm
+          path: web/src/wasm/tc-crypto/
 
       - name: Run Vitest with coverage
         working-directory: web
@@ -775,6 +805,7 @@ jobs:
     needs:
       - detect-changes
       - build-images
+      - build-wasm
       - lint
       - lint-web
     # always() is required so this job evaluates its `if` even when
@@ -805,13 +836,8 @@ jobs:
           install_only: true
           cluster_name: ${{ env.KIND_CLUSTER_NAME }}
 
-      # GHA ubuntu-24.04 pre-installs Helm; catthehacker ARC runners do not.
-      # azure/setup-helm relies on GHA tool cache infrastructure absent on ARC runners.
-      - name: Install Helm
-        run: |
-          HELM_VERSION=v3.17.3
-          curl -fsSL "https://get.helm.sh/helm-${HELM_VERSION}-linux-amd64.tar.gz" \
-            | sudo tar -xz --strip-components=1 -C /usr/local/bin linux-amd64/helm
+      # Helm is pre-installed in the ARC runner image (dockerfiles/Dockerfile.arc-runner).
+      # To upgrade, bump ARG HELM_VERSION there and rebuild via build-arc-runner.yml.
 
       - name: Start KinD cluster in background
         run: |
@@ -823,12 +849,25 @@ jobs:
           echo "Starting KinD cluster ${KIND_CLUSTER_NAME} (logs: ${KIND_LOG})"
           kind create cluster --name "${KIND_CLUSTER_NAME}" --wait 0s >"${KIND_LOG}" 2>&1 &
 
+      - name: Cache Skaffold binary
+        id: cache-skaffold
+        uses: runs-on/cache@v4
+        with:
+          path: ${{ runner.temp }}/skaffold-bin
+          key: skaffold-${{ runner.os }}-${{ hashFiles('.skaffold-version') }}
+
       - name: Install Skaffold
         run: |
           set -euo pipefail
-          SKAFFOLD_VERSION="v$(cat .skaffold-version)"
-          curl -fsSL -o skaffold "https://storage.googleapis.com/skaffold/releases/${SKAFFOLD_VERSION}/skaffold-linux-amd64"
-          sudo install skaffold /usr/local/bin/skaffold
+          SKAFFOLD_BIN="${RUNNER_TEMP}/skaffold-bin/skaffold"
+          if [ ! -f "$SKAFFOLD_BIN" ]; then
+            mkdir -p "${RUNNER_TEMP}/skaffold-bin"
+            SKAFFOLD_VERSION="v$(cat .skaffold-version)"
+            curl -fsSL -o "$SKAFFOLD_BIN" \
+              "https://storage.googleapis.com/skaffold/releases/${SKAFFOLD_VERSION}/skaffold-linux-amd64"
+            chmod +x "$SKAFFOLD_BIN"
+          fi
+          sudo install "$SKAFFOLD_BIN" /usr/local/bin/skaffold
 
       - name: Login to GHCR
         uses: docker/login-action@v3
@@ -863,19 +902,11 @@ jobs:
         working-directory: web
         run: yarn playwright install --with-deps chromium
 
-      - name: Setup Rust toolchain
-        uses: ./.github/actions/setup-rust
+      - name: Download WASM artifact
+        uses: actions/download-artifact@v4
         with:
-          targets: wasm32-unknown-unknown
-          cache-dependencies: 'false'
-
-      - name: Install wasm-pack
-        uses: taiki-e/install-action@wasm-pack
-
-      - name: Build WASM
-        run: |
-          cd crates/tc-crypto
-          wasm-pack build --target web --release --out-dir ../../web/src/wasm/tc-crypto
+          name: tc-crypto-wasm
+          path: web/src/wasm/tc-crypto/
 
       - name: Wait for KinD readiness
         run: |
@@ -1045,6 +1076,7 @@ jobs:
       - security-audit
       - sqlx-check
       - build-images
+      - build-wasm
       - scan-images
       - unit-tests
       - rust-coverage
