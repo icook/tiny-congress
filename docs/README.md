@@ -44,7 +44,7 @@ Contracts and standards for consistency:
 
 | Interface | Coverage |
 |-----------|----------|
-| [ADR-011](decisions/011-figment-layered-configuration.md) | Configuration architecture (`service/src/config.rs` is source of truth) |
+| [ADR-011](decisions/011-figment-layered-configuration.md) | Configuration architecture (`service/src/config.rs` is the source of truth) |
 | [directory-conventions.md](interfaces/directory-conventions.md) | Where code lives |
 | [naming-conventions.md](interfaces/naming-conventions.md) | How to name things |
 | [branch-naming-conventions.md](interfaces/branch-naming-conventions.md) | Git branch naming standards |

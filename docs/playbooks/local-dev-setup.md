@@ -285,6 +285,16 @@ git commit --no-verify -m "WIP: work in progress"
 
 Use sparingly—CI will still enforce these checks.
 
+## Troubleshooting
+
+| Error | Cause | Fix |
+|-------|-------|-----|
+| "database.user is required" | Missing `TC_DATABASE__USER` | Set env var or configure in `config.yaml` |
+| "database.password is required" | Missing `TC_DATABASE__PASSWORD` | Set env var or configure in `config.yaml` |
+| "connection refused" | Postgres not running | Start postgres or check host/port |
+| "database does not exist" | DB not created | Run `createdb tiny-congress` |
+| "extension pgmq does not exist" | Missing extension | Use provided `dockerfiles/Dockerfile.postgres` |
+
 ## See also
 
 - `service/src/config.rs` - Configuration struct (source of truth for all config fields and defaults)
