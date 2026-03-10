@@ -31,4 +31,4 @@ check_timeout = 900
 
 [prompts]
 # Markdown file with project-specific refinement guidance
-guidance = "docs/refine-guidance.md"
+guidance = "scripts/refine-guidance.md"

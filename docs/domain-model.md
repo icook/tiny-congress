@@ -390,4 +390,4 @@ A user's rating on a single dimension. Votes are upserted — voting again on th
 | Rust coding patterns (`Kid`, newtypes) | [interfaces/rust-coding-standards.md](interfaces/rust-coding-standards.md) |
 | Error handling taxonomy | [interfaces/error-handling-backend.md](interfaces/error-handling-backend.md) |
 | Secure defaults policy | [interfaces/secure-defaults.md](interfaces/secure-defaults.md) |
-| Environment variables | [interfaces/environment-variables.md](interfaces/environment-variables.md) |
+| Configuration | `service/src/config.rs` (source of truth), [ADR-011](decisions/011-figment-layered-configuration.md) |

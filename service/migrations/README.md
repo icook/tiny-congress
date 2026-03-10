@@ -14,7 +14,7 @@ Migrations are numbered sequentially and run in order:
 
 ## Adding Migrations
 
-See the [adding-migration playbook](../../docs/playbooks/adding-migration.md) for the full workflow.
+See the [database migrations playbook](../../docs/playbooks/database-migrations.md) for the full workflow.
 
 Quick reference:
 ```bash

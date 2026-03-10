@@ -202,7 +202,7 @@ DATABASE_URL=postgres://... sqlx migrate run
 cargo sqlx prepare
 ```
 
-See `docs/playbooks/adding-migration.md` for full workflow.
+See `docs/playbooks/database-migrations.md` for full workflow.
 
 ## Port Reference
 
@@ -287,7 +287,8 @@ Use sparingly—CI will still enforce these checks.
 
 ## See also
 
-- `docs/interfaces/environment-variables.md` - All env vars
+- `service/src/config.rs` - Configuration struct (source of truth for all config fields and defaults)
+- `service/config.yaml.example` - Example local configuration
 - `docs/playbooks/debugging-ci-failure.md` - When things break
-- `docs/playbooks/adding-migration.md` - Database changes
+- `docs/playbooks/database-migrations.md` - Database changes
 - `README.md` - Project overview

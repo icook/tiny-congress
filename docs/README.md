@@ -24,18 +24,16 @@ How-to guides for common development tasks:
 | Playbook | When to Use |
 |----------|-------------|
 | [local-dev-setup.md](playbooks/local-dev-setup.md) | Setting up development environment |
-| [adding-migration.md](playbooks/adding-migration.md) | Making database schema changes |
-| [new-graphql-endpoint.md](playbooks/new-graphql-endpoint.md) | Adding GraphQL queries/mutations |
+| [database-migrations.md](playbooks/database-migrations.md) | Database schema changes, migrations, and testing |
+| [new-graphql-endpoint.md](playbooks/new-graphql-endpoint.md) | Adding API endpoints |
 | [new-rest-endpoint.md](playbooks/new-rest-endpoint.md) | Adding REST endpoints (dominant API surface) |
 | [debugging-ci-failure.md](playbooks/debugging-ci-failure.md) | Troubleshooting CI issues |
-| [database-schema-change.md](playbooks/database-schema-change.md) | Database migrations workflow |
 | [docker-layer-caching.md](playbooks/docker-layer-caching.md) | Optimizing Docker builds |
 | [dependency-update.md](playbooks/dependency-update.md) | Updating project dependencies |
 | [frontend-test-patterns.md](playbooks/frontend-test-patterns.md) | Writing frontend tests |
 | [fixing-flaky-tests.md](playbooks/fixing-flaky-tests.md) | Debugging intermittent test failures |
 | [backend-test-patterns.md](playbooks/backend-test-patterns.md) | Writing backend tests |
 | [graphql-codegen.md](playbooks/graphql-codegen.md) | Generating GraphQL types |
-| [pr-review-checklist.md](playbooks/pr-review-checklist.md) | Reviewing pull requests |
 | [gitops-cd-setup.md](playbooks/gitops-cd-setup.md) | Setting up gitops CD pipeline |
 | [skaffold-profiles.md](playbooks/skaffold-profiles.md) | Using Skaffold profiles |
 | [test-data-factories.md](playbooks/test-data-factories.md) | Creating backend test data with factories |
@@ -46,7 +44,7 @@ Contracts and standards for consistency:
 
 | Interface | Coverage |
 |-----------|----------|
-| [environment-variables.md](interfaces/environment-variables.md) | Required and optional env vars |
+| [ADR-011](decisions/011-figment-layered-configuration.md) | Configuration architecture (`service/src/config.rs` is source of truth) |
 | [directory-conventions.md](interfaces/directory-conventions.md) | Where code lives |
 | [naming-conventions.md](interfaces/naming-conventions.md) | How to name things |
 | [branch-naming-conventions.md](interfaces/branch-naming-conventions.md) | Git branch naming standards |
@@ -88,7 +86,7 @@ Architecture Decision Records explaining why we chose specific approaches:
 
 Pre-flight checks for critical operations:
 
-- [pre-pr.md](checklists/pre-pr.md) - Before opening a PR
+- [pr-checklist.md](checklists/pr-checklist.md) - Author & reviewer PR checklist
 - [pre-release.md](checklists/pre-release.md) - Before deploying
 - [incident.md](checklists/incident.md) - During incidents
 

@@ -355,6 +355,5 @@ Specific requirements or reproduction steps.
 ## Related Documentation
 
 - `branch-naming-conventions.md` - Branch names reference issue numbers
-- `../checklists/pre-pr.md` - PR checklist references linked issues
-- `../playbooks/pr-review-checklist.md` - Review process
+- `../checklists/pr-checklist.md` - PR checklist (author & reviewer)
 - `../../.github/pull_request_template.md` - PR template with issue linking
