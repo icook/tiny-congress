@@ -151,7 +151,10 @@ TinyCongress handles cryptographic identity and delegation. The bar is: code tha
 ## Commit & Pull Request Guidelines
 - Match the concise, imperative commit log (e.g., `Migrate CI build to docker build-push`). Avoid bundling unrelated work.
 - PR descriptions should cover intent, risks, rollout, and linked issues. Add screenshots or GraphQL traces for UX or schema changes.
-- Call out env var updates and refresh `docs/` entries when system behavior evolves.
+- When removing code (functions, types, endpoints), state how you confirmed zero callers (e.g., "grep found no references outside the definition"). A reviewer shouldn't have to re-derive that analysis.
+- When a PR makes a non-obvious decision (choosing approach A over B, accepting a known limitation, deferring something), call it out in the PR body. If the decision is durable, record it in the appropriate place (`docs/decisions/` for architectural, inline comment for local rationale) and link from the PR.
+- Feature PRs that span multiple steps should link a GitHub issue or tracking PR so reviewers can navigate between design intent and implementation. Chores and small fixes don't need this — use judgment.
+- Call out env var updates and refresh `docs/` entries when system behavior evolves. If a PR changes how something works, check whether `docs/` describes the old behavior and update it in the same PR — don't leave stale docs for the next person to discover.
 
 ## Environment & Configuration Tips
 - Keep secrets out of version control; export `DATABASE_URL` and queue settings locally and in CI.
