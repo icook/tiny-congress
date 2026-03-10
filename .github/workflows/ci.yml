@@ -792,7 +792,9 @@ jobs:
     needs: [detect-changes]
     if: needs.detect-changes.outputs.api == 'true' || needs.detect-changes.outputs.ci == 'true'
     env:
-      TEST_POSTGRES_IMAGE: ${{ needs.detect-changes.outputs.image-registry }}/postgres:${{ github.sha }}
+      # Use the branch-master tag (last successful master build).
+      # Migrations run from the working tree, not the image, so this is always valid.
+      TEST_POSTGRES_IMAGE: ghcr.io/${{ github.repository }}/postgres:branch-master
     steps:
       - name: Checkout
         uses: actions/checkout@v6
