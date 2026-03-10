@@ -870,7 +870,7 @@ jobs:
           chmod +x "$SKAFFOLD_BIN"
 
       - name: Save Skaffold binary cache
-        if: always()
+        if: steps.cache-skaffold.outputs.cache-hit != 'true'
         uses: runs-on/cache/save@v4
         with:
           path: ${{ runner.temp }}/skaffold-bin
