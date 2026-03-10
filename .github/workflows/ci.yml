@@ -661,10 +661,12 @@ jobs:
   rust-checks:
     name: Rust checks
     runs-on: ${{ needs.detect-changes.outputs.runner-large }}
-    needs: [detect-changes, build-images]
+    needs: [detect-changes]
     if: needs.detect-changes.outputs.api == 'true' || needs.detect-changes.outputs.ci == 'true'
     env:
-      TEST_POSTGRES_IMAGE: ${{ needs.build-images.outputs.postgres-tag || format('ghcr.io/{0}/postgres:{1}', github.repository, github.sha) }}
+      # Use the branch-master tag (last successful master build).
+      # Migrations run from the working tree, not the image, so this is always valid.
+      TEST_POSTGRES_IMAGE: ghcr.io/${{ github.repository }}/postgres:branch-master
     steps:
       - name: Checkout
         uses: actions/checkout@v6
