@@ -2,6 +2,7 @@
 #
 # Based on the official actions-runner image so the GitHub Actions runner binary
 # is baked in — no init container needed to copy it at pod startup.
+# Includes Playwright Chromium OS-level dependencies for e2e-test jobs.
 #
 # Pre-installs small, stable CLI tools that are used across many CI jobs.
 # Heavy toolchains (Rust, Node) are excluded — they are cached effectively by
