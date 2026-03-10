@@ -159,9 +159,9 @@ jobs:
             exit 1
           fi
 
-  # ── Lint web ─────────────────────────────────────────────
-  lint-web:
-    name: Lint web
+  # ── Frontend checks (lint + Storybook build) ───────────────
+  frontend-checks:
+    name: Frontend checks
     needs: [detect-changes]
     if: needs.detect-changes.outputs.ui == 'true' || needs.detect-changes.outputs.ci == 'true'
     runs-on: ${{ needs.detect-changes.outputs.runner-small }}
@@ -180,6 +180,16 @@ jobs:
 
       - name: Run Linters
         run: just lint-frontend
+
+      - name: Build Storybook
+        run: just build-storybook
+
+      - name: Upload Storybook artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: storybook-static
+          path: web/storybook-static/
+          retention-days: 30
 
   # ── Static analysis (typos, Dockerfiles, workflows, scripts)
   static-analysis:
@@ -222,35 +232,6 @@ jobs:
 
       - name: Run static analysis
         run: just lint-static
-
-  # ── Build Storybook ──────────────────────────────────────
-  build-storybook:
-    name: Build Storybook
-    needs: [detect-changes]
-    if: needs.detect-changes.outputs.ui == 'true' || needs.detect-changes.outputs.ci == 'true'
-    runs-on: ${{ needs.detect-changes.outputs.runner-small }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Setup web toolchain
-        uses: ./.github/actions/setup-web
-
-      - name: Install just
-        uses: extractions/setup-just@v3
-
-      - name: Install dependencies
-        run: just _ensure-frontend-deps
-
-      - name: Build Storybook
-        run: just build-storybook
-
-      - name: Upload Storybook artifact
-        uses: actions/upload-artifact@v6
-        with:
-          name: storybook-static
-          path: web/storybook-static/
-          retention-days: 30
 
   # ── Build API documentation ──────────────────────────────
   build-docs:
@@ -1054,10 +1035,9 @@ jobs:
       - detect-changes
       - backend-checks
       - lint-kube
-      - lint-web
+      - frontend-checks
       - static-analysis
       - check-dashboards
-      - build-storybook
       - build-images
       - build-wasm
       - scan-images
@@ -1194,7 +1174,7 @@ jobs:
   deploy-reports:
     name: Upload CI reports to Dufs
     runs-on: ${{ needs.detect-changes.outputs.runner-small }}
-    needs: [detect-changes, ci-gate, unit-tests, rust-checks, e2e-tests, build-storybook, build-docs]
+    needs: [detect-changes, ci-gate, unit-tests, rust-checks, e2e-tests, frontend-checks, build-docs]
     if: needs.ci-gate.result == 'success'
     permissions:
       contents: read
