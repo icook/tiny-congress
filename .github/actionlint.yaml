@@ -1,5 +1,7 @@
 self-hosted-runner:
   labels:
     - arc-runner-set
+    - arc-runner-small
+    - arc-runner-dind-bench
 
 config-variables: null
