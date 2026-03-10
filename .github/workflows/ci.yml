@@ -849,7 +849,16 @@ jobs:
           echo "KIND_LOG=${KIND_LOG}" >> "$GITHUB_ENV"
 
           echo "Starting KinD cluster ${KIND_CLUSTER_NAME} (logs: ${KIND_LOG})"
-          kind create cluster --name "${KIND_CLUSTER_NAME}" --wait 0s >"${KIND_LOG}" 2>&1 &
+          KIND_CONFIG=$(mktemp --suffix=.yaml)
+          if [ -n "${DOCKER_HOST:-}" ]; then
+            # On ARC/DinD runners the runner pod reaches the API server via the
+            # DinD service hostname. Bind to 0.0.0.0 so the port is reachable
+            # from outside the DinD pod.
+            printf 'kind: Cluster\napiVersion: kind.x-k8s.io/v1alpha4\nnetworking:\n  apiServerAddress: "0.0.0.0"\n' > "$KIND_CONFIG"
+          else
+            printf 'kind: Cluster\napiVersion: kind.x-k8s.io/v1alpha4\n' > "$KIND_CONFIG"
+          fi
+          kind create cluster --name "${KIND_CLUSTER_NAME}" --config "$KIND_CONFIG" --wait 0s >"${KIND_LOG}" 2>&1 &
 
       - name: Cache Skaffold binary
         id: cache-skaffold
@@ -914,12 +923,44 @@ jobs:
         run: |
           set -euo pipefail
           : "${KIND_LOG:?KIND_LOG not set}"
-          echo "Waiting for cluster API to become available..."
-          if ! timeout 180 bash -c "until kubectl cluster-info --context kind-${KIND_CLUSTER_NAME} >/dev/null 2>&1; do sleep 5; done"; then
-            echo "KinD did not finish starting in time; dumping logs."
-            cat "${KIND_LOG}" || true
-            exit 1
+          # On ARC runners DOCKER_HOST points to the remote DinD pod. KinD writes
+          # 0.0.0.0 (or 127.0.0.1) into the kubeconfig, which is unreachable from
+          # the runner pod. Rewrite the server address to the DinD hostname.
+          if [ -n "${DOCKER_HOST:-}" ]; then
+            DIND_HOSTNAME=$(echo "$DOCKER_HOST" | sed 's|tcp://||;s|:[0-9]*$||')
+            KUBECONFIG_FILE="${KUBECONFIG:-${HOME}/.kube/config}"
+            echo "Waiting for KinD to write kubeconfig (DinD hostname: ${DIND_HOSTNAME})..."
+            elapsed=0
+            until [ -f "${KUBECONFIG_FILE}" ] && \
+                  kubectl --kubeconfig="${KUBECONFIG_FILE}" config get-contexts "kind-${KIND_CLUSTER_NAME}" >/dev/null 2>&1; do
+              if [ $elapsed -ge 240 ]; then
+                echo "Timed out waiting for kubeconfig after ${elapsed}s. KinD log:"
+                cat "${KIND_LOG}" || echo "(kind.log not found at ${KIND_LOG})"
+                exit 1
+              fi
+              sleep 5; elapsed=$((elapsed + 5))
+              [ $((elapsed % 30)) -eq 0 ] && echo "  ...still waiting for kubeconfig (${elapsed}s)"
+            done
+            echo "Kubeconfig ready after ${elapsed}s; rewriting server -> ${DIND_HOSTNAME}..."
+            grep 'server:' "${KUBECONFIG_FILE}" | head -1
+            sed -i "s|server: https://[0-9.]*:|server: https://${DIND_HOSTNAME}:|g" \
+              "${KUBECONFIG_FILE}"
+            grep 'server:' "${KUBECONFIG_FILE}" | head -1
+            kubectl config set-cluster "kind-${KIND_CLUSTER_NAME}" \
+              --kubeconfig="${KUBECONFIG_FILE}" --insecure-skip-tls-verify=true
           fi
+          echo "Waiting for cluster API to become available..."
+          elapsed=0
+          until kubectl cluster-info --context "kind-${KIND_CLUSTER_NAME}" >/dev/null 2>&1; do
+            if [ $elapsed -ge 180 ]; then
+              echo "KinD API not ready after ${elapsed}s. KinD log:"
+              cat "${KIND_LOG}" || echo "(kind.log not found at ${KIND_LOG})"
+              exit 1
+            fi
+            sleep 5; elapsed=$((elapsed + 5))
+            [ $((elapsed % 30)) -eq 0 ] && echo "  ...still waiting for API (${elapsed}s)"
+          done
+          echo "Cluster API ready after ${elapsed}s."
           kubectl version --client=true
           kubectl cluster-info
           kubectl get nodes -o wide
@@ -927,6 +968,22 @@ jobs:
           # API server starts. On slower storage (ARC runners) this can race.
           kubectl wait serviceaccount default -n default \
             --for=jsonpath='{.metadata.name}'=default --timeout=60s
+
+      - name: Fix CoreDNS upstream in DinD
+        run: |
+          set -euo pipefail
+          if [ -z "${DOCKER_HOST:-}" ]; then
+            echo "Not running under DinD; skipping CoreDNS patch."
+            exit 0
+          fi
+          # Inside DinD, CoreDNS's readiness probe returns 503 because the
+          # kubernetes plugin can't reach the API server ClusterIP. The DNS
+          # port 53 itself works fine. publishNotReadyAddresses=true makes
+          # kube-dns route to CoreDNS pods regardless of readiness status,
+          # so in-cluster DNS resolution works even while CoreDNS reports not-ready.
+          kubectl patch service kube-dns -n kube-system \
+            -p '{"spec":{"publishNotReadyAddresses":true}}'
+          echo "kube-dns patched to publish not-ready addresses."
 
       - name: Configure registry access for KinD
         run: |
