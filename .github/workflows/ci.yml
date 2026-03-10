@@ -730,6 +730,7 @@ jobs:
 
       - uses: ./.github/actions/collect-telemetry
 
+
       - name: Wait for Docker sidecar
         run: until docker info >/dev/null 2>&1; do sleep 1; done
 
