@@ -851,25 +851,33 @@ jobs:
           echo "Starting KinD cluster ${KIND_CLUSTER_NAME} (logs: ${KIND_LOG})"
           kind create cluster --name "${KIND_CLUSTER_NAME}" --wait 0s >"${KIND_LOG}" 2>&1 &
 
-      - name: Cache Skaffold binary
+      - name: Restore Skaffold binary cache
         id: cache-skaffold
-        uses: runs-on/cache@v4
+        uses: runs-on/cache/restore@v4
         with:
           path: ${{ runner.temp }}/skaffold-bin
           key: skaffold-${{ runner.os }}-${{ hashFiles('.skaffold-version') }}
 
       - name: Install Skaffold
+        if: steps.cache-skaffold.outputs.cache-hit != 'true'
         run: |
           set -euo pipefail
           SKAFFOLD_BIN="${RUNNER_TEMP}/skaffold-bin/skaffold"
-          if [ ! -f "$SKAFFOLD_BIN" ]; then
-            mkdir -p "${RUNNER_TEMP}/skaffold-bin"
-            SKAFFOLD_VERSION="v$(cat .skaffold-version)"
-            curl -fsSL -o "$SKAFFOLD_BIN" \
-              "https://storage.googleapis.com/skaffold/releases/${SKAFFOLD_VERSION}/skaffold-linux-amd64"
-            chmod +x "$SKAFFOLD_BIN"
-          fi
-          sudo install "$SKAFFOLD_BIN" /usr/local/bin/skaffold
+          mkdir -p "${RUNNER_TEMP}/skaffold-bin"
+          SKAFFOLD_VERSION="v$(cat .skaffold-version)"
+          curl -fsSL -o "$SKAFFOLD_BIN" \
+            "https://storage.googleapis.com/skaffold/releases/${SKAFFOLD_VERSION}/skaffold-linux-amd64"
+          chmod +x "$SKAFFOLD_BIN"
+
+      - name: Save Skaffold binary cache
+        if: steps.cache-skaffold.outputs.cache-hit != 'true'
+        uses: runs-on/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/skaffold-bin
+          key: skaffold-${{ runner.os }}-${{ hashFiles('.skaffold-version') }}
+
+      - name: Install Skaffold to PATH
+        run: sudo install "${RUNNER_TEMP}/skaffold-bin/skaffold" /usr/local/bin/skaffold
 
       - name: Login to GHCR
         uses: docker/login-action@v3
@@ -914,7 +922,7 @@ jobs:
           fi
 
       - name: Save Playwright browser cache
-        if: always()
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
         uses: runs-on/cache/save@v4
         with:
           path: ${{ env.PLAYWRIGHT_BROWSERS_PATH }}
