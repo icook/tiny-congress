@@ -154,7 +154,14 @@ TinyCongress handles cryptographic identity and delegation. The bar is: code tha
 ## Commit & Pull Request Guidelines
 - Match the concise, imperative commit log (e.g., `Migrate CI build to docker build-push`). Avoid bundling unrelated work.
 - PR descriptions should cover intent, risks, rollout, and linked issues. Add screenshots or GraphQL traces for UX or schema changes.
-- Call out env var updates and refresh `docs/` entries when system behavior evolves.
+- When removing code (functions, types, endpoints), state how you confirmed zero callers (e.g., "grep found no references outside the definition"). A reviewer shouldn't have to re-derive that analysis.
+- When changing shared code (function signatures, types, traits), enumerate affected callers and how each was updated. ("Three callers in `service/`: updated all. No WASM callers — confirmed via grep in `crates/tc-crypto/`.")
+- When changing behavior, show before/after evidence. Screenshots for UI changes, API response diffs for schema changes, test output for logic changes. The reviewer shouldn't have to deploy locally to see what changed.
+- When adding a dependency, justify why existing deps don't cover it. A new crate or npm package is a long-term maintenance commitment — state what you evaluated.
+- When new logic lacks test coverage, explain why: untestable without infrastructure X, covered by existing integration test Y, or deferred to issue #Z. Silence reads as "forgot."
+- When a PR makes a non-obvious decision (choosing approach A over B, accepting a known limitation, deferring something), call it out in the PR body. If the decision is durable, record it in the appropriate place (`docs/decisions/` for architectural, inline comment for local rationale) and link from the PR.
+- Feature PRs that span multiple steps should link a GitHub issue or tracking PR so reviewers can navigate between design intent and implementation. Chores and small fixes don't need this — use judgment.
+- If a PR changes how something works — API behavior, data flow, user-facing features, architectural patterns — check whether `docs/` describes the old behavior and update it in the same PR. Prioritize architecture docs (`docs/decisions/`, `docs/domain-model.md`) and user-facing feature docs over internal configuration details.
 
 ## Environment & Configuration Tips
 - Keep secrets out of version control; export `DATABASE_URL` and queue settings locally and in CI.
