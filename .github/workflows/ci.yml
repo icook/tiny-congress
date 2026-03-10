@@ -45,7 +45,14 @@ jobs:
 
       # ── Lint ──
       - name: Lint backend
+        if: needs.detect-changes.outputs.api == 'true' || needs.detect-changes.outputs.ci == 'true'
         run: just lint-backend
+
+      # gitleaks GitHub Action provides richer integration than the CLI
+      - name: Run gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       # ── Codegen check ──
       - name: Install frontend dependencies
@@ -65,22 +72,20 @@ jobs:
 
       # ── Security & dependency audit ──
       - name: Install cargo-deny
+        if: needs.detect-changes.outputs.api == 'true' || needs.detect-changes.outputs.ci == 'true'
         uses: taiki-e/install-action@cargo-deny
 
       - name: Install cargo-machete
+        if: needs.detect-changes.outputs.api == 'true' || needs.detect-changes.outputs.ci == 'true'
         uses: taiki-e/install-action@cargo-machete
 
       - name: Run dependency audit
+        if: needs.detect-changes.outputs.api == 'true' || needs.detect-changes.outputs.ci == 'true'
         run: just audit-deps
 
       - name: Check for unused dependencies
+        if: needs.detect-changes.outputs.api == 'true' || needs.detect-changes.outputs.ci == 'true'
         run: just audit-unused
-
-      # gitleaks GitHub Action provides richer integration than the CLI
-      - name: Run gitleaks
-        uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   # ── Lint Kubernetes manifests ─────────────────────────────
   lint-kube:
