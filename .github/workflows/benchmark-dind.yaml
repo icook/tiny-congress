@@ -1,62 +1,44 @@
-# Benchmark shared DinD (current) vs per-pod sidecar DinD (arc-runner-dind-bench).
-# Trigger manually via workflow_dispatch.
-# NOTE: arc-runner-dind-bench requires homelab-gitops PR #90 to be merged first.
-name: Benchmark DinD modes
+# Measure warm pod boot penalty: shared DinD vs per-pod sidecar DinD.
+# Both pools have minRunners > 0, so pods are pre-scheduled.
+# The question: how much does the init-dind-externals + dockerd sidecar startup add?
+name: Benchmark DinD boot penalty
 
 on:
   workflow_dispatch:
 
 jobs:
-  shared-dind:
-    name: "Shared DinD (current: arc-runner-small)"
+  shared-1:
+    name: "Shared DinD #1"
     runs-on: arc-runner-small
     steps:
-      - name: Record boot time
-        id: boot
-        run: |
-          echo "::notice::Runner ready at $(date -u +%Y-%m-%dT%H:%M:%S.%3NZ)"
-          echo "boot_ms=$(date +%s%3N)" >> "$GITHUB_OUTPUT"
-      - name: Docker info
-        run: |
-          echo "DOCKER_HOST=$DOCKER_HOST"
-          docker info 2>&1 | grep -E 'Server Version|Storage Driver|Total Memory'
-          echo "::notice::Docker ready at $(date -u +%Y-%m-%dT%H:%M:%S.%3NZ)"
-      - name: Pull alpine (cold)
-        run: |
-          start=$(date +%s%3N)
-          docker pull alpine:3.21
-          end=$(date +%s%3N)
-          echo "::notice::docker pull took $((end - start))ms"
-      - name: Minimal docker build
-        run: |
-          start=$(date +%s%3N)
-          printf 'FROM alpine:3.21\nRUN echo bench' | docker build -t bench-shared -
-          end=$(date +%s%3N)
-          echo "::notice::docker build took $((end - start))ms"
+      - run: echo "::notice::Runner ready at $(date -u +%Y-%m-%dT%H:%M:%S.%3NZ)"
 
-  sidecar-dind:
-    name: "Sidecar DinD (new: arc-runner-dind-bench)"
+  shared-2:
+    name: "Shared DinD #2"
+    runs-on: arc-runner-small
+    steps:
+      - run: echo "::notice::Runner ready at $(date -u +%Y-%m-%dT%H:%M:%S.%3NZ)"
+
+  shared-3:
+    name: "Shared DinD #3"
+    runs-on: arc-runner-small
+    steps:
+      - run: echo "::notice::Runner ready at $(date -u +%Y-%m-%dT%H:%M:%S.%3NZ)"
+
+  sidecar-1:
+    name: "Sidecar DinD #1"
     runs-on: arc-runner-dind-bench
     steps:
-      - name: Record boot time
-        id: boot
-        run: |
-          echo "::notice::Runner ready at $(date -u +%Y-%m-%dT%H:%M:%S.%3NZ)"
-          echo "boot_ms=$(date +%s%3N)" >> "$GITHUB_OUTPUT"
-      - name: Docker info
-        run: |
-          echo "DOCKER_HOST=$DOCKER_HOST"
-          docker info 2>&1 | grep -E 'Server Version|Storage Driver|Total Memory'
-          echo "::notice::Docker ready at $(date -u +%Y-%m-%dT%H:%M:%S.%3NZ)"
-      - name: Pull alpine (cold)
-        run: |
-          start=$(date +%s%3N)
-          docker pull alpine:3.21
-          end=$(date +%s%3N)
-          echo "::notice::docker pull took $((end - start))ms"
-      - name: Minimal docker build
-        run: |
-          start=$(date +%s%3N)
-          printf 'FROM alpine:3.21\nRUN echo bench' | docker build -t bench-sidecar -
-          end=$(date +%s%3N)
-          echo "::notice::docker build took $((end - start))ms"
+      - run: echo "::notice::Runner ready at $(date -u +%Y-%m-%dT%H:%M:%S.%3NZ)"
+
+  sidecar-2:
+    name: "Sidecar DinD #2"
+    runs-on: arc-runner-dind-bench
+    steps:
+      - run: echo "::notice::Runner ready at $(date -u +%Y-%m-%dT%H:%M:%S.%3NZ)"
+
+  sidecar-3:
+    name: "Sidecar DinD #3"
+    runs-on: arc-runner-dind-bench
+    steps:
+      - run: echo "::notice::Runner ready at $(date -u +%Y-%m-%dT%H:%M:%S.%3NZ)"
