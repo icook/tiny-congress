@@ -96,10 +96,6 @@ jobs:
       - name: Setup web toolchain
         uses: ./.github/actions/setup-web
 
-      - name: Install dependencies
-        working-directory: web
-        run: yarn install --immutable
-
       - name: Install Playwright browsers
         working-directory: web
         run: yarn playwright install --with-deps

@@ -77,9 +77,6 @@ jobs:
       - name: Setup web toolchain
         uses: ./.github/actions/setup-web
 
-      - name: Install frontend dependencies
-        run: cd web && yarn install --immutable
-
       # ── Docker (for testcontainers in backend tests) ──
 
       - name: Build test postgres image
