@@ -50,6 +50,7 @@
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
     "react-error-boundary": "^6.0.3",
+    "react-markdown": "^10.1.0",
     "recharts": "^3.6.0",
     "zod": "^4.3.5"
   },
