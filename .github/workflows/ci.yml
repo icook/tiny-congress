@@ -832,11 +832,33 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Install KinD tooling
-        uses: helm/kind-action@v1.13.0
+      - name: Restore KinD binary cache
+        id: cache-kind
+        uses: runs-on/cache/restore@v4
         with:
-          install_only: true
-          cluster_name: ${{ env.KIND_CLUSTER_NAME }}
+          path: ${{ runner.temp }}/kind-bin
+          key: kind-${{ runner.os }}-${{ hashFiles('.kind-version') }}
+
+      - name: Install KinD
+        if: steps.cache-kind.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          KIND_BIN="${RUNNER_TEMP}/kind-bin/kind"
+          mkdir -p "${RUNNER_TEMP}/kind-bin"
+          KIND_VERSION="$(cat .kind-version)"
+          curl -fsSL -o "$KIND_BIN" \
+            "https://kind.sigs.k8s.io/dl/${KIND_VERSION}/kind-linux-amd64"
+          chmod +x "$KIND_BIN"
+
+      - name: Save KinD binary cache
+        if: steps.cache-kind.outputs.cache-hit != 'true'
+        uses: runs-on/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/kind-bin
+          key: kind-${{ runner.os }}-${{ hashFiles('.kind-version') }}
+
+      - name: Install KinD to PATH
+        run: sudo install "${RUNNER_TEMP}/kind-bin/kind" /usr/local/bin/kind
 
       # Helm is pre-installed in the ARC runner image (dockerfiles/Dockerfile.arc-runner).
       # To upgrade, bump ARG HELM_VERSION there and rebuild via build-arc-runner.yml.
