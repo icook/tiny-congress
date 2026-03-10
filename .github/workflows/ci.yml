@@ -894,6 +894,7 @@ jobs:
         uses: ./.github/actions/setup-web
 
       - name: Restore Playwright browser cache
+        id: playwright-cache
         uses: runs-on/cache/restore@v4
         with:
           path: ${{ env.PLAYWRIGHT_BROWSERS_PATH }}
@@ -901,7 +902,16 @@ jobs:
 
       - name: Install Playwright browsers
         working-directory: web
-        run: yarn playwright install --with-deps chromium
+        run: |
+          if [ "${{ steps.playwright-cache.outputs.cache-hit }}" = "true" ] && [ "$RUNNER_ENVIRONMENT" = "self-hosted" ]; then
+            # ARC runner: deps pre-installed in image, binary from cache — nothing to do.
+            yarn playwright install chromium
+          elif [ "${{ steps.playwright-cache.outputs.cache-hit }}" = "true" ]; then
+            # GHA hosted: binary from cache, but still need OS deps from apt.
+            yarn playwright install-deps chromium
+          else
+            yarn playwright install --with-deps chromium
+          fi
 
       - name: Save Playwright browser cache
         if: always()
