@@ -6,10 +6,12 @@ on:
     paths:
       - 'dockerfiles/Dockerfile.arc-runner'
       - 'dockerfiles/cache-actions.sh'
+      - 'mise.toml'
   pull_request:
     paths:
       - 'dockerfiles/Dockerfile.arc-runner'
       - 'dockerfiles/cache-actions.sh'
+      - 'mise.toml'
   workflow_dispatch:
   schedule:
     # Weekly rebuild to pick up base image security patches (Monday 6am UTC)
@@ -43,8 +45,12 @@ jobs:
         id: versions
         run: |
           RUNNER_VER=$(grep 'ARG RUNNER_VERSION=' dockerfiles/Dockerfile.arc-runner | cut -d= -f2)
-          echo "runner=${RUNNER_VER}" >> "$GITHUB_OUTPUT"
-          echo "date=$(date -u +%Y%m%d)" >> "$GITHUB_OUTPUT"
+          RUST_VER=$(grep '^rust' mise.toml | sed 's/.*= *"\([^"]*\)".*/\1/')
+          {
+            echo "runner=${RUNNER_VER}"
+            echo "rust=${RUST_VER}"
+            echo "date=$(date -u +%Y%m%d)"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Build and push
         uses: docker/build-push-action@v6
@@ -58,6 +64,8 @@ jobs:
             ghcr.io/${{ github.repository }}/arc-runner:latest
             ghcr.io/${{ github.repository }}/arc-runner:runner-${{ steps.versions.outputs.runner }}
             ghcr.io/${{ github.repository }}/arc-runner:${{ steps.versions.outputs.date }}
+          build-args: |
+            RUST_VERSION=${{ steps.versions.outputs.rust }}
           cache-from: type=registry,ref=ghcr.io/${{ github.repository }}/arc-runner:cache
           cache-to: type=registry,ref=ghcr.io/${{ github.repository }}/arc-runner:cache,mode=max
           # Pass GITHUB_TOKEN as a BuildKit secret so cache-actions.sh can call

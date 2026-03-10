@@ -17,26 +17,75 @@ env:
   REGISTRY: ghcr.io/${{ github.repository }}
 
 jobs:
-  # ── Lint Rust formatting ──────────────────────────────────
-  lint:
-    name: Lint Rust formatting
+  # ── Backend checks (lint + codegen + security audit) ───────
+  backend-checks:
+    name: Backend checks
     needs: [detect-changes]
-    if: needs.detect-changes.outputs.api == 'true' || needs.detect-changes.outputs.ci == 'true'
+    if: >-
+      needs.detect-changes.outputs.api == 'true' ||
+      needs.detect-changes.outputs.ui == 'true' ||
+      needs.detect-changes.outputs.ci == 'true'
     runs-on: ${{ needs.detect-changes.outputs.runner-small }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          fetch-depth: 0  # Full history for gitleaks
 
       - name: Setup Rust toolchain
         uses: ./.github/actions/setup-rust
         with:
           components: rustfmt, clippy
 
+      - name: Setup web toolchain
+        uses: ./.github/actions/setup-web
+
       - name: Install just
         uses: extractions/setup-just@v3
 
+      # ── Lint ──
       - name: Lint backend
+        if: needs.detect-changes.outputs.api == 'true' || needs.detect-changes.outputs.ci == 'true'
         run: just lint-backend
+
+      # gitleaks GitHub Action provides richer integration than the CLI
+      - name: Run gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # ── Codegen check ──
+      - name: Install frontend dependencies
+        run: just _ensure-frontend-deps
+
+      - name: Run codegen
+        run: just codegen
+
+      - name: Check for uncommitted codegen changes
+        run: |
+          if ! git diff --quiet web/schema.graphql web/openapi.json web/src/api/generated/; then
+            echo "::error::Codegen is out of date. Run 'just codegen' and commit the changes."
+            git diff web/schema.graphql web/openapi.json web/src/api/generated/
+            exit 1
+          fi
+          echo "✓ Codegen is up to date"
+
+      # ── Security & dependency audit ──
+      - name: Install cargo-deny
+        if: needs.detect-changes.outputs.api == 'true' || needs.detect-changes.outputs.ci == 'true'
+        uses: taiki-e/install-action@cargo-deny
+
+      - name: Install cargo-machete
+        if: needs.detect-changes.outputs.api == 'true' || needs.detect-changes.outputs.ci == 'true'
+        uses: taiki-e/install-action@cargo-machete
+
+      - name: Run dependency audit
+        if: needs.detect-changes.outputs.api == 'true' || needs.detect-changes.outputs.ci == 'true'
+        run: just audit-deps
+
+      - name: Check for unused dependencies
+        if: needs.detect-changes.outputs.api == 'true' || needs.detect-changes.outputs.ci == 'true'
+        run: just audit-unused
 
   # ── Lint Kubernetes manifests ─────────────────────────────
   lint-kube:
@@ -110,9 +159,9 @@ jobs:
             exit 1
           fi
 
-  # ── Lint web ─────────────────────────────────────────────
-  lint-web:
-    name: Lint web
+  # ── Frontend checks (lint + Storybook build) ───────────────
+  frontend-checks:
+    name: Frontend checks
     needs: [detect-changes]
     if: needs.detect-changes.outputs.ui == 'true' || needs.detect-changes.outputs.ci == 'true'
     runs-on: ${{ needs.detect-changes.outputs.runner-small }}
@@ -131,6 +180,16 @@ jobs:
 
       - name: Run Linters
         run: just lint-frontend
+
+      - name: Build Storybook
+        run: just build-storybook
+
+      - name: Upload Storybook artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: storybook-static
+          path: web/storybook-static/
+          retention-days: 30
 
   # ── Static analysis (typos, Dockerfiles, workflows, scripts)
   static-analysis:
@@ -174,35 +233,6 @@ jobs:
       - name: Run static analysis
         run: just lint-static
 
-  # ── Build Storybook ──────────────────────────────────────
-  build-storybook:
-    name: Build Storybook
-    needs: [detect-changes]
-    if: needs.detect-changes.outputs.ui == 'true' || needs.detect-changes.outputs.ci == 'true'
-    runs-on: ${{ needs.detect-changes.outputs.runner-small }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Setup web toolchain
-        uses: ./.github/actions/setup-web
-
-      - name: Install just
-        uses: extractions/setup-just@v3
-
-      - name: Install dependencies
-        run: just _ensure-frontend-deps
-
-      - name: Build Storybook
-        run: just build-storybook
-
-      - name: Upload Storybook artifact
-        uses: actions/upload-artifact@v6
-        with:
-          name: storybook-static
-          path: web/storybook-static/
-          retention-days: 30
-
   # ── Build API documentation ──────────────────────────────
   build-docs:
     name: Build documentation
@@ -233,181 +263,6 @@ jobs:
             target/doc
             web/docs
           retention-days: 7
-
-  # ── Verify codegen is up-to-date (GraphQL + OpenAPI) ─────
-  codegen-check:
-    name: Check codegen
-    needs: [detect-changes]
-    if: needs.detect-changes.outputs.api == 'true' || needs.detect-changes.outputs.ui == 'true' || needs.detect-changes.outputs.ci == 'true'
-    runs-on: ${{ needs.detect-changes.outputs.runner-small }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Setup Rust toolchain
-        uses: ./.github/actions/setup-rust
-
-      - name: Setup web toolchain
-        uses: ./.github/actions/setup-web
-
-      - name: Install just
-        uses: extractions/setup-just@v3
-
-      - name: Install frontend dependencies
-        run: just _ensure-frontend-deps
-
-      - name: Run codegen
-        run: just codegen
-
-      - name: Check for uncommitted changes
-        run: |
-          if ! git diff --quiet web/schema.graphql web/openapi.json web/src/api/generated/; then
-            echo "::error::Codegen is out of date. Run 'just codegen' and commit the changes."
-            git diff web/schema.graphql web/openapi.json web/src/api/generated/
-            exit 1
-          fi
-          echo "✓ Codegen is up to date"
-
-  # ── Security & dependency audit ──────────────────────────
-  security-audit:
-    name: Security & Dependency Audit
-    needs: [detect-changes]
-    if: needs.detect-changes.outputs.api == 'true' || needs.detect-changes.outputs.ui == 'true' || needs.detect-changes.outputs.ci == 'true'
-    runs-on: ${{ needs.detect-changes.outputs.runner-small }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-        with:
-          fetch-depth: 0  # Full history for gitleaks
-
-      - name: Install just
-        uses: extractions/setup-just@v3
-
-      - name: Setup Rust toolchain
-        uses: ./.github/actions/setup-rust
-        with:
-          cache-dependencies: 'false'
-
-      - name: Install cargo-deny
-        uses: taiki-e/install-action@cargo-deny
-
-      - name: Install cargo-machete
-        uses: taiki-e/install-action@cargo-machete
-
-      - name: Setup web toolchain
-        uses: ./.github/actions/setup-web
-
-      - name: Run dependency audit
-        run: just audit-deps
-
-      - name: Check for unused dependencies
-        run: just audit-unused
-
-      # gitleaks GitHub Action provides richer integration than the CLI
-      - name: Run gitleaks
-        uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  # ── Verify SQLx query snapshots ──────────────────────────
-  sqlx-check:
-    name: Check SQLx snapshots
-    runs-on: ${{ needs.detect-changes.outputs.runner-small }}
-    needs: [build-images, detect-changes]
-    if: needs.detect-changes.outputs.api == 'true' || needs.detect-changes.outputs.ci == 'true'
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Docker environment diagnostics
-        run: |
-          echo "DOCKER_HOST=${DOCKER_HOST:-<unset>}"
-          docker version --format '{{.Server.Version}}' || echo "docker not reachable"
-
-      - name: Login to GHCR
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Start postgres
-        run: |
-          CONTAINER_NAME="postgres-${GITHUB_RUN_ID}"
-
-          # Check if container already exists
-          if docker ps -a --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
-            echo "Container exists, starting it..."
-            docker start "$CONTAINER_NAME"
-          else
-            echo "Creating new postgres container..."
-            # Use -p 5432 (no host port) so Docker assigns a random host port.
-            # This avoids port collisions when multiple workflow runs share the
-            # same DinD pod's network namespace.
-            docker run -d --name "$CONTAINER_NAME" \
-              -p 5432 \
-              -e POSTGRES_USER=postgres \
-              -e POSTGRES_PASSWORD=postgres \
-              ${{ env.REGISTRY }}/postgres:${{ github.sha }}
-          fi
-
-          # Discover the mapped host port via docker port.
-          # Sidecar DinD shares the runner's network namespace, so containers
-          # are always reachable on 127.0.0.1.
-          DOCKER_HOSTNAME="127.0.0.1"
-          PG_PORT=$(docker port "$CONTAINER_NAME" 5432 | head -1 | sed 's/.*://')
-
-          # Wait for postgres to be ready (docker exec avoids needing network access)
-          for i in {1..30}; do
-            if docker exec "$CONTAINER_NAME" pg_isready -U postgres; then
-              echo "Postgres is ready"
-              break
-            fi
-            echo "Waiting for postgres... ($i/30)"
-            sleep 1
-          done
-
-          echo "DATABASE_URL=postgres://postgres:postgres@${DOCKER_HOSTNAME}:${PG_PORT}/tiny-congress" >> "$GITHUB_ENV"
-
-      - name: Setup Rust toolchain
-        uses: ./.github/actions/setup-rust
-
-      # Version must match sqlx in service/Cargo.lock
-      - name: Cache sqlx-cli binary
-        id: cache-sqlx-cli
-        uses: runs-on/cache@v4
-        with:
-          path: |
-            ~/.cargo/bin/sqlx
-            ~/.cargo/bin/cargo-sqlx
-          key: sqlx-cli-${{ runner.os }}-0.8.6-v2
-
-      - name: Install sqlx-cli
-        if: steps.cache-sqlx-cli.outputs.cache-hit != 'true'
-        run: cargo install sqlx-cli --version 0.8.6 --locked --no-default-features --features postgres
-
-      - name: Run migrations
-        working-directory: service
-        run: cargo sqlx migrate run
-
-      - name: Check SQLx snapshots
-        working-directory: service
-        run: |
-          output=$(cargo sqlx prepare --check 2>&1) || {
-            echo "$output"
-            echo "::error::SQLx query snapshots are out of date. Run 'just sqlx-prepare' and commit the changes in service/.sqlx/"
-            exit 1
-          }
-          echo "$output"
-          if echo "$output" | grep -q "potentially unused queries"; then
-            echo "::error::Unused SQLx query snapshots found in .sqlx/. Run 'just sqlx-prepare' to remove stale entries."
-            exit 1
-          fi
-          echo "✓ SQLx snapshots are up to date"
-
-      - name: Cleanup postgres (best effort)
-        if: always()
-        run: docker rm -f "postgres-${GITHUB_RUN_ID}" 2>/dev/null || true
 
   # ── Detect which paths changed (skip unnecessary builds) ─
   detect-changes:
@@ -757,17 +612,29 @@ jobs:
           path: web/coverage/vitest/
           retention-days: 7
 
-  # ── Rust unit tests + coverage ───────────────────────────
-  rust-coverage:
-    name: Rust coverage
+  # ── Rust checks (SQLx snapshots + coverage) ───────────────────────────
+  rust-checks:
+    name: Rust checks
     runs-on: ${{ needs.detect-changes.outputs.runner-large }}
-    needs: [detect-changes, build-images]
+    needs: [detect-changes]
     if: needs.detect-changes.outputs.api == 'true' || needs.detect-changes.outputs.ci == 'true'
     env:
-      TEST_POSTGRES_IMAGE: ${{ needs.build-images.outputs.postgres-tag || format('ghcr.io/{0}/postgres:{1}', github.repository, github.sha) }}
+      # Use the branch-master tag (last successful master build) so rust-checks
+      # can start in wave 1 without waiting for build-images.
+      # Migrations run from the working tree (cargo sqlx migrate run), so this
+      # is valid for all migration-only changes.
+      # Known gap: a PR that simultaneously modifies Dockerfile.postgres (adding
+      # a new extension) AND adds a migration that requires that extension will
+      # fail here. That's rare; when it happens, re-run after build-images pushes
+      # the new postgres image to branch-<pr-branch> and retag manually, or
+      # temporarily restore build-images to rust-checks needs.
+      TEST_POSTGRES_IMAGE: ghcr.io/${{ github.repository }}/postgres:branch-master
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+
+      - name: Wait for Docker sidecar
+        run: until docker info >/dev/null 2>&1; do sleep 1; done
 
       - name: Login to GHCR
         uses: docker/login-action@v3
@@ -784,6 +651,71 @@ jobs:
       - name: Install cargo-llvm-cov
         uses: taiki-e/install-action@cargo-llvm-cov
 
+      # ── SQLx snapshot check ──
+      - name: Start postgres
+        run: |
+          CONTAINER_NAME="postgres-${GITHUB_RUN_ID}"
+          docker run -d --name "$CONTAINER_NAME" \
+            -p 5432 \
+            -e POSTGRES_USER=postgres \
+            -e POSTGRES_PASSWORD=postgres \
+            ${{ env.TEST_POSTGRES_IMAGE }}
+
+          DOCKER_HOSTNAME="127.0.0.1"
+          PG_PORT=$(docker port "$CONTAINER_NAME" 5432 | head -1 | sed 's/.*://')
+
+          for i in {1..30}; do
+            if docker exec "$CONTAINER_NAME" pg_isready -U postgres; then
+              echo "Postgres is ready"
+              break
+            fi
+            echo "Waiting for postgres... ($i/30)"
+            sleep 1
+          done
+          if ! docker exec "$CONTAINER_NAME" pg_isready -U postgres 2>/dev/null; then
+            echo "::error::Postgres did not become ready in 30s"
+            exit 1
+          fi
+
+          echo "DATABASE_URL=postgres://postgres:postgres@${DOCKER_HOSTNAME}:${PG_PORT}/tiny-congress" >> "$GITHUB_ENV"
+
+      - name: Cache sqlx-cli binary
+        id: cache-sqlx-cli
+        uses: runs-on/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/sqlx
+            ~/.cargo/bin/cargo-sqlx
+          key: sqlx-cli-${{ runner.os }}-0.8.6-v2
+
+      - name: Install sqlx-cli
+        if: steps.cache-sqlx-cli.outputs.cache-hit != 'true'
+        run: cargo install sqlx-cli --version 0.8.6 --locked --no-default-features --features postgres
+
+      - name: Run migrations
+        working-directory: service
+        run: cargo sqlx migrate run
+
+      - name: Check SQLx snapshots
+        working-directory: service
+        run: |
+          output=$(cargo sqlx prepare --check 2>&1) || {
+            echo "$output"
+            echo "::error::SQLx query snapshots are out of date. Run 'just sqlx-prepare' and commit the changes in service/.sqlx/"
+            exit 1
+          }
+          echo "$output"
+          if echo "$output" | grep -q "potentially unused queries"; then
+            echo "::error::Unused SQLx query snapshots found in .sqlx/. Run 'just sqlx-prepare' to remove stale entries."
+            exit 1
+          fi
+          echo "✓ SQLx snapshots are up to date"
+
+      - name: Cleanup postgres (best effort)
+        if: always()
+        run: docker rm -f "postgres-${GITHUB_RUN_ID}" 2>/dev/null || true
+
+      # ── Rust coverage ──
       - name: Generate Rust coverage
         working-directory: service
         run: |
@@ -1104,21 +1036,16 @@ jobs:
     if: always()
     needs:
       - detect-changes
-      - lint
+      - backend-checks
       - lint-kube
-      - lint-web
+      - frontend-checks
       - static-analysis
       - check-dashboards
-      - build-storybook
-      - build-docs
-      - codegen-check
-      - security-audit
-      - sqlx-check
       - build-images
       - build-wasm
       - scan-images
       - unit-tests
-      - rust-coverage
+      - rust-checks
       - e2e-tests
     runs-on: ${{ needs.detect-changes.outputs.runner-small }}
     steps:
@@ -1250,7 +1177,7 @@ jobs:
   deploy-reports:
     name: Upload CI reports to Dufs
     runs-on: ${{ needs.detect-changes.outputs.runner-small }}
-    needs: [detect-changes, ci-gate, unit-tests, rust-coverage, e2e-tests, build-storybook, build-docs]
+    needs: [detect-changes, ci-gate, unit-tests, rust-checks, e2e-tests, frontend-checks, build-docs]
     if: needs.ci-gate.result == 'success'
     permissions:
       contents: read

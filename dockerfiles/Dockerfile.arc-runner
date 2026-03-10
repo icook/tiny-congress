@@ -4,8 +4,9 @@
 # is baked in — no init container needed to copy it at pod startup.
 #
 # Pre-installs small, stable CLI tools that are used across many CI jobs.
-# Heavy toolchains (Rust, Node) are excluded — they are cached effectively by
-# runs-on/cache@v4 and are version-pinned in mise.toml / .nvmrc.
+# Rust toolchain is baked in (see bottom of this file) — version-pinned via
+# mise.toml build arg for fast CI job startup. Node is excluded and cached
+# via runs-on/cache@v4 instead (.nvmrc pins the version).
 #
 # Rebuilt automatically:
 #   - On changes to this file (via build-arc-runner.yml workflow)
@@ -24,6 +25,9 @@ ARG YQ_VERSION=v4.44.3
 ARG KUBECTL_VERSION=v1.32.0
 # Keep in sync with @playwright/test version in web/yarn.lock
 ARG PLAYWRIGHT_VERSION=1.57.0
+# Rust version — single source of truth is mise.toml.
+# build-arc-runner.yml extracts and passes this as a build arg.
+ARG RUST_VERSION=1.91.0
 
 USER root
 
@@ -94,6 +98,15 @@ RUN --mount=type=secret,id=github_token \
 ENV PATH="/home/runner/.cargo/bin:${PATH}"
 
 USER runner
+
+# Pre-install Rust toolchain so CI jobs skip the download on every run.
+# Version is extracted from mise.toml by build-arc-runner.yml at build time.
+# Includes all components used across CI jobs to avoid per-job component adds.
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+      | sh -s -- -y --default-toolchain "${RUST_VERSION}" \
+        --component rustfmt,clippy,llvm-tools-preview \
+        --target wasm32-unknown-unknown \
+    && rustup --version && rustc --version && cargo --version
 
 # Start the GitHub Actions runner binary. ARC runner pods that don't specify
 # a custom command (small/medium/large tiers) rely on this entrypoint.
