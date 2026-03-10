@@ -15,9 +15,24 @@ inputs:
 runs:
   using: composite
   steps:
+    # Check if the Rust toolchain is already installed (baked into ARC runner image).
+    # If present, skip the toolchain cache download — just ensure extra components/targets.
+    - name: Check for pre-installed Rust
+      id: preinstalled
+      shell: bash
+      run: |
+        if command -v rustc &>/dev/null && command -v cargo &>/dev/null; then
+          echo "found=true" >> "$GITHUB_OUTPUT"
+          echo "Rust $(rustc --version) already installed, skipping toolchain cache"
+        else
+          echo "found=false" >> "$GITHUB_OUTPUT"
+        fi
+
     # Restore toolchain before dtolnay/rust-toolchain so rustup detects
     # existing installation and skips the download on warm runs.
+    # Skipped when the toolchain is already baked into the runner image.
     - name: Cache Rust toolchain
+      if: steps.preinstalled.outputs.found != 'true'
       uses: runs-on/cache@v4
       with:
         path: |
