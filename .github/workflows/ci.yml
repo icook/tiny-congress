@@ -27,6 +27,11 @@ jobs:
       needs.detect-changes.outputs.ci == 'true'
     runs-on: ${{ needs.detect-changes.outputs.runner-small }}
     steps:
+      - name: Collect workflow telemetry
+        uses: catchpoint/workflow-telemetry-action@v2
+        with:
+          comment_on_pr: false
+
       - name: Checkout
         uses: actions/checkout@v6
         with:
@@ -94,6 +99,11 @@ jobs:
     if: needs.detect-changes.outputs.chart == 'true' || needs.detect-changes.outputs.ci == 'true'
     runs-on: ${{ needs.detect-changes.outputs.runner-small }}
     steps:
+      - name: Collect workflow telemetry
+        uses: catchpoint/workflow-telemetry-action@v2
+        with:
+          comment_on_pr: false
+
       - name: Checkout
         uses: actions/checkout@v6
 
@@ -129,6 +139,11 @@ jobs:
     if: needs.detect-changes.outputs.dashboards == 'true' || needs.detect-changes.outputs.ci == 'true'
     runs-on: ${{ needs.detect-changes.outputs.runner-small }}
     steps:
+      - name: Collect workflow telemetry
+        uses: catchpoint/workflow-telemetry-action@v2
+        with:
+          comment_on_pr: false
+
       - name: Checkout
         uses: actions/checkout@v6
 
@@ -166,6 +181,11 @@ jobs:
     if: needs.detect-changes.outputs.ui == 'true' || needs.detect-changes.outputs.ci == 'true'
     runs-on: ${{ needs.detect-changes.outputs.runner-small }}
     steps:
+      - name: Collect workflow telemetry
+        uses: catchpoint/workflow-telemetry-action@v2
+        with:
+          comment_on_pr: false
+
       - name: Checkout
         uses: actions/checkout@v6
 
@@ -202,6 +222,11 @@ jobs:
       needs.detect-changes.outputs.ci == 'true'
     runs-on: ${{ needs.detect-changes.outputs.runner-small }}
     steps:
+      - name: Collect workflow telemetry
+        uses: catchpoint/workflow-telemetry-action@v2
+        with:
+          comment_on_pr: false
+
       - name: Checkout
         uses: actions/checkout@v6
 
@@ -240,6 +265,11 @@ jobs:
     if: needs.detect-changes.outputs.api == 'true' || needs.detect-changes.outputs.ui == 'true' || needs.detect-changes.outputs.ci == 'true'
     runs-on: ${{ needs.detect-changes.outputs.runner-small }}
     steps:
+      - name: Collect workflow telemetry
+        uses: catchpoint/workflow-telemetry-action@v2
+        with:
+          comment_on_pr: false
+
       - name: Checkout
         uses: actions/checkout@v6
 
@@ -286,6 +316,11 @@ jobs:
       # 'true' when running on ARC self-hosted runners, 'false' for GHA-hosted.
       use-arc: ${{ steps.runner.outputs.use-arc }}
     steps:
+      - name: Collect workflow telemetry
+        uses: catchpoint/workflow-telemetry-action@v2
+        with:
+          comment_on_pr: false
+
       - uses: actions/checkout@v6
       - name: Select runner
         id: runner
@@ -366,6 +401,11 @@ jobs:
       needs.detect-changes.outputs.api == 'true' ||
       needs.detect-changes.outputs.ci == 'true'
     steps:
+      - name: Collect workflow telemetry
+        uses: catchpoint/workflow-telemetry-action@v2
+        with:
+          comment_on_pr: false
+
       - name: Checkout
         uses: actions/checkout@v6
 
@@ -416,6 +456,11 @@ jobs:
       tc-ui-release-tag: ${{ steps.meta.outputs.tc-ui-release-tag }}
       postgres-tag: ${{ steps.meta.outputs.postgres-tag }}
     steps:
+      - name: Collect workflow telemetry
+        uses: catchpoint/workflow-telemetry-action@v2
+        with:
+          comment_on_pr: false
+
       - name: Checkout
         uses: actions/checkout@v6
 
@@ -543,6 +588,11 @@ jobs:
           - tc-ui-release
           - postgres
     steps:
+      - name: Collect workflow telemetry
+        uses: catchpoint/workflow-telemetry-action@v2
+        with:
+          comment_on_pr: false
+
       - name: Check if scan needed
         id: should-scan
         run: |
@@ -588,6 +638,11 @@ jobs:
     needs: [detect-changes, build-wasm]
     if: needs.detect-changes.outputs.ui == 'true' || needs.detect-changes.outputs.ci == 'true'
     steps:
+      - name: Collect workflow telemetry
+        uses: catchpoint/workflow-telemetry-action@v2
+        with:
+          comment_on_pr: false
+
       - name: Checkout
         uses: actions/checkout@v6
 
@@ -630,6 +685,11 @@ jobs:
       # temporarily restore build-images to rust-checks needs.
       TEST_POSTGRES_IMAGE: ghcr.io/${{ github.repository }}/postgres:branch-master
     steps:
+      - name: Collect workflow telemetry
+        uses: catchpoint/workflow-telemetry-action@v2
+        with:
+          comment_on_pr: false
+
       - name: Checkout
         uses: actions/checkout@v6
 
@@ -753,6 +813,11 @@ jobs:
       PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.cache/ms-playwright
       KIND_CLUSTER_NAME: skaffold-ci-${{ github.run_id }}
     steps:
+      - name: Collect workflow telemetry
+        uses: catchpoint/workflow-telemetry-action@v2
+        with:
+          comment_on_pr: false
+
       - name: Checkout
         uses: actions/checkout@v6
 
@@ -1049,6 +1114,11 @@ jobs:
       - e2e-tests
     runs-on: ${{ needs.detect-changes.outputs.runner-small }}
     steps:
+      - name: Collect workflow telemetry
+        uses: catchpoint/workflow-telemetry-action@v2
+        with:
+          comment_on_pr: false
+
       - name: Check results
         run: |
           results='${{ toJson(needs.*.result) }}'
@@ -1069,6 +1139,11 @@ jobs:
       contents: read
       packages: read
     steps:
+      - name: Collect workflow telemetry
+        uses: catchpoint/workflow-telemetry-action@v2
+        with:
+          comment_on_pr: false
+
       - name: Checkout gitops repo
         uses: actions/checkout@v6
         with:
@@ -1183,6 +1258,11 @@ jobs:
       contents: read
       pull-requests: write
     steps:
+      - name: Collect workflow telemetry
+        uses: catchpoint/workflow-telemetry-action@v2
+        with:
+          comment_on_pr: false
+
       - name: Checkout
         uses: actions/checkout@v6
 
