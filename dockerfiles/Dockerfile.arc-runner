@@ -22,6 +22,8 @@ ARG SHELLCHECK_VERSION=v0.10.0
 ARG HELM_VERSION=v3.17.3
 ARG YQ_VERSION=v4.44.3
 ARG KUBECTL_VERSION=v1.32.0
+# Keep in sync with @playwright/test version in web/yarn.lock
+ARG PLAYWRIGHT_VERSION=1.57.0
 
 USER root
 
@@ -59,6 +61,20 @@ RUN set -eux; \
     just --version && hadolint --version && actionlint --version && \
     shellcheck --version && helm version --short && python3 --version && \
     yq --version && kubectl version --client
+
+# Pre-install Playwright Chromium OS-level dependencies so e2e-tests jobs skip
+# the apt-get step entirely when the browser binary is restored from cache.
+# Node is installed temporarily to drive `playwright install-deps`, then removed.
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends nodejs npm; \
+    npm install -g "playwright@${PLAYWRIGHT_VERSION}"; \
+    playwright install-deps chromium; \
+    # Remove nodejs/npm but NOT autoremove — autoremove would strip chromium deps
+    # that were pulled in as transitive deps of nodejs.
+    apt-get purge -y nodejs npm; \
+    npm uninstall -g playwright 2>/dev/null || true; \
+    rm -rf /root/.npm /var/lib/apt/lists/*
 
 # Pre-cache GitHub Action archives so runners skip the per-job download.
 # The runner checks ACTIONS_RUNNER_ACTION_ARCHIVE_CACHE for
