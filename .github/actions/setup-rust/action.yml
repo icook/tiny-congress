@@ -41,6 +41,11 @@ runs:
           ~/.cargo/bin
         key: rustup-${{ runner.os }}-stable
 
+    # Always run dtolnay/rust-toolchain to ensure requested components and targets
+    # are present. On ARC runners with a pre-installed toolchain, this is a fast
+    # no-op if `stable` hasn't advanced since the image was built; if stable has
+    # advanced, rustup will update — this is accepted drift and keeps the toolchain
+    # current. The baked version in mise.toml ensures a known baseline.
     - name: Install Rust toolchain
       uses: dtolnay/rust-toolchain@stable
       with:
