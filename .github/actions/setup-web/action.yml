@@ -6,12 +6,11 @@ runs:
   steps:
     # Cache Node.js binary — self-hosted runners have no pre-installed tool
     # cache, so setup-node downloads it from GitHub on every run without this.
-    - name: Cache Node.js toolchain
-      uses: runs-on/cache@v4
+    - name: Restore Node.js toolchain cache
+      uses: runs-on/cache/restore@v4
       with:
         path: ${{ runner.tool_cache }}
         key: node-toolcache-${{ runner.os }}-${{ hashFiles('web/.nvmrc') }}
-        save-always: true
 
     - name: Set up Node
       uses: actions/setup-node@v6
@@ -32,17 +31,30 @@ runs:
         printf '#!/bin/sh\nexec node "%s" "$@"\n' "$YARN_BIN" | sudo tee /usr/local/bin/yarn > /dev/null
         sudo chmod +x /usr/local/bin/yarn
 
-    - name: Cache node_modules
+    - name: Restore node_modules cache
       id: nm-cache
-      uses: runs-on/cache@v4
+      uses: runs-on/cache/restore@v4
       with:
         path: web/node_modules
         key: node-modules-${{ runner.os }}-${{ hashFiles('web/yarn.lock') }}
-        save-always: true
 
     - name: Install frontend dependencies
       if: steps.nm-cache.outputs.cache-hit != 'true'
       shell: bash
       working-directory: web
       run: yarn install --immutable
+
+    - name: Save Node.js toolchain cache
+      if: always()
+      uses: runs-on/cache/save@v4
+      with:
+        path: ${{ runner.tool_cache }}
+        key: node-toolcache-${{ runner.os }}-${{ hashFiles('web/.nvmrc') }}
+
+    - name: Save node_modules cache
+      if: always()
+      uses: runs-on/cache/save@v4
+      with:
+        path: web/node_modules
+        key: node-modules-${{ runner.os }}-${{ hashFiles('web/yarn.lock') }}
 

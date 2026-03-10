@@ -893,16 +893,22 @@ jobs:
       - name: Setup web toolchain
         uses: ./.github/actions/setup-web
 
-      - name: Cache Playwright browsers
-        uses: runs-on/cache@v4
+      - name: Restore Playwright browser cache
+        uses: runs-on/cache/restore@v4
         with:
           path: ${{ env.PLAYWRIGHT_BROWSERS_PATH }}
           key: playwright-chromium-${{ hashFiles('web/yarn.lock') }}
-          save-always: true
 
       - name: Install Playwright browsers
         working-directory: web
         run: yarn playwright install --with-deps chromium
+
+      - name: Save Playwright browser cache
+        if: always()
+        uses: runs-on/cache/save@v4
+        with:
+          path: ${{ env.PLAYWRIGHT_BROWSERS_PATH }}
+          key: playwright-chromium-${{ hashFiles('web/yarn.lock') }}
 
       - name: Download WASM artifact
         uses: actions/download-artifact@v4
