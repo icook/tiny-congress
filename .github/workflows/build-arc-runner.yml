@@ -121,8 +121,7 @@ jobs:
             echo "No digest changes detected"
             exit 0
           fi
-          git commit -m "chore(arc-runner): update image digest
-
-arc-runner: ${NEW_DIGEST}
-Source: ${SHORT_SHA:0:7} (tiny-congress)"
+          MSG=$(printf 'chore(arc-runner): update image digest\n\narc-runner: %s\nSource: %s (tiny-congress)' \
+            "${NEW_DIGEST}" "${SHORT_SHA:0:7}")
+          git commit -m "$MSG"
           git push origin main
