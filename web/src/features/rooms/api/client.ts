@@ -86,10 +86,6 @@ export interface DimensionVote {
   value: number;
 }
 
-export interface HasEndorsementResponse {
-  has_endorsement: boolean;
-}
-
 // === Public endpoints (no auth) ===
 
 export async function listRooms(): Promise<Room[]> {
@@ -117,15 +113,6 @@ export async function getPollDistribution(
   pollId: string
 ): Promise<PollDistribution> {
   return fetchJson(`/rooms/${roomId}/polls/${pollId}/results/distribution`);
-}
-
-export async function checkEndorsement(
-  subjectId: string,
-  topic: string
-): Promise<HasEndorsementResponse> {
-  return fetchJson(
-    `/endorsements/check?subject_id=${subjectId}&topic=${encodeURIComponent(topic)}`
-  );
 }
 
 // === Authenticated endpoints ===
