@@ -55,12 +55,6 @@ jobs:
         if: needs.detect-changes.outputs.api == 'true' || needs.detect-changes.outputs.ci == 'true'
         run: just lint-backend
 
-      # gitleaks GitHub Action provides richer integration than the CLI
-      - name: Run gitleaks
-        uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
       # ── Codegen check ──
       - name: Install frontend dependencies
         run: just _ensure-frontend-deps
@@ -79,20 +73,23 @@ jobs:
 
       # ── Security & dependency audit ──
       - name: Install cargo-deny
-        if: needs.detect-changes.outputs.api == 'true' || needs.detect-changes.outputs.ci == 'true'
         uses: taiki-e/install-action@cargo-deny
 
       - name: Install cargo-machete
-        if: needs.detect-changes.outputs.api == 'true' || needs.detect-changes.outputs.ci == 'true'
         uses: taiki-e/install-action@cargo-machete
 
       - name: Run dependency audit
-        if: needs.detect-changes.outputs.api == 'true' || needs.detect-changes.outputs.ci == 'true'
         run: just audit-deps
 
       - name: Check for unused dependencies
-        if: needs.detect-changes.outputs.api == 'true' || needs.detect-changes.outputs.ci == 'true'
         run: just audit-unused
+
+      # gitleaks GitHub Action provides richer integration than the CLI
+      - name: Run gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
 
   # ── Lint Kubernetes manifests ─────────────────────────────
   lint-kube:
@@ -280,84 +277,6 @@ jobs:
             target/doc
             web/docs
           retention-days: 7
-
-  # ── Verify codegen is up-to-date (GraphQL + OpenAPI) ─────
-  codegen-check:
-    name: Check codegen
-    needs: [detect-changes]
-    if: needs.detect-changes.outputs.api == 'true' || needs.detect-changes.outputs.ui == 'true' || needs.detect-changes.outputs.ci == 'true'
-    runs-on: ${{ needs.detect-changes.outputs.runner-small }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Setup Rust toolchain
-        uses: ./.github/actions/setup-rust
-
-      - name: Setup web toolchain
-        uses: ./.github/actions/setup-web
-
-      - name: Install just
-        uses: extractions/setup-just@v3
-
-      - name: Install frontend dependencies
-        run: just _ensure-frontend-deps
-
-      - name: Run codegen
-        run: just codegen
-
-      - name: Check for uncommitted changes
-        run: |
-          if ! git diff --quiet web/schema.graphql web/openapi.json web/src/api/generated/; then
-            echo "::error::Codegen is out of date. Run 'just codegen' and commit the changes."
-            git diff web/schema.graphql web/openapi.json web/src/api/generated/
-            exit 1
-          fi
-          echo "✓ Codegen is up to date"
-
-  # ── Security & dependency audit ──────────────────────────
-  security-audit:
-    name: Security & Dependency Audit
-    needs: [detect-changes]
-    if: needs.detect-changes.outputs.api == 'true' || needs.detect-changes.outputs.ui == 'true' || needs.detect-changes.outputs.ci == 'true'
-    runs-on: ${{ needs.detect-changes.outputs.runner-small }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-        with:
-          fetch-depth: 0  # Full history for gitleaks
-
-      - name: Install just
-        uses: extractions/setup-just@v3
-
-      - name: Setup Rust toolchain
-        uses: ./.github/actions/setup-rust
-        with:
-          cache-dependencies: 'false'
-
-      - name: Install cargo-deny
-        uses: taiki-e/install-action@cargo-deny
-
-      - name: Install cargo-machete
-        uses: taiki-e/install-action@cargo-machete
-
-      - name: Setup web toolchain
-        uses: ./.github/actions/setup-web
-
-      - name: Install frontend dependencies
-        run: cd web && yarn install --immutable
-
-      - name: Run dependency audit
-        run: just audit-deps
-
-      - name: Check for unused dependencies
-        run: just audit-unused
-
-      # gitleaks GitHub Action provides richer integration than the CLI
-      - name: Run gitleaks
-        uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   # ── Detect which paths changed (skip unnecessary builds) ─
   detect-changes:
