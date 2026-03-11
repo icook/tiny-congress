@@ -15,7 +15,7 @@ concurrency:
 
 env:
   REGISTRY: ghcr.io/${{ github.repository }}
-  TRIVY_VERSION: '0.65.0'
+  TRIVY_VERSION: '0.69.3'
 
 permissions:
   contents: read
