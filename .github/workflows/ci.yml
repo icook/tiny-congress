@@ -32,6 +32,13 @@ jobs:
       needs.detect-changes.outputs.ci == 'true'
     runs-on: ${{ needs.detect-changes.outputs.runner-small }}
     steps:
+      - name: Collect workflow telemetry
+        if: needs.detect-changes.outputs.use-arc == 'true'
+        uses: catchpoint/workflow-telemetry-action@v2
+        with:
+          comment_on_pr: false
+          theme: dark
+
       - name: Checkout
         uses: actions/checkout@v6
         with:
@@ -177,6 +184,13 @@ jobs:
     if: needs.detect-changes.outputs.ui == 'true' || needs.detect-changes.outputs.ci == 'true'
     runs-on: ${{ needs.detect-changes.outputs.runner-small }}
     steps:
+      - name: Collect workflow telemetry
+        if: needs.detect-changes.outputs.use-arc == 'true'
+        uses: catchpoint/workflow-telemetry-action@v2
+        with:
+          comment_on_pr: false
+          theme: dark
+
       - name: Checkout
         uses: actions/checkout@v6
 
@@ -446,6 +460,13 @@ jobs:
       tc-ui-release-tag: ${{ steps.meta.outputs.tc-ui-release-tag }}
       postgres-tag: ${{ steps.meta.outputs.postgres-tag }}
     steps:
+      - name: Collect workflow telemetry
+        if: needs.detect-changes.outputs.use-arc == 'true'
+        uses: catchpoint/workflow-telemetry-action@v2
+        with:
+          comment_on_pr: false
+          theme: dark
+
       - name: Checkout
         uses: actions/checkout@v6
 
@@ -681,6 +702,13 @@ jobs:
     needs: [detect-changes, build-wasm]
     if: needs.detect-changes.outputs.ui == 'true' || needs.detect-changes.outputs.ci == 'true'
     steps:
+      - name: Collect workflow telemetry
+        if: needs.detect-changes.outputs.use-arc == 'true'
+        uses: catchpoint/workflow-telemetry-action@v2
+        with:
+          comment_on_pr: false
+          theme: dark
+
       - name: Checkout
         uses: actions/checkout@v6
 
@@ -725,6 +753,13 @@ jobs:
       # temporarily restore build-images to rust-checks needs.
       TEST_POSTGRES_IMAGE: ghcr.io/${{ github.repository }}/postgres:branch-master
     steps:
+      - name: Collect workflow telemetry
+        if: needs.detect-changes.outputs.use-arc == 'true'
+        uses: catchpoint/workflow-telemetry-action@v2
+        with:
+          comment_on_pr: false
+          theme: dark
+
       - name: Checkout
         uses: actions/checkout@v6
 
@@ -853,6 +888,13 @@ jobs:
       PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.cache/ms-playwright
       KIND_CLUSTER_NAME: skaffold-ci-${{ github.run_id }}
     steps:
+      - name: Collect workflow telemetry
+        if: needs.detect-changes.outputs.use-arc == 'true'
+        uses: catchpoint/workflow-telemetry-action@v2
+        with:
+          comment_on_pr: false
+          theme: dark
+
       - name: Checkout
         uses: actions/checkout@v6
 
