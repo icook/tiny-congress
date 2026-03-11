@@ -27,6 +27,8 @@ jobs:
     # Run on GHA hosted — avoids circular dependency where building the runner
     # image requires an ARC runner that depends on this image.
     runs-on: ubuntu-latest
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -53,6 +55,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Build and push
+        id: build
         uses: docker/build-push-action@v6
         with:
           context: dockerfiles
@@ -73,3 +76,60 @@ jobs:
           # image layer — it's only available during the RUN step that uses it.
           secrets: |
             github_token=${{ secrets.GITHUB_TOKEN }}
+
+  deploy-gitops:
+    name: Update gitops arc-runner digest
+    # Only runs when we actually pushed a new image (not on PRs).
+    if: github.event_name != 'pull_request'
+    needs: [build]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout gitops repo
+        uses: actions/checkout@v6
+        with:
+          repository: icook/homelab-gitops
+          ssh-key: ${{ secrets.GITOPS_DEPLOY_KEY }}
+          ref: main
+
+      - name: Read current digest
+        id: current
+        run: |
+          FILE="clusters/sauce/platform/arc/runners/base/helmrelease.yaml"
+          # Both image fields share the same digest; read from the runner container.
+          OLD=$(yq '(.spec.values.template.spec.containers[] | select(.name == "runner") | .image)' "$FILE" \
+            | grep -o 'sha256:[^"]*')
+          echo "digest=${OLD}" >> "$GITHUB_OUTPUT"
+
+      - name: Update arc-runner image digest
+        env:
+          NEW_DIGEST: ${{ needs.build.outputs.digest }}
+        run: |
+          FILE="clusters/sauce/platform/arc/runners/base/helmrelease.yaml"
+          OLD="${{ steps.current.outputs.digest }}"
+          if [ "$NEW_DIGEST" = "$OLD" ]; then
+            echo "arc-runner digest unchanged, skipping"
+            exit 0
+          fi
+          echo "arc-runner: ${OLD} -> ${NEW_DIGEST}"
+          IMAGE="ghcr.io/${{ github.repository }}/arc-runner:latest@${NEW_DIGEST}"
+          export IMAGE
+          yq -i '(.spec.values.template.spec.containers[] | select(.name == "runner") | .image) = strenv(IMAGE)' "$FILE"
+          yq -i '(.spec.values.template.spec.initContainers[] | select(.name == "init-dind-externals") | .image) = strenv(IMAGE)' "$FILE"
+
+      - name: Commit and push
+        env:
+          NEW_DIGEST: ${{ needs.build.outputs.digest }}
+          SHORT_SHA: ${{ github.sha }}
+        run: |
+          FILE="clusters/sauce/platform/arc/runners/base/helmrelease.yaml"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add "$FILE"
+          if git diff --cached --quiet; then
+            echo "No digest changes detected"
+            exit 0
+          fi
+          MSG=$(printf 'chore(arc-runner): update image digest\n\narc-runner: %s\nSource: %s (tiny-congress)' \
+            "${NEW_DIGEST}" "${SHORT_SHA:0:7}")
+          git commit -m "$MSG"
+          git push origin main
