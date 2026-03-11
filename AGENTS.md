@@ -84,6 +84,7 @@ When a generated file needs changes, edit the source and run the generator. The 
 - Adding a frontend runtime config value without wiring both layers. A new `window.__TC_ENV__` field requires: (1) `web/src/config.ts` (interface + getter), (2) `kube/app/templates/deployment.yaml` (Helm value → container env var). The entrypoint auto-discovers `TC_*`/`VITE_*` env vars — no script changes needed. Missing the Helm layer means the value is silently empty in production.
 - Forgetting to run `just lint-static` before committing changes to Dockerfiles, GitHub Actions workflows, or shell scripts. `just lint` only covers Rust and TypeScript — static analysis (hadolint, actionlint, shellcheck) catches a different class of issues.
 - **Migration number conflicts on long-lived branches.** If another PR lands a migration while your branch is open, your migration number may collide. Always run `ls service/migrations/*.sql | sort -V | tail -1` before finalizing a migration to confirm your number is still the next available. Rebase onto master and rename your file if there's a collision.
+- **Forgetting `just codegen` after changing documented types.** Types annotated with `SimpleObject` (async-graphql) or `ToSchema` (utoipa) export their doc comments into `web/schema.graphql` and `web/openapi.json`. Changing doc comments on these types requires running `just codegen` and committing the regenerated files. CI checks for staleness but `just lint` and `just test` do not — the codegen step compiles and runs Rust binaries, so it's intentionally separate.
 
 ## Documentation
 
