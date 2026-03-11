@@ -605,7 +605,7 @@ jobs:
         id: trivy-bin
         uses: runs-on/cache@v4
         with:
-          path: /usr/local/bin/trivy
+          path: ~/.local/bin/trivy
           key: trivy-bin-${{ env.TRIVY_VERSION }}-linux-amd64
 
       - name: Install Trivy
@@ -613,14 +613,20 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          mkdir -p ~/.local/bin
           DL_URL="https://github.com/aquasecurity/trivy/releases/download"
           TARBALL="trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
           curl -fL --retry 3 --retry-delay 5 \
             -H "Authorization: token ${GH_TOKEN}" \
             "${DL_URL}/v${TRIVY_VERSION}/${TARBALL}" \
             -o /tmp/trivy.tar.gz
-          tar -xzf /tmp/trivy.tar.gz -C /usr/local/bin trivy
+          tar -xzf /tmp/trivy.tar.gz -C ~/.local/bin trivy
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
           trivy --version
+
+      - name: Add Trivy to PATH
+        if: steps.should-scan.outputs.changed != 'false' && steps.trivy-bin.outputs.cache-hit == 'true'
+        run: echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       - name: Cache Trivy DB
         if: steps.should-scan.outputs.changed != 'false'
