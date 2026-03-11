@@ -25,7 +25,8 @@ How-to guides for common development tasks:
 |----------|-------------|
 | [local-dev-setup.md](playbooks/local-dev-setup.md) | Setting up development environment |
 | [adding-migration.md](playbooks/adding-migration.md) | Making database schema changes |
-| [new-graphql-endpoint.md](playbooks/new-graphql-endpoint.md) | Adding API endpoints |
+| [new-graphql-endpoint.md](playbooks/new-graphql-endpoint.md) | Adding GraphQL queries/mutations |
+| [new-rest-endpoint.md](playbooks/new-rest-endpoint.md) | Adding REST endpoints (dominant API surface) |
 | [debugging-ci-failure.md](playbooks/debugging-ci-failure.md) | Troubleshooting CI issues |
 | [database-schema-change.md](playbooks/database-schema-change.md) | Database migrations workflow |
 | [docker-layer-caching.md](playbooks/docker-layer-caching.md) | Optimizing Docker builds |
