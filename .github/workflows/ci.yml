@@ -16,6 +16,10 @@ concurrency:
 env:
   REGISTRY: ghcr.io/${{ github.repository }}
 
+permissions:
+  contents: read
+  actions: read
+
 jobs:
   # ── Backend checks (lint + codegen + security audit) ───────
   backend-checks:
@@ -282,6 +286,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      actions: read
       checks: write
     outputs:
       postgres: ${{ steps.filter.outputs.postgres }}
@@ -414,6 +419,7 @@ jobs:
     runs-on: ${{ needs.detect-changes.outputs.runner-small }}
     permissions:
       contents: read
+      actions: read
       packages: write
     strategy:
       fail-fast: false
@@ -773,6 +779,7 @@ jobs:
       !contains(needs.*.result, 'cancelled')
     permissions:
       contents: read
+      actions: read
       packages: read
       checks: write
     env:
@@ -1097,6 +1104,7 @@ jobs:
     runs-on: ${{ needs.detect-changes.outputs.runner-small }}
     permissions:
       contents: read
+      actions: read
       packages: read
     steps:
       - name: Checkout gitops repo
@@ -1213,6 +1221,7 @@ jobs:
     if: needs.ci-gate.result == 'success'
     permissions:
       contents: read
+      actions: read
       pull-requests: write
     steps:
       - name: Checkout
