@@ -2,7 +2,9 @@ import { IconAlertTriangle, IconInfoCircle } from '@tabler/icons-react';
 import { useQuery } from '@tanstack/react-query';
 import { Alert, Card, Group, Loader, Stack, Text, Title } from '@mantine/core';
 import { buildInfoQuery } from '../api/queries';
+import { MarkdownContent } from '../components/MarkdownContent';
 import { TimestampText } from '../components/TimestampText';
+import aboutContent from '../content/about.md?raw';
 
 export function AboutPage() {
   const { data, isPending, isError, error } = useQuery(buildInfoQuery);
@@ -14,34 +16,7 @@ export function AboutPage() {
         <Title order={2}>About TinyCongress</Title>
       </Group>
 
-      <Text size="sm">
-        TinyCongress is an experimental platform for structured group decision-making. Instead of
-        simple yes/no polls, participants vote across multiple dimensions — capturing the nuance of
-        how people actually think about complex issues.
-      </Text>
-
-      <Text size="sm">
-        Every account is backed by cryptographic identity. Your keys are generated in your browser
-        and never leave your device. The server is a witness, not a trusted authority.
-      </Text>
-
-      <Card shadow="sm" padding="lg" radius="md" withBorder>
-        <Stack gap="xs">
-          <Title order={5}>How it works</Title>
-          <Text size="sm" c="dimmed">
-            1. Create an account with a username and backup password
-          </Text>
-          <Text size="sm" c="dimmed">
-            2. Verify your identity to prove you&apos;re a real person
-          </Text>
-          <Text size="sm" c="dimmed">
-            3. Join a room and vote on multi-dimensional polls
-          </Text>
-          <Text size="sm" c="dimmed">
-            4. See how the community thinks — not just averages, but the shape of opinion
-          </Text>
-        </Stack>
-      </Card>
+      <MarkdownContent>{aboutContent}</MarkdownContent>
 
       <Title order={4} mt="md">
         Build Info
