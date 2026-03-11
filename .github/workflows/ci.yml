@@ -32,6 +32,8 @@ jobs:
         with:
           fetch-depth: 0  # Full history for gitleaks
 
+      - uses: ./.github/actions/collect-telemetry
+
       - name: Setup Rust toolchain
         uses: ./.github/actions/setup-rust
         with:
@@ -97,6 +99,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
+      - uses: ./.github/actions/collect-telemetry
+
       - name: Run kube-linter
         uses: stackrox/kube-linter-action@v1
         with:
@@ -131,6 +135,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+
+      - uses: ./.github/actions/collect-telemetry
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -169,6 +175,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
+      - uses: ./.github/actions/collect-telemetry
+
       - name: Setup web toolchain
         uses: ./.github/actions/setup-web
 
@@ -204,6 +212,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+
+      - uses: ./.github/actions/collect-telemetry
 
       - name: Install just
         uses: extractions/setup-just@v3
@@ -242,6 +252,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+
+      - uses: ./.github/actions/collect-telemetry
 
       - name: Setup Rust toolchain
         uses: ./.github/actions/setup-rust
@@ -287,6 +299,9 @@ jobs:
       use-arc: ${{ steps.runner.outputs.use-arc }}
     steps:
       - uses: actions/checkout@v6
+
+      - uses: ./.github/actions/collect-telemetry
+
       - name: Select runner
         id: runner
         env:
@@ -369,6 +384,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
+      - uses: ./.github/actions/collect-telemetry
+
       - name: Setup Rust toolchain
         uses: ./.github/actions/setup-rust
         with:
@@ -418,6 +435,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+
+      - uses: ./.github/actions/collect-telemetry
 
       # BuildKit + cache registry adapt to the runner environment:
       # - ARC (self-hosted): remote BuildKit daemon + Zot in-cluster registry
@@ -543,6 +562,11 @@ jobs:
           - tc-ui-release
           - postgres
     steps:
+      - name: Collect workflow telemetry
+        uses: catchpoint/workflow-telemetry-action@v2
+        with:
+          comment_on_pr: false
+
       - name: Check if scan needed
         id: should-scan
         run: |
@@ -591,6 +615,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
+      - uses: ./.github/actions/collect-telemetry
+
       - name: Setup web toolchain
         uses: ./.github/actions/setup-web
 
@@ -632,6 +658,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+
+      - uses: ./.github/actions/collect-telemetry
 
       - name: Wait for Docker sidecar
         run: until docker info >/dev/null 2>&1; do sleep 1; done
@@ -755,6 +783,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+
+      - uses: ./.github/actions/collect-telemetry
 
       - name: Wait for Docker sidecar
         run: until docker info >/dev/null 2>&1; do sleep 1; done
@@ -1076,6 +1106,8 @@ jobs:
           ssh-key: ${{ secrets.GITOPS_DEPLOY_KEY }}
           ref: main
 
+      - uses: ./.github/actions/collect-telemetry
+
       - name: Get image digests from GHCR
         id: digests
         env:
@@ -1185,6 +1217,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+
+      - uses: ./.github/actions/collect-telemetry
 
       - name: Setup web toolchain
         uses: ./.github/actions/setup-web

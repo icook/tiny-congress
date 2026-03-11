@@ -93,6 +93,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
+      - uses: ./.github/actions/collect-telemetry
+
       - name: Setup web toolchain
         uses: ./.github/actions/setup-web
 
