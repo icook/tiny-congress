@@ -145,6 +145,10 @@ frontend:
     capabilities:
       drop:
         - ALL
+  exporter:
+    image:
+      repository: nginx/nginx-prometheus-exporter
+      tag: "1.4.1"
   resources: {}
   podDisruptionBudget:
     enabled: false
