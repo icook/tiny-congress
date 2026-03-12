@@ -10,7 +10,7 @@ runs:
       id: node-cache
       uses: runs-on/cache/restore@v4
       with:
-        path: ${{ runner.tool_cache }}
+        path: ${{ runner.tool_cache }}/node
         key: node-toolcache-${{ runner.os }}-${{ hashFiles('web/.nvmrc') }}
 
     - name: Set up Node
@@ -58,7 +58,7 @@ runs:
       if: steps.node-cache.outputs.cache-hit != 'true'
       uses: runs-on/cache/save@v4
       with:
-        path: ${{ runner.tool_cache }}
+        path: ${{ runner.tool_cache }}/node
         key: node-toolcache-${{ runner.os }}-${{ hashFiles('web/.nvmrc') }}
 
     - name: Save yarn cache
