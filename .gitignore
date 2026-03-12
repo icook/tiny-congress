@@ -1,6 +1,9 @@
 .aider*
 .env
-.claude
+# Claude Code runtime artifacts (keep .claude/ itself tracked)
+.claude/worktrees/
+.claude/session-log.jsonl
+.claude/refine.log
 .worktrees/
 
 # Rust build output
