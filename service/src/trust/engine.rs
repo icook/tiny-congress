@@ -92,14 +92,28 @@ GROUP BY user_id
         .fetch_all(&self.pool)
         .await?;
 
-        Ok(rows
+        let mut scores: Vec<ComputedScore> = rows
             .into_iter()
             .map(|r| ComputedScore {
                 user_id: r.user_id,
                 trust_distance: Some(r.trust_distance),
                 path_diversity: 0,
             })
-            .collect())
+            .collect();
+
+        // The anchor itself is the root of trust — distance 0 by definition.
+        // The CTE only traverses outward edges, so it never produces a row for
+        // the anchor. We inject it here so callers always see it.
+        scores.insert(
+            0,
+            ComputedScore {
+                user_id: anchor_id,
+                trust_distance: Some(0.0),
+                path_diversity: 0,
+            },
+        );
+
+        Ok(scores)
     }
 
     /// Compute approximate path diversity for each user reachable from `anchor_id`.
@@ -167,7 +181,14 @@ GROUP BY e.subject_id
 
         let count = distances.len();
         for score in &distances {
-            let diversity = diversities.get(&score.user_id).copied().unwrap_or(0);
+            // The anchor is the root of trust — its diversity is not meaningful
+            // in the endorser-count sense, so we pin it high to avoid it being
+            // flagged as low-diversity.
+            let diversity = if score.user_id == anchor_id {
+                i32::MAX
+            } else {
+                diversities.get(&score.user_id).copied().unwrap_or(0)
+            };
             trust_repo
                 .upsert_score(
                     score.user_id,
