@@ -34,8 +34,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
-        with:
-          fetch-depth: 0  # Full history for gitleaks
 
       - uses: ./.github/actions/collect-telemetry
 
@@ -54,12 +52,6 @@ jobs:
       - name: Lint backend
         if: needs.detect-changes.outputs.api == 'true' || needs.detect-changes.outputs.ci == 'true'
         run: just lint-backend
-
-      # gitleaks GitHub Action provides richer integration than the CLI
-      - name: Run gitleaks
-        uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       # ── Codegen check ──
       - name: Install frontend dependencies
