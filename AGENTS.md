@@ -82,6 +82,7 @@ Some files are generated from source definitions and must not be hand-edited. Ed
 When a generated file needs changes, edit the source and run the generator. The CI `check-dashboards` job verifies the committed JSON matches the generator output.
 
 ## Common Mistakes
+- **Subagents don't reliably run lint.** Always verify lint passes in the main session before committing, even if a subagent reports success.
 - Using `String` where a newtype exists (`Kid`, `BackupEnvelope`). If a domain type exists, use it — the type system is the guardrail.
 - Adding `match` arms, database columns, or dispatch logic for variants that don't exist yet (second KDF algorithm, second envelope version). Wait until the second variant arrives.
 - Assuming error mappings without checking the service layer. The HTTP status for a repo error depends on context (e.g., `DuplicateAccount` on backup is 500 during signup because the account was just created in the same transaction).
@@ -161,11 +162,14 @@ Additional notes:
 - Prefer `Result<_, anyhow::Error>` for async handlers so GraphQL resolvers surface uniform errors.
 - Frontend TypeScript relies on Prettier, ESLint, Stylelint; use PascalCase components, camelCase hooks, and co-locate styles.
 - Frontend styling follows Mantine-first approach per ADR-005 (`docs/decisions/005-mantine-first-styling.md`).
+- **ESLint gotchas:** `prefer-nullish-coalescing` is a warning but `--max-warnings=0` makes it a hard fail. Features (`src/features/`) cannot use deep relative imports (`../*/**`) — use `@/` path alias. Import from sibling barrels (`../api`), not internals (`../api/client`). `public/` is ignored by ESLint.
+- `CLAUDE.md` is a symlink to `AGENTS.md` — edits land in `AGENTS.md`.
 
 ## Design Principles
 
 TinyCongress handles cryptographic identity and delegation. The bar is: code that is obviously correct, not merely code that appears to work. These principles serve that standard.
 
+- **Challenge primitive types early.** During planning and brainstorming, if a value has format rules, ask "should this be a newtype?" Plans must include type signatures for new types and key functions — a plan that says "create account with root_kid" without specifying the type will produce stringly-typed code.
 - **Make wrong code hard to write.** Prefer types and APIs where misuse is a compile error, not a runtime bug. A function that accepts `&Kid` instead of `&str` turns a class of bugs into type errors. A `BackupEnvelope` that can only be constructed through parsing turns malformed data into an early, obvious failure. This matters doubly for AI-assisted development: LLMs optimize for "compiles and passes tests", not "makes incorrect usage structurally impossible." Explicit type-level constraints counteract that tendency. See `docs/interfaces/rust-coding-standards.md` for patterns.
 - **Strict by default, paranoid at boundaries.** Reject input that is technically parseable but outside expected parameters — don't rely on "this should be safe" or "no reasonable client would send this." If Argon2id m_cost should be >= 65536 in practice, enforce that. If a field should be exactly 22 characters, reject 23. Prefer breaking on unexpected input over silently accepting it: a crash from a violated assumption is better than undefined behavior from an assumption that turned out to be wrong. This applies to configuration too — use `${VAR:?error message}` over `${VAR:-default}`.
 - **No untracked security debt.** Every security-relevant concern raised in review must be either fixed in the PR or tracked as a GitHub issue before merge. "We'll fix it later" without a ticket is how things get forgotten. A knowledgeable reviewer should see deliberate choices, not deferred sloppiness — even in a preview.
