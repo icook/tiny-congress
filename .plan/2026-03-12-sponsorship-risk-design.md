@@ -132,6 +132,22 @@ Full audit of ADRs 017-021 against 001-016 identified these issues:
 - 021 → 003 (pgmq), 018/019/017 → 008 (verifiers), 019 ↔ 020 (coupled systems)
 - Status mismatch: Accepted ADRs (017, 019) depend on Proposed ADRs (020, 021)
 
+## Additional Attack Vectors (from Gemini brainstorm)
+
+Two scenarios from `~/tiny-congress-notes/03-05-2026-gemini.md` not covered in the TRD red team (§5.1) and relevant to sponsorship risk design:
+
+### Coerced Handshake (Boss Extortion)
+
+Authority figure pressures subordinates into QR handshakes. The resulting trust edges are topologically legitimate (real humans, real handshakes) but socially coerced. This is invisible to graph analysis — the topology looks healthy.
+
+**Implication for sponsorship risk:** Mutual slashing (endorser loses all endorsements if endorsee is flagged) was proposed as mitigation. This makes coercion costly for the coercer — they risk their entire graph position. However, it also makes *any* endorsement high-stakes, which interacts with mechanisms A-F above. If combined with D (slot forfeiture), the penalty for a coerced-then-flagged endorsee could be devastating.
+
+### Mercenary Bot (Pro-Social Trojan)
+
+A bot participates helpfully for months, accumulates endorsements from genuine users, then shifts voting behavior before a critical vote. Undetectable by graph topology — the node is well-integrated.
+
+**Implication for sponsorship risk:** This attack bypasses all pre-endorsement risk mechanisms (A, C, F). The endorsement was genuinely earned. Only post-hoc detection (vote correlation analysis, behavioral anomaly flagging) can catch it. Mitigation: strict human/bot vote separation in room aggregation — human and delegated agent votes always shown separately and togglable. Sponsors of a mercenary bot should face lighter penalties (soft slash) since due diligence was reasonable.
+
 ## Next Steps (suggested, not committed)
 
 1. **Model denouncements** — decide what a denouncement does to the graph before designing risk propagation

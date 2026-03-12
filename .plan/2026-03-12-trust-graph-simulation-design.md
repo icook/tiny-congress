@@ -29,6 +29,8 @@
 - Chain infiltration
 - Colluding ring
 - Mixed: healthy web + red cluster attached at single point
+- Coerced handshake: legitimate topology created under social pressure (tests whether mutual slashing mitigation works)
+- Mercenary bot: well-integrated node that shifts voting behavior after trust accumulation (tests vote correlation detection)
 - (More to be defined after handshake abstractions solidify)
 
 **Test pattern:** `#[shared_runtime_test]` + `isolated_db()` + direct `reputation__endorsements` inserts (same as existing `trust_engine_tests.rs`)
@@ -67,6 +69,44 @@ Cross-reference: see `.plan/2026-03-12-sponsorship-risk-design.md` for sponsorsh
 - ADR-019 ↔ ADR-020 (score computation and slot allocation are mechanically coupled)
 - **Status mismatch:** Accepted ADRs (017, 019) depend on Proposed ADRs (020, 021)
 
+## Design Heritage (from ~/tiny-congress-notes/)
+
+### EigenTrust evaluation → CTE decision
+
+The Nov 2024 research (`research/02_trust_reputation/`) extensively explored **EigenTrust** (PageRank-like iterative matrix-vector convergence) as the trust computation algorithm. EigenTrust properties: decentralized, convergent, manipulation-resistant by small clusters. Scaling estimate: convergence for 100M nodes with 100 edges each ≈ 25 minutes on a 1,000-node distributed cluster (50 iterations × ~30s/iteration).
+
+**Why CTE won for MVP:** Simpler, runs directly in Postgres, sufficient for <100 users. No distributed infrastructure required. The recursive CTE (ADR-019) with `cost = 1/weight` produces trust distance — a single scalar per user pair. EigenTrust produces a global ranking (more like PageRank centrality).
+
+**Future upgrade path:** As the network grows past ~1,000 users, the CTE approach may hit performance limits. EigenTrust or similar iterative convergence should be evaluated as a replacement. The batch reconciliation model (ADR-021) is architecturally compatible with either approach — both produce materialized snapshots.
+
+### Multidimensional trust (deliberate simplification)
+
+The research describes trust as **5 independent dimensions**: Identity, Intentional, Reliability, Competence, Proximity — each with its own decay rate and weight. The current implementation uses a **single scalar** (trust distance from CTE).
+
+**This is a deliberate simplification for MVP, not a design rejection.** Multiple dimensions remain relevant as room-level enrichment:
+- **Handshake context** (physical QR vs video vs social referral) — already captured as edge weight
+- **Claims verified** (which verifiers have attested what)
+- **Length of relationship** (edge age, renewal history)
+- **Endorser reputation** (trust-flows-downhill dynamic)
+
+Rooms can factor any of these into their constraint models via ADR-017's `constraint_config` JSONB. Platform eligibility uses only trust distance + path diversity. Room-level trust modeling is richer and intentionally room-configurable.
+
+### Bounded weight multiplier (room-level, not platform)
+
+The Aug 2025 whitepaper (`historical/2025-08-25 whitepaper.md`) establishes a "soft gate" mechanism: trust scores modulate voting weight between **0.5x and 3.0x**, never silencing eligible users. This is distinct from room eligibility (the "hard gate").
+
+**Decision:** This is a room-level capability, not a platform concern. A room can choose to weight votes by trust score within the 0.5x–3.0x bounds. Platform eligibility is binary (meets threshold or doesn't). The multiplier is not implemented for March 20 — all eligible participants vote at 1.0x.
+
+### Additional attack vectors (from Gemini brainstorm, 2026-03-05)
+
+Two attack vectors from `~/tiny-congress-notes/03-05-2026-gemini.md` not covered in the TRD red team analysis:
+
+**Coerced Handshake (Boss Extortion):** Authority figure pressures subordinates into QR handshakes, creating real-but-involuntary trust edges. Graph signature: legitimate topology (real humans, real handshakes), but the social pressure behind the edges is coercive. Proposed mitigation: mutual slashing — if an endorsee is flagged, the endorser loses ALL endorsements (not just the one), making coercion too costly because the coercer risks their entire graph position.
+
+**Mercenary Bot (Pro-Social Trojan):** A helpful bot accumulates endorsements over months of legitimate participation, then silently shifts voting behavior before a critical vote. Graph signature: well-integrated node with sudden behavioral change (detectable only via vote correlation analysis, not graph topology). Proposed mitigation: strict human/bot vote separation — human votes and delegated agent votes are always separately visible and togglable in room result aggregation. This makes behavioral shifts detectable by separating the channels.
+
+Both scenarios should be modeled as named simulation scenarios once the denouncement model is resolved.
+
 ## Context
 
 ### Trust architecture (ADR series 017-021, PR #630)
@@ -92,6 +132,9 @@ Cross-reference: see `.plan/2026-03-12-sponsorship-risk-design.md` for sponsorsh
 
 - `.plan/2026-03-12-sponsorship-risk-design.md` — sponsorship risk mechanisms (6 candidates evaluated, none selected), ADR audit details, verifier bootstrapping
 - PR #630 (`docs/017-trust-architecture-adrs`) — the ADR series formalizing trust architecture decisions
+- `~/tiny-congress-notes/historical/adr-component-boundary-contracts.md` (Feb 2026) — three-component modular monolith ADR (Identity / Reputation / Rooms) with `tc_trust::TrustResolver` interface. Has "sort of landed" in the codebase but needs a gap analysis and formal ADR. Defines the `resolve(actor_id, room_trust_policy, identity_state, endorsement_state) → EffectiveContext` contract and "sync, don't query" principle (Rooms cache trust state via events, not live queries). Simulation should model cached reads, not RPC.
+- `~/tiny-congress-notes/research/02_trust_reputation/` — EigenTrust evaluation, multidimensional trust model, endorsement mechanics research
+- `~/tiny-congress-notes/03-05-2026-gemini.md` — the original Gemini brainstorm that produced the trust architecture. Source for coerced handshake and mercenary bot attack vectors.
 
 ## AI Tooling
 
