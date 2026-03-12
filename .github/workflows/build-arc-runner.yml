@@ -6,11 +6,13 @@ on:
     paths:
       - 'dockerfiles/Dockerfile.arc-runner'
       - 'dockerfiles/cache-actions.sh'
+      - '.github/tool-versions'
       - 'mise.toml'
   pull_request:
     paths:
       - 'dockerfiles/Dockerfile.arc-runner'
       - 'dockerfiles/cache-actions.sh'
+      - '.github/tool-versions'
       - 'mise.toml'
   workflow_dispatch:
   schedule:
@@ -43,15 +45,20 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract versions for tags
+      - name: Extract versions for tags and build args
         id: versions
         run: |
+          source .github/tool-versions
           RUNNER_VER=$(grep 'ARG RUNNER_VERSION=' dockerfiles/Dockerfile.arc-runner | cut -d= -f2)
           RUST_VER=$(grep '^rust' mise.toml | sed 's/.*= *"\([^"]*\)".*/\1/')
           {
             echo "runner=${RUNNER_VER}"
             echo "rust=${RUST_VER}"
             echo "date=$(date -u +%Y%m%d)"
+            echo "hadolint=${HADOLINT_VERSION}"
+            echo "actionlint=${ACTIONLINT_VERSION}"
+            echo "shellcheck=${SHELLCHECK_VERSION}"
+            echo "yq=${YQ_VERSION}"
           } >> "$GITHUB_OUTPUT"
 
       - name: Build and push
@@ -69,6 +76,10 @@ jobs:
             ghcr.io/${{ github.repository }}/arc-runner:${{ steps.versions.outputs.date }}
           build-args: |
             RUST_VERSION=${{ steps.versions.outputs.rust }}
+            HADOLINT_VERSION=${{ steps.versions.outputs.hadolint }}
+            ACTIONLINT_VERSION=${{ steps.versions.outputs.actionlint }}
+            SHELLCHECK_VERSION=${{ steps.versions.outputs.shellcheck }}
+            YQ_VERSION=${{ steps.versions.outputs.yq }}
           cache-from: type=registry,ref=ghcr.io/${{ github.repository }}/arc-runner:cache
           cache-to: type=registry,ref=ghcr.io/${{ github.repository }}/arc-runner:cache,mode=max
           # Pass GITHUB_TOKEN as a BuildKit secret so cache-actions.sh can call

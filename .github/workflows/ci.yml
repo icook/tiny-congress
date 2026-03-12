@@ -220,22 +220,22 @@ jobs:
         with:
           tool: typos-cli
 
-      - name: Install hadolint
+      - name: Install static-analysis tools
         run: |
-          curl -fsSL "https://github.com/hadolint/hadolint/releases/latest/download/hadolint-Linux-x86_64" -o hadolint
-          sudo install hadolint /usr/local/bin/
-
-      - name: Install actionlint
-        run: |
-          bash <(curl -fsSL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
-          sudo install actionlint /usr/local/bin/
-
-      # GHA ubuntu-24.04 pre-installs shellcheck; it's not in catthehacker's apt sources.
-      - name: Install shellcheck
-        run: |
-          VERSION=v0.10.0
-          curl -fsSL "https://github.com/koalaman/shellcheck/releases/download/${VERSION}/shellcheck-${VERSION}.linux.x86_64.tar.xz" \
-            | sudo tar -xJ --strip-components=1 -C /usr/local/bin/ "shellcheck-${VERSION}/shellcheck"
+          source .github/tool-versions
+          if ! hadolint --version 2>/dev/null | grep -q "${HADOLINT_VERSION#v}"; then
+            curl -fsSL "https://github.com/hadolint/hadolint/releases/download/${HADOLINT_VERSION}/hadolint-Linux-x86_64" -o hadolint
+            sudo install hadolint /usr/local/bin/
+          fi
+          if ! actionlint --version 2>/dev/null | grep -q "${ACTIONLINT_VERSION}"; then
+            curl -fsSL "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz" \
+              | tar -xz actionlint
+            sudo install actionlint /usr/local/bin/
+          fi
+          if ! shellcheck --version 2>/dev/null | grep -q "${SHELLCHECK_VERSION#v}"; then
+            curl -fsSL "https://github.com/koalaman/shellcheck/releases/download/${SHELLCHECK_VERSION}/shellcheck-${SHELLCHECK_VERSION}.linux.x86_64.tar.xz" \
+              | sudo tar -xJ --strip-components=1 -C /usr/local/bin/ "shellcheck-${SHELLCHECK_VERSION}/shellcheck"
+          fi
 
       - name: Run static analysis
         run: just lint-static

@@ -1,0 +1,6 @@
+# Pinned CLI tool versions — single source of truth.
+# Sourced by CI workflows and passed as build args to Dockerfile.arc-runner.
+HADOLINT_VERSION=v2.12.0
+ACTIONLINT_VERSION=2.14.0
+SHELLCHECK_VERSION=v0.10.0
+YQ_VERSION=v4.52.4
