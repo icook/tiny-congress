@@ -12,7 +12,7 @@ import { signupUser } from './helpers';
 test.describe('page load baselines', () => {
   test('home page renders @smoke', async ({ page }) => {
     await page.goto('/');
-    await expect(page.getByText(/TinyCongress/i)).toBeVisible();
+    await expect(page.getByRole('heading', { name: /TinyCongress/i })).toBeVisible();
   });
 
   test('rooms page loads @smoke', async ({ page }) => {
@@ -25,7 +25,7 @@ test.describe('page load baselines', () => {
   test('about page loads @smoke', async ({ page }) => {
     await page.goto('/about');
     await page.waitForLoadState('load');
-    await expect(page.getByText(/about/i)).toBeVisible();
+    await expect(page.getByRole('heading', { name: /about/i })).toBeVisible();
   });
 
   test('signup page renders form @smoke', async ({ page }) => {
@@ -50,6 +50,6 @@ test.describe('page load baselines', () => {
   test('settings page loads when authenticated @smoke', async ({ page }) => {
     await signupUser(page);
     await page.goto('/settings');
-    await expect(page.getByText(/devices/i)).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByRole('heading', { name: /devices/i })).toBeVisible({ timeout: 10_000 });
   });
 });

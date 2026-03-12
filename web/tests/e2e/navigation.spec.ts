@@ -5,7 +5,7 @@ test('guest nav links all resolve @smoke', async ({ page }) => {
   await page.goto('/');
 
   // Home renders
-  await expect(page.getByText(/TinyCongress/i)).toBeVisible();
+  await expect(page.getByRole('heading', { name: /TinyCongress/i })).toBeVisible();
 
   // Rooms is accessible
   await page.goto('/rooms');
@@ -26,7 +26,7 @@ test('authenticated nav links all resolve @smoke', async ({ page }) => {
 
   // Settings is accessible after signup
   await page.goto('/settings');
-  await expect(page.getByText(/devices/i)).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByRole('heading', { name: /devices/i })).toBeVisible({ timeout: 10_000 });
 
   // Login/signup redirect to rooms when authenticated
   await page.goto('/signup');
