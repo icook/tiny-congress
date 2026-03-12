@@ -25,7 +25,7 @@ test.describe('page load baselines', () => {
   test('about page loads @smoke', async ({ page }) => {
     await page.goto('/about');
     await page.waitForLoadState('load');
-    await expect(page.getByRole('heading', { name: /about/i })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /about/i }).first()).toBeVisible();
   });
 
   test('signup page renders form @smoke', async ({ page }) => {

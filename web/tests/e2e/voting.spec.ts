@@ -17,6 +17,7 @@ test('unverified user sees verification gate on poll page @smoke', async ({ page
   // Skip if no polls are seeded in this environment
   const pollLink = page.locator('a[href*="/polls/"]').first();
   const pollExists = await pollLink.isVisible({ timeout: 5_000 }).catch(() => false);
+  // eslint-disable-next-line playwright/no-skipped-test -- runtime skip based on seeded data
   test.skip(!pollExists, 'No polls seeded in this environment');
 
   await pollLink.click();
@@ -41,6 +42,7 @@ test('guest user sees login prompt on poll page @smoke', async ({ page }) => {
   // Skip if no polls are seeded in this environment
   const pollLink = page.locator('a[href*="/polls/"]').first();
   const pollExists = await pollLink.isVisible({ timeout: 5_000 }).catch(() => false);
+  // eslint-disable-next-line playwright/no-skipped-test -- runtime skip based on seeded data
   test.skip(!pollExists, 'No polls seeded in this environment');
 
   await pollLink.click();

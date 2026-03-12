@@ -13,7 +13,7 @@ test('guest nav links all resolve @smoke', async ({ page }) => {
 
   // About is accessible
   await page.goto('/about');
-  await expect(page.getByText(/about/i)).toBeVisible();
+  await expect(page.getByRole('heading', { name: /about/i }).first()).toBeVisible();
 
   // Settings redirects to login
   await page.goto('/settings');
@@ -30,8 +30,8 @@ test('authenticated nav links all resolve @smoke', async ({ page }) => {
 
   // Login/signup redirect to rooms when authenticated
   await page.goto('/signup');
-  expect(page.url()).toContain('/rooms');
+  await page.waitForURL('**/rooms', { timeout: 5_000 });
 
   await page.goto('/login');
-  expect(page.url()).toContain('/rooms');
+  await page.waitForURL('**/rooms', { timeout: 5_000 });
 });
