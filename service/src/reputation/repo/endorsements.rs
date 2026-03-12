@@ -196,6 +196,31 @@ where
     Ok(())
 }
 
+/// Count active (non-revoked) trust endorsements made by a given endorser.
+///
+/// # Errors
+///
+/// Returns `Database` on connection or query failure.
+pub async fn count_active_trust_endorsements_by<'e, E>(
+    executor: E,
+    endorser_id: Uuid,
+) -> Result<i64, EndorsementRepoError>
+where
+    E: sqlx::Executor<'e, Database = sqlx::Postgres>,
+{
+    let count: i64 = sqlx::query_scalar(
+        r"
+        SELECT COUNT(*) FROM reputation__endorsements
+        WHERE endorser_id = $1 AND topic = 'trust' AND revoked_at IS NULL
+        ",
+    )
+    .bind(endorser_id)
+    .fetch_one(executor)
+    .await?;
+
+    Ok(count)
+}
+
 /// # Errors
 ///
 /// Returns `NotFound` if no endorsement exists for this subject and topic.

@@ -8,7 +8,7 @@ use std::sync::Arc;
 use common::factories::AccountFactory;
 use common::test_db::isolated_db;
 use tc_test_macros::shared_runtime_test;
-use tinycongress_api::reputation::repo::PgReputationRepo;
+use tinycongress_api::reputation::repo::{PgReputationRepo, ReputationRepo};
 use tinycongress_api::trust::constraints::{EndorsedByConstraint, RoomConstraint};
 use tinycongress_api::trust::engine::TrustEngine;
 use tinycongress_api::trust::repo::{PgTrustRepo, TrustRepo};
@@ -134,7 +134,8 @@ async fn test_demo_day_flow() {
     assert!(!dave_eligibility.is_eligible, "Dave should not be eligible");
 
     // Step 7: Queue an endorse action via TrustService (Alice endorses Bob — idempotent at queue level)
-    let trust_service = DefaultTrustService::new(trust_repo.clone());
+    let rep_repo = Arc::new(PgReputationRepo::new(pool.clone())) as Arc<dyn ReputationRepo>;
+    let trust_service = DefaultTrustService::new(trust_repo.clone(), rep_repo);
     trust_service
         .endorse(alice.id, bob.id, 1.0, None)
         .await

@@ -4,8 +4,9 @@ pub mod endorsements;
 pub mod external_identities;
 
 pub use endorsements::{
-    create_endorsement, has_endorsement, list_endorsements_by_subject, revoke_endorsement,
-    CreatedEndorsement, EndorsementRecord, EndorsementRepoError,
+    count_active_trust_endorsements_by, create_endorsement, has_endorsement,
+    list_endorsements_by_subject, revoke_endorsement, CreatedEndorsement, EndorsementRecord,
+    EndorsementRepoError,
 };
 pub use external_identities::{
     get_external_identity_by_provider, link_external_identity, ExternalIdentityRecord,
@@ -48,6 +49,11 @@ pub trait ReputationRepo: Send + Sync {
         subject_id: Uuid,
         topic: &str,
     ) -> Result<(), EndorsementRepoError>;
+
+    async fn count_active_trust_endorsements_by(
+        &self,
+        endorser_id: Uuid,
+    ) -> Result<i64, EndorsementRepoError>;
 
     // External identity operations
 
@@ -122,6 +128,13 @@ impl ReputationRepo for PgReputationRepo {
         topic: &str,
     ) -> Result<(), EndorsementRepoError> {
         endorsements::revoke_endorsement(&self.pool, endorser_id, subject_id, topic).await
+    }
+
+    async fn count_active_trust_endorsements_by(
+        &self,
+        endorser_id: Uuid,
+    ) -> Result<i64, EndorsementRepoError> {
+        endorsements::count_active_trust_endorsements_by(&self.pool, endorser_id).await
     }
 
     async fn link_external_identity(

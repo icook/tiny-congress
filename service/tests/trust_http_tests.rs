@@ -320,10 +320,12 @@ async fn test_budget_returns_200() {
     assert_eq!(response.status(), StatusCode::OK);
 
     let json = json_body(response).await;
-    assert!(json["total_influence"].is_number());
-    assert!(json["staked_influence"].is_number());
-    assert!(json["spent_influence"].is_number());
-    assert!(json["available_influence"].is_number());
+    assert!(json["slots_total"].is_number());
+    assert!(json["slots_used"].is_number());
+    assert!(json["slots_available"].is_number());
+    assert_eq!(json["slots_total"], 3);
+    assert_eq!(json["slots_used"], 0);
+    assert_eq!(json["slots_available"], 3);
 }
 
 // ─── Invites ──────────────────────────────────────────────────────────────────
