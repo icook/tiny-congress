@@ -8,6 +8,15 @@ on:
     branches:
       - '**'
   workflow_dispatch:
+    inputs:
+      use_arc:
+        description: "Run on ARC self-hosted runners"
+        type: boolean
+        default: false
+      force_all:
+        description: "Bypass change detection — run every job"
+        type: boolean
+        default: false
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.number || github.sha }}
@@ -287,7 +296,7 @@ jobs:
       ui: ${{ steps.filter.outputs.ui }}
       chart: ${{ steps.filter.outputs.chart }}
       dashboards: ${{ steps.filter.outputs.dashboards }}
-      ci: ${{ steps.filter.outputs.ci }}
+      ci: ${{ inputs.force_all == true && 'true' || steps.filter.outputs.ci }}
       # Runner tier outputs — set all at once, each job picks the right size.
       # Toggle: gh variable set USE_ARC_RUNNERS --body "false" --repo icook/tiny-congress
       runner-small: ${{ steps.runner.outputs.small }}
@@ -306,11 +315,14 @@ jobs:
         env:
           PR_TITLE: ${{ github.event.pull_request.title }}
         run: |
-          # Two ways to enable ARC runners:
-          #   1. PR title contains [arc]         — sticky for the whole PR lifecycle
-          #   2. Repo var USE_ARC_RUNNERS=true   — global default
+          # Three ways to enable ARC runners:
+          #   1. workflow_dispatch input use_arc  — per-run override
+          #   2. PR title contains [arc]          — sticky for the whole PR lifecycle
+          #   3. Repo var USE_ARC_RUNNERS=true    — global default
           # Fallback: ubuntu-latest (GHA hosted)
-          if echo "$PR_TITLE" | grep -qF '[arc]' || [ "${{ vars.USE_ARC_RUNNERS }}" = "true" ]; then
+          if [ "${{ inputs.use_arc }}" = "true" ] \
+             || echo "$PR_TITLE" | grep -qF '[arc]' \
+             || [ "${{ vars.USE_ARC_RUNNERS }}" = "true" ]; then
             {
               echo "use-arc=true"
               echo "small=arc-runner-small"
@@ -342,8 +354,8 @@ jobs:
               output: {
                 title: useArc ? '🚀 ARC self-hosted runners' : '☁️ GHA hosted runners (ubuntu-latest)',
                 summary: useArc
-                  ? 'Triggered by `[arc]` in PR title or `USE_ARC_RUNNERS=true`.'
-                  : 'Add `[arc]` to the PR title or set `USE_ARC_RUNNERS=true` to switch to ARC.',
+                  ? 'Triggered by `use_arc` input, `[arc]` in PR title, or `USE_ARC_RUNNERS=true`.'
+                  : 'Add `[arc]` to the PR title, set `USE_ARC_RUNNERS=true`, or dispatch with `use_arc=true` to switch to ARC.',
               },
             });
       - name: Print image registry
