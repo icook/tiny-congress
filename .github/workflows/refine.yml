@@ -53,9 +53,12 @@ jobs:
 
       - name: Install yq
         run: |
-          sudo wget -qO /usr/local/bin/yq \
-            https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
-          sudo chmod +x /usr/local/bin/yq
+          source .github/tool-versions
+          if ! yq --version 2>/dev/null | grep -q "${YQ_VERSION#v}"; then
+            sudo wget -qO /usr/local/bin/yq \
+              "https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/yq_linux_amd64"
+            sudo chmod +x /usr/local/bin/yq
+          fi
 
       - name: Install just
         uses: extractions/setup-just@v3

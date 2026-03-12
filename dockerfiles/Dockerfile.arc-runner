@@ -17,11 +17,13 @@ ARG RUNNER_VERSION=2.332.0
 FROM ghcr.io/actions/actions-runner:${RUNNER_VERSION}
 
 ARG JUST_VERSION=1.40.0
+# Versions sourced from .github/tool-versions — build-arc-runner.yml
+# extracts and passes these as build args.
 ARG HADOLINT_VERSION=v2.12.0
-ARG ACTIONLINT_VERSION=1.7.7
+ARG ACTIONLINT_VERSION=1.7.11
 ARG SHELLCHECK_VERSION=v0.10.0
 ARG HELM_VERSION=v3.17.3
-ARG YQ_VERSION=v4.44.3
+ARG YQ_VERSION=v4.52.4
 ARG KUBECTL_VERSION=v1.32.0
 # Keep in sync with @playwright/test version in web/yarn.lock
 ARG PLAYWRIGHT_VERSION=1.57.0
