@@ -227,7 +227,7 @@ jobs:
             curl -fsSL "https://github.com/hadolint/hadolint/releases/download/${HADOLINT_VERSION}/hadolint-Linux-x86_64" -o hadolint
             sudo install hadolint /usr/local/bin/
           fi
-          if ! actionlint --version 2>/dev/null | grep -q "${ACTIONLINT_VERSION}"; then
+          if ! actionlint -version 2>/dev/null | grep -q "${ACTIONLINT_VERSION}"; then
             curl -fsSL "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz" \
               | tar -xz actionlint
             sudo install actionlint /usr/local/bin/
