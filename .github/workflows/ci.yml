@@ -755,7 +755,7 @@ jobs:
           - postgres
     steps:
       - name: Collect workflow telemetry
-        uses: catchpoint/workflow-telemetry-action@v2
+        uses: whywaita/workflow-telemetry-action@9861d94d4f5862a5b8c5e863cf9a156a1b950738
         with:
           comment_on_pr: false
 
