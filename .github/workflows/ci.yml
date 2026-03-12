@@ -1154,6 +1154,25 @@ jobs:
         if: always()
         run: kind delete cluster --name "${KIND_CLUSTER_NAME}" || true
 
+  # ── Block .plan/ files from landing on master ───────────
+  check-no-plans:
+    name: No .plan/ files on master
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Reject .plan/ files targeting default branch
+        run: |
+          plans=$(find .plan -name '*.md' ! -name 'README.md' 2>/dev/null || true)
+          if [ -n "$plans" ]; then
+            echo "::error::.plan/ files must be stripped before merging to master."
+            echo "Graduate decisions to docs/decisions/, docs/domain-model.md, or docs/playbooks/."
+            echo ""
+            echo "Files found:"
+            echo "$plans"
+            exit 1
+          fi
+
   # ── CI gate (single required check) ─────────────────────
   ci-gate:
     name: CI Gate
@@ -1165,6 +1184,7 @@ jobs:
       - frontend-checks
       - static-analysis
       - check-dashboards
+      - check-no-plans
       - build-images
       - build-wasm
       - scan-images

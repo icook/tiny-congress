@@ -21,6 +21,7 @@ This does NOT lower the bar for crypto/trust boundary code — those principles 
 - Always sync with `master` before starting work: `git checkout master && git pull --rebase`. When picking up a PR or ticket, rebase your working branch onto the refreshed `master` before any edits.
 - Assign yourself to the issue before starting work (`gh issue edit <number> --add-assignee <user>`) so others know it's claimed.
 - Create a branch for every ticket before making changes following the conventions in `docs/interfaces/branch-naming-conventions.md` (e.g., `feature/123-update-copy`, `fix/456-login-redirect`).
+- **Plan-backed tickets:** If the ticket has `.plan/` documents (design brief, spike brief, gap analysis), commit them to the feature branch as the first commit. This preserves planning context for the implementer across sessions. When the feature ships, strip `.plan/` files and graduate decisions into ADRs or permanent docs.
 - Implement the work, keep commits focused, and run the relevant test suites via `just test` (unit tests) or `just test-ci` (full CI suite).
 - Treat each major checkpoint on a PR (e.g., before opening, after rebasing, after addressing review) as a moment to leave a fresh status comment with what changed and what still needs attention.
 - Once everything passes locally, push the branch and open a draft PR that links the tracked issue, fills out the PR template, and notes which AI tool generated it (if applicable).
@@ -33,7 +34,7 @@ This does NOT lower the bar for crypto/trust boundary code — those principles 
 - `service/`: Rust GraphQL API, workers, and SQL migrations (`migrations/`). Tests live in `service/tests/` (`*_tests.rs`).
 - `web/`: React/Mantine client on Vite. Source under `web/src/`, shared mocks in `web/test-utils/`.
 - `dockerfiles/`, `skaffold.yaml`, `kube/`: Container and Kubernetes assets for CI, integration, and demo environments.
-- `.plan/`: Ephemeral feature specs and design docs — **do not commit to PRs** (removed on merge).
+- `.plan/`: Feature specs, design briefs, and spike plans. Committed on feature branches as the first commit to preserve planning context across sessions. **Stripped on merge to master** — when the feature ships, decisions graduate to ADRs or permanent docs in `docs/`.
 - `.scratch/`: Temporary working notes — **do not commit** (deleted after task).
 - Do NOT create `docs/plans/` or similar directories. Use `.plan/` for in-progress designs and `.scratch/` for throwaway analysis. Only permanent documentation belongs in `docs/` (see `docs/README.md` for placement rules).
 
