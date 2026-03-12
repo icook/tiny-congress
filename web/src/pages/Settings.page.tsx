@@ -4,6 +4,7 @@
 
 import { IconAlertTriangle, IconCheck, IconShieldOff } from '@tabler/icons-react';
 import { Alert, Badge, Button, Card, Group, Loader, Stack, Text, Title } from '@mantine/core';
+import { notifications } from '@mantine/notifications';
 import { useListDevices, useRenameDevice, useRevokeDevice } from '@/features/identity/api/queries';
 import { DeviceList } from '@/features/identity/components';
 import { buildVerifierUrl, useVerificationStatus } from '@/features/verification';
@@ -21,6 +22,8 @@ export function SettingsPage() {
   const isVerified = verificationQuery.data?.isVerified ?? false;
   const verifiedAt = verificationQuery.data?.verifiedAt;
 
+  const currentDevice = devicesQuery.data?.devices.find((d) => d.device_kid === deviceKid);
+
   // Defensive safety net — route guard guarantees deviceKid is set
   if (!deviceKid) {
     return null;
@@ -34,6 +37,30 @@ export function SettingsPage() {
           Manage your devices and signing keys
         </Text>
       </div>
+
+      <Card shadow="sm" padding="lg" radius="md" withBorder>
+        <Stack gap="xs">
+          <Title order={4}>Account</Title>
+          <Group gap="xs">
+            <Text size="sm" c="dimmed" w={120}>
+              Username
+            </Text>
+            <Text size="sm" fw={500}>
+              {username}
+            </Text>
+          </Group>
+          {currentDevice ? (
+            <Group gap="xs">
+              <Text size="sm" c="dimmed" w={120}>
+                Current device
+              </Text>
+              <Text size="sm" fw={500}>
+                {currentDevice.device_name}
+              </Text>
+            </Group>
+          ) : null}
+        </Stack>
+      </Card>
 
       <Card shadow="sm" padding="lg" radius="md" withBorder>
         <Stack gap="md">
@@ -64,7 +91,17 @@ export function SettingsPage() {
               devices={devicesQuery.data.devices}
               currentDeviceKid={deviceKid}
               onRevoke={(kid) => {
-                revokeMutation.mutate(kid);
+                revokeMutation.mutate(kid, {
+                  onSuccess: () => {
+                    notifications.show({
+                      title: 'Device revoked',
+                      message: 'The device can no longer sign requests.',
+                      color: 'green',
+                      icon: <IconCheck size={16} />,
+                      autoClose: 3000,
+                    });
+                  },
+                });
               }}
               onRename={(kid, name) => {
                 renameMutation.mutate({ targetKid: kid, name });
@@ -89,16 +126,21 @@ export function SettingsPage() {
           ) : null}
 
           {isVerified ? (
-            <Group gap="sm">
-              <Badge color="green" leftSection={<IconCheck size={12} />} variant="light">
-                Verified
-              </Badge>
-              {verifiedAt ? (
-                <Text size="sm" c="dimmed">
-                  Verified on {new Date(verifiedAt).toLocaleDateString()}
-                </Text>
-              ) : null}
-            </Group>
+            <Stack gap="xs">
+              <Group gap="sm">
+                <Badge color="green" leftSection={<IconCheck size={12} />} variant="light">
+                  Verified
+                </Badge>
+                {verifiedAt ? (
+                  <Text size="sm" c="dimmed">
+                    Since {new Date(verifiedAt).toLocaleDateString()}
+                  </Text>
+                ) : null}
+              </Group>
+              <Text size="sm" c="dimmed">
+                Your identity is verified — you can vote in any room.
+              </Text>
+            </Stack>
           ) : null}
 
           {!isVerified && !verificationQuery.isLoading ? (
@@ -107,15 +149,15 @@ export function SettingsPage() {
                 <Badge color="yellow" leftSection={<IconShieldOff size={12} />} variant="light">
                   Not Verified
                 </Badge>
-                <Text size="sm" c="dimmed">
-                  Verify your identity to vote in rooms
-                </Text>
               </Group>
+              <Text size="sm" c="dimmed">
+                Verify your identity to unlock voting. This is a one-time step.
+              </Text>
               {(() => {
                 const url = buildVerifierUrl(username ?? '');
                 if (url) {
                   return (
-                    <Button component="a" href={url} variant="light" size="sm">
+                    <Button component="a" href={url} variant="light" size="sm" w="fit-content">
                       Verify Identity
                     </Button>
                   );

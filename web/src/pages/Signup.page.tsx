@@ -24,6 +24,7 @@ export function SignupPage() {
 
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [passwordConfirm, setPasswordConfirm] = useState('');
   const [isGeneratingKeys, setIsGeneratingKeys] = useState(false);
   const [createdAccount, setCreatedAccount] = useState<{
     account_id: string;
@@ -34,7 +35,7 @@ export function SignupPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!username.trim() || !password) {
+    if (!username.trim() || !password || password !== passwordConfirm) {
       return;
     }
 
@@ -84,8 +85,10 @@ export function SignupPage() {
     <SignupForm
       username={username}
       password={password}
+      passwordConfirm={passwordConfirm}
       onUsernameChange={setUsername}
       onPasswordChange={setPassword}
+      onPasswordConfirmChange={setPasswordConfirm}
       onSubmit={(e) => {
         void handleSubmit(e);
       }}
