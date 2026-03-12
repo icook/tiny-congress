@@ -7,6 +7,7 @@ runs:
     # Cache Node.js binary — self-hosted runners have no pre-installed tool
     # cache, so setup-node downloads it from GitHub on every run without this.
     - name: Restore Node.js toolchain cache
+      id: node-cache
       uses: runs-on/cache/restore@v4
       with:
         path: ${{ runner.tool_cache }}
@@ -54,14 +55,14 @@ runs:
       run: yarn install --immutable
 
     - name: Save Node.js toolchain cache
-      if: always()
+      if: steps.node-cache.outputs.cache-hit != 'true'
       uses: runs-on/cache/save@v4
       with:
         path: ${{ runner.tool_cache }}
         key: node-toolcache-${{ runner.os }}-${{ hashFiles('web/.nvmrc') }}
 
     - name: Save yarn cache
-      if: always()
+      if: steps.yarn-cache.outputs.cache-hit != 'true'
       uses: runs-on/cache/save@v4
       with:
         path: web/.yarn/cache
