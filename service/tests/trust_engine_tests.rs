@@ -449,7 +449,7 @@ async fn test_recompute_from_anchor_writes_scores() {
         .await
         .expect("recompute_from_anchor");
 
-    assert_eq!(count, 2, "Should have written scores for A and B");
+    assert_eq!(count, 3, "Should have written scores for anchor, A, and B");
 
     // Verify A's score is in the snapshot table
     let a_snap = repo
@@ -478,5 +478,99 @@ async fn test_recompute_from_anchor_writes_scores() {
     assert!(
         (b_distance - 2.0).abs() < 0.01,
         "Expected B distance = 2.0, got {b_distance}"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Anchor bootstrap: anchor itself gets distance=0 in compute_distances_from
+// ---------------------------------------------------------------------------
+#[shared_runtime_test]
+async fn test_anchor_has_distance_zero() {
+    let db = isolated_db().await;
+    let pool = db.pool().clone();
+
+    let seed = AccountFactory::new()
+        .with_seed(1)
+        .create(&pool)
+        .await
+        .expect("create seed");
+    let a = AccountFactory::new()
+        .with_seed(2)
+        .create(&pool)
+        .await
+        .expect("create a");
+
+    insert_endorsement(&pool, seed.id, a.id, 1.0).await;
+
+    let engine = TrustEngine::new(pool);
+    let scores = engine
+        .compute_distances_from(seed.id)
+        .await
+        .expect("compute_distances_from");
+
+    let anchor_score = scores
+        .iter()
+        .find(|s| s.user_id == seed.id)
+        .expect("Anchor should be present in results");
+
+    let distance = anchor_score
+        .trust_distance
+        .expect("Anchor should have a distance");
+    assert!(
+        distance.abs() < 0.01,
+        "Expected anchor distance = 0.0, got {distance}"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Anchor bootstrap: recompute_from_anchor persists anchor score to snapshots
+// ---------------------------------------------------------------------------
+#[shared_runtime_test]
+async fn test_recompute_from_anchor_writes_anchor_score() {
+    let db = isolated_db().await;
+    let pool = db.pool().clone();
+
+    let seed = AccountFactory::new()
+        .with_seed(1)
+        .create(&pool)
+        .await
+        .expect("create seed");
+    let a = AccountFactory::new()
+        .with_seed(2)
+        .create(&pool)
+        .await
+        .expect("create a");
+
+    insert_endorsement(&pool, seed.id, a.id, 1.0).await;
+
+    let engine = TrustEngine::new(pool.clone());
+    let repo = PgTrustRepo::new(pool.clone());
+    let count = engine
+        .recompute_from_anchor(seed.id, &repo)
+        .await
+        .expect("recompute_from_anchor");
+
+    // Anchor + A = 2 scores written
+    assert_eq!(count, 2, "Should have written scores for anchor and A");
+
+    // Verify anchor's own score
+    let anchor_snap = repo
+        .get_score(seed.id, Some(seed.id))
+        .await
+        .expect("get_score")
+        .expect("Anchor should have a score snapshot");
+
+    let anchor_distance = anchor_snap
+        .trust_distance
+        .expect("Anchor should have a trust_distance");
+    assert!(
+        anchor_distance.abs() < 0.01,
+        "Expected anchor distance = 0.0, got {anchor_distance}"
+    );
+
+    assert_eq!(
+        anchor_snap.path_diversity,
+        Some(i32::MAX),
+        "Anchor diversity should be sentinel high value"
     );
 }
