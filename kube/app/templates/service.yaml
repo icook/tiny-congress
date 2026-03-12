@@ -39,6 +39,12 @@ spec:
       targetPort: {{ .Values.frontend.service.targetPort | default .Values.frontend.service.port }}
       protocol: TCP
       name: http
+    {{- if .Values.metrics.enabled }}
+    - port: 9113
+      targetPort: 9113
+      protocol: TCP
+      name: metrics
+    {{- end }}
   selector:
     {{- include "app.selectorLabels" . | nindent 4 }}
     app.kubernetes.io/component: frontend

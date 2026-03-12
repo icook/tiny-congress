@@ -179,6 +179,28 @@ spec:
               mountPath: /tmp
             - name: nginx-cache
               mountPath: /var/cache/nginx
+        {{- if .Values.metrics.enabled }}
+        - name: nginx-exporter
+          image: "{{ .Values.frontend.exporter.image.repository }}:{{ .Values.frontend.exporter.image.tag }}"
+          args:
+            - --nginx.scrape-uri=http://127.0.0.1:{{ .Values.frontend.service.targetPort | default .Values.frontend.service.port }}/stub_status
+          ports:
+            - name: metrics
+              containerPort: 9113
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              cpu: 100m
+              memory: 32Mi
+        {{- end }}
       volumes:
         - name: tmp
           emptyDir: {}
