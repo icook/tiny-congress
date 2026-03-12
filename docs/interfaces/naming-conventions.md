@@ -14,7 +14,7 @@
 | SQL migration | `YYYYMMDDHHMMSS_description` | `20240115120000_add_votes_table.sql` |
 | Kubernetes template | kebab-case | `deployment.yaml`, `hpa.yaml` |
 | Shell script | kebab-case | `integration-coverage.sh` |
-| Documentation | kebab-case | `adding-migration.md` |
+| Documentation | kebab-case | `database-migrations.md` |
 
 ## Code
 
@@ -56,15 +56,7 @@
 
 ### Git
 
-| Type | Convention | Example |
-|------|------------|---------|
-| Branch | `type/issue-slug` | `feature/123-add-voting` |
-| Commit | Conventional Commits | `feat(voting): add counting endpoint (#123)` |
-| PR title | Conventional Commits | `feat(voting): add counting endpoint (#123)` |
-
-For comprehensive rules, see:
-- `branch-naming-conventions.md` - Branch naming
-- `pr-naming-conventions.md` - PR titles and commit messages
+See [branch-naming-conventions.md](branch-naming-conventions.md) and [pr-naming-conventions.md](pr-naming-conventions.md).
 
 ## Anti-patterns
 

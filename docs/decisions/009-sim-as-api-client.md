@@ -62,5 +62,5 @@ The simulation worker (`sim` binary) is a pure HTTP API client. It interacts exc
 - PR #380: Sim module implementation
 - `service/src/sim/`: Module source
 - `service/src/bin/sim.rs`: Orchestration entry point
-- `docs/interfaces/environment-variables.md`: `SIM_*` configuration
+- `service/src/bin/sim.rs`: `SIM_*` env var parsing
 - ADR-008: Account-based verifiers (the sim's endorsement mechanism)

@@ -52,4 +52,4 @@ Verifiers are regular accounts authenticated via the same device-key signing pro
 - PR #381, #384: Generalized verifier API implementation
 - `service/src/reputation/bootstrap.rs`: Bootstrap logic
 - `service/src/reputation/http/mod.rs`: Endorsement endpoint with `AuthenticatedDevice`
-- `docs/interfaces/environment-variables.md`: `TC_VERIFIERS` configuration
+- `service/src/config.rs`: `VerifierConfig` struct (`TC_VERIFIERS` env var)

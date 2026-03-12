@@ -83,7 +83,7 @@ When adding new configuration options:
 - [ ] Add validation that fails fast on invalid values
 - [ ] Document the default and security implications
 - [ ] Add development-friendly values to `config.yaml.example`
-- [ ] Update `docs/interfaces/environment-variables.md`
+- [ ] Add doc comments to the config field in `service/src/config.rs`
 
 ## Current Implementations
 
@@ -169,7 +169,7 @@ pub enable_auth: bool,  // Defaults to false
 
 - [OWASP Secure Configuration Guidelines](https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/02-Configuration_and_Deployment_Management_Testing/)
 - PR #97 - CORS origin restriction (established this pattern)
-- `docs/interfaces/environment-variables.md` - Configuration reference
+- `service/src/config.rs` - Configuration struct (source of truth)
 
 ## See Also
 
