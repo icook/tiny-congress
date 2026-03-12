@@ -4,45 +4,11 @@
 
 mod common;
 
-use common::factories::AccountFactory;
+use common::factories::{insert_endorsement, insert_revoked_endorsement, AccountFactory};
 use common::test_db::isolated_db;
 use tc_test_macros::shared_runtime_test;
 use tinycongress_api::trust::engine::TrustEngine;
 use tinycongress_api::trust::repo::{PgTrustRepo, TrustRepo};
-use uuid::Uuid;
-
-/// Insert an active endorsement directly into the DB (bypass the action queue for test setup).
-async fn insert_endorsement(pool: &sqlx::PgPool, endorser: Uuid, subject: Uuid, weight: f32) {
-    sqlx::query(
-        "INSERT INTO reputation__endorsements (endorser_id, subject_id, topic, weight)
-         VALUES ($1, $2, 'trust', $3)",
-    )
-    .bind(endorser)
-    .bind(subject)
-    .bind(weight)
-    .execute(pool)
-    .await
-    .unwrap();
-}
-
-/// Insert a revoked endorsement (revoked_at set to now).
-async fn insert_revoked_endorsement(
-    pool: &sqlx::PgPool,
-    endorser: Uuid,
-    subject: Uuid,
-    weight: f32,
-) {
-    sqlx::query(
-        "INSERT INTO reputation__endorsements (endorser_id, subject_id, topic, weight, revoked_at)
-         VALUES ($1, $2, 'trust', $3, NOW())",
-    )
-    .bind(endorser)
-    .bind(subject)
-    .bind(weight)
-    .execute(pool)
-    .await
-    .unwrap();
-}
 
 // ---------------------------------------------------------------------------
 // TRD 6.1: Linear chain trust distance
