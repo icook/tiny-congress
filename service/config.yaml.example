@@ -51,3 +51,29 @@ security_headers:
   content_security_policy: "default-src 'self'"
   # Referrer-Policy (default: strict-origin-when-cross-origin)
   referrer_policy: strict-origin-when-cross-origin
+
+# HMAC key for synthetic backup envelopes (anti-enumeration).
+# Required. Must be at least 32 bytes. Must remain stable for the lifetime
+# of the deployment — changing it can leak which usernames are real.
+# Generate with: openssl rand -base64 48
+# In production, set via TC_SYNTHETIC_BACKUP_KEY env var or Helm syntheticBackupKey.
+synthetic_backup_key: "dev-only-hmac-key-replace-in-production-at-least-32-bytes!!"
+
+# GraphQL Playground — interactive API explorer at /graphql (GET)
+# Disabled by default for security (exposes full schema).
+graphql:
+  playground_enabled: true
+
+# Swagger UI — REST API docs at /swagger-ui
+# Disabled by default for security.
+swagger:
+  enabled: true
+
+# ID.me OAuth configuration (optional — omit to disable identity verification)
+# If any idme field is set, all required fields must be present.
+# idme:
+#   client_id: "your-client-id"
+#   client_secret: "your-client-secret"
+#   redirect_uri: "http://localhost:8080/auth/idme/callback"
+#   state_secret: "at-least-32-bytes-for-anti-csrf-hmac"
+#   frontend_callback_url: "http://localhost:5173/verify/callback"

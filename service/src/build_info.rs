@@ -5,13 +5,22 @@ use std::env;
 use utoipa::ToSchema;
 
 /// Build metadata exposed via GraphQL, REST, and logs.
+///
+/// Loaded from environment variables at startup (see [`BuildInfo::from_env`]).
+/// These are typically set by the CI pipeline or Dockerfile at image build time.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, SimpleObject, ToSchema)]
 #[graphql(rename_fields = "camelCase")]
 #[serde(rename_all = "camelCase")]
 pub struct BuildInfo {
+    /// Application version string. Read from `APP_VERSION` or `VERSION` env var.
+    /// Defaults to `"dev"`.
     pub version: String,
+    /// Git commit SHA. Read from `GIT_SHA` env var. Defaults to `"unknown"`.
     pub git_sha: String,
+    /// Build timestamp in RFC 3339 format. Read from `BUILD_TIME` env var.
+    /// Defaults to `"unknown"`.
     pub build_time: String,
+    /// Optional build message (e.g., CI run URL). Read from `BUILD_MESSAGE` env var.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub message: Option<String>,
 }

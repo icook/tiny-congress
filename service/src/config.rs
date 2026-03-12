@@ -26,9 +26,17 @@ pub struct Config {
     #[serde(default)]
     pub swagger: SwaggerConfig,
     /// HMAC key for generating synthetic backup envelopes.
-    /// Required — prevents username enumeration by making synthetic backups
-    /// unpredictable to external observers.
-    /// Set via `TC_SYNTHETIC_BACKUP_KEY` environment variable.
+    ///
+    /// Required — prevents username enumeration by making `GET /auth/backup/{username}`
+    /// return indistinguishable responses for real and non-existent accounts.
+    ///
+    /// **Must remain stable for the lifetime of a deployment.** Changing it alters
+    /// synthetic responses, which can leak which usernames are real.
+    ///
+    /// Generate with: `openssl rand -base64 48`
+    ///
+    /// Set via `TC_SYNTHETIC_BACKUP_KEY` environment variable or `synthetic_backup_key`
+    /// in config.yaml. In Kubernetes, set via `syntheticBackupKey` in Helm values.
     #[serde(default)]
     pub synthetic_backup_key: String,
     /// ID.me OAuth configuration. Optional — verification is disabled when absent.
@@ -138,6 +146,13 @@ pub struct LoggingConfig {
     pub level: String,
 }
 
+/// CORS configuration.
+///
+/// **Security:** Defaults to blocking all cross-origin requests (empty origin list).
+/// You must explicitly configure allowed origins for the frontend to work.
+///
+/// Set via `TC_CORS__ALLOWED_ORIGINS` (comma-separated) or `cors.allowed_origins`
+/// in config.yaml.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct CorsConfig {
     /// Allowed origins for CORS requests.
@@ -207,6 +222,16 @@ impl Default for CorsConfig {
     }
 }
 
+/// Security response headers configuration.
+///
+/// When enabled (the default), the following headers are always applied:
+/// - `X-Content-Type-Options: nosniff`
+/// - `X-XSS-Protection: 1; mode=block`
+///
+/// The remaining headers below are configurable.
+///
+/// Set via `TC_SECURITY_HEADERS__*` environment variables or `security_headers.*`
+/// in config.yaml.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct SecurityHeadersConfig {
     /// Enable security headers (default: true).
@@ -285,11 +310,15 @@ pub struct GraphQLConfig {
 
 /// ID.me OAuth 2.0 configuration.
 ///
-/// All fields are required when ID.me verification is enabled.
-/// Set via `TC_IDME__*` environment variables.
+/// The entire section is optional — if omitted, identity verification is disabled.
+/// But if any `TC_IDME__*` variable is set, all required fields must be present.
+///
+/// Set via `TC_IDME__*` environment variables or `idme.*` in config.yaml.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct IdMeConfig {
+    /// OAuth client ID from ID.me application registration.
     pub client_id: String,
+    /// OAuth client secret from ID.me application registration.
     pub client_secret: String,
     #[serde(default = "default_idme_authorize_url")]
     pub authorize_url: String,

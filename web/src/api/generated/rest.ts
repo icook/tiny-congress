@@ -57,11 +57,26 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
   schemas: {
-    /** @description Build metadata exposed via GraphQL, REST, and logs. */
+    /**
+     * @description Build metadata exposed via GraphQL, REST, and logs.
+     *
+     *     Loaded from environment variables at startup (see [`BuildInfo::from_env`]).
+     *     These are typically set by the CI pipeline or Dockerfile at image build time.
+     */
     BuildInfo: {
+      /**
+       * @description Build timestamp in RFC 3339 format. Read from `BUILD_TIME` env var.
+       *     Defaults to `"unknown"`.
+       */
       buildTime: string;
+      /** @description Git commit SHA. Read from `GIT_SHA` env var. Defaults to `"unknown"`. */
       gitSha: string;
+      /** @description Optional build message (e.g., CI run URL). Read from `BUILD_MESSAGE` env var. */
       message?: string | null;
+      /**
+       * @description Application version string. Read from `APP_VERSION` or `VERSION` env var.
+       *     Defaults to `"dev"`.
+       */
       version: string;
     };
     CreateEndorsementRequest: {

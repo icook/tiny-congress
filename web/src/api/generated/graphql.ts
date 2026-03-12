@@ -20,11 +20,26 @@ export type Scalars = {
   Float: { input: number; output: number };
 };
 
-/** Build metadata exposed via GraphQL, REST, and logs. */
+/**
+ * Build metadata exposed via GraphQL, REST, and logs.
+ *
+ * Loaded from environment variables at startup (see [`BuildInfo::from_env`]).
+ * These are typically set by the CI pipeline or Dockerfile at image build time.
+ */
 export type BuildInfo = {
+  /**
+   * Build timestamp in RFC 3339 format. Read from `BUILD_TIME` env var.
+   * Defaults to `"unknown"`.
+   */
   buildTime: Scalars['String']['output'];
+  /** Git commit SHA. Read from `GIT_SHA` env var. Defaults to `"unknown"`. */
   gitSha: Scalars['String']['output'];
+  /** Optional build message (e.g., CI run URL). Read from `BUILD_MESSAGE` env var. */
   message?: Maybe<Scalars['String']['output']>;
+  /**
+   * Application version string. Read from `APP_VERSION` or `VERSION` env var.
+   * Defaults to `"dev"`.
+   */
   version: Scalars['String']['output'];
 };
 

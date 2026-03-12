@@ -96,7 +96,7 @@
     "schemas": {
       "BuildInfo": {
         "type": "object",
-        "description": "Build metadata exposed via GraphQL, REST, and logs.",
+        "description": "Build metadata exposed via GraphQL, REST, and logs.\n\nLoaded from environment variables at startup (see [`BuildInfo::from_env`]).\nThese are typically set by the CI pipeline or Dockerfile at image build time.",
         "required": [
           "version",
           "gitSha",
@@ -104,19 +104,23 @@
         ],
         "properties": {
           "buildTime": {
-            "type": "string"
+            "type": "string",
+            "description": "Build timestamp in RFC 3339 format. Read from `BUILD_TIME` env var.\nDefaults to `\"unknown\"`."
           },
           "gitSha": {
-            "type": "string"
+            "type": "string",
+            "description": "Git commit SHA. Read from `GIT_SHA` env var. Defaults to `\"unknown\"`."
           },
           "message": {
             "type": [
               "string",
               "null"
-            ]
+            ],
+            "description": "Optional build message (e.g., CI run URL). Read from `BUILD_MESSAGE` env var."
           },
           "version": {
-            "type": "string"
+            "type": "string",
+            "description": "Application version string. Read from `APP_VERSION` or `VERSION` env var.\nDefaults to `\"dev\"`."
           }
         }
       },
