@@ -380,10 +380,6 @@ jobs:
     name: Build WASM
     runs-on: ${{ needs.detect-changes.outputs.runner-small }}
     needs: [detect-changes]
-    if: >-
-      needs.detect-changes.outputs.ui == 'true' ||
-      needs.detect-changes.outputs.api == 'true' ||
-      needs.detect-changes.outputs.ci == 'true'
     steps:
       - name: Checkout
         uses: actions/checkout@v6
