@@ -78,7 +78,10 @@ async fn test_demo_day_flow() {
         .recompute_from_anchor(alice.id, trust_repo.as_ref())
         .await
         .expect("recompute_from_anchor");
-    assert_eq!(written, 2, "Should have written scores for Bob and Carol");
+    assert_eq!(
+        written, 3,
+        "Should have written scores for Alice (anchor), Bob, and Carol"
+    );
 
     // Step 5: Verify trust distances written to score_snapshots
     let bob_score = trust_repo
