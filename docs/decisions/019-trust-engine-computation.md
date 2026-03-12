@@ -136,8 +136,10 @@ A placeholder exists for eigenvector centrality as a global (non-anchor-relative
 - Rejected for MVP due to computational cost (max-flow is O(V * E^2) in the general case). The distinct-endorser approximation provides adequate Sybil resistance at demo scale.
 
 ## References
+- [ADR-008: Account-based verifiers](008-account-based-verifiers.md) — verifier endorsements populate the same table the CTE traverses
 - [ADR-017: Two-layer trust architecture](017-two-layer-trust-architecture.md) — the trust engine serves the platform trust layer
 - [ADR-018: Handshake protocol](018-handshake-protocol.md) — how edges are created and weighted
+- [ADR-020: Reputation scarcity](020-reputation-scarcity.md) — trust scores may influence slot allocation
 - [ADR-021: Batch reconciliation](021-batch-reconciliation.md) — when scores are recomputed
 - `service/src/trust/engine.rs` — `compute_distances_from`, `compute_diversity_from`, `recompute_from_anchor`
 - `service/src/trust/repo/scores.rs` — `upsert_score`, `get_score`, `get_all_scores`

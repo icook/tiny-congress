@@ -91,6 +91,7 @@ The cadence may be adjusted (12h, 48h) based on observed user behavior, but the 
 - Rejected. If a revocation is urgent, the room layer can respond to a "pending revocation" signal without the trust graph recomputing.
 
 ## References
+- [ADR-003: pgmq job queue](003-pgmq-job-queue.md) — queue infrastructure for action storage and batch triggering
 - [ADR-017: Two-layer trust architecture](017-two-layer-trust-architecture.md) — the layer separation this cadence applies to
 - [ADR-020: Reputation scarcity](020-reputation-scarcity.md) — the action budgets consumed during each batch
 - TRD §3.4 (Materialization Strategy) — original discussion of when to recompute

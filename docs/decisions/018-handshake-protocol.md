@@ -52,7 +52,7 @@ Trust edges are stored in `reputation__endorsements` with the following relevant
 | `topic` | Edge topic — trust graph traversal uses `"trust"` topic |
 | `weight` | Edge weight in (0.0, 1.0], determined by handshake context |
 | `attestation` | JSONB metadata: method, relationship context, confidence |
-| `influence_staked` | Amount of endorser's influence locked on this edge |
+| `influence_staked` | Amount of endorser's influence locked on this edge (legacy — ADR-020 replaces continuous influence with discrete endorsement slots) |
 | `revoked_at` | Non-null if the endorser revoked this edge |
 
 Edges are directed: Alice endorsing Bob does not imply Bob endorsing Alice. Mutual trust requires two separate handshakes.
@@ -115,6 +115,7 @@ The invite is single-use. The low weight ensures referral-only paths are long in
 - Rejected because it conflates "I vouch for you" with "you vouch for me." A QR scan proves Alice showed up, but Bob might have been coerced. Asymmetric edges preserve the distinction.
 
 ## References
+- [ADR-008: Account-based verifiers](008-account-based-verifiers.md) — verifier endorsements write to the same `reputation__endorsements` table
 - [ADR-015: Identity model](015-identity-model.md) — the cryptographic keys used to sign handshake tokens
 - [ADR-017: Two-layer trust architecture](017-two-layer-trust-architecture.md) — handshakes serve the platform trust layer
 - TRD §2 (Identity & Handshake Protocol) — original specification

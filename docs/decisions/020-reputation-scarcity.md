@@ -29,6 +29,8 @@ When all slots are occupied, the user must revoke an existing endorsement before
 
 Platform trust level (computed from the user's own graph position) may increase the slot count over time. A well-established user with high diversity and long tenure might earn additional slots. The mechanism for this is not yet defined and will be calibrated from real usage data.
 
+**Platform/verifier accounts are exempt from slot limits.** Accounts designated as platform verifiers (see ADR-008) issue endorsements as infrastructure, not as peer trust signals. These accounts have effectively unlimited endorsement capacity. This exemption is necessary for bootstrapping — the initial verifier must be able to onboard the first cohort of users without exhausting a personal slot budget. Long-term, the system's credibility depends on users graduating from platform-issued endorsements to peer-verified handshakes.
+
 ### Renewable daily action budget
 
 Separate from endorsement slots, each user has a daily **action budget** — a renewable resource that limits how many trust actions they can perform per reconciliation cycle (see ADR-021).
@@ -98,6 +100,7 @@ Denouncements are recorded but **do not currently affect trust graph traversal**
 ## References
 - [ADR-017: Two-layer trust architecture](017-two-layer-trust-architecture.md) — slots and budgets are platform trust concepts
 - [ADR-018: Handshake protocol](018-handshake-protocol.md) — endorsements are the edges that consume slots
+- [ADR-019: Trust engine computation](019-trust-engine-computation.md) — scores that may drive dynamic slot allocation
 - [ADR-021: Batch reconciliation](021-batch-reconciliation.md) — action budgets regenerate each reconciliation cycle
 - [GitHub #624: Trust graph red/blue simulation](https://github.com/icook/tiny-congress/issues/624) — will inform sponsorship risk design
 - TRD §4 (Reputation Scarcity Model) — original slot-based design

@@ -26,7 +26,7 @@ The trust system is split into two layers with distinct responsibilities:
 - All humans are welcome, even untrustworthy ones. An untrustworthy human has poor graph position (high distance, low diversity), which limits their scope of impact — but they are never expelled from the platform for being untrustworthy.
 - The trust engine computes graph metrics (distance, diversity, endorsement budget) and publishes them. It does not make access decisions.
 
-**Platform trust governs:** endorsement slot count, daily action budget, and participation in the identity/trust network itself.
+**Platform trust governs:** endorsement slot count, daily action budget, and participation in the identity/trust network itself. (Slot and budget specifics are defined in ADR-020 and ADR-021, both currently Proposed.)
 
 ### Layer 2: Communication Permission (Rooms)
 
@@ -39,7 +39,7 @@ The trust system is split into two layers with distinct responsibilities:
 
 TinyCongress cannot know what a room thinks. The platform provides the identity infrastructure; rooms make their own judgments.
 
-**Room admission is immediate.** When a user's trust graph position changes (e.g., after a new handshake), room eligibility updates in real-time. This contrasts with the trust engine's batch cadence (see ADR-021) — the graph recomputes on a schedule, but rooms evaluate the latest snapshot immediately.
+**Room admission evaluates immediately against the latest snapshot.** When a daily batch reconciliation produces new trust scores (see ADR-021), room eligibility checks reflect those scores immediately — there is no additional delay between score publication and room access.
 
 ### Architectural boundary
 
@@ -89,6 +89,7 @@ The Room Service should be a separate service boundary, analogous to how the Ver
 - Rejected because it duplicates Sybil resistance work across every room and makes cross-room identity impossible.
 
 ## References
+- [ADR-008: Account-based verifiers](008-account-based-verifiers.md) — verifier endorsements predate the two-layer split; reframing pending
 - [ADR-015: Identity model](015-identity-model.md) — the cryptographic identity layer this builds on
 - [ADR-021: Batch reconciliation](021-batch-reconciliation.md) — the cadence at which platform trust updates
 - TRD §3 (Trust Engine) and §7 (MVP Scope) — original design context
