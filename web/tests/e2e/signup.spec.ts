@@ -16,8 +16,8 @@ test('signup flow creates account with device key @smoke', async ({ page }) => {
 
   // Fill and submit
   await page.getByLabel(/username/i).fill(username);
-  await page.getByLabel('Backup Password', { exact: true }).fill('test-password-123');
-  await page.getByLabel('Confirm Backup Password', { exact: true }).fill('test-password-123');
+  await page.getByLabel(/^Backup Password$/i).fill('test-password-123');
+  await page.getByLabel(/^Confirm Backup Password$/i).fill('test-password-123');
   await page.getByRole('button', { name: /sign up/i }).click();
 
   // Wait for success — timeout accounts for WASM loading + key generation + API call
@@ -45,8 +45,8 @@ test('signup shows error for duplicate username @smoke', async ({ page, browser 
 
   // First signup should succeed
   await page.getByLabel(/username/i).fill(username);
-  await page.getByLabel('Backup Password', { exact: true }).fill('test-password-123');
-  await page.getByLabel('Confirm Backup Password', { exact: true }).fill('test-password-123');
+  await page.getByLabel(/^Backup Password$/i).fill('test-password-123');
+  await page.getByLabel(/^Confirm Backup Password$/i).fill('test-password-123');
   await page.getByRole('button', { name: /sign up/i }).click();
   await expect(page.getByText(/account has been created/i)).toBeVisible({ timeout: 15_000 });
 
@@ -62,10 +62,8 @@ test('signup shows error for duplicate username @smoke', async ({ page, browser 
     await expect(freshPage.getByLabel(/username/i)).toBeVisible();
 
     await freshPage.getByLabel(/username/i).fill(username);
-    await freshPage.getByLabel('Backup Password', { exact: true }).fill('test-password-123');
-    await freshPage
-      .getByLabel('Confirm Backup Password', { exact: true })
-      .fill('test-password-123');
+    await freshPage.getByLabel(/^Backup Password$/i).fill('test-password-123');
+    await freshPage.getByLabel(/^Confirm Backup Password$/i).fill('test-password-123');
     await freshPage.getByRole('button', { name: /sign up/i }).click();
 
     // Should show an error (duplicate username)
