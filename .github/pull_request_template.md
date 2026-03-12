@@ -20,6 +20,15 @@
 - [ ] E2E (CI-only / local — specify which)
 - [ ] Manual verification (describe what you did)
 
+## Plan Graduation
+<!-- Delete this section if no .plan/ files exist on this branch -->
+- [ ] If this PR removes `.plan/` files, durable decisions are captured in the appropriate docs:
+  - Architectural decisions → `docs/decisions/NNN-*.md` (ADR)
+  - Domain model changes → `docs/domain-model.md`
+  - API contracts / interfaces → `docs/interfaces/*.md`
+  - Operational procedures → `docs/playbooks/*.md`
+  - UX patterns → `docs/style/*.md`
+
 ## Linked Issue
 - Closes #
 

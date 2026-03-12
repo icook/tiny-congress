@@ -5,8 +5,8 @@ Planning documents for large feature branches or major subsystems.
 ## Purpose
 
 - Feature specifications that evolve during implementation
-- Ticket definitions and status tracking
-- Design decisions being refined
+- Design briefs, spike plans, and gap analyses
+- Design decisions being refined before graduation to permanent docs
 
 ## Why Here Instead of GitHub Issues?
 
@@ -17,17 +17,27 @@ Planning documents for large feature branches or major subsystems.
 
 ## Lifecycle
 
-- **Committed to feature branch** during development
-- **Removed when feature merges to master**
-- Promote persistent content to `docs/` before merge
+1. **Created during planning** — design briefs, spike briefs, gap analyses
+2. **Committed to feature branch as first commit** — preserves context across sessions
+3. **Evolves during implementation** — updated as decisions are made
+4. **Graduated before merge** — durable knowledge moves to permanent docs:
+   - Architectural decisions → `docs/decisions/NNN-*.md` (ADR)
+   - Domain model changes → `docs/domain-model.md`
+   - API contracts / interfaces → `docs/interfaces/*.md`
+   - Operational procedures → `docs/playbooks/*.md`
+   - UX patterns → `docs/style/*.md`
+5. **Stripped on merge to master** — CI enforces this (`check-no-plans` job)
+
+Use `docs/skills/plan-graduation.md` for the full graduation process.
 
 ## Structure
 
 ```
 .plan/
-├── spec.md           # Main feature specification
-├── tickets.md        # Ticket breakdown and status
-└── {subsystem}/      # Subsystem-specific planning if needed
+├── README.md                    # This file (committed to master)
+├── {date}-{feature}-brief.md    # Design brief for brainstorming
+├── {date}-{feature}-spike.md    # Spike validation plan
+└── {date}-{feature}-gap.md      # Gap analysis
 ```
 
 See `AGENTS.md` for full specification.
