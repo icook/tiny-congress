@@ -39,15 +39,16 @@ runs:
       shell: bash
       run: echo "YARN_ENABLE_HARDENED_MODE=0" >> "$GITHUB_ENV"
 
-    - name: Restore node_modules cache
-      id: nm-cache
+    - name: Restore yarn cache
+      id: yarn-cache
       uses: runs-on/cache/restore@v4
       with:
-        path: web/node_modules
-        key: node-modules-${{ runner.os }}-${{ hashFiles('web/yarn.lock') }}
+        path: web/.yarn/cache
+        key: yarn-cache-${{ runner.os }}-${{ hashFiles('web/yarn.lock') }}
 
+    # Always run install: with a warm zip cache this takes ~15-20s to
+    # materialise node_modules, far cheaper than downloading a 1.6 GB tar.
     - name: Install frontend dependencies
-      if: steps.nm-cache.outputs.cache-hit != 'true'
       shell: bash
       working-directory: web
       run: yarn install --immutable
@@ -59,10 +60,10 @@ runs:
         path: ${{ runner.tool_cache }}
         key: node-toolcache-${{ runner.os }}-${{ hashFiles('web/.nvmrc') }}
 
-    - name: Save node_modules cache
+    - name: Save yarn cache
       if: always()
       uses: runs-on/cache/save@v4
       with:
-        path: web/node_modules
-        key: node-modules-${{ runner.os }}-${{ hashFiles('web/yarn.lock') }}
+        path: web/.yarn/cache
+        key: yarn-cache-${{ runner.os }}-${{ hashFiles('web/yarn.lock') }}
 
