@@ -1,11 +1,18 @@
 # Trust UI Gap Analysis
 
 **Date:** 2026-03-11
+**Updated:** 2026-03-12 (aligned with ADR series 017-021, PR #630)
 **Source:** Design state document + TRD cross-referenced against codebase at `9c26720` (PR #555)
 
 ## Summary
 
-PR #555 shipped the full backend trust engine (~6,000 lines). The frontend is unchanged — it still presents the pre-trust demo (signup → verify → vote). This document captures the concrete delta between design intent and current implementation, organized by user-facing capability.
+PR #555 shipped the backend trust engine (~6,000 lines). The frontend is unchanged — it still presents the pre-trust demo (signup → verify → vote). This document captures the delta between design intent and current implementation.
+
+> **Architecture update (2026-03-12):** The backend implements a continuous influence
+> model with real-time processing. ADRs 020 and 021 (Proposed) call for discrete
+> endorsement slots and 24h batch reconciliation respectively. **The backend itself
+> needs changes before the frontend can fully align.** Sections marked **[UPDATED]**
+> reflect the target architecture per ADRs, not current backend state.
 
 ---
 
@@ -27,17 +34,19 @@ PR #555 shipped the full backend trust engine (~6,000 lines). The frontend is un
 
 The TRD and design state document describe a trust-centric experience where:
 
-### Trust Score Visibility
-- Users see their **trust distance** (weighted hops from seed) and **path diversity** (distinct endorsers)
-- A **tier badge** (Community / Congress) shows what rooms they qualify for
-- An **influence budget** shows remaining endorsement capacity (starts at 10.0)
+### Trust Score Visibility [UPDATED]
+- Users see their **trust distance** (weighted hops from seed) and **path diversity** (distinct endorsers) — from latest daily snapshot (ADR-021)
+- Room eligibility is **room-configurable** (ADR-017) — rooms set their own distance/diversity thresholds, not platform-wide tiers
+- An **endorsement slot count** shows remaining capacity: "2 of 3 endorsements used" (ADR-020, replaces influence budget)
 - These are the "aha moment" — users understand their position in the web of trust
 
-### Endorsement Flow
-- Users can **endorse** other users (costs influence budget, queued async)
-- Users can **revoke** endorsements (returns staked influence)
-- Users can **denounce** bad actors (costs influence, max 2 active denouncements)
-- Daily action quota: 5 actions/day
+### Endorsement Flow [UPDATED]
+- Users **endorse** via handshakes (ADR-018): Physical QR (1.0), Remote (0.7), Social Referral (0.3). Endorsement = handshake, not a separate action.
+- Each endorsement occupies one **slot** (ADR-020, k=3 demo). To endorse a new person when full, must revoke an existing one.
+- Users can **revoke** endorsements (frees the slot)
+- Users can **denounce** bad actors (d=2 permanent budget, no graph effect yet — ADR-020)
+- **Daily action budget** (ADR-020/021): TBD (1-3 for demo), renewable, use-it-or-lose-it
+- **Actions are declared intentions** (ADR-021): applied at next daily batch, retractable before then
 
 ### Invite / Handshake Flow
 - **QR code generation**: Create a short-lived invite, encode as QR
@@ -46,13 +55,14 @@ The TRD and design state document describe a trust-centric experience where:
 - Physical co-presence ("the ritual") creates high-weight trust edges
 - The TRD describes JWT-signed QR payloads, but the backend uses invite IDs with expiry + single-use constraints (simpler, equivalent security)
 
-### Room Constraint System
+### Room Constraint System [UPDATED]
 - Rooms have a `constraint_type` + `constraint_config` (JSONB)
-- Three constraint presets:
+- Three constraint presets exist as reference implementations:
   - **EndorsedBy** — must be reachable from anchor in trust graph
   - **Community** — trust distance ≤ threshold AND path diversity ≥ threshold
   - **Congress** — stricter sybil resistance via path diversity only
-- The design envisions rooms displaying their constraint requirements so users understand what they need to qualify
+- **Thresholds are room-configurable, not platform constants (ADR-017).** Rooms are independent relying parties that consume trust graph signals and define their own gating policies.
+- The design envisions rooms displaying their specific constraint requirements so users understand what they need to qualify
 
 ### Trust Tree Visualization
 - The design describes a graph visualization showing the user's trust connections
@@ -61,26 +71,28 @@ The TRD and design state document describe a trust-centric experience where:
 
 ---
 
-## Gap Table
+## Gap Table [UPDATED]
 
-| Capability | Backend | Frontend | Gap |
-|---|---|---|---|
-| Trust score computation | CTE + worker, cached snapshots | None | Full build needed |
-| Trust score display | `GET /trust/scores/me` | None | API client + component |
-| Influence budget | `GET /trust/budget` | None | API client + component |
-| Tier badges (Community/Congress) | Constraint system computes eligibility | Navbar shows binary Verified/Unverified | Replace badge logic |
-| Endorsement creation | `POST /trust/endorse` (202) | None | API client + UI (form? inline?) |
-| Endorsement revocation | `POST /trust/revoke` (202) | None | API client + UI |
-| Denouncement | `POST /trust/denounce` (202) | None | API client + UI — design question: how prominent? |
-| Invite creation | `POST /trust/invites` | None | API client + QR generation |
-| Invite listing | `GET /trust/invites/mine` | None | API client + table |
-| Invite acceptance | `POST /trust/invites/{id}/accept` | None | API client + accept page |
-| QR handshake (generate) | Invite endpoint exists | None | QR library + component |
-| QR handshake (scan) | Accept endpoint exists | None | Camera API + scanning library |
-| Room constraint display | `constraint_type` + `constraint_config` in room record | `Room` type only has `eligibility_topic` | Type mismatch — may or may not serialize |
-| Poll eligibility messaging | Backend returns specific constraint failure reason | Frontend shows generic "verify your identity" | Surface backend error detail |
-| Trust tree visualization | Score snapshots exist, graph data in endorsements table | None | Major design + build effort |
-| Demo data seeding | Tables exist | None | Seed script needed for demo |
+| Capability | Backend State | Backend Target (ADRs) | Frontend | Gap |
+|---|---|---|---|---|
+| Trust score computation | CTE + worker, cached snapshots | Same (ADR-019) | None | Frontend build needed |
+| Trust score display | `GET /trust/scores/me` | Returns daily snapshot (ADR-021) | None | API client + component |
+| Endorsement slots | `GET /trust/budget` returns float influence | Slot count: k=3 demo (ADR-020) | None | **Backend change** + frontend build |
+| Room eligibility | Constraint system with hardcoded presets | Room-configurable thresholds (ADR-017) | Binary Verified/Unverified | Replace badge logic, surface room policy |
+| Endorsement creation | `POST /trust/endorse` (202, immediate queue) | Declared intention, batch-applied (ADR-021) | None | **Backend change** + UI with pending state |
+| Endorsement revocation | `POST /trust/revoke` (202) | Retractable before batch (ADR-021) | None | **Backend change** + UI |
+| Denouncement | `POST /trust/denounce` (202, costs influence) | d=2 permanent budget, no graph effect (ADR-020) | None | **Backend change** + UI |
+| Invite creation | `POST /trust/invites` | Same | None | API client + QR generation |
+| Invite listing | `GET /trust/invites/mine` | Same | None | API client + table |
+| Invite acceptance | `POST /trust/invites/{id}/accept` | Creates edge, weight=0.3 (ADR-018) | None | API client + accept page |
+| QR handshake (generate) | Invite endpoint exists | JWT-signed QR, weight=1.0 (ADR-018) | None | QR library + component |
+| QR handshake (scan) | Accept endpoint exists | Same | None | Camera API + scanning library |
+| Room constraint display | `constraint_type` + `constraint_config` | Room-configurable (ADR-017) | Only `eligibility_topic` | Type mismatch — needs investigation |
+| Poll eligibility messaging | Returns `VoteError::NotEligible` | Two-layer message (ADR-017) | Generic "verify your identity" | Surface constraint-specific + room-specific detail |
+| Pending actions UX | Action queue exists | Retractable declarations (ADR-021) | None | **New concept** — show pending vs applied |
+| Batch reconciliation | Real-time worker | Daily batch at fixed time (ADR-021) | None | **Backend change** + "scores update tomorrow" messaging |
+| Trust tree visualization | Score snapshots + endorsement graph | Same | None | Major design + build effort |
+| Demo data seeding | Tables exist | Same | None | Seed script needed |
 
 ## Specific Code-Level Findings
 
@@ -92,11 +104,12 @@ The TRD and design state document describe a trust-centric experience where:
 ### Dead Code
 - `HasEndorsementResponse` and `checkEndorsement()` at `web/src/features/rooms/api/client.ts:89-129` appear unused — the frontend doesn't call `checkEndorsement` anywhere. Likely from an earlier endorsement check approach that was replaced by the verification status hook. Needs grep confirmation.
 
-### Verification vs Trust
+### Verification vs Trust [UPDATED — two-layer architecture, ADR-017]
 - The frontend uses a **binary** verification model: `topic === 'identity_verified' && !revoked`
 - The backend now uses a **graduated** trust model: distance + diversity + constraints
-- These are layered, not contradictory — verification is the entry point, trust score is the deeper signal
-- But the UI only shows the binary layer. The design docs expect both.
+- **ADR-017 formalizes this as a two-layer split:** Platform trust (humanity/Sybil resistance) is the identity layer — "are you a verified human?" Rooms are the permission layer — "does this room want to hear from you?"
+- The UI needs to surface both layers: "Your platform trust position" (distance, diversity, slots) and "This room requires..." (room-specific thresholds)
+- Verification (binary) maps to the *minimum* platform trust signal — you've been attested as human by at least one path. Trust score is the deeper graduated signal.
 
 ### Error Path
 - Vote rejection returns from `rooms/service.rs` via `VoteError::NotEligible` with a human-readable `reason` string
@@ -121,3 +134,20 @@ These are questions the gap analysis surfaced that need design decisions, not ju
 4. **What does the eligibility gate look like for trust-gated rooms?** Today it says "verify your identity." For Community/Congress rooms, should it say "you need endorsements from 2+ trusted members" with a progress indicator?
 5. **Is the trust tree visualization in scope for March 20?** It's the design doc's "aha moment" but it's the largest single piece of frontend work.
 6. **Mobile-first or desktop-first?** The QR handshake is inherently mobile. Is the trust dashboard also mobile-primary?
+7. **[NEW] How to present pending vs applied state?** Under batch reconciliation (ADR-021), the UI must show both "what you've declared today" and "your current trust position from last batch." What's the right UX pattern — a pending/applied toggle? Inline annotations? A timeline?
+8. **[NEW] What does "2 of 3 endorsements used" look like?** The slot scarcity display (ADR-020) is the central UX element. Is it a progress bar? Circles? A card?
+
+---
+
+## Backend Changes Required Before Frontend Can Align
+
+These backend items block full M3 implementation. The frontend can start building against current endpoints, but the final UX depends on these changes landing.
+
+| Backend change | ADR | Blocking what |
+|---|---|---|
+| Replace continuous influence with discrete slot count | ADR-020 | Slot display ("2 of 3"), budget endpoint shape |
+| Implement batch reconciliation (queue → daily batch) | ADR-021 | Pending vs applied state UX |
+| Add retractable action declarations | ADR-021 | Undo/retract UX for pending endorsements |
+| Denouncement as permanent budget (d=2), not influence cost | ADR-020 | Denouncement UI flow |
+| Verifier/platform account slot exemption | ADR-020 + 008 audit | Demo bootstrapping |
+| Trust anchor bootstrap (distance=0 for seed node) | ADR-019 audit | Any trust score display for first user |
