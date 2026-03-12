@@ -1,19 +1,7 @@
 import { expect, test } from './fixtures';
+import { signupUser } from './helpers';
 
 const PASSWORD = 'test-password-123';
-
-/**
- * Sign up a user on the given page.
- */
-async function signupUser(page: import('@playwright/test').Page, username: string) {
-  await page.goto('/signup');
-  await expect(page.getByLabel(/username/i)).toBeVisible();
-
-  await page.getByLabel(/username/i).fill(username);
-  await page.getByLabel(/backup password/i).fill(PASSWORD);
-  await page.getByRole('button', { name: /sign up/i }).click();
-  await expect(page.getByText(/Account Created/i)).toBeVisible({ timeout: 15_000 });
-}
 
 /**
  * Create a fresh browser context that inherits the project's baseURL.

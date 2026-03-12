@@ -132,4 +132,5 @@ export async function generateCoverageReport(): Promise<void> {
   await fs.rm(rawCoverageDir, { recursive: true, force: true });
 }
 
+export type { Page } from '@playwright/test';
 export { expect };
