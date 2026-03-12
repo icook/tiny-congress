@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>QR Handshake Spike</title>
+  <script src="https://unpkg.com/qrcode@1.5.4/build/qrcode.min.js"></script>
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #1a1a2e; color: #e0e0e0;
+      padding: 16px; max-width: 480px; margin: 0 auto;
+    }
+    h1 { font-size: 1.4rem; margin-bottom: 12px; color: #7c7cff; }
+    h2 { font-size: 1.1rem; margin: 16px 0 8px; color: #a0a0ff; }
+    .section {
+      background: #16213e; border-radius: 8px; padding: 12px;
+      margin-bottom: 12px; border: 1px solid #2a2a5a;
+    }
+    label { display: block; font-size: 0.85rem; margin-bottom: 4px; color: #aaa; }
+    input, textarea {
+      width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #444;
+      background: #0f0f23; color: #e0e0e0; font-family: monospace; font-size: 0.85rem;
+      margin-bottom: 8px;
+    }
+    textarea { resize: vertical; min-height: 60px; }
+    button {
+      padding: 10px 16px; border-radius: 6px; border: none;
+      background: #7c7cff; color: #fff; font-weight: 600;
+      cursor: pointer; font-size: 0.95rem; margin: 4px 4px 4px 0;
+    }
+    button:disabled { opacity: 0.4; cursor: not-allowed; }
+    button.secondary { background: #444; }
+    button.danger { background: #c0392b; }
+    #qr-canvas { margin: 12px auto; display: block; }
+    #scanner-region { width: 100%; }
+    .log {
+      background: #0f0f23; border-radius: 4px; padding: 8px;
+      font-family: monospace; font-size: 0.8rem; white-space: pre-wrap;
+      max-height: 200px; overflow-y: auto; margin-top: 8px;
+      border: 1px solid #333;
+    }
+    .ok { color: #2ecc71; }
+    .err { color: #e74c3c; }
+    .info { color: #f39c12; }
+    .tabs { display: flex; gap: 4px; margin-bottom: 12px; }
+    .tabs button { flex: 1; }
+    .tabs button.active { background: #5c5cdf; }
+    .hidden { display: none; }
+  </style>
+</head>
+<body>
+  <h1>QR Handshake Spike</h1>
+
+  <div class="tabs">
+    <button id="tab-generate" class="active" onclick="switchTab('generate')">Generate</button>
+    <button id="tab-scan" onclick="switchTab('scan')">Scan</button>
+  </div>
+
+  <!-- Auth Config (shared) -->
+  <div class="section">
+    <h2>Auth Config</h2>
+    <label>API Base URL</label>
+    <input id="api-url" value="http://localhost:8080" />
+    <label>Device KID (22-char base64url)</label>
+    <input id="device-kid" placeholder="e.g. abc123..." />
+    <label>Private Key (base64url-encoded raw Ed25519 seed, 32 bytes)</label>
+    <input id="private-key" type="password" placeholder="Paste base64url private key" />
+    <button class="secondary" onclick="testAuth()">Test Auth</button>
+  </div>
+
+  <!-- GENERATE TAB -->
+  <div id="panel-generate">
+    <div class="section">
+      <h2>Create Invite &amp; QR</h2>
+      <button onclick="createInvite()">Create Invite</button>
+      <button class="secondary" onclick="generateTestQR()">Test QR (no backend)</button>
+      <canvas id="qr-canvas"></canvas>
+      <div id="invite-info" class="hidden">
+        <label>Invite ID</label>
+        <input id="invite-id" readonly />
+        <label>Invite URL</label>
+        <input id="invite-url" readonly />
+      </div>
+    </div>
+  </div>
+
+  <!-- SCAN TAB -->
+  <div id="panel-scan" class="hidden">
+    <div class="section">
+      <h2>Scan QR Code</h2>
+      <button id="btn-start-scan" onclick="startScanner()">Start Camera</button>
+      <button id="btn-stop-scan" class="danger hidden" onclick="stopScanner()">Stop Camera</button>
+      <div id="scanner-region"></div>
+      <div id="scan-result" class="hidden">
+        <label>Decoded</label>
+        <input id="decoded-text" readonly />
+        <label>Latency</label>
+        <input id="scan-latency" readonly />
+        <button onclick="acceptScannedInvite()">Accept Invite</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Log -->
+  <div class="section">
+    <h2>Log</h2>
+    <div id="log" class="log"></div>
+    <button class="secondary" onclick="document.getElementById('log').textContent=''">Clear</button>
+  </div>
+
+<script>
+// ---------------------------------------------------------------------------
+// Logging
+// ---------------------------------------------------------------------------
+function log(msg, cls = '') {
+  const el = document.getElementById('log');
+  const line = document.createElement('span');
+  line.className = cls;
+  line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}\n`;
+  el.appendChild(line);
+  el.scrollTop = el.scrollHeight;
+}
+
+// ---------------------------------------------------------------------------
+// Tab switching
+// ---------------------------------------------------------------------------
+function switchTab(tab) {
+  document.getElementById('panel-generate').classList.toggle('hidden', tab !== 'generate');
+  document.getElementById('panel-scan').classList.toggle('hidden', tab !== 'scan');
+  document.getElementById('tab-generate').classList.toggle('active', tab === 'generate');
+  document.getElementById('tab-scan').classList.toggle('active', tab === 'scan');
+  // Auto-check hash for accept mode
+  if (tab === 'scan') checkHashForAccept();
+}
+
+// ---------------------------------------------------------------------------
+// Base64url helpers
+// ---------------------------------------------------------------------------
+function b64urlEncode(buf) {
+  const bytes = buf instanceof Uint8Array ? buf : new Uint8Array(buf);
+  let binary = '';
+  for (const b of bytes) binary += String.fromCharCode(b);
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function b64urlDecode(str) {
+  let s = str.replace(/-/g, '+').replace(/_/g, '/');
+  while (s.length % 4) s += '=';
+  const binary = atob(s);
+  const buf = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) buf[i] = binary.charCodeAt(i);
+  return buf;
+}
+
+// ---------------------------------------------------------------------------
+// Ed25519 signing (replicates web/src/api/signing.ts)
+// ---------------------------------------------------------------------------
+async function importPrivateKey(b64urlSeed) {
+  const seed = b64urlDecode(b64urlSeed);
+  if (seed.length !== 32) throw new Error(`Expected 32-byte seed, got ${seed.length}`);
+  // PKCS#8 wrapping for Ed25519: fixed prefix + 32-byte seed
+  // RFC 8410 PKCS#8 prefix for Ed25519 private key
+  const pkcs8Prefix = new Uint8Array([
+    0x30, 0x2e, 0x02, 0x01, 0x00, 0x30, 0x05, 0x06,
+    0x03, 0x2b, 0x65, 0x70, 0x04, 0x22, 0x04, 0x20
+  ]);
+  const pkcs8 = new Uint8Array(pkcs8Prefix.length + seed.length);
+  pkcs8.set(pkcs8Prefix);
+  pkcs8.set(seed, pkcs8Prefix.length);
+  return crypto.subtle.importKey('pkcs8', pkcs8, { name: 'Ed25519' }, false, ['sign']);
+}
+
+async function sha256Hex(data) {
+  const hash = await crypto.subtle.digest('SHA-256', data);
+  return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+async function buildAuthHeaders(method, path, bodyBytes, deviceKid, privateKey) {
+  const timestamp = Math.floor(Date.now() / 1000).toString();
+  const nonce = crypto.randomUUID();
+  const bodyHash = await sha256Hex(bodyBytes);
+  const canonical = `${method}\n${path}\n${timestamp}\n${nonce}\n${bodyHash}`;
+  const sigBuffer = await crypto.subtle.sign('Ed25519', privateKey, new TextEncoder().encode(canonical));
+  return {
+    'X-Device-Kid': deviceKid,
+    'X-Signature': b64urlEncode(sigBuffer),
+    'X-Timestamp': timestamp,
+    'X-Nonce': nonce,
+  };
+}
+
+async function signedFetch(method, path, body) {
+  const apiUrl = document.getElementById('api-url').value.replace(/\/$/, '');
+  const deviceKid = document.getElementById('device-kid').value.trim();
+  const privKeyB64 = document.getElementById('private-key').value.trim();
+
+  if (!deviceKid || !privKeyB64) throw new Error('Device KID and private key are required');
+
+  const privateKey = await importPrivateKey(privKeyB64);
+  const bodyStr = body !== undefined ? JSON.stringify(body) : '';
+  const bodyBytes = new TextEncoder().encode(bodyStr);
+  const headers = await buildAuthHeaders(method, path, bodyBytes, deviceKid, privateKey);
+  headers['Content-Type'] = 'application/json';
+
+  const resp = await fetch(`${apiUrl}${path}`, {
+    method,
+    headers,
+    body: body !== undefined ? bodyStr : undefined,
+  });
+
+  const text = await resp.text();
+  let json;
+  try { json = JSON.parse(text); } catch { json = { raw: text }; }
+
+  if (!resp.ok) {
+    throw new Error(json.error || `HTTP ${resp.status}: ${text}`);
+  }
+  return json;
+}
+
+// ---------------------------------------------------------------------------
+// Test Auth
+// ---------------------------------------------------------------------------
+async function testAuth() {
+  try {
+    log('Testing auth — importing key...', 'info');
+    const privKeyB64 = document.getElementById('private-key').value.trim();
+    await importPrivateKey(privKeyB64);
+    log('Key import OK', 'ok');
+    // Try a simple authenticated call
+    const result = await signedFetch('GET', '/trust/invites/mine', undefined);
+    log(`Auth OK — ${result.invites?.length ?? 0} existing invites`, 'ok');
+  } catch (e) {
+    log(`Auth test failed: ${e.message}`, 'err');
+  }
+}
+
+// ---------------------------------------------------------------------------
+// QR Generation
+// ---------------------------------------------------------------------------
+function generateTestQR() {
+  const testUrl = `${location.origin}/spike-qr.html#accept/test-${Date.now()}`;
+  renderQR(testUrl);
+  log(`Test QR generated: ${testUrl}`, 'ok');
+}
+
+async function createInvite() {
+  try {
+    log('Creating invite...', 'info');
+    const envelope = b64urlEncode(new TextEncoder().encode('spike-test-envelope'));
+    const result = await signedFetch('POST', '/trust/invites', {
+      envelope,
+      delivery_method: 'qr',
+      attestation: {},
+    });
+    log(`Invite created: ${result.id}`, 'ok');
+    log(`Expires: ${result.expires_at}`, 'info');
+
+    const inviteUrl = `${location.origin}/spike-qr.html#accept/${result.id}`;
+    document.getElementById('invite-id').value = result.id;
+    document.getElementById('invite-url').value = inviteUrl;
+    document.getElementById('invite-info').classList.remove('hidden');
+    renderQR(inviteUrl);
+  } catch (e) {
+    log(`Create invite failed: ${e.message}`, 'err');
+  }
+}
+
+function renderQR(text) {
+  const canvas = document.getElementById('qr-canvas');
+  QRCode.toCanvas(canvas, text, {
+    width: 280,
+    margin: 2,
+    color: { dark: '#e0e0e0', light: '#16213e' },
+  }, (err) => {
+    if (err) log(`QR render error: ${err.message}`, 'err');
+  });
+}
+
+// ---------------------------------------------------------------------------
+// QR Scanner
+// ---------------------------------------------------------------------------
+let scanner = null;
+let scanStartTime = null;
+
+async function startScanner() {
+  try {
+    scanStartTime = performance.now();
+    log('Initializing camera...', 'info');
+    scanner = new Html5Qrcode('scanner-region');
+    await scanner.start(
+      { facingMode: 'environment' },
+      { fps: 10, qrbox: { width: 250, height: 250 } },
+      onScanSuccess,
+      () => {} // ignore scan failures (no QR in frame)
+    );
+    const initTime = (performance.now() - scanStartTime).toFixed(0);
+    log(`Camera initialized in ${initTime}ms`, 'ok');
+    document.getElementById('btn-start-scan').classList.add('hidden');
+    document.getElementById('btn-stop-scan').classList.remove('hidden');
+  } catch (e) {
+    log(`Camera error: ${e.message || e}`, 'err');
+  }
+}
+
+async function stopScanner() {
+  if (scanner) {
+    try { await scanner.stop(); } catch {}
+    scanner = null;
+  }
+  document.getElementById('btn-start-scan').classList.remove('hidden');
+  document.getElementById('btn-stop-scan').classList.add('hidden');
+}
+
+function onScanSuccess(decoded) {
+  const latency = (performance.now() - scanStartTime).toFixed(0);
+  log(`Decoded: ${decoded}`, 'ok');
+  log(`Total latency (camera init → decode): ${latency}ms`, 'ok');
+
+  document.getElementById('decoded-text').value = decoded;
+  document.getElementById('scan-latency').value = `${latency}ms`;
+  document.getElementById('scan-result').classList.remove('hidden');
+
+  stopScanner();
+}
+
+// ---------------------------------------------------------------------------
+// Accept invite (from scan or hash)
+// ---------------------------------------------------------------------------
+function checkHashForAccept() {
+  const hash = location.hash;
+  const match = hash.match(/^#accept\/(.+)$/);
+  if (match) {
+    const id = match[1];
+    log(`Invite ID from URL hash: ${id}`, 'info');
+    document.getElementById('decoded-text').value = location.href;
+    document.getElementById('scan-result').classList.remove('hidden');
+  }
+}
+
+async function acceptScannedInvite() {
+  try {
+    const decoded = document.getElementById('decoded-text').value;
+    const match = decoded.match(/#accept\/([0-9a-f-]+)/);
+    if (!match) {
+      log('No invite ID found in decoded URL', 'err');
+      return;
+    }
+    const inviteId = match[1];
+    log(`Accepting invite ${inviteId}...`, 'info');
+    const result = await signedFetch('POST', `/trust/invites/${inviteId}/accept`);
+    log(`Invite accepted! Endorser: ${result.endorser_id}`, 'ok');
+    log(`Accepted at: ${result.accepted_at}`, 'ok');
+  } catch (e) {
+    log(`Accept failed: ${e.message}`, 'err');
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Init
+// ---------------------------------------------------------------------------
+window.addEventListener('load', () => {
+  checkHashForAccept();
+  log('Spike page loaded. Use Generate tab to create QR, Scan tab to read one.', 'info');
+});
+</script>
+</body>
+</html>
