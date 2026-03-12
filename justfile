@@ -336,7 +336,7 @@ lint-workflows:
 
 # Lint shell scripts (requires shellcheck: brew install shellcheck)
 lint-scripts:
-    shellcheck web/bin/*.sh web/scripts/*.sh service/bin/*.sh
+    shellcheck web/bin/*.sh web/scripts/*.sh service/bin/*.sh scripts/*.sh
 
 # Lint Kubernetes manifests (requires kube-linter: brew install kube-linter)
 lint-kube:
@@ -404,6 +404,14 @@ refine-remote *ARGS:
     gh workflow run refine.yml {{ARGS}}
     @echo "✓ Triggered refinement workflow"
     @echo "  Watch: gh run watch --workflow refine.yml"
+
+# =============================================================================
+# CI Performance Analysis
+# =============================================================================
+
+# Run CI performance report for a workflow run (defaults to latest on current branch)
+ci-perf RUN_ID="":
+    python3 scripts/ci-perf-report.py {{RUN_ID}}
 
 # =============================================================================
 # Utility Commands
