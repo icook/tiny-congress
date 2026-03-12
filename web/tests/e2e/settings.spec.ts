@@ -15,8 +15,8 @@ test('settings page shows device list after signup', async ({ page }) => {
   await page.goto('/signup');
   await expect(page.getByLabel(/username/i)).toBeVisible();
   await page.getByLabel(/username/i).fill(username);
-  await page.getByLabel(/^Backup Password$/i).fill('test-password-123');
-  await page.getByLabel(/^Confirm Backup Password$/i).fill('test-password-123');
+  await page.getByLabel(/^Backup Password/i).fill('test-password-123');
+  await page.getByLabel(/^Confirm Backup Password/i).fill('test-password-123');
   await page.getByRole('button', { name: /sign up/i }).click();
   await expect(page.getByText(/account has been created/i)).toBeVisible({ timeout: 15_000 });
 
@@ -48,8 +48,8 @@ test('current device cannot be revoked or renamed', async ({ page }) => {
   await page.goto('/signup');
   await expect(page.getByLabel(/username/i)).toBeVisible();
   await page.getByLabel(/username/i).fill(username);
-  await page.getByLabel(/^Backup Password$/i).fill('test-password-123');
-  await page.getByLabel(/^Confirm Backup Password$/i).fill('test-password-123');
+  await page.getByLabel(/^Backup Password/i).fill('test-password-123');
+  await page.getByLabel(/^Confirm Backup Password/i).fill('test-password-123');
   await page.getByRole('button', { name: /sign up/i }).click();
   await expect(page.getByText(/account has been created/i)).toBeVisible({ timeout: 15_000 });
 
