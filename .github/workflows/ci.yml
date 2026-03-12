@@ -290,7 +290,6 @@ jobs:
       ci: ${{ steps.filter.outputs.ci }}
       # Runner tier outputs — set all at once, each job picks the right size.
       # Toggle: gh variable set USE_ARC_RUNNERS --body "false" --repo icook/tiny-congress
-      runner-nano: ${{ steps.runner.outputs.small }}
       runner-small: ${{ steps.runner.outputs.small }}
       runner-large: ${{ steps.runner.outputs.large }}
       # 'true' when running on ARC self-hosted runners, 'false' for GHA-hosted.
@@ -593,12 +592,17 @@ jobs:
       - name: Check if scan needed
         id: should-scan
         run: |
-          case "${{ matrix.image }}" in
-            tc-api-release) changed="${{ needs.detect-changes.outputs.api }}" ;;
-            tc-ui-release)  changed="${{ needs.detect-changes.outputs.ui }}" ;;
-            postgres)       changed="${{ needs.detect-changes.outputs.postgres }}" ;;
-            *)              changed="true" ;;
-          esac
+          # Force re-scan when CI files change (mirrors build-images logic).
+          if [ "${{ needs.detect-changes.outputs.ci }}" = "true" ]; then
+            changed="true"
+          else
+            case "${{ matrix.image }}" in
+              tc-api-release) changed="${{ needs.detect-changes.outputs.api }}" ;;
+              tc-ui-release)  changed="${{ needs.detect-changes.outputs.ui }}" ;;
+              postgres)       changed="${{ needs.detect-changes.outputs.postgres }}" ;;
+              *)              changed="true" ;;
+            esac
+          fi
           echo "changed=${changed}" >> "$GITHUB_OUTPUT"
 
       - name: Checkout
@@ -1191,6 +1195,7 @@ jobs:
       - unit-tests
       - rust-checks
       - e2e-tests
+      - build-docs
     runs-on: ${{ needs.detect-changes.outputs.runner-small }}
     steps:
       - name: Check results
