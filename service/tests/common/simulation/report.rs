@@ -6,7 +6,10 @@ use std::fmt::Write as _;
 use std::io;
 use std::path::Path;
 
+use sqlx::PgPool;
+use tinycongress_api::trust::constraints::{Eligibility, RoomConstraint};
 use tinycongress_api::trust::engine::TrustEngine;
+use tinycongress_api::trust::repo::{PgTrustRepo, TrustRepo};
 use uuid::Uuid;
 
 use super::{GraphBuilder, Team};
@@ -62,6 +65,35 @@ impl SimulationReport {
             .collect();
 
         Self { anchor_id, scores }
+    }
+
+    /// Write computed scores to `trust__score_snapshots` via `recompute_from_anchor`.
+    ///
+    /// Must be called before `check_eligibility`. Separated from `run()` to keep
+    /// the default path side-effect-free.
+    pub async fn materialize(&self, pool: &PgPool) {
+        let engine = TrustEngine::new(pool.clone());
+        let repo = PgTrustRepo::new(pool.clone());
+        engine
+            .recompute_from_anchor(self.anchor_id, &repo)
+            .await
+            .expect("recompute_from_anchor failed during materialize");
+    }
+
+    /// Check a node's eligibility against a room constraint.
+    ///
+    /// Requires `materialize()` to have been called first (reads from snapshot table).
+    pub async fn check_eligibility(
+        &self,
+        node_id: Uuid,
+        constraint: &dyn RoomConstraint,
+        pool: &PgPool,
+    ) -> Eligibility {
+        let repo = PgTrustRepo::new(pool.clone());
+        constraint
+            .check(node_id, Some(self.anchor_id), &repo)
+            .await
+            .expect("constraint check failed")
     }
 
     /// Get distance for a specific node.
