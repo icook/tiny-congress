@@ -42,7 +42,6 @@ CREATE TABLE reputation__endorsements (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     revoked_at TIMESTAMPTZ,
     weight FLOAT4 NOT NULL DEFAULT 1.0,
-    influence_staked FLOAT4 NOT NULL DEFAULT 0,
     attestation JSONB);
 
 CREATE TABLE reputation__external_identities (
@@ -319,7 +318,6 @@ CREATE UNIQUE INDEX trust__user_influence_pkey ON public.trust__user_influence U
 -- device_keys: uq_device_keys_kid (UNIQUE)
 -- reputation__endorsements: reputation__endorsements_created_at_not_null (CHECK)
 -- reputation__endorsements: reputation__endorsements_id_not_null (CHECK)
--- reputation__endorsements: reputation__endorsements_influence_staked_not_null (CHECK)
 -- reputation__endorsements: reputation__endorsements_pkey (PRIMARY KEY)
 -- reputation__endorsements: reputation__endorsements_subject_id_not_null (CHECK)
 -- reputation__endorsements: reputation__endorsements_topic_not_null (CHECK)
