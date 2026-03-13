@@ -13,6 +13,7 @@ import { AuthRequiredOutlet } from './components/AuthRequiredOutlet';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { AboutPage } from './pages/About.page';
 import { HomePage } from './pages/Home.page';
+import { KeysPage } from './pages/Keys.page';
 import { Layout } from './pages/Layout';
 import { LoginPage } from './pages/Login.page';
 import { PollPage } from './pages/Poll.page';
@@ -101,6 +102,12 @@ const verifyCallbackRoute = createRoute({
   }),
 });
 
+const keysRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: 'keys',
+  component: KeysPage,
+});
+
 const roomsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: 'rooms',
@@ -116,6 +123,7 @@ const pollRoute = createRoute({
 const routeTree = rootRoute.addChildren([
   homeRoute,
   aboutRoute,
+  keysRoute,
   guestOnlyLayout.addChildren([signupRoute, loginRoute]),
   authRequiredLayout.addChildren([settingsRoute, verifyCallbackRoute]),
   roomsRoute,

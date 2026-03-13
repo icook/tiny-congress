@@ -99,12 +99,7 @@ export function SignupForm({
                 </Text>
               </List.Item>
             </List>
-            <Anchor
-              href="https://github.com/icook/tiny-congress/blob/master/docs/domain-model.md"
-              target="_blank"
-              rel="noopener noreferrer"
-              size="xs"
-            >
+            <Anchor component={Link} to="/keys" size="xs">
               Learn more about how TinyCongress keys work →
             </Anchor>
           </Stack>
