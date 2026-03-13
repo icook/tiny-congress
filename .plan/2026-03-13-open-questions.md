@@ -98,6 +98,6 @@ Endorsing someone who later gets denounced should carry consequences. This is "p
 - [ ] **Add weight variance scenarios** (question 4) — mixed-weight topologies in the comparison
 - [ ] **Loss function conversation** (question 7) — needed before automated tuning
 - [ ] **Multi-method weight UI** — #656: add swap method + relationship depth selection to endorsement flow
-- [ ] **ADR-020 ↔ ADR-023 cross-reference** (question 9) — quick edit once ADR-023 is accepted
-- [ ] **Finalize ADR-023** — currently Draft, needs review of weight table values
+- [x] **ADR-020 ↔ ADR-023 cross-reference** (question 9) — done
+- [x] **Finalize ADR-023** — accepted; weight table values are provisional, structural decision is final
 - [ ] **Adjudication process design** (question 3) — governance process for severe slashing; likely its own ADR

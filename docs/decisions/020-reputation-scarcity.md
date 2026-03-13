@@ -85,7 +85,7 @@ Denouncements are recorded but **do not currently affect trust graph traversal**
 ### Continuous influence budget (current implementation)
 - Flexible — different actions can cost different amounts of influence.
 - Rejected for the demo because it's hard to explain. "You have 6.3 influence remaining" doesn't mean anything to a non-technical user. "You have 1 endorsement slot left" does.
-- May be revisited if the system needs variable-cost endorsements (e.g., a high-weight physical QR endorsement costs more than a social referral).
+- Revisited in [ADR-023](023-fixed-slot-variable-weight.md): variable-weight endorsements are supported, but each still costs one slot. The continuous budget model remains rejected.
 
 ### Unlimited endorsements with diminishing returns
 - Each additional endorsement from the same user carries less weight (e.g., weight * 0.8^n).
@@ -102,6 +102,8 @@ Denouncements are recorded but **do not currently affect trust graph traversal**
 - [ADR-018: Handshake protocol](018-handshake-protocol.md) — endorsements are the edges that consume slots
 - [ADR-019: Trust engine computation](019-trust-engine-computation.md) — scores that may drive dynamic slot allocation
 - [ADR-021: Batch reconciliation](021-batch-reconciliation.md) — action budgets regenerate each reconciliation cycle
+- [ADR-023: Fixed slots with variable weight](023-fixed-slot-variable-weight.md) — resolves the variable-cost endorsement question
+- [ADR-024: Denouncement mechanism](024-denouncement-mechanism.md) — denouncer-only edge revocation as baseline
 - [GitHub #624: Trust graph red/blue simulation](https://github.com/icook/tiny-congress/issues/624) — will inform sponsorship risk design
 - TRD §4 (Reputation Scarcity Model) — original slot-based design
 - `service/src/trust/repo/influence.rs` — current continuous influence implementation

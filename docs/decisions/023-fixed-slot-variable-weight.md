@@ -1,7 +1,9 @@
 # ADR-023: Fixed Slots with Variable Weight — No Fractional Budgets
 
 ## Status
-Draft
+Accepted
+
+Weight table values (swap method base weights and relationship depth multipliers) are provisional estimates. The simulation framework (PR #643) is the calibration tool — values may be tuned before launch without revisiting this ADR. The structural decision (fixed slots, variable weight, no fractional budgets) is final.
 
 ## Context
 
