@@ -46,7 +46,7 @@ pub async fn apply_score_penalty(
     distance_penalty: f32,
     diversity_penalty: i32,
 ) -> SimulationReport {
-    let report = SimulationReport::run(g, anchor).await;
+    let mut report = SimulationReport::run(g, anchor).await;
     report.materialize(pool).await;
     // Directly mutate the snapshot
     sqlx::query(
@@ -62,6 +62,7 @@ pub async fn apply_score_penalty(
     .execute(pool)
     .await
     .expect("score penalty UPDATE failed");
+    report.refresh_from_snapshot(pool).await;
     report
 }
 
@@ -87,9 +88,11 @@ pub async fn apply_sponsorship_cascade(
         g.revoke(endorser, target).await;
     }
     // Re-run engine with edges revoked
-    let report = SimulationReport::run(g, anchor).await;
+    let mut report = SimulationReport::run(g, anchor).await;
     report.materialize(pool).await;
-    // Apply penalty to endorsers' snapshots
+    // Apply penalty to endorsers' snapshots. Lighter than the primary
+    // score_penalty (3.0/1) because endorsers are collateral, not the target —
+    // they vouched for a bad actor but aren't the bad actor themselves.
     for &endorser in &endorsers {
         sqlx::query(
             "UPDATE trust__score_snapshots \
@@ -103,5 +106,6 @@ pub async fn apply_sponsorship_cascade(
         .await
         .expect("sponsorship penalty UPDATE failed");
     }
+    report.refresh_from_snapshot(pool).await;
     report
 }

@@ -566,34 +566,40 @@ async fn sim_asymmetric_weight_exploit() {
     let bridge = g.add_node("compromised_bridge", Team::Blue).await;
     g.endorse(anchor, bridge, 1.0).await;
 
-    // Red node with max weight endorsement (weight capped at 1.0 by DB)
+    // Red node with max-weight endorsement. The DB enforces
+    // CHECK (weight > 0 AND weight <= 1.0), so weight=1.0 IS the maximum.
+    // The original design imagined testing weight=10.0 (cost=0.1, distance≈0.1)
+    // to see if extreme closeness substitutes for diversity — but the DB cap
+    // makes that impossible. The cap itself is the defense: no single endorsement
+    // can push distance below cost=1.0. This test documents that at max weight
+    // (cost=1.0), a single-path node still fails diversity constraints.
     let red = g.add_node("red_exploiter", Team::Red).await;
     g.endorse(bridge, red, 1.0).await; // cost = 1/1.0 = 1.0
 
     let report = SimulationReport::run(&g, anchor).await;
     eprintln!("\n=== Asymmetric Weight Exploit ===\n{report}");
 
-    // Assert: red node is close (distance = 1.0 + 1.0 = 2.0)
+    // Assert: red node distance = anchor→bridge (1.0) + bridge→red (1.0) = 2.0
     let red_dist = report.distance(red).expect("red should be reachable");
     assert!(
         (red_dist - 2.0).abs() < 0.01,
         "Asymmetric weight: red node should have distance=2.0, got {red_dist:.3}"
     );
 
-    // Assert: diversity = 1 (only one path)
+    // Assert: diversity = 1 (only one path through compromised_bridge)
     let red_div = report.diversity(red);
     assert_eq!(
         red_div, 1,
         "Asymmetric weight: red node should have diversity=1, got {red_div}"
     );
 
-    // Pipeline: close distance but diversity=1 < min=2 → rejected
+    // Pipeline: even at max weight, diversity=1 < min=2 → rejected
     report.materialize(db.pool()).await;
     let community = CommunityConstraint::new(5.0, 2).expect("valid constraint");
     let eligibility = report.check_eligibility(red, &community, db.pool()).await;
     assert!(
         !eligibility.is_eligible,
-        "Asymmetric weight: red node should fail CommunityConstraint despite close distance"
+        "Asymmetric weight: red node should fail CommunityConstraint (diversity=1 < min=2)"
     );
 
     report
@@ -758,6 +764,23 @@ async fn sim_graph_splitting() {
         report_after.diversity(downstream_a),
         1,
         "After: downstream_a should drop to diversity=1"
+    );
+
+    // Pipeline: materialize after revocation and verify eligibility changes
+    report_after.materialize(db.pool()).await;
+    let a_after = report_after
+        .check_eligibility(downstream_a, &constraint, db.pool())
+        .await;
+    assert!(
+        !a_after.is_eligible,
+        "After: downstream_a should be ineligible (diversity dropped to 1, collateral damage)"
+    );
+    let b_after = report_after
+        .check_eligibility(downstream_b, &constraint, db.pool())
+        .await;
+    assert!(
+        !b_after.is_eligible,
+        "After: downstream_b should be ineligible (unreachable)"
     );
 
     report_after

@@ -96,6 +96,35 @@ impl SimulationReport {
             .expect("constraint check failed")
     }
 
+    /// Refresh in-memory scores from the `trust__score_snapshots` table.
+    ///
+    /// Call this after any direct DB mutations to the snapshot (e.g., score
+    /// penalty UPDATEs) so that `distance()` and `diversity()` reflect the
+    /// actual snapshot state used by `check_eligibility`.
+    pub async fn refresh_from_snapshot(&mut self, pool: &PgPool) {
+        let rows: Vec<(Uuid, Option<f32>, Option<i32>)> = sqlx::query_as(
+            "SELECT user_id, trust_distance, path_diversity \
+             FROM trust__score_snapshots \
+             WHERE context_user_id = $1",
+        )
+        .bind(self.anchor_id)
+        .fetch_all(pool)
+        .await
+        .expect("refresh_from_snapshot query failed");
+
+        let snapshot: HashMap<Uuid, (Option<f32>, i32)> = rows
+            .into_iter()
+            .map(|(uid, dist, div)| (uid, (dist, div.unwrap_or(0))))
+            .collect();
+
+        for score in &mut self.scores {
+            if let Some(&(dist, div)) = snapshot.get(&score.id) {
+                score.distance = dist;
+                score.diversity = div;
+            }
+        }
+    }
+
     /// Get distance for a specific node.
     pub fn distance(&self, node_id: Uuid) -> Option<f32> {
         self.scores.iter().find(|s| s.id == node_id)?.distance
