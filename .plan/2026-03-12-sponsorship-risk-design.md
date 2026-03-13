@@ -2,8 +2,9 @@
 
 **Date:** 2026-03-12
 **Branch:** test/624-trust-graph-simulation
-**Status:** Exploratory — no implementation decisions made yet
+**Status:** Exploratory — no implementation decisions made yet. Blocked on denouncement model.
 **Related:** ADR-020 (reputation scarcity), GitHub #624 (trust graph simulation)
+**Updated:** 2026-03-13 — factored in slots landing (#640), diversity fix (#652), anchor bootstrap resolution
 
 ## Problem Statement
 
@@ -15,11 +16,11 @@ ADR-020 establishes the *principle* that sponsors bear risk for endorsees, but e
 
 ### Architecture (from ADRs 017-021)
 
-- **Discrete endorsement slots** (k=3 demo, k=5 prod) — the scarcity currency
+- **Discrete endorsement slots** (k=3 demo, k=5 prod) — the scarcity currency. **Landed** in PR #640 with verifier exemption.
 - **Daily action budgets** — renewable, use-it-or-lose-it rate limit
 - **24h batch reconciliation** — actions are declared intentions, reconciled at EOD
-- **Trust distance** — recursive CTE, 1/weight cost, 10.0 cutoff
-- **Path diversity** — count of distinct reachable endorsers (approximation)
+- **Trust distance** — recursive CTE, 1/weight cost, 10.0 cutoff. Now filters `topic = 'trust'` (#652).
+- **Vertex connectivity** — exact node-disjoint path count via Edmonds-Karp max-flow (#652). Replaced the old `COUNT(DISTINCT endorser_id)` approximation which was exploitable by dense clusters.
 - **Two-layer split** — platform trust (Sybil resistance) vs room permission (independent gating)
 - **Denouncement budget** — d=2 per user, permanent (non-refundable)
 
@@ -106,24 +107,22 @@ Combining **C (activation gate) + F (graduated activation)** was suggested as a 
 
 ## Verifier Bootstrapping Problem
 
-ADR audit revealed ADR-008 (account-based verifiers) conflicts with the new slot system. Verifier accounts would exhaust k=3 slots after 3 endorsements.
+~~ADR audit revealed ADR-008 (account-based verifiers) conflicts with the new slot system. Verifier accounts would exhaust k=3 slots after 3 endorsements.~~ **Slot exemption resolved** — PR #640 implements verifier bypass in `TrustService.endorse()`.
 
-**User's position:** Platform endorsements (verifiers) should grant large or unlimited slots. This is the bootstrap mechanism — the platform itself attesting humanity. Long-term, system credibility depends on replacing platform endorsements with peer endorsements.
-
-**Unresolved:** How to incentivize users to graduate from platform-only trust to peer-verified trust. Possible: platform endorsements carry low weight (like social referral at 0.3), so platform-bootstrapped users have high trust distance and are incentivized to get real handshakes.
+**Remaining open question:** How to incentivize users to graduate from platform-only trust to peer-verified trust. Possible: platform endorsements carry low weight (like social referral at 0.3), so platform-bootstrapped users have high trust distance and are incentivized to get real handshakes. The simulation harness can test this by modeling verifier endorsements at 0.3 weight and measuring resulting trust distance for verifier-only vs peer-endorsed users.
 
 ## ADR Audit Findings (2026-03-12)
 
 Full audit of ADRs 017-021 against 001-016 identified these issues:
 
 ### Breaking contradictions
-1. **018 vs 020:** `influence_staked` documented as active (018) but targeted for removal (020)
-2. **020 vs 008:** No slot exemption for verifier accounts
+1. ~~**018 vs 020:** `influence_staked` documented as active (018) but targeted for removal (020)~~ **RESOLVED** — migration 15 dropped the column. Remaining table repurpose in #647.
+2. ~~**020 vs 008:** No slot exemption for verifier accounts~~ **RESOLVED** — PR #640 implements verifier bypass.
 3. **021 vs 009:** Sim worker assumes real-time effects; batch model breaks this
 
 ### Architectural tensions
 4. **017 vs 008:** "All humans welcome" vs verifier endorsements gating voting eligibility
-5. **019 vs 018:** Trust anchor's own distance=0 never populated by CTE
+5. ~~**019 vs 018:** Trust anchor's own distance=0 never populated by CTE~~ **RESOLVED** — anchor injected at distance=0 by `compute_distances_from`.
 6. **021 vs 017:** "Real-time" room admission language misleading under 24h batch
 7. **020 vs 021:** Partial-budget ordering rule undefined (5 actions submitted, budget is 3)
 8. **018 vs 008:** `endorser_id` vs `issuer_id` naming divergence
@@ -150,8 +149,8 @@ A bot participates helpfully for months, accumulates endorsements from genuine u
 
 ## Next Steps (suggested, not committed)
 
-1. **Model denouncements** — decide what a denouncement does to the graph before designing risk propagation
-2. **Resolve ADR-008 conflicts** — reframe verifier endorsements under two-layer architecture, add slot exemption
+1. **Model denouncements** — decide what a denouncement does to the graph before designing risk propagation. **This is the critical blocker.** The simulation harness (PR #643) is ready to test denouncement effects once the model is decided.
+2. ~~**Resolve ADR-008 conflicts** — reframe verifier endorsements under two-layer architecture, add slot exemption~~ **Partially resolved** — slot exemption landed (#640). ADR-008 reframing under two-layer model still needed.
 3. **Fix ADR cross-references** — quick cleanup pass on 017-021
-4. **Then return to sponsorship risk** — with denouncement model in hand, evaluate mechanisms A-F
-5. **Red/blue simulation** (#624) — validate chosen mechanism against Sybil attack scenarios
+4. **Then return to sponsorship risk** — with denouncement model in hand, evaluate mechanisms A-F against simulation scenarios
+5. ~~**Red/blue simulation** (#624)~~ **DONE** — PR #643 ships the harness with 6 passing scenarios. Add denouncement experiments as parameterized layers on top of existing scenarios.
