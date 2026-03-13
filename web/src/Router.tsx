@@ -12,6 +12,9 @@ import { Button, Center, Group, Loader, Stack, Text, Title } from '@mantine/core
 import { AuthRequiredOutlet } from './components/AuthRequiredOutlet';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { AboutPage } from './pages/About.page';
+import { DevArchitecturePage } from './pages/DevArchitecture.page';
+import { DevDomainModelPage } from './pages/DevDomainModel.page';
+import { DevIndexPage } from './pages/DevIndex.page';
 import { HomePage } from './pages/Home.page';
 import { KeysPage } from './pages/Keys.page';
 import { Layout } from './pages/Layout';
@@ -41,6 +44,24 @@ const aboutRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: 'about',
   component: AboutPage,
+});
+
+const devIndexRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: 'dev',
+  component: DevIndexPage,
+});
+
+const devArchitectureRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: 'dev/architecture',
+  component: DevArchitecturePage,
+});
+
+const devDomainModelRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: 'dev/domain-model',
+  component: DevDomainModelPage,
 });
 
 // Layout route for guest-only pages (login, signup)
@@ -124,6 +145,9 @@ const routeTree = rootRoute.addChildren([
   homeRoute,
   aboutRoute,
   keysRoute,
+  devIndexRoute,
+  devArchitectureRoute,
+  devDomainModelRoute,
   guestOnlyLayout.addChildren([signupRoute, loginRoute]),
   authRequiredLayout.addChildren([settingsRoute, verifyCallbackRoute]),
   roomsRoute,

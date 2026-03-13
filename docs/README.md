@@ -2,9 +2,13 @@
 
 This directory contains permanent, accepted documentation for TinyCongress.
 
+## Architecture
+
+Start here: [architecture.md](architecture.md) — system diagram, crypto boundary, and request flow. A visual overview of how the major components connect.
+
 ## Domain Model
 
-Start here: [domain-model.md](domain-model.md) — core entities, data invariants, trust boundaries, and the signup flow. Read this before writing code that touches identity, cryptography, or account management.
+[domain-model.md](domain-model.md) — core entities, data invariants, trust boundaries, and the signup flow. Read this before writing code that touches identity, cryptography, or account management.
 
 ## Directory Structure
 
@@ -104,6 +108,7 @@ LLM-specific task guides for AI assistants:
 
 ## Related Documentation
 
+- [architecture.md](architecture.md) - System diagram, crypto boundary, and request flow
 - [domain-model.md](domain-model.md) - Core domain entities, trust boundaries, and invariants
 - [.plan/](../.plan/) - Ephemeral feature specs and tickets (removed on merge)
 - [.scratch/](../.scratch/) - Temporary working notes (deleted after task)

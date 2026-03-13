@@ -1,4 +1,5 @@
 import {
+  IconCode,
   IconDoor,
   IconHome2,
   IconInfoCircle,
@@ -16,6 +17,7 @@ const navLinks = [
   { icon: IconHome2, label: 'Home', path: '/' },
   { icon: IconDoor, label: 'Rooms', path: '/rooms' },
   { icon: IconInfoCircle, label: 'About', path: '/about' },
+  { icon: IconCode, label: 'Dev Docs', path: '/dev' },
 ];
 
 const guestLinks = [
