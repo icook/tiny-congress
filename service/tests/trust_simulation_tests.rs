@@ -12,7 +12,7 @@ use common::simulation::report::SimulationReport;
 use common::simulation::{topology, GraphBuilder, Team};
 use common::test_db::isolated_db;
 use tc_test_macros::shared_runtime_test;
-use tinycongress_api::trust::constraints::CommunityConstraint;
+use tinycongress_api::trust::constraints::{CommunityConstraint, CongressConstraint};
 
 // ---------------------------------------------------------------------------
 // Scenario 1: Hub-and-spoke Sybil attack
@@ -211,6 +211,21 @@ async fn sim_colluding_ring() {
             red.name,
             dist,
             bridge_dist
+        );
+    }
+
+    // Pipeline assertion: materialize scores, then verify ring nodes are
+    // rejected by CongressConstraint (diversity=1 < min_diversity=2).
+    report.materialize(db.pool()).await;
+    let constraint = CongressConstraint::new(2).expect("valid constraint");
+    for red in report.red_nodes() {
+        let eligibility = report
+            .check_eligibility(red.id, &constraint, db.pool())
+            .await;
+        assert!(
+            !eligibility.is_eligible,
+            "Colluding ring: node '{}' should be rejected by CongressConstraint(min_diversity=2), got eligible",
+            red.name
         );
     }
 
