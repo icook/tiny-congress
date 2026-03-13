@@ -9,7 +9,7 @@ use common::factories::AccountFactory;
 use common::test_db::isolated_db;
 use tc_test_macros::shared_runtime_test;
 use tinycongress_api::reputation::repo::{PgReputationRepo, ReputationRepo};
-use tinycongress_api::trust::constraints::{EndorsedByConstraint, RoomConstraint};
+use tinycongress_api::trust::constraints::RoomConstraint;
 use tinycongress_api::trust::engine::TrustEngine;
 use tinycongress_api::trust::repo::{PgTrustRepo, TrustRepo};
 use tinycongress_api::trust::service::{DefaultTrustService, TrustService};
@@ -118,17 +118,30 @@ async fn test_demo_day_flow() {
         .expect("get dave score");
     assert!(dave_score.is_none(), "Dave should be unreachable");
 
-    // Step 6: Verify room constraint — Bob can enter, Dave cannot
-    let endorsed_by = EndorsedByConstraint;
+    // Step 6: Verify room constraint — Bob has identity_verified endorsement, Dave does not
+    // Insert an identity_verified endorsement for Bob (as a verifier would via /verifiers/endorsements)
+    sqlx::query(
+        "INSERT INTO reputation__endorsements (endorser_id, subject_id, topic, weight) \
+         VALUES ($1, $2, 'identity_verified', 1.0)",
+    )
+    .bind(alice.id)
+    .bind(bob.id)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let endorsed_by = tinycongress_api::trust::constraints::EndorsedByConstraint {
+        topic: "identity_verified".to_string(),
+    };
 
     let bob_eligibility = endorsed_by
-        .check(bob.id, Some(alice.id), trust_repo.as_ref())
+        .check(bob.id, None, trust_repo.as_ref())
         .await
         .expect("check bob eligibility");
     assert!(bob_eligibility.is_eligible, "Bob should be eligible");
 
     let dave_eligibility = endorsed_by
-        .check(dave.id, Some(alice.id), trust_repo.as_ref())
+        .check(dave.id, None, trust_repo.as_ref())
         .await
         .expect("check dave eligibility");
     assert!(!dave_eligibility.is_eligible, "Dave should not be eligible");

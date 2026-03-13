@@ -63,17 +63,15 @@ async fn endorse_user(pool: &sqlx::PgPool, account_id: uuid::Uuid, topic: &str) 
         .expect("endorsement");
 }
 
-/// Helper: seed a global trust score snapshot that makes `account_id` eligible to vote.
+/// Helper: insert an `identity_verified` endorsement that makes `account_id` eligible to vote.
 ///
-/// The `EndorsedByConstraint` with a nil anchor checks `trust_repo.get_score(user_id, None)`.
-/// Seeding a score with `trust_distance = Some(1.0)` makes the user reachable and eligible.
+/// `EndorsedByConstraint` (constraint_type = "endorsed_by", config.topic = "identity_verified")
+/// requires an active `reputation__endorsements` row with `topic = 'identity_verified'`.
 async fn make_eligible(pool: &sqlx::PgPool, account_id: uuid::Uuid, _room_id: uuid::Uuid) {
-    use tinycongress_api::trust::repo::{PgTrustRepo, TrustRepo};
-    let trust_repo = PgTrustRepo::new(pool.clone());
-    trust_repo
-        .upsert_score(account_id, None, Some(1.0), Some(1), None)
+    use tinycongress_api::reputation::repo::create_endorsement;
+    create_endorsement(pool, account_id, "identity_verified", None, None, 1.0, None)
         .await
-        .expect("trust score");
+        .expect("identity_verified endorsement");
 }
 
 /// Helper: parse JSON response body.
