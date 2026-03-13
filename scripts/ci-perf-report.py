@@ -358,8 +358,14 @@ def build_concurrency_section(jobs: list[dict]) -> str:
     return "\n".join(lines)
 
 
-def _parse_ci_yml() -> Optional[dict[str, tuple[str, list[str]]]]:
+def _parse_ci_yml(
+    head_sha: str = "",
+) -> Optional[dict[str, tuple[str, list[str]]]]:
     """Parse ci.yml to extract job definitions.
+
+    When *head_sha* is provided, reads ci.yml from that commit via
+    ``git show`` so the dep graph matches the workflow that actually ran.
+    Falls back to the working-tree copy if the git command fails.
 
     Returns {job_id: (name_template, [needs_job_ids])} or None on failure.
     """
@@ -368,13 +374,30 @@ def _parse_ci_yml() -> Optional[dict[str, tuple[str, list[str]]]]:
     except ImportError:
         return None
 
-    ci_path = os.path.join(
-        os.path.dirname(__file__), "..", ".github", "workflows", "ci.yml"
-    )
+    raw: Optional[str] = None
+    if head_sha:
+        try:
+            result = subprocess.run(
+                ["git", "show", f"{head_sha}:.github/workflows/ci.yml"],
+                capture_output=True, text=True, check=True,
+            )
+            raw = result.stdout
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            pass  # fall through to working-tree read
+
+    if raw is None:
+        ci_path = os.path.join(
+            os.path.dirname(__file__), "..", ".github", "workflows", "ci.yml"
+        )
+        try:
+            with open(ci_path) as f:
+                raw = f.read()
+        except OSError:
+            return None
+
     try:
-        with open(ci_path) as f:
-            data = yaml.safe_load(f)
-    except (OSError, yaml.YAMLError):
+        data = yaml.safe_load(raw)
+    except yaml.YAMLError:
         return None
 
     jobs = data.get("jobs")
@@ -418,14 +441,19 @@ def _resolve_needs(
     return resolved
 
 
-def _build_dep_graph(jobs_by_name: dict[str, dict]) -> dict[str, list[str]]:
+def _build_dep_graph(
+    jobs_by_name: dict[str, dict], head_sha: str = ""
+) -> dict[str, list[str]]:
     """Build the CI job dependency graph by parsing ci.yml.
 
     Reads job definitions and `needs:` from the workflow file, resolving job IDs
     to the display names returned by the GitHub API. Matrix jobs are expanded by
     matching API names against the name template prefix.
+
+    When *head_sha* is provided, reads ci.yml from that commit so the graph
+    matches the workflow that actually ran (not the local working tree).
     """
-    ci_jobs = _parse_ci_yml()
+    ci_jobs = _parse_ci_yml(head_sha)
     if ci_jobs is None:
         print(
             "WARNING: Could not parse ci.yml — critical path may be inaccurate",
@@ -449,13 +477,15 @@ def _build_dep_graph(jobs_by_name: dict[str, dict]) -> dict[str, list[str]]:
     return deps
 
 
-def _compute_critical_path_jobs(jobs_by_name: dict[str, dict]) -> list[str]:
+def _compute_critical_path_jobs(
+    jobs_by_name: dict[str, dict], head_sha: str = ""
+) -> list[str]:
     """Return the critical path as a list of job names from first to CI Gate.
 
     Walks backwards from CI Gate, always following the predecessor that
     completed latest (the one that actually held up the next job).
     """
-    deps = _build_dep_graph(jobs_by_name)
+    deps = _build_dep_graph(jobs_by_name, head_sha)
 
     if "CI Gate" not in jobs_by_name:
         return []
@@ -482,14 +512,16 @@ def _compute_critical_path_jobs(jobs_by_name: dict[str, dict]) -> list[str]:
     return path
 
 
-def build_critical_path(jobs: list[dict], run_started_at: datetime) -> str:
+def build_critical_path(
+    jobs: list[dict], run_started_at: datetime, head_sha: str = ""
+) -> str:
     """Format the critical path with per-job queue delay and execution time."""
     jobs_by_name: dict[str, dict] = {}
     for j in jobs:
         if j.get("started_at") and j.get("completed_at"):
             jobs_by_name[j["name"]] = j
 
-    path = _compute_critical_path_jobs(jobs_by_name)
+    path = _compute_critical_path_jobs(jobs_by_name, head_sha)
     if not path:
         return "_CI Gate job not found — cannot compute critical path._"
 
@@ -527,7 +559,7 @@ def build_critical_path(jobs: list[dict], run_started_at: datetime) -> str:
     return fmt_columns(["Job", "Queue", "Exec"], rows)
 
 
-def build_summary(jobs: list[dict], run_started_at: datetime) -> str:
+def build_summary(jobs: list[dict], run_started_at: datetime, head_sha: str = "") -> str:
     completed = [j for j in jobs if j.get("completed_at")]
     if not completed:
         return "_Run still in progress._"
@@ -551,7 +583,7 @@ def build_summary(jobs: list[dict], run_started_at: datetime) -> str:
     # This is the time spent waiting for runners, not doing work.
     exec_on_crit_path = wall_time  # fallback
     jobs_by_name = {j["name"]: j for j in completed}
-    crit_path = _compute_critical_path_jobs(jobs_by_name)
+    crit_path = _compute_critical_path_jobs(jobs_by_name, head_sha)
     if crit_path:
         exec_on_crit_path = 0.0
         for name in crit_path:
@@ -605,6 +637,7 @@ def main() -> None:
         print(f"ERROR: Could not fetch run {run_id}: {exc}", file=sys.stderr)
         sys.exit(1)
 
+    head_sha = run.get("head_sha", "")
     run_started_at = parse_time(run.get("run_started_at") or run.get("created_at"))
     if not run_started_at:
         print("ERROR: Could not parse run start time", file=sys.stderr)
@@ -672,12 +705,12 @@ def main() -> None:
 
     print("── Critical Path ───────────────────────────────────────────────────────")
     print()
-    print(build_critical_path(jobs, run_started_at))
+    print(build_critical_path(jobs, run_started_at, head_sha))
     print()
 
     print("── Summary ─────────────────────────────────────────────────────────────")
     print()
-    print(build_summary(jobs, run_started_at))
+    print(build_summary(jobs, run_started_at, head_sha))
     print()
 
     # Push Grafana annotations
