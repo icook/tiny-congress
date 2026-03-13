@@ -48,7 +48,9 @@ A tier is **PASS** when all gate criteria have evidence. **BLOCKED** when work i
 **Known risks accepted:**
 - BA topology is unrealistically well-connected. Real social graphs will have more clustering and fewer independent paths. This is the primary risk carried forward.
 - Dense max-flow at 1k uses ~4MB — acceptable.
-- No Sybil detection heuristics beyond diversity. At 1k, compromising 2 independent accounts requires real social engineering of 2 separate people — meaningfully hard.
+- No Sybil detection heuristics beyond diversity.
+- **Account compromise vector exists.** The QR handshake requires physical copresence for endorsement *creation*, but existing edges persist after account compromise. An attacker who gains control of an already-endorsed account inherits its graph position without needing to pass any endorsement ceremony. Decay partially mitigates this (compromised-then-abandoned accounts lose weight), but there's a window. At 1k, the number of compromisable accounts is small enough that this is acceptable.
+- **Sybil entry cost decreases with population.** If willingness to sell an endorsement is normally distributed, the cost of the cheapest 2 accounts on independent paths falls as N grows. At 1k this cost is still meaningfully high.
 
 ---
 
@@ -89,14 +91,43 @@ A tier is **PASS** when all gate criteria have evidence. **BLOCKED** when work i
 |---|---|---|
 | Batch reconciliation scales to 10k | Profile `recompute_from_anchor` at 10k. If >10s, need incremental update (recompute affected subgraph only). | Not started |
 | Dijkstra path computation scales | Profile DB-based recursive CTE at 10k. May need to move path-finding out of SQL or add graph-aware indices. | Not started |
-| Sybil detection heuristics exist | At least one heuristic beyond diversity threshold: temporal burst detection OR structural cluster detection. | Not started |
+| Sybil detection: structural heuristic | At least one graph-structural heuristic implemented and tested. See heuristic layer below. | Not started |
+| Sybil detection: temporal heuristic | At least one temporal-pattern heuristic implemented and tested. See heuristic layer below. | Not started |
+| Account compromise threat modeled | Simulation of account takeover scenarios: attacker inherits existing endorsed account's graph position. Measure blast radius and detection feasibility. | Not started |
 | 10k SBM simulation passes Tier 2 tests | Re-run all Tier 2 must-pass tests at 10k. Verify thresholds still hold. | Not started |
 | Trust graph health monitoring | Dashboard showing: mean distance, diversity distribution, reachability %, edge creation rate, denouncement rate, decay churn rate. | Not started |
+
+### Sybil detection heuristic layer
+
+The diversity threshold alone is insufficient at scale. As population grows, the cost of buying/compromising 2 accounts on independent paths decreases (price distribution effect). The heuristic layer raises the effective cost by detecting suspicious patterns that legitimate users don't produce.
+
+**Three heuristic families (at least one from each of the first two required for this tier):**
+
+**1. Structural signals** (graph topology) — hardest to evade
+- Dense subgraph with few external connections (classic Sybil cluster signature)
+- High reciprocity ratio within a subgroup (A→B and B→A for most edges; legitimate networks are less symmetric)
+- Bridge concentration: subgraph where all external paths funnel through 1-2 nodes
+- Low conductance cuts suggesting artificial community boundaries
+- *Why hard to evade:* attacker must "waste" endorsement slots (k=10 cap) on edges that don't serve the attack, just to look legitimate. Directly conflicts with attack goal of maximizing Sybil diversity.
+
+**2. Temporal signals** (when endorsements happen) — moderate evasion cost
+- Burst detection: N endorsements to/from an account within a short window
+- Synchronized creation: multiple accounts created in the same window that later cross-endorse
+- Age-diversity mismatch: account is 2 days old but has 5 endorsements (suspicious velocity)
+- *Why moderate evasion:* attacker can space out actions over weeks, but this increases attack duration and cost. Time decay works in the defender's favor — slow attacks risk edges decaying before the mesh is complete.
+
+**3. Behavioral signals** (how accounts are used) — highest evasion cost
+- Endorsement-only accounts: endorse but never vote or participate
+- Uniform behavior: Sybil accounts act identically (same voting patterns, timing)
+- Endorsement pattern mismatch: endorses people they never interact with on the platform
+- *Why highest evasion:* attacker must simulate realistic platform usage across all Sybil accounts, which costs real human time per account.
 
 **Must-pass tests (to be designed):**
 - All Tier 2 tests at 10k scale
 - `scale_reconciliation_benchmark_10k` — full recompute completes in <10s
-- `scale_sybil_temporal_detection_10k` — burst-created Sybil edges are flagged by temporal heuristic
+- `scale_sybil_dense_subgraph_detection_10k` — Sybil mesh of 20 nodes attached via 3 bridges is flagged by structural heuristic
+- `scale_sybil_temporal_burst_detection_10k` — 10 endorsements from new accounts in 1 hour are flagged
+- `scale_account_compromise_blast_radius_10k` — attacker takes over top-3 betweenness-centrality accounts; measure how many Sybil nodes gain eligibility
 - `scale_incremental_update_10k` — single edge change triggers partial recompute, not full graph
 
 **Key uncertainty:** The DB-based trust engine (recursive CTE for Dijkstra, `FlowGraph` for max-flow) may need architectural changes at this tier. The simulation framework computes everything in-memory with sparse data structures. The engine computes via SQL + in-memory dense matrix. The gap between "simulation proves the math works" and "engine implements it efficiently" widens here.
@@ -113,9 +144,10 @@ A tier is **PASS** when all gate criteria have evidence. **BLOCKED** when work i
 | Recovery playbook documented | Procedures for: detected Sybil attack, compromised bridge node, mass edge decay, administrative edge revocation. | Not started |
 | Anomaly detection operational | Automated alerts for: sudden topology changes, unusual endorsement patterns, diversity distribution shifts. | Not started |
 | 50k SBM simulation passes all tests | All Tier 2-3 tests at 50k. Verify no emergent behavior at scale. | Not started |
-| Sybil cost analysis completed | Empirical estimate: at 50k users, how many accounts are "cheaply" compromisable? Do they cluster on independent paths? | Not started |
+| Sybil cost analysis completed | Empirical estimate: at 50k users, how many accounts are "cheaply" compromisable? Do they cluster on independent paths? Model the cost distribution — if price-to-sell is normal, what does the tail look like? | Not started |
+| Account compromise response procedures | Defined process for: detecting compromised accounts, revoking their edges, notifying affected endorsers, restoring legitimate owner's trust position. | Not started |
 
-**Key uncertainty:** This tier introduces governance questions that simulation alone cannot answer. The adjudication process for severe slashing is a social/political design problem, not a technical one. The "right" quorum, evidence standard, and appeal process depend on community norms that don't exist yet at demo scale.
+**Key uncertainty:** This tier introduces governance questions that simulation alone cannot answer. The adjudication process for severe slashing is a social/political design problem, not a technical one. The "right" quorum, evidence standard, and appeal process depend on community norms that don't exist yet at demo scale. Additionally, the Sybil cost analysis is partly empirical — it depends on the actual user population's behavior and economic incentives, which can't be fully modeled in simulation.
 
 ---
 
@@ -126,12 +158,14 @@ A tier is **PASS** when all gate criteria have evidence. **BLOCKED** when work i
 | Gate criteria | Evidence needed | Status |
 |---|---|---|
 | All Tier 0-4 gates pass | Cumulative evidence from all lower tiers | Not started |
-| Red team exercise completed | Adversary with budget (N accounts, M endorsements) attempts infiltration on test network. Measures actual attack cost vs. theoretical. | Not started |
+| Red team exercise completed | Adversary with budget (N accounts, M endorsements) attempts infiltration on test network. Measures actual attack cost vs. theoretical. Must test both account creation AND account compromise vectors. | Not started |
+| Sybil cost curve validated | Empirical measurement: at 100k, what does it actually cost to get 2 accounts on independent paths? Compare against theoretical model from Tier 4 cost analysis. | Not started |
 | Real topology validation | Test against at least one real social graph dataset (e.g., ego-network data). Verify simulation predictions match. | Not started |
 | Distance threshold validated or tightened | With community-structure data: confirm 5.0 is appropriate or tighten to reduce Sybil attack surface. | Not started |
 | Formal diversity=bridge_count argument documented | Written proof (or verified test coverage) that Menger's theorem guarantee holds for the specific vertex-split construction used in the engine. | Not started |
+| Heuristic detection layer validated against adaptive attacker | Red team exercise includes an attacker who knows the heuristics and actively evades them. Measures residual detection rate. | Not started |
 
-**Key uncertainty:** The gap between synthetic topology testing and real-world behavior. Even SBM graphs are idealized. Real social networks have: degree-correlated clustering, temporal burstiness (people join in waves), geographic/cultural community structure, and adversarial actors who adapt. The red team exercise is the closest proxy for real-world confidence.
+**Key uncertainty:** The gap between synthetic topology testing and real-world behavior. Even SBM graphs are idealized. Real social networks have: degree-correlated clustering, temporal burstiness (people join in waves), geographic/cultural community structure, and adversarial actors who adapt. The red team exercise is the closest proxy for real-world confidence. Additionally, account compromise at scale (credential stuffing, phishing, purchased accounts) is a proven attack vector in other platforms — the trust boundary (Ed25519 keys, no server-side private material) makes it harder but not impossible.
 
 ---
 
@@ -143,8 +177,10 @@ These risks span multiple tiers and could force revisiting earlier gates:
 |---|---|---|---|
 | **Community-structure topology breaks diversity** | Nodes in tight clusters may have diversity=1 (all paths go through same bridge). Diversity threshold of 2 would exclude them. | Test with SBM. If widespread, either lower threshold (accepting more Sybil risk) or incentivize cross-community endorsements. | Tier 2 |
 | **Decay pressure fragments communities** | If most endorsements are intra-community and the community goes inactive, all edges decay simultaneously. | Correlated decay testing on SBM. If severe, consider community-level renewal or longer decay window. | Tier 2 |
+| **Sybil entry cost decreases with population** | If willingness to sell/compromise an endorsement is normally distributed, the cheapest 2 accounts on independent paths get cheaper as N grows. Diversity threshold sets *how many* you need, but not the per-unit cost. | Heuristic detection layer raises effective cost. Structural heuristics force attacker to waste limited slots (k=10) on non-attack edges. Behavioral signals require human-time investment per Sybil. Red team exercise at Tier 5 to empirically measure cost curve. | Tier 3 (heuristics), Tier 5 (empirical) |
+| **Account compromise bypasses endorsement ceremony** | QR handshake ensures endorsement *creation* requires copresence, but account takeover inherits existing edges. Attacker gains graph position without any endorsement ceremony. | Credential-layer defenses (Ed25519 keys, no server-side private key material). Decay mitigates stale compromised accounts. Anomaly detection for behavior change post-compromise. Simulate blast radius of high-centrality account takeover. | Tier 3 |
 | **Engine architecture doesn't scale** | SQL-based path computation + dense max-flow may need replacement, not just optimization. | Profile at each tier. If DB approach hits wall, consider in-memory graph engine (like simulation framework). | Tier 3 |
-| **Sybil strategy evolves** | Attackers adapt to diversity threshold by compromising real accounts rather than creating fake ones. | Sybil cost analysis + red team at Tier 4-5. May need behavioral signals beyond graph structure. | Tier 4 |
+| **Sybil strategy evolves** | Attackers adapt to diversity threshold by compromising real accounts rather than creating fake ones. At scale this is cheaper than social engineering new endorsements. | Heuristic detection layer + behavioral signals. Red team at Tier 5. Accept that sophisticated, well-funded attackers will always be able to compromise some accounts — the question is whether the cost exceeds the value of the attack. | Tier 3 (heuristics), Tier 5 (red team) |
 | **Governance deadlock** | Adjudication quorum too high → can't act on bad actors. Too low → weaponizable. | Governance design ADR. Simulate quorum scenarios. | Tier 4 |
 
 ---
