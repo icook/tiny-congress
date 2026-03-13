@@ -200,14 +200,13 @@ async fn test_path_diversity_independent_branches() {
 }
 
 // ---------------------------------------------------------------------------
-// TRD 6.1: Path diversity — shared branch
+// TRD 6.1: Path diversity — shared branch (vertex connectivity)
 // Setup: Seed → A → B → X AND Seed → A → C → X (both paths share A)
-// Assert: X.path_diversity >= 1
+// Assert: X.path_diversity = 1
 //
-// Note: the approximation counts distinct reachable endorsers of X. In this
-// topology B and C are both reachable from the anchor, so diversity = 2.
-// The TRD acknowledges this is an approximation for demo scale; the key
-// invariant (hub-and-spoke gives diversity=1) still holds.
+// Both paths to X share chokepoint A. Vertex connectivity correctly identifies
+// this — removing A disconnects X from Seed. The old COUNT(DISTINCT endorser_id)
+// approximation incorrectly returned 2 here.
 // ---------------------------------------------------------------------------
 #[shared_runtime_test]
 async fn test_path_diversity_shared_branch() {
@@ -258,11 +257,10 @@ async fn test_path_diversity_shared_branch() {
         .find(|(uid, _)| *uid == x.id)
         .expect("X should have a diversity entry");
 
-    // The approximation gives 2 because B and C are both reachable from anchor.
-    // Key invariant: diversity is positive and reflects multiple endorsers.
-    assert!(
-        *x_diversity >= 1,
-        "X should have at least diversity=1, got {x_diversity}"
+    // Vertex connectivity = 1: both paths share chokepoint A.
+    assert_eq!(
+        *x_diversity, 1,
+        "Both paths to X share chokepoint A — vertex connectivity should be 1, got {x_diversity}"
     );
 }
 
