@@ -1254,8 +1254,6 @@ jobs:
           ssh-key: ${{ secrets.GITOPS_DEPLOY_KEY }}
           ref: main
 
-      - uses: ./.github/actions/collect-telemetry
-
       - name: Install crane
         if: needs.detect-changes.outputs.use-arc == 'true'
         run: |
