@@ -45,6 +45,8 @@
 
 **Open question scoreboard:** 23 questions total. 16 resolved through simulation + ADR acceptance. 4 new scale questions (Q20-Q23). 3 deferred for design/engineering.
 
+**Scale readiness:** See `.plan/2026-03-13-scale-readiness-matrix.md` for the tier-by-tier gate criteria and evidence requirements. Tiers 0-1 PASS. Tier 2 BLOCKED on #680, #681, #682.
+
 ---
 
 ## Mechanism selection
