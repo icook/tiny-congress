@@ -358,6 +358,7 @@ async fn list_invites_handler(
 
 async fn accept_invite_handler(
     Extension(trust_repo): Extension<Arc<dyn TrustRepo>>,
+    Extension(trust_service): Extension<Arc<dyn TrustService>>,
     Path(invite_id): Path<Uuid>,
     auth: AuthenticatedDevice,
 ) -> impl IntoResponse {
@@ -375,6 +376,23 @@ async fn accept_invite_handler(
                         .into_response()
                 }
             };
+
+            // Auto-enqueue endorsement — the stored signed envelope is the endorser's authorization
+            if let Err(e) = trust_service
+                .endorse(
+                    invite.endorser_id,
+                    auth.account_id,
+                    1.0,
+                    Some(invite.attestation.clone()),
+                )
+                .await
+            {
+                tracing::warn!(
+                    "auto-endorse after invite accept failed for endorser={}: {e}",
+                    invite.endorser_id
+                );
+            }
+
             (
                 StatusCode::OK,
                 Json(AcceptInviteResponse {
