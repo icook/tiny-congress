@@ -87,7 +87,7 @@ RUN set -eux; \
     just --version && hadolint --version && actionlint --version && \
     shellcheck --version && helm version --short && python3 --version && \
     yq --version && kubectl version --client && \
-    wasm-pack --version && cargo-llvm-cov --version && \
+    wasm-pack --version && test -x /usr/local/bin/cargo-llvm-cov && \
     cargo-deny --version && cargo-machete --version
 
 # Pre-install Playwright Chromium OS-level dependencies so e2e-tests jobs skip

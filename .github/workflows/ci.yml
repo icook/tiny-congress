@@ -829,7 +829,7 @@ jobs:
       - name: Install cargo-llvm-cov
         run: |
           source .github/tool-versions
-          if ! cargo-llvm-cov --version 2>/dev/null | grep -q "${CARGO_LLVM_COV_VERSION#v}"; then
+          if ! cargo llvm-cov --version 2>/dev/null | grep -q "${CARGO_LLVM_COV_VERSION#v}"; then
             curl -fsSL "https://github.com/taiki-e/cargo-llvm-cov/releases/download/${CARGO_LLVM_COV_VERSION}/cargo-llvm-cov-x86_64-unknown-linux-gnu.tar.gz" \
               | tar xz -C /tmp cargo-llvm-cov
             sudo install /tmp/cargo-llvm-cov /usr/local/bin/
