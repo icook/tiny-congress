@@ -10,6 +10,7 @@ mod common;
 
 use common::simulation::comparison::{ComparisonTable, MechanismComparison};
 use common::simulation::mechanisms;
+use common::simulation::predicates;
 use common::simulation::report::SimulationReport;
 use common::simulation::{topology, GraphBuilder, Team};
 use common::test_db::isolated_db;
@@ -1168,4 +1169,120 @@ async fn sim_weaponization_resistance() {
             "target/simulation/weaponization_resistance.txt",
         ))
         .expect("write weaponization table");
+}
+
+// ---------------------------------------------------------------------------
+// Predicate test 1: hub-and-spoke invariants
+//
+// Builds the same hub-and-spoke topology as Scenario 1 but asserts via
+// predicates instead of raw numeric comparisons.
+// ---------------------------------------------------------------------------
+#[shared_runtime_test]
+async fn sim_predicate_hub_spoke_invariants() {
+    let db = isolated_db().await;
+    let mut g = GraphBuilder::new(db.pool().clone());
+
+    let anchor = g.add_node("anchor", Team::Blue).await;
+    let bridge = g.add_node("bridge", Team::Blue).await;
+    g.endorse(anchor, bridge, 1.0).await;
+
+    let hub = g.add_node("red_hub", Team::Red).await;
+    g.endorse(bridge, hub, 0.3).await;
+    for i in 0..5 {
+        let spoke = g.add_node(&format!("red_spoke_{i}"), Team::Red).await;
+        g.endorse(hub, spoke, 1.0).await;
+    }
+
+    let report = SimulationReport::run(&g, anchor).await;
+
+    let result = predicates::single_attachment_implies_low_diversity(g.spec(), &report);
+    assert!(result.holds, "{}: {}", result.name, result.explanation);
+
+    let result = predicates::red_nodes_blocked(g.spec(), &report, 3.0, 2);
+    assert!(result.holds, "{}: {}", result.name, result.explanation);
+}
+
+// ---------------------------------------------------------------------------
+// Predicate test 2: colluding ring invariants
+// ---------------------------------------------------------------------------
+#[shared_runtime_test]
+async fn sim_predicate_ring_invariants() {
+    let db = isolated_db().await;
+    let mut g = GraphBuilder::new(db.pool().clone());
+
+    let anchor = g.add_node("anchor", Team::Blue).await;
+    let bridge = g.add_node("bridge", Team::Blue).await;
+    g.endorse(anchor, bridge, 1.0).await;
+
+    let ring = topology::colluding_ring(&mut g, "red", Team::Red, 6, 1.0).await;
+    g.endorse(bridge, ring[0], 0.3).await;
+
+    let report = SimulationReport::run(&g, anchor).await;
+
+    let result = predicates::ring_diversity_bounded(g.spec(), &report, &ring, 1);
+    assert!(result.holds, "{}: {}", result.name, result.explanation);
+
+    let result = predicates::red_nodes_blocked(g.spec(), &report, 10.0, 2);
+    assert!(result.holds, "{}: {}", result.name, result.explanation);
+}
+
+// ---------------------------------------------------------------------------
+// Predicate test 3: healthy blue network with red attachment
+// ---------------------------------------------------------------------------
+#[shared_runtime_test]
+async fn sim_predicate_healthy_blue_network() {
+    let db = isolated_db().await;
+    let mut g = GraphBuilder::new(db.pool().clone());
+
+    let anchor = g.add_node("anchor", Team::Blue).await;
+    let blue_web = topology::healthy_web(&mut g, "blue", Team::Blue, 6, 0.5, 1.0).await;
+    g.endorse(anchor, blue_web[0], 1.0).await;
+    g.endorse(anchor, blue_web[1], 1.0).await;
+
+    let (red_hub, _red_spokes) = topology::hub_and_spoke(&mut g, "red", Team::Red, 4, 1.0).await;
+    g.endorse(blue_web[2], red_hub, 0.3).await;
+
+    let report = SimulationReport::run(&g, anchor).await;
+
+    let result = predicates::blue_nodes_reachable(g.spec(), &report);
+    assert!(result.holds, "{}: {}", result.name, result.explanation);
+
+    let result = predicates::red_nodes_blocked(g.spec(), &report, 10.0, 2);
+    assert!(result.holds, "{}: {}", result.name, result.explanation);
+}
+
+// ---------------------------------------------------------------------------
+// Predicate test 4: denouncer-only revocation mechanism
+//
+// ADR-024 baseline: when you denounce someone, your endorsement edge to
+// them is revoked. Target loses the path; blue nodes are unaffected.
+// ---------------------------------------------------------------------------
+#[shared_runtime_test]
+async fn sim_predicate_denouncer_only_revocation() {
+    let db = isolated_db().await;
+    let mut g = GraphBuilder::new(db.pool().clone());
+
+    let anchor = g.add_node("anchor", Team::Blue).await;
+    let bridge = g.add_node("bridge", Team::Blue).await;
+    let target = g.add_node("target", Team::Red).await;
+
+    g.endorse(anchor, bridge, 1.0).await;
+    g.endorse(bridge, target, 0.3).await;
+
+    let before_report = SimulationReport::run(&g, anchor).await;
+    assert!(
+        before_report.distance(target).is_some(),
+        "target should be reachable before revocation"
+    );
+
+    // Denouncement: bridge revokes its endorsement of target
+    g.revoke(bridge, target).await;
+
+    let after_report = SimulationReport::run(&g, anchor).await;
+
+    let result = predicates::red_nodes_blocked(g.spec(), &after_report, 10.0, 1);
+    assert!(result.holds, "{}: {}", result.name, result.explanation);
+
+    let result = predicates::blue_nodes_reachable(g.spec(), &after_report);
+    assert!(result.holds, "{}: {}", result.name, result.explanation);
 }
