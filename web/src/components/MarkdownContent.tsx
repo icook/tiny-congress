@@ -1,4 +1,5 @@
 import Markdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { Typography } from '@mantine/core';
 
 interface MarkdownContentProps {
@@ -10,7 +11,7 @@ interface MarkdownContentProps {
 export function MarkdownContent({ children }: MarkdownContentProps) {
   return (
     <Typography>
-      <Markdown>{children}</Markdown>
+      <Markdown remarkPlugins={[remarkGfm]}>{children}</Markdown>
     </Typography>
   );
 }
