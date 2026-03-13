@@ -59,20 +59,18 @@ export function Navbar({ onNavigate }: NavbarProps) {
       style={{ borderRight: `1px solid ${borderColor}` }}
     >
       <Stack gap={4} style={{ flex: 1 }}>
-        {[...publicNavLinks, ...(isAuthenticated ? authNavLinks : [])].map(
-          (link) => (
-            <NavLink
-              key={link.label}
-              component={Link}
-              to={link.path}
-              label={link.label}
-              leftSection={<link.icon size={18} stroke={1.5} />}
-              active={isActive(link.path)}
-              onClick={onNavigate}
-              fw={500}
-            />
-          )
-        )}
+        {[...publicNavLinks, ...(isAuthenticated ? authNavLinks : [])].map((link) => (
+          <NavLink
+            key={link.label}
+            component={Link}
+            to={link.path}
+            label={link.label}
+            leftSection={<link.icon size={18} stroke={1.5} />}
+            active={isActive(link.path)}
+            onClick={onNavigate}
+            fw={500}
+          />
+        ))}
       </Stack>
 
       {!isAuthenticated ? (
