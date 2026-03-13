@@ -97,6 +97,37 @@ pub async fn fully_connected_cluster(
     nodes
 }
 
+/// Create a hub-and-spoke where edges have staggered creation times.
+///
+/// The hub's first spoke edge is created at `base_time`. Each subsequent spoke's
+/// edge is progressively newer: `spoke_0` at `base_time`, `spoke_1` at
+/// `base_time + interval`, etc.
+///
+/// Returns `(hub_id, spoke_ids)`.
+pub async fn hub_and_spoke_temporal(
+    g: &mut GraphBuilder,
+    prefix: &str,
+    team: Team,
+    spoke_count: usize,
+    weight: f32,
+    base_time: chrono::DateTime<chrono::Utc>,
+    interval: chrono::Duration,
+) -> (Uuid, Vec<Uuid>) {
+    let hub = g.add_node(&format!("{prefix}_hub"), team).await;
+    let mut spokes = Vec::with_capacity(spoke_count);
+    for i in 0..spoke_count {
+        let spoke = g.add_node(&format!("{prefix}_spoke_{i}"), team).await;
+        g.endorse(hub, spoke, weight).await;
+        // Set the creation time on the edge we just added
+        if let Some(edge) = g.spec_mut().all_edges_mut().last_mut() {
+            let step = i32::try_from(i).unwrap_or(i32::MAX);
+            edge.created_at = Some(base_time + interval * step);
+        }
+        spokes.push(spoke);
+    }
+    (hub, spokes)
+}
+
 /// Create a healthy web: nodes with deterministic interconnections.
 ///
 /// `density` is the proportion (0.0-1.0) of possible directed edges to create.
