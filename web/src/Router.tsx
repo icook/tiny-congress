@@ -24,6 +24,7 @@ import { PollPage } from './pages/Poll.page';
 import { RoomsPage } from './pages/Rooms.page';
 import { SettingsPage } from './pages/Settings.page';
 import { SignupPage } from './pages/Signup.page';
+import { TrustPage } from './pages/Trust.page';
 import { VerifyCallbackPage } from './pages/VerifyCallback.page';
 import { useDevice } from './providers/DeviceProvider';
 
@@ -111,6 +112,12 @@ const settingsRoute = createRoute({
   component: SettingsPage,
 });
 
+const trustRoute = createRoute({
+  getParentRoute: () => authRequiredLayout,
+  path: 'trust',
+  component: TrustPage,
+});
+
 const endorseRoute = createRoute({
   getParentRoute: () => authRequiredLayout,
   path: 'endorse',
@@ -159,7 +166,7 @@ const routeTree = rootRoute.addChildren([
   devArchitectureRoute,
   devDomainModelRoute,
   guestOnlyLayout.addChildren([signupRoute, loginRoute]),
-  authRequiredLayout.addChildren([settingsRoute, endorseRoute, verifyCallbackRoute]),
+  authRequiredLayout.addChildren([settingsRoute, trustRoute, endorseRoute, verifyCallbackRoute]),
   roomsRoute,
   pollRoute,
 ]);
