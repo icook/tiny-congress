@@ -1,0 +1,108 @@
+name: Sync issues to project board
+
+on:
+  issues:
+    types: [milestoned, demilestoned, labeled, unlabeled]
+
+permissions:
+  issues: read
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          # Requires a PAT with 'project' scope stored as PROJECT_TOKEN secret.
+          # Create at: https://github.com/settings/tokens/new?scopes=project
+          github-token: ${{ secrets.PROJECT_TOKEN }}
+          script: |
+            const PROJECT_ID = "PVT_kwHOAB5wt84BRqXf";
+            const PRIORITY_FIELD_ID = "PVTSSF_lAHOAB5wt84BRqXfzg_bMU4";
+            const PRIORITY_OPTIONS = {
+              "priority/critical": "79628723",  // P0
+              "priority/high":     "0a877460",  // P1
+              "priority/medium":   "0a877460",  // P1
+              "priority/low":      "da944a9c",  // P2
+            };
+
+            const issue = context.payload.issue;
+            const action = context.payload.action;
+
+            function getPriorityLabel(labels) {
+              const ranked = ["priority/critical", "priority/high", "priority/medium", "priority/low"];
+              return ranked.find(p => labels.some(l => l.name === p)) ?? null;
+            }
+
+            async function getProjectItem(issueNodeId) {
+              const result = await github.graphql(`
+                query($nodeId: ID!) {
+                  node(id: $nodeId) {
+                    ... on Issue {
+                      projectItems(first: 20) {
+                        nodes { id project { id } }
+                      }
+                    }
+                  }
+                }`, { nodeId: issueNodeId });
+              return result.node.projectItems.nodes.find(i => i.project.id === PROJECT_ID) ?? null;
+            }
+
+            async function addToProject(issueNodeId) {
+              const result = await github.graphql(`
+                mutation($projectId: ID!, $contentId: ID!) {
+                  addProjectV2ItemById(input: { projectId: $projectId, contentId: $contentId }) {
+                    item { id }
+                  }
+                }`, { projectId: PROJECT_ID, contentId: issueNodeId });
+              return result.addProjectV2ItemById.item.id;
+            }
+
+            async function archiveItem(itemId) {
+              await github.graphql(`
+                mutation($projectId: ID!, $itemId: ID!) {
+                  archiveProjectV2Item(input: { projectId: $projectId, itemId: $itemId }) {
+                    item { id }
+                  }
+                }`, { projectId: PROJECT_ID, itemId });
+            }
+
+            async function setPriority(itemId, label) {
+              const optionId = PRIORITY_OPTIONS[label];
+              if (!optionId) return;
+              await github.graphql(`
+                mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $optionId: String!) {
+                  updateProjectV2ItemFieldValue(input: {
+                    projectId: $projectId, itemId: $itemId, fieldId: $fieldId,
+                    value: { singleSelectOptionId: $optionId }
+                  }) { projectV2Item { id } }
+                }`, { projectId: PROJECT_ID, itemId, fieldId: PRIORITY_FIELD_ID, optionId });
+            }
+
+            const nodeId = issue.node_id;
+            const priorityLabel = getPriorityLabel(issue.labels ?? []);
+
+            if (action === "milestoned") {
+              let item = await getProjectItem(nodeId);
+              const itemId = item ? item.id : await addToProject(nodeId);
+              console.log(item ? `#${issue.number} already in project` : `Added #${issue.number} to project`);
+              if (priorityLabel) {
+                await setPriority(itemId, priorityLabel);
+                console.log(`Set priority: ${priorityLabel}`);
+              }
+
+            } else if (action === "demilestoned") {
+              const item = await getProjectItem(nodeId);
+              if (item) {
+                await archiveItem(item.id);
+                console.log(`Archived #${issue.number} from project`);
+              }
+
+            } else if (action === "labeled" || action === "unlabeled") {
+              if (!issue.milestone) return;
+              const item = await getProjectItem(nodeId);
+              if (item && priorityLabel) {
+                await setPriority(item.id, priorityLabel);
+                console.log(`Updated priority to ${priorityLabel} for #${issue.number}`);
+              }
+            }
