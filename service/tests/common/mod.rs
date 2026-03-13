@@ -193,11 +193,11 @@ pub mod test_db {
 
     /// Run an async test on the shared runtime.
     /// Use this instead of `#[tokio::test]` to ensure proper async cleanup.
-    pub fn run_test<F>(f: F)
+    pub fn run_test<F>(f: F) -> F::Output
     where
-        F: Future<Output = ()>,
+        F: Future,
     {
-        TEST_RUNTIME.block_on(f);
+        TEST_RUNTIME.block_on(f)
     }
 
     /// Get a reference to the shared test database.

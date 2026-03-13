@@ -11,24 +11,25 @@
 
 mod common;
 
-use std::sync::OnceLock;
-
 use common::simulation::generators::{self, GraphParams};
 use common::simulation::predicates::{self, PredicateResult};
 use common::simulation::report::SimulationReport;
 use common::simulation::{GraphBuilder, Team};
-use common::test_db::isolated_db;
+use common::test_db::{isolated_db, run_test};
 use proptest::prelude::*;
 
-fn shared_runtime() -> &'static tokio::runtime::Runtime {
-    static RT: OnceLock<tokio::runtime::Runtime> = OnceLock::new();
-    RT.get_or_init(|| tokio::runtime::Runtime::new().expect("tokio runtime"))
+/// Materialized graph with its backing database.
+///
+/// Holds the `IsolatedDb` to prevent its `Drop` from terminating connections
+/// while the `GraphBuilder` (which clones the pool) is still in use.
+struct MaterializedGraph {
+    #[allow(dead_code)] // held for Drop — prevents pg_terminate_backend during queries
+    db: common::test_db::IsolatedDb,
+    builder: GraphBuilder,
+    anchor_id: uuid::Uuid,
 }
 
-/// Materialize a generated graph into a `GraphBuilder` backed by an isolated DB.
-///
-/// Returns (builder, anchor_id).
-async fn materialize_graph(gen: &generators::GeneratedGraph) -> (GraphBuilder, uuid::Uuid) {
+async fn materialize_graph(gen: &generators::GeneratedGraph) -> MaterializedGraph {
     let db = isolated_db().await;
     let mut g = GraphBuilder::new(db.pool().clone());
 
@@ -45,7 +46,11 @@ async fn materialize_graph(gen: &generators::GeneratedGraph) -> (GraphBuilder, u
     }
 
     let anchor_id = node_db_ids[0];
-    (g, anchor_id)
+    MaterializedGraph {
+        db,
+        builder: g,
+        anchor_id,
+    }
 }
 
 proptest! {
@@ -56,10 +61,10 @@ proptest! {
     fn prop_single_attachment_implies_low_diversity(
         gen in generators::default_graph()
     ) {
-        let result: PredicateResult = shared_runtime().block_on(async {
-            let (g, anchor_id) = materialize_graph(&gen).await;
-            let report = SimulationReport::run(&g, anchor_id).await;
-            predicates::single_attachment_implies_low_diversity(g.spec(), &report)
+        let result: PredicateResult = run_test(async {
+            let mg = materialize_graph(&gen).await;
+            let report = SimulationReport::run(&mg.builder, mg.anchor_id).await;
+            predicates::single_attachment_implies_low_diversity(mg.builder.spec(), &report)
         });
         prop_assert!(result.holds, "{}: {}", result.name, result.explanation);
     }
@@ -69,10 +74,10 @@ proptest! {
     fn prop_reachable_nodes_have_active_path(
         gen in generators::default_graph()
     ) {
-        let result: PredicateResult = shared_runtime().block_on(async {
-            let (g, anchor_id) = materialize_graph(&gen).await;
-            let report = SimulationReport::run(&g, anchor_id).await;
-            predicates::unreachable_nodes_have_no_distance(g.spec(), &report)
+        let result: PredicateResult = run_test(async {
+            let mg = materialize_graph(&gen).await;
+            let report = SimulationReport::run(&mg.builder, mg.anchor_id).await;
+            predicates::unreachable_nodes_have_no_distance(mg.builder.spec(), &report)
         });
         prop_assert!(result.holds, "{}: {}", result.name, result.explanation);
     }
@@ -96,7 +101,7 @@ proptest! {
         }),
         cluster_size in 2usize..=4,
     ) {
-        let result: PredicateResult = shared_runtime().block_on(async {
+        let result: PredicateResult = run_test(async {
             let db = isolated_db().await;
             let mut g = GraphBuilder::new(db.pool().clone());
 
