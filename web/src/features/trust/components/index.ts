@@ -1,0 +1,1 @@
+export { TrustScoreCard } from './TrustScoreCard';

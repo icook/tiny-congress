@@ -28,6 +28,7 @@ import {
   type Dimension,
   type DimensionVote,
 } from '@/features/rooms';
+import { useTrustScores } from '@/features/trust';
 import { buildVerifierUrl, useVerificationStatus } from '@/features/verification';
 import { useCrypto } from '@/providers/CryptoProvider';
 import { useDevice } from '@/providers/DeviceProvider';
@@ -49,6 +50,8 @@ export function PollPage({ roomId, pollId }: PollPageProps) {
   const voteMutation = useCastVote(roomId, pollId, deviceKid, privateKey, crypto);
   const verificationQuery = useVerificationStatus(deviceKid, privateKey, crypto);
   const isVerified = verificationQuery.data?.isVerified ?? false;
+  const trustScoresQuery = useTrustScores(deviceKid, privateKey, crypto);
+  const hasTrustScore = (trustScoresQuery.data?.length ?? 0) > 0;
 
   const [votes, setVotes] = useState<Record<string, number>>({});
   const [hasInitialized, setHasInitialized] = useState(false);
@@ -224,6 +227,13 @@ export function PollPage({ roomId, pollId }: PollPageProps) {
                   }
                   return null;
                 })()}
+              </Alert>
+            ) : null}
+
+            {isAuthenticated && isVerified && !hasTrustScore ? (
+              <Alert icon={<IconShieldOff size={16} />} color="yellow">
+                You&apos;re verified, but you need endorsements from trusted members to vote in this
+                room. Visit the Trust page to see your status.
               </Alert>
             ) : null}
 

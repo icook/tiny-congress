@@ -6,10 +6,12 @@ import {
   IconInfoCircle,
   IconLogin,
   IconShieldCheck,
+  IconShieldHalfFilled,
   IconUserPlus,
 } from '@tabler/icons-react';
 import { Link, useRouterState } from '@tanstack/react-router';
 import { Badge, Box, NavLink, Stack, useComputedColorScheme, useMantineTheme } from '@mantine/core';
+import { useTrustScores } from '@/features/trust';
 import { buildVerifierUrl, useVerificationStatus } from '@/features/verification';
 import { useCrypto } from '@/providers/CryptoProvider';
 import { useDevice } from '@/providers/DeviceProvider';
@@ -21,7 +23,10 @@ const publicNavLinks = [
   { icon: IconCode, label: 'Dev Docs', path: '/dev' },
 ];
 
-const authNavLinks = [{ icon: IconHeartHandshake, label: 'Endorse', path: '/endorse' }];
+const authNavLinks = [
+  { icon: IconShieldHalfFilled, label: 'Trust', path: '/trust' },
+  { icon: IconHeartHandshake, label: 'Endorse', path: '/endorse' },
+];
 
 const guestLinks = [
   { icon: IconLogin, label: 'Login', path: '/login' },
@@ -41,8 +46,10 @@ export function Navbar({ onNavigate }: NavbarProps) {
   const colorScheme = useComputedColorScheme();
   const { crypto } = useCrypto();
   const verificationQuery = useVerificationStatus(deviceKid, privateKey, crypto);
+  const trustScoresQuery = useTrustScores(deviceKid, privateKey, crypto);
   const isVerified = verificationQuery.data?.isVerified ?? false;
   const isAuthenticated = Boolean(deviceKid);
+  const trustScore = trustScoresQuery.data?.[0] ?? null;
 
   const borderColor = colorScheme === 'dark' ? theme.colors.dark[4] : theme.colors.gray[3];
 
@@ -92,7 +99,29 @@ export function Navbar({ onNavigate }: NavbarProps) {
         </Box>
       ) : (
         <Box pt="sm" style={{ borderTop: `1px solid ${borderColor}` }}>
-          {isVerified ? (
+          {isVerified && trustScore ? (
+            (() => {
+              if (trustScore.distance <= 3.0 && trustScore.path_diversity >= 2) {
+                return (
+                  <Badge color="violet" leftSection={<IconShieldCheck size={14} />} variant="light">
+                    Congress
+                  </Badge>
+                );
+              }
+              if (trustScore.distance <= 6.0 && trustScore.path_diversity >= 1) {
+                return (
+                  <Badge color="blue" leftSection={<IconShieldCheck size={14} />} variant="light">
+                    Community
+                  </Badge>
+                );
+              }
+              return (
+                <Badge color="green" leftSection={<IconShieldCheck size={14} />} variant="light">
+                  Verified
+                </Badge>
+              );
+            })()
+          ) : isVerified ? (
             <Badge color="green" leftSection={<IconShieldCheck size={14} />} variant="light">
               Verified
             </Badge>

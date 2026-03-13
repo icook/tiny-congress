@@ -7,6 +7,7 @@ import { Alert, Badge, Button, Card, Group, Loader, Stack, Text, Title } from '@
 import { notifications } from '@mantine/notifications';
 import { useListDevices, useRenameDevice, useRevokeDevice } from '@/features/identity/api/queries';
 import { DeviceList } from '@/features/identity/components';
+import { TrustScoreCard } from '@/features/trust';
 import { buildVerifierUrl, useVerificationStatus } from '@/features/verification';
 import { useCrypto } from '@/providers/CryptoProvider';
 import { useDevice } from '@/providers/DeviceProvider';
@@ -61,6 +62,8 @@ export function SettingsPage() {
           ) : null}
         </Stack>
       </Card>
+
+      <TrustScoreCard deviceKid={deviceKid} privateKey={privateKey} wasmCrypto={crypto} />
 
       <Card shadow="sm" padding="lg" radius="md" withBorder>
         <Stack gap="md">
