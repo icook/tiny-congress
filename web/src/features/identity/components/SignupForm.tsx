@@ -105,6 +105,11 @@ export function SignupForm({
           </Stack>
         </Card>
 
+        <Text size="sm" c="dimmed">
+          In the future, you&apos;ll be able to set up social recovery and paper backups. For now,
+          your backup password is the only way to access your account on a new device.
+        </Text>
+
         <Stack gap="sm">
           <Title order={3}>What&apos;s next?</Title>
           {verifierUrl ? (
@@ -179,6 +184,11 @@ export function SignupForm({
               error={passwordMismatch}
               disabled={isLoading}
             />
+
+            <Alert icon={<IconAlertTriangle size={16} />} color="yellow" variant="light">
+              If you forget this password, your account cannot be recovered. There is no reset
+              option.
+            </Alert>
 
             {error ? (
               <Alert icon={<IconAlertTriangle size={16} />} title="Signup failed" color="red">

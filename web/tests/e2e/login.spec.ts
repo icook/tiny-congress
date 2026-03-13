@@ -76,7 +76,9 @@ test('login with wrong password shows error', async ({ page, browser }) => {
     await device2.page.getByRole('button', { name: /log in/i }).click();
 
     // Decryption with the wrong password should fail and show an error
-    await expect(device2.page.getByText(/Wrong password or corrupted backup/i)).toBeVisible({
+    await expect(
+      device2.page.getByText(/Incorrect password\. There is no way to reset/i)
+    ).toBeVisible({
       timeout: 30_000,
     });
 
