@@ -1,9 +1,15 @@
 # Trust Graph Red/Blue Sybil Resistance Simulation
 
-> **Status:** Design in progress. Blocked on finalizing trust handshake base abstractions.
+> **Status:** Simulation harness shipped (PR #643). Diversity fix shipped (PR #652). Remaining work: denouncement experiments, sponsorship risk mechanisms.
 
 **Issue:** #624
 **Goal:** Validate the trust engine's Sybil resistance claims by simulating adversarial graph topologies against the real service layer.
+
+### Progress (2026-03-12/13)
+- **Simulation harness built and passing** — 6 named scenarios, all assertions green (PR #643)
+- **Diversity approximation fixed** — replaced exploitable `COUNT(DISTINCT endorser_id)` with exact vertex connectivity via Edmonds-Karp max-flow (PR #652, fixes #648)
+- **Trust anchor bootstrap resolved** — `compute_distances_from` now injects anchor at distance=0 (already on master)
+- **Endorsement slots landed** — k=3 limit enforced with verifier exemption, `influence_staked` dropped (PR #640, migration 15)
 
 ---
 
@@ -35,12 +41,23 @@
 
 **Test pattern:** `#[shared_runtime_test]` + `isolated_db()` + direct `reputation__endorsements` inserts (same as existing `trust_engine_tests.rs`)
 
+## Empirical Findings (from simulation harness, PR #643)
+
+| Scenario | Key result | Status |
+|----------|-----------|--------|
+| Hub-and-spoke Sybil | d=5.333, div=1 for all spokes | Structurally blocked |
+| Chain infiltration | 2/8 red nodes unreachable (distance cutoff), all reachable have div=1 | Distance cutoff works |
+| Colluding ring (6 nodes, single attachment) | div=1 for all ring nodes (post #652 fix) | Blocked by vertex connectivity |
+| Red cluster (5 fully-connected, single attachment) | div=1 for all cluster nodes (post #652 fix) | Blocked by vertex connectivity |
+| Social referral ceiling | Exactly 3 hops reachable at weight 0.3 (d=3.33/hop, cutoff at 10.0) | Distance limit works |
+| Weight calibration | Physical=1.0, Video=1.43, Social=3.33 — target gets div=3 from 3 independent paths | Exact expected ratios |
+
 ## Open Questions — Simulation
 
-- **GraphBuilder node model:** Initial proposal used `enum Team { Blue, Red }` and `SimNode { id, name, team }`. Needs rethinking after handshake base abstractions are finalized — the simulation model should align with whatever the handshake establishes.
-- **Topology generators:** Exact parameters and default values TBD.
-- **Assertion invariants:** Need to define the specific properties we expect to hold (e.g., "red hub-and-spoke nodes never achieve `path_diversity >= 2`", "red chain of length > N exceeds distance cutoff"). These should be derived from the trust engine's actual algorithm properties.
-- **Denouncement simulation:** Denouncements don't currently affect graph traversal. Should the simulation test what *would* happen if they did, or only test current behavior?
+- ~~**GraphBuilder node model:**~~ Resolved — `Team { Blue, Red }` + `SimNode { id, name, team }` works well. Shipped in PR #643.
+- ~~**Topology generators:**~~ Resolved — `hub_and_spoke`, `chain`, `colluding_ring`, `healthy_web` with parameterized prefix/team/count/weight.
+- ~~**Assertion invariants:**~~ Resolved — all 6 scenarios have specific numeric assertions validated against the engine.
+- **Denouncement simulation:** Still open. Denouncements don't affect graph traversal. The harness is ready to test denouncement effects once the denouncement model is decided — add graph mutation helpers and parameterized denouncement layers on top of existing scenarios.
 
 ## Open Questions — Trust Architecture (from ADR audit, 2026-03-12)
 
@@ -48,13 +65,13 @@ Cross-reference: see `.plan/2026-03-12-sponsorship-risk-design.md` for sponsorsh
 
 ### Blocking design gaps
 
-- **Trust anchor bootstrap:** How does the first user (seed node) achieve `trust_distance = 0`? The recursive CTE (ADR-019) starts by finding users the anchor endorses — the anchor itself is never inserted into the result set. No ADR specifies the mechanism for populating the anchor's own score record. This is prerequisite for both simulation and production.
-- **Denouncement model:** What does a denouncement *do* to the graph? Currently recorded but has no traversal effect (ADR-020). Must be modeled before sponsorship risk can be designed. Dependency chain: denouncement model → risk propagation → sponsorship cost.
-- **Verifier slot exemption:** ADR-020 defines endorsement slots (k=3 demo) but has no carve-out for verifier/platform accounts (ADR-008). A bootstrap verifier would exhaust slots after 3 endorsements. Decision: platform endorsements should grant large/unlimited slots as a bootstrap mechanism. Needs to be formalized.
+- ~~**Trust anchor bootstrap:**~~ **RESOLVED** — `compute_distances_from` now injects anchor at distance=0 in the result set. Confirmed working in all 6 simulation scenarios.
+- **Denouncement model:** What does a denouncement *do* to the graph? Currently recorded but has no traversal effect (ADR-020). Must be modeled before sponsorship risk can be designed. Dependency chain: denouncement model → risk propagation → sponsorship cost. **This is the primary remaining blocker.**
+- ~~**Verifier slot exemption:**~~ **RESOLVED** — PR #640 implements verifier bypass of endorsement slot limits in `TrustService.endorse()`.
 
 ### ADR contradictions to resolve
 
-- **`influence_staked` field (ADR-018 vs 020):** ADR-018 documents `influence_staked` as an active schema field. ADR-020 targets continuous influence for removal in favor of discrete slots. 018 should note the field as legacy.
+- ~~**`influence_staked` field (ADR-018 vs 020):**~~ **RESOLVED** — migration 15 dropped `influence_staked` column. `update_influence` removed. Remaining cleanup (`trust__user_influence` table repurpose) tracked in #647.
 - **"Real-time" room admission language (ADR-017 vs 021):** ADR-017 says room admission is "real-time." Under ADR-021's 24h batch, this means up to 24h post-action. Language in 017 needs clarification: "immediate against the latest snapshot" not "instant after handshake."
 - **Room thresholds are room-configurable:** TRD and backend have different default thresholds (Community: distance ≤ 6.0/diversity ≥ 1 vs distance ≤ 5.0/diversity ≥ 2). Per ADR-017, these are room-level policy, not platform constants. ADR-017 should make this explicit.
 - **Verifier endorsements under two-layer model (ADR-008 vs 017):** ADR-008 frames verifier endorsements as gating "voting eligibility" — a platform-level access decision. Under ADR-017's two-layer split, voting eligibility should be a room-layer decision. ADR-008 needs reframing.
@@ -116,9 +133,12 @@ Both scenarios should be modeled as named simulation scenarios once the denounce
 - **ADR-020:** Reputation scarcity — discrete slots (k=3/5), daily action budgets, sponsorship risk (principle only)
 - **ADR-021:** Batch reconciliation — 24h action cadence, declared intentions processed at EOD
 
-### Current backend state
+### Current backend state (as of 2026-03-13)
 - Weighted directed graph: edges in `reputation__endorsements`, cost = `1/weight`
-- Influence budgets: 10.0 default, staked on endorsements, burned on denouncements (ADR-020 proposes replacing with slots)
+- **Endorsement slots** (k=3 demo) — replaced continuous influence. Verifiers exempt. (#640)
+- **Vertex connectivity** — exact node-disjoint path count via Edmonds-Karp max-flow, replacing the old `COUNT(DISTINCT endorser_id)` approximation (#652)
+- **Trust anchor bootstrap** — anchor injected at distance=0 by `compute_distances_from`
+- **Topic filter** — distance CTE and diversity edge loading now filter `topic = 'trust'` (#652)
 - Denouncements stored but **do not affect traversal** yet
 - Room constraints check distance + diversity thresholds (values are room-configurable per ADR-017)
 
@@ -132,10 +152,14 @@ Both scenarios should be modeled as named simulation scenarios once the denounce
 
 - `.plan/2026-03-12-sponsorship-risk-design.md` — sponsorship risk mechanisms (6 candidates evaluated, none selected), ADR audit details, verifier bootstrapping
 - PR #630 (`docs/017-trust-architecture-adrs`) — the ADR series formalizing trust architecture decisions
+- PR #640 (`refactor/636-endorsement-slots`) — endorsement slots implementation (k=3, verifier exemption, influence_staked dropped)
+- PR #643 (`test/624-trust-simulation-harness`) — simulation harness with 6 named scenarios, all passing
+- PR #652 (`fix/648-diversity-vertex-connectivity`) — replaced diversity approximation with exact vertex connectivity
+- #647 — remaining cleanup: `trust__user_influence` table repurpose
 - `~/tiny-congress-notes/historical/adr-component-boundary-contracts.md` (Feb 2026) — three-component modular monolith ADR (Identity / Reputation / Rooms) with `tc_trust::TrustResolver` interface. Has "sort of landed" in the codebase but needs a gap analysis and formal ADR. Defines the `resolve(actor_id, room_trust_policy, identity_state, endorsement_state) → EffectiveContext` contract and "sync, don't query" principle (Rooms cache trust state via events, not live queries). Simulation should model cached reads, not RPC.
 - `~/tiny-congress-notes/research/02_trust_reputation/` — EigenTrust evaluation, multidimensional trust model, endorsement mechanics research
 - `~/tiny-congress-notes/03-05-2026-gemini.md` — the original Gemini brainstorm that produced the trust architecture. Source for coerced handshake and mercenary bot attack vectors.
 
 ## AI Tooling
 
-Brainstormed with Claude Code (Opus 4.6). Design paused pending handshake abstraction work.
+Brainstormed with Claude Code (Opus 4.6).
