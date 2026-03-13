@@ -456,3 +456,437 @@ async fn sim_weight_calibration() {
         )
         .expect("write DOT");
 }
+
+// ---------------------------------------------------------------------------
+// Scenario 7: Multi-point attachment
+//
+// Topology:
+//   anchor (blue) → bridge_a (blue), anchor → bridge_b (blue)
+//   bridge_a → red_cluster[0], bridge_b → red_cluster[1]
+//   Red cluster: 5 fully connected nodes
+//
+// Red cluster attached at TWO blue nodes — diversity=2 for red nodes.
+// This demonstrates that multi-point attachment defeats diversity checks
+// when min_diversity=2.
+// ---------------------------------------------------------------------------
+#[shared_runtime_test]
+async fn sim_multi_point_attachment() {
+    let db = isolated_db().await;
+    let mut g = GraphBuilder::new(db.pool().clone());
+
+    // Blue team
+    let anchor = g.add_node("anchor", Team::Blue).await;
+    let bridge_a = g.add_node("bridge_a", Team::Blue).await;
+    let bridge_b = g.add_node("bridge_b", Team::Blue).await;
+    g.endorse(anchor, bridge_a, 1.0).await;
+    g.endorse(anchor, bridge_b, 1.0).await;
+
+    // Red team: fully connected cluster attached at two points
+    let red_cluster = topology::fully_connected_cluster(&mut g, "red", Team::Red, 5, 1.0).await;
+    g.endorse(bridge_a, red_cluster[0], 0.3).await;
+    g.endorse(bridge_b, red_cluster[1], 0.3).await;
+
+    let report = SimulationReport::run(&g, anchor).await;
+    eprintln!("\n=== Multi-Point Attachment ===\n{report}");
+
+    // Assert: red nodes are reachable
+    for red in report.red_nodes() {
+        assert!(
+            red.distance.is_some(),
+            "Red cluster node '{}' should be reachable",
+            red.name
+        );
+    }
+
+    // Assert: red nodes get diversity=2 (two independent bridge paths)
+    for red in report.red_nodes() {
+        assert_eq!(
+            red.diversity, 2,
+            "Multi-point: red node '{}' should have diversity=2, got {}",
+            red.name, red.diversity
+        );
+    }
+
+    // Pipeline assertion: red nodes PASS CommunityConstraint(5.0, 2)
+    // This is the dangerous case — adversaries that meet the threshold.
+    report.materialize(db.pool()).await;
+    let constraint = CommunityConstraint::new(5.0, 2).expect("valid constraint");
+    for red in report.red_nodes() {
+        let eligibility = report
+            .check_eligibility(red.id, &constraint, db.pool())
+            .await;
+        assert!(
+            eligibility.is_eligible,
+            "Multi-point: red node '{}' should PASS CommunityConstraint(5.0, 2) — this is the attack succeeding",
+            red.name
+        );
+    }
+
+    // But CongressConstraint with higher diversity should still block
+    let strict_constraint = CongressConstraint::new(3).expect("valid constraint");
+    for red in report.red_nodes() {
+        let eligibility = report
+            .check_eligibility(red.id, &strict_constraint, db.pool())
+            .await;
+        assert!(
+            !eligibility.is_eligible,
+            "Multi-point: red node '{}' should be rejected by CongressConstraint(min_diversity=3)",
+            red.name
+        );
+    }
+
+    report
+        .write_dot(
+            &g,
+            std::path::Path::new("target/simulation/multi_point_attachment.dot"),
+        )
+        .expect("write DOT");
+}
+
+// ---------------------------------------------------------------------------
+// Scenario 8: Asymmetric weight exploitation
+//
+// Topology:
+//   anchor (blue) → compromised_bridge (blue) at weight 1.0
+//   compromised_bridge → red_node at weight 10.0 (super high)
+//
+// The red node is very "close" (distance ≈ 1.1) but has diversity=1.
+// Tests that high edge weight cannot substitute for structural diversity.
+// ---------------------------------------------------------------------------
+#[shared_runtime_test]
+async fn sim_asymmetric_weight_exploit() {
+    let db = isolated_db().await;
+    let mut g = GraphBuilder::new(db.pool().clone());
+
+    let anchor = g.add_node("anchor", Team::Blue).await;
+    let bridge = g.add_node("compromised_bridge", Team::Blue).await;
+    g.endorse(anchor, bridge, 1.0).await;
+
+    // Red node with extremely high weight endorsement
+    let red = g.add_node("red_exploiter", Team::Red).await;
+    g.endorse(bridge, red, 10.0).await; // cost = 1/10.0 = 0.1
+
+    let report = SimulationReport::run(&g, anchor).await;
+    eprintln!("\n=== Asymmetric Weight Exploit ===\n{report}");
+
+    // Assert: red node is very close (distance ≈ 1.0 + 0.1 = 1.1)
+    let red_dist = report.distance(red).expect("red should be reachable");
+    assert!(
+        red_dist < 1.5,
+        "Asymmetric weight: red node should be very close (d < 1.5), got {red_dist:.3}"
+    );
+
+    // Assert: diversity = 1 (only one path)
+    let red_div = report.diversity(red);
+    assert_eq!(
+        red_div, 1,
+        "Asymmetric weight: red node should have diversity=1, got {red_div}"
+    );
+
+    // Pipeline: passes EndorsedByConstraint (just needs to be reachable)
+    // but fails CommunityConstraint (diversity=1 < min=2)
+    report.materialize(db.pool()).await;
+    let community = CommunityConstraint::new(5.0, 2).expect("valid constraint");
+    let eligibility = report.check_eligibility(red, &community, db.pool()).await;
+    assert!(
+        !eligibility.is_eligible,
+        "Asymmetric weight: red node should fail CommunityConstraint despite close distance"
+    );
+
+    report
+        .write_dot(
+            &g,
+            std::path::Path::new("target/simulation/asymmetric_weight_exploit.dot"),
+        )
+        .expect("write DOT");
+}
+
+// ---------------------------------------------------------------------------
+// Scenario 9: Phantom edges (near-zero weight)
+//
+// Topology:
+//   anchor (blue) → bridge (blue) at weight 1.0
+//   bridge → red_node at weight 0.001 (cost = 1000.0, beyond 10.0 cutoff)
+//
+// An endorsement with near-zero weight creates a DB edge that is
+// functionally nonexistent — the distance cutoff should exclude it.
+// ---------------------------------------------------------------------------
+#[shared_runtime_test]
+async fn sim_phantom_edges() {
+    let db = isolated_db().await;
+    let mut g = GraphBuilder::new(db.pool().clone());
+
+    let anchor = g.add_node("anchor", Team::Blue).await;
+    let bridge = g.add_node("bridge", Team::Blue).await;
+    g.endorse(anchor, bridge, 1.0).await;
+
+    let red = g.add_node("red_phantom", Team::Red).await;
+    g.endorse(bridge, red, 0.001).await; // cost = 1000.0
+
+    let report = SimulationReport::run(&g, anchor).await;
+    eprintln!("\n=== Phantom Edges ===\n{report}");
+
+    // Assert: red node is unreachable (distance 1.0 + 1000.0 > 10.0 cutoff)
+    assert!(
+        report.distance(red).is_none(),
+        "Phantom edge: red node should be unreachable (cost=1000.0 exceeds cutoff)"
+    );
+
+    // Assert: diversity = 0 (not in reachable set)
+    assert_eq!(
+        report.diversity(red),
+        0,
+        "Phantom edge: red node should have diversity=0"
+    );
+
+    // Pipeline: materialize and verify red is ineligible
+    report.materialize(db.pool()).await;
+    let constraint = CommunityConstraint::new(5.0, 2).expect("valid constraint");
+    let eligibility = report.check_eligibility(red, &constraint, db.pool()).await;
+    assert!(
+        !eligibility.is_eligible,
+        "Phantom edge: unreachable red node should fail all constraints"
+    );
+
+    report
+        .write_dot(
+            &g,
+            std::path::Path::new("target/simulation/phantom_edges.dot"),
+        )
+        .expect("write DOT");
+}
+
+// ---------------------------------------------------------------------------
+// Scenario 10: Graph-splitting attack
+//
+// Topology:
+//   anchor (blue) → cut_vertex (blue) → downstream_a, downstream_b (blue)
+//   anchor → alt_bridge (blue) → downstream_a (provides second path to a)
+//
+// cut_vertex is the only path to downstream_b but NOT to downstream_a.
+// Revoking cut_vertex's edges should disconnect downstream_b but not
+// downstream_a (which has an alternative path via alt_bridge).
+// ---------------------------------------------------------------------------
+#[shared_runtime_test]
+async fn sim_graph_splitting() {
+    let db = isolated_db().await;
+    let mut g = GraphBuilder::new(db.pool().clone());
+
+    let anchor = g.add_node("anchor", Team::Blue).await;
+    let cut_vertex = g.add_node("cut_vertex", Team::Blue).await;
+    let alt_bridge = g.add_node("alt_bridge", Team::Blue).await;
+    let downstream_a = g.add_node("downstream_a", Team::Blue).await;
+    let downstream_b = g.add_node("downstream_b", Team::Blue).await;
+
+    g.endorse(anchor, cut_vertex, 1.0).await;
+    g.endorse(anchor, alt_bridge, 1.0).await;
+    g.endorse(cut_vertex, downstream_a, 1.0).await;
+    g.endorse(cut_vertex, downstream_b, 1.0).await;
+    g.endorse(alt_bridge, downstream_a, 1.0).await;
+    // No alt path to downstream_b
+
+    // --- Before revocation ---
+    let report_before = SimulationReport::run(&g, anchor).await;
+    eprintln!("\n=== Graph Splitting (before) ===\n{report_before}");
+
+    // Both downstream nodes reachable
+    assert!(
+        report_before.distance(downstream_a).is_some(),
+        "Before: downstream_a should be reachable"
+    );
+    assert!(
+        report_before.distance(downstream_b).is_some(),
+        "Before: downstream_b should be reachable"
+    );
+    // downstream_a has diversity=2 (cut_vertex + alt_bridge)
+    assert_eq!(
+        report_before.diversity(downstream_a),
+        2,
+        "Before: downstream_a should have diversity=2"
+    );
+    // downstream_b has diversity=1 (only cut_vertex)
+    assert_eq!(
+        report_before.diversity(downstream_b),
+        1,
+        "Before: downstream_b should have diversity=1"
+    );
+
+    // Pipeline: materialize and check before state
+    report_before.materialize(db.pool()).await;
+    let constraint = CommunityConstraint::new(5.0, 2).expect("valid constraint");
+    let a_before = report_before
+        .check_eligibility(downstream_a, &constraint, db.pool())
+        .await;
+    assert!(
+        a_before.is_eligible,
+        "Before: downstream_a should be eligible (div=2)"
+    );
+    let b_before = report_before
+        .check_eligibility(downstream_b, &constraint, db.pool())
+        .await;
+    assert!(
+        !b_before.is_eligible,
+        "Before: downstream_b should be ineligible (div=1)"
+    );
+
+    // --- Revoke cut_vertex's inbound edge ---
+    g.revoke(anchor, cut_vertex).await;
+
+    let report_after = SimulationReport::run(&g, anchor).await;
+    eprintln!("\n=== Graph Splitting (after) ===\n{report_after}");
+
+    // downstream_a still reachable via alt_bridge
+    assert!(
+        report_after.distance(downstream_a).is_some(),
+        "After: downstream_a should still be reachable via alt_bridge"
+    );
+    // downstream_b disconnected (only path was through cut_vertex)
+    assert!(
+        report_after.distance(downstream_b).is_none(),
+        "After: downstream_b should be unreachable (cut_vertex revoked)"
+    );
+    // downstream_a drops to diversity=1 (only alt_bridge path remains)
+    assert_eq!(
+        report_after.diversity(downstream_a),
+        1,
+        "After: downstream_a should drop to diversity=1"
+    );
+
+    report_after
+        .write_dot(
+            &g,
+            std::path::Path::new("target/simulation/graph_splitting.dot"),
+        )
+        .expect("write DOT");
+}
+
+// ---------------------------------------------------------------------------
+// Scenario 11: Coerced handshake (baseline)
+//
+// Topology:
+//   anchor (blue) → 4 blue web nodes (interconnected, density 0.5)
+//   3 blue web nodes → coercer (red) at weight 1.0 (forced QR handshakes)
+//
+// The coercer has real handshakes from real humans — high diversity.
+// This is a baseline measurement: the coercer SHOULD pass constraints
+// because topologically they look legitimate. Phase 2 tests whether
+// denouncement can dislodge them.
+// ---------------------------------------------------------------------------
+#[shared_runtime_test]
+async fn sim_coerced_handshake() {
+    let db = isolated_db().await;
+    let mut g = GraphBuilder::new(db.pool().clone());
+
+    let anchor = g.add_node("anchor", Team::Blue).await;
+    let blue_web = topology::healthy_web(&mut g, "blue", Team::Blue, 4, 0.5, 1.0).await;
+    // Anchor endorses first two web nodes
+    g.endorse(anchor, blue_web[0], 1.0).await;
+    g.endorse(anchor, blue_web[1], 1.0).await;
+
+    // Coercer: forced handshakes from 3 blue nodes
+    let coercer = g.add_node("coercer", Team::Red).await;
+    g.endorse(blue_web[0], coercer, 1.0).await;
+    g.endorse(blue_web[1], coercer, 1.0).await;
+    g.endorse(blue_web[2], coercer, 1.0).await;
+
+    let report = SimulationReport::run(&g, anchor).await;
+    eprintln!("\n=== Coerced Handshake (baseline) ===\n{report}");
+
+    // Coercer should be close and well-diversified
+    let coercer_dist = report
+        .distance(coercer)
+        .expect("coercer should be reachable");
+    assert!(
+        coercer_dist < 4.0,
+        "Coerced handshake: coercer should be close (d < 4.0), got {coercer_dist:.3}"
+    );
+    let coercer_div = report.diversity(coercer);
+    assert!(
+        coercer_div >= 2,
+        "Coerced handshake: coercer should have diversity >= 2, got {coercer_div}"
+    );
+
+    // Pipeline: coercer passes CommunityConstraint — this is the problem
+    report.materialize(db.pool()).await;
+    let constraint = CommunityConstraint::new(5.0, 2).expect("valid constraint");
+    let eligibility = report
+        .check_eligibility(coercer, &constraint, db.pool())
+        .await;
+    assert!(
+        eligibility.is_eligible,
+        "Coerced handshake: coercer should PASS CommunityConstraint (topologically legitimate)"
+    );
+
+    report
+        .write_dot(
+            &g,
+            std::path::Path::new("target/simulation/coerced_handshake.dot"),
+        )
+        .expect("write DOT");
+}
+
+// ---------------------------------------------------------------------------
+// Scenario 12: Mercenary bot (baseline)
+//
+// Topology:
+//   anchor (blue) → 6 blue web nodes (interconnected)
+//   3 independent blue nodes → mercenary (red) at weight 1.0
+//
+// The mercenary accumulated endorsements through months of legitimate
+// participation. It's indistinguishable from a real user by topology.
+// Baseline measurement before Phase 2 tests denouncement effectiveness.
+// ---------------------------------------------------------------------------
+#[shared_runtime_test]
+async fn sim_mercenary_bot() {
+    let db = isolated_db().await;
+    let mut g = GraphBuilder::new(db.pool().clone());
+
+    let anchor = g.add_node("anchor", Team::Blue).await;
+
+    // Blue web: 6 nodes, anchor endorses first 3 directly
+    let blue_web = topology::healthy_web(&mut g, "blue", Team::Blue, 6, 0.4, 1.0).await;
+    g.endorse(anchor, blue_web[0], 1.0).await;
+    g.endorse(anchor, blue_web[1], 1.0).await;
+    g.endorse(anchor, blue_web[2], 1.0).await;
+
+    // Mercenary: endorsed by 3 independent blue nodes
+    let mercenary = g.add_node("mercenary", Team::Red).await;
+    g.endorse(blue_web[0], mercenary, 1.0).await;
+    g.endorse(blue_web[3], mercenary, 1.0).await;
+    g.endorse(blue_web[5], mercenary, 1.0).await;
+
+    let report = SimulationReport::run(&g, anchor).await;
+    eprintln!("\n=== Mercenary Bot (baseline) ===\n{report}");
+
+    // Mercenary should look like a legitimate, well-connected user
+    let merc_dist = report
+        .distance(mercenary)
+        .expect("mercenary should be reachable");
+    assert!(
+        merc_dist < 4.0,
+        "Mercenary bot: should be close (d < 4.0), got {merc_dist:.3}"
+    );
+    let merc_div = report.diversity(mercenary);
+    assert!(
+        merc_div >= 2,
+        "Mercenary bot: should have diversity >= 2, got {merc_div}"
+    );
+
+    // Pipeline: mercenary passes all constraints — indistinguishable
+    report.materialize(db.pool()).await;
+    let constraint = CommunityConstraint::new(5.0, 2).expect("valid constraint");
+    let eligibility = report
+        .check_eligibility(mercenary, &constraint, db.pool())
+        .await;
+    assert!(
+        eligibility.is_eligible,
+        "Mercenary bot: should PASS CommunityConstraint (topologically legitimate)"
+    );
+
+    report
+        .write_dot(
+            &g,
+            std::path::Path::new("target/simulation/mercenary_bot.dot"),
+        )
+        .expect("write DOT");
+}
