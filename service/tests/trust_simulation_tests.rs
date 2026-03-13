@@ -12,7 +12,7 @@ use common::simulation::report::SimulationReport;
 use common::simulation::{topology, GraphBuilder, Team};
 use common::test_db::isolated_db;
 use tc_test_macros::shared_runtime_test;
-use tinycongress_api::trust::engine::TrustEngine;
+use tinycongress_api::trust::constraints::CommunityConstraint;
 
 // ---------------------------------------------------------------------------
 // Scenario 1: Hub-and-spoke Sybil attack
@@ -46,25 +46,14 @@ async fn sim_hub_and_spoke_sybil_attack() {
         spokes.push(spoke);
     }
 
-    // Run engine
-    let engine = TrustEngine::new(db.pool().clone());
-    let distances = engine
-        .compute_distances_from(anchor)
-        .await
-        .expect("compute_distances_from");
-    let diversities = engine
-        .compute_diversity_from(anchor)
-        .await
-        .expect("compute_diversity_from");
+    // Run engine via SimulationReport
+    let report = SimulationReport::run(&g, anchor).await;
 
     // Assert: all spokes have diversity = 1
     for &spoke in &spokes {
-        let (_, div) = diversities
-            .iter()
-            .find(|(uid, _)| *uid == spoke)
-            .expect("spoke should have diversity entry");
+        let div = report.diversity(spoke);
         assert_eq!(
-            *div, 1,
+            div, 1,
             "Hub-and-spoke: spoke should have diversity=1, got {div}"
         );
     }
@@ -73,14 +62,24 @@ async fn sim_hub_and_spoke_sybil_attack() {
     // anchor→bridge (1.0) + bridge→hub (1/0.3≈3.33) + hub→spoke (1.0) ≈ 5.33
     // Observed: distance=5.333 for all spokes (matches expected math)
     for &spoke in &spokes {
-        let score = distances
-            .iter()
-            .find(|s| s.user_id == spoke)
-            .expect("spoke should be reachable");
-        let dist = score.trust_distance.expect("spoke should have distance");
+        let dist = report.distance(spoke).expect("spoke should be reachable");
         assert!(
             dist >= 3.0,
             "Hub-and-spoke: spoke distance should be >= 3.0 (Congress threshold), got {dist:.3}"
+        );
+    }
+
+    // Pipeline assertion: materialize scores, then verify spokes are
+    // rejected by CommunityConstraint (diversity=1 < min_diversity=2).
+    report.materialize(db.pool()).await;
+    let constraint = CommunityConstraint::new(5.0, 2).expect("valid constraint");
+    for &spoke in &spokes {
+        let eligibility = report
+            .check_eligibility(spoke, &constraint, db.pool())
+            .await;
+        assert!(
+            !eligibility.is_eligible,
+            "Hub-and-spoke: spoke should be rejected by CommunityConstraint(min_diversity=2)"
         );
     }
 }
