@@ -358,64 +358,93 @@ def build_concurrency_section(jobs: list[dict]) -> str:
     return "\n".join(lines)
 
 
-def _build_dep_graph(jobs_by_name: dict[str, dict]) -> dict[str, list[str]]:
-    """Build the CI job dependency graph from known ci.yml structure.
+def _parse_ci_yml() -> Optional[dict[str, tuple[str, list[str]]]]:
+    """Parse ci.yml to extract job definitions.
 
-    Names must match the `name:` field in ci.yml (what the GitHub API returns).
-    Matrix jobs (Build *, Scan *) are discovered dynamically from job names.
+    Returns {job_id: (name_template, [needs_job_ids])} or None on failure.
     """
-    SCAN_PREFIX = "Scan "
-    BUILD_PREFIX = "Build "
+    try:
+        import yaml
+    except ImportError:
+        return None
 
-    deps: dict[str, list[str]] = {
-        "Detect changed paths": [],
-        "Backend checks": ["Detect changed paths"],
-        "Lint Kubernetes manifests": ["Detect changed paths"],
-        "Validate Grafana dashboards": ["Detect changed paths"],
-        "Frontend checks": ["Detect changed paths"],
-        "Static Analysis": ["Detect changed paths"],
-        "Build documentation": ["Detect changed paths"],
-        "Rust checks": ["Detect changed paths"],
-        "Build WASM": ["Detect changed paths"],
-        "Unit tests (Vitest)": ["Detect changed paths", "Build WASM"],
-    }
+    ci_path = os.path.join(
+        os.path.dirname(__file__), "..", ".github", "workflows", "ci.yml"
+    )
+    try:
+        with open(ci_path) as f:
+            data = yaml.safe_load(f)
+    except (OSError, yaml.YAMLError):
+        return None
 
-    # Dynamically add build-images matrix jobs
-    for name in jobs_by_name:
-        if name.startswith(BUILD_PREFIX) and name not in deps:
-            if name in ("Build WASM", "Build documentation"):
-                continue
-            deps[name] = ["Detect changed paths"]
+    jobs = data.get("jobs")
+    if not isinstance(jobs, dict):
+        return None
 
-    # scan-images depend on their corresponding build job
-    for name in jobs_by_name:
-        if name.startswith(SCAN_PREFIX):
-            image = name[len(SCAN_PREFIX):]
-            build_name = f"Build {image}"
-            preds = ["Detect changed paths"]
-            if build_name in jobs_by_name:
-                preds.append(build_name)
-            deps[name] = preds
+    result: dict[str, tuple[str, list[str]]] = {}
+    for job_id, job_def in jobs.items():
+        if not isinstance(job_def, dict):
+            continue
+        name = str(job_def.get("name", job_id))
+        needs = job_def.get("needs", [])
+        if isinstance(needs, str):
+            needs = [needs]
+        result[job_id] = (name, list(needs))
+    return result
 
-    # E2E tests depend on build-images + build-wasm
-    e2e_deps = ["Detect changed paths", "Build WASM"]
-    for name in jobs_by_name:
-        if name.startswith(BUILD_PREFIX) and name not in ("Build WASM", "Build documentation"):
-            e2e_deps.append(name)
-    deps["E2E tests"] = e2e_deps
 
-    # ci-gate depends on everything
-    ci_gate_deps = [
-        "Detect changed paths", "Backend checks", "Lint Kubernetes manifests",
-        "Frontend checks", "Static Analysis", "Validate Grafana dashboards",
-        "Build WASM", "Unit tests (Vitest)", "Rust checks", "E2E tests",
-    ]
-    for name in jobs_by_name:
-        if name.startswith(BUILD_PREFIX) and name not in ("Build WASM", "Build documentation"):
-            ci_gate_deps.append(name)
-        elif name.startswith(SCAN_PREFIX):
-            ci_gate_deps.append(name)
-    deps["CI Gate"] = ci_gate_deps
+def _resolve_needs(
+    needs_ids: list[str],
+    ci_jobs: dict[str, tuple[str, list[str]]],
+    jobs_by_name: dict[str, dict],
+) -> list[str]:
+    """Resolve a list of job IDs from ci.yml `needs:` to API display names.
+
+    Matrix jobs (whose name templates contain `${{`) are expanded by matching
+    API-returned job names against the template prefix.
+    """
+    resolved: list[str] = []
+    for need_id in needs_ids:
+        if need_id not in ci_jobs:
+            continue
+        need_template = ci_jobs[need_id][0]
+        if "${{" in need_template:
+            # Matrix job — match API names by prefix (e.g. "Build " matches
+            # "Build tc-api-release", "Build postgres", etc.)
+            prefix = need_template.split("${{")[0]
+            resolved.extend(n for n in jobs_by_name if n.startswith(prefix))
+        else:
+            resolved.append(need_template)
+    return resolved
+
+
+def _build_dep_graph(jobs_by_name: dict[str, dict]) -> dict[str, list[str]]:
+    """Build the CI job dependency graph by parsing ci.yml.
+
+    Reads job definitions and `needs:` from the workflow file, resolving job IDs
+    to the display names returned by the GitHub API. Matrix jobs are expanded by
+    matching API names against the name template prefix.
+    """
+    ci_jobs = _parse_ci_yml()
+    if ci_jobs is None:
+        print(
+            "WARNING: Could not parse ci.yml — critical path may be inaccurate",
+            file=sys.stderr,
+        )
+        return {}
+
+    deps: dict[str, list[str]] = {}
+    for job_id, (name_template, needs_ids) in ci_jobs.items():
+        resolved = _resolve_needs(needs_ids, ci_jobs, jobs_by_name)
+        if "${{" in name_template:
+            # Matrix job — find all matching API names and give each the
+            # same resolved dependencies.
+            prefix = name_template.split("${{")[0]
+            for api_name in jobs_by_name:
+                if api_name.startswith(prefix):
+                    deps[api_name] = list(resolved)
+        else:
+            deps[name_template] = resolved
 
     return deps
 
