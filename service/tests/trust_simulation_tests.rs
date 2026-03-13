@@ -12,10 +12,11 @@ use common::simulation::comparison::{ComparisonTable, MechanismComparison};
 use common::simulation::mechanisms;
 use common::simulation::predicates;
 use common::simulation::report::SimulationReport;
-use common::simulation::{topology, GraphBuilder, Team};
+use common::simulation::{topology, GraphBuilder, GraphSpec, Team};
 use common::test_db::isolated_db;
 use tc_test_macros::shared_runtime_test;
 use tinycongress_api::trust::constraints::{CommunityConstraint, CongressConstraint};
+use uuid::Uuid;
 
 // ---------------------------------------------------------------------------
 // Scenario 1: Hub-and-spoke Sybil attack
@@ -1285,4 +1286,162 @@ async fn sim_predicate_denouncer_only_revocation() {
 
     let result = predicates::blue_nodes_reachable(g.spec(), &after_report);
     assert!(result.holds, "{}: {}", result.name, result.explanation);
+}
+
+// ---------------------------------------------------------------------------
+// Temporal Scenario 1: Decay reduces edge weight based on age
+//
+// Three edges with different ages: 1 year old, 6 months old, 1 week old.
+// Apply exponential decay (half-life = 6 months = 180 days).
+// Assert that older edges have lower weight than newer ones.
+// This is a pure GraphSpec test — no database needed.
+// ---------------------------------------------------------------------------
+#[test]
+fn sim_temporal_decay_reduces_weight() {
+    use chrono::{Duration, Utc};
+
+    let mut spec = GraphSpec::new();
+    let a = Uuid::from_u128(1);
+    let b = Uuid::from_u128(2);
+    let c = Uuid::from_u128(3);
+    let d = Uuid::from_u128(4);
+    spec.add_node("a", Team::Blue, a);
+    spec.add_node("b", Team::Blue, b);
+    spec.add_node("c", Team::Blue, c);
+    spec.add_node("d", Team::Blue, d);
+
+    let now = Utc::now();
+    let one_year_ago = now - Duration::days(365);
+    let six_months_ago = now - Duration::days(180);
+    let one_week_ago = now - Duration::days(7);
+
+    spec.add_edge_at(a, b, 1.0, one_year_ago); // oldest
+    spec.add_edge_at(a, c, 1.0, six_months_ago); // medium
+    spec.add_edge_at(a, d, 1.0, one_week_ago); // newest
+
+    // Exponential decay: weight * 0.5^(age_days / 180)
+    let decayed = spec.with_decay(
+        now,
+        |age| {
+            let days = age.num_days() as f32;
+            0.5f32.powf(days / 180.0)
+        },
+        0.01,
+    );
+
+    let edges = decayed.all_edges();
+    let old_weight = edges[0].weight; // 1 year old
+    let mid_weight = edges[1].weight; // 6 months old (half-life)
+    let new_weight = edges[2].weight; // 1 week old
+
+    // 1-year-old edge decays to ~0.25 (two half-lives)
+    assert!(
+        old_weight < 0.3,
+        "1-year-old edge should decay below 0.3, got {old_weight:.4}"
+    );
+    // 6-month-old edge decays to ~0.5 (one half-life)
+    assert!(
+        (mid_weight - 0.5).abs() < 0.05,
+        "6-month-old edge should be near 0.5 (one half-life), got {mid_weight:.4}"
+    );
+    // 1-week-old edge decays minimally (< 4% loss)
+    assert!(
+        new_weight > 0.95,
+        "1-week-old edge should stay above 0.95, got {new_weight:.4}"
+    );
+    // Monotonic: older edges have strictly lower weight
+    assert!(
+        old_weight < mid_weight,
+        "1-year edge ({old_weight:.4}) should be less than 6-month edge ({mid_weight:.4})"
+    );
+    assert!(
+        mid_weight < new_weight,
+        "6-month edge ({mid_weight:.4}) should be less than 1-week edge ({new_weight:.4})"
+    );
+
+    // Original spec is not modified (with_decay returns a new spec)
+    let orig_edges = spec.all_edges();
+    assert!(
+        (orig_edges[0].weight - 1.0).abs() < 0.001,
+        "Original spec should be unmodified"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Temporal Scenario 2: Sybil cluster with old edges decays to near-zero
+//
+// A Sybil hub-and-spoke has edges created 1 year ago.
+// A legitimate node has an edge created 1 week ago.
+// After decay, Sybil edges drop near the minimum; legitimate edge stays high.
+// This is a pure GraphSpec test — no database needed.
+// ---------------------------------------------------------------------------
+#[test]
+fn sim_temporal_sybil_window_narrows() {
+    use chrono::{Duration, Utc};
+
+    let mut spec = GraphSpec::new();
+
+    // UUIDs for the Sybil cluster
+    let sybil_hub = Uuid::from_u128(10);
+    let sybil_spoke_0 = Uuid::from_u128(11);
+    let sybil_spoke_1 = Uuid::from_u128(12);
+    let sybil_spoke_2 = Uuid::from_u128(13);
+
+    // UUIDs for the legitimate network
+    let legit_anchor = Uuid::from_u128(20);
+    let legit_user = Uuid::from_u128(21);
+
+    spec.add_node("sybil_hub", Team::Red, sybil_hub);
+    spec.add_node("sybil_spoke_0", Team::Red, sybil_spoke_0);
+    spec.add_node("sybil_spoke_1", Team::Red, sybil_spoke_1);
+    spec.add_node("sybil_spoke_2", Team::Red, sybil_spoke_2);
+    spec.add_node("legit_anchor", Team::Blue, legit_anchor);
+    spec.add_node("legit_user", Team::Blue, legit_user);
+
+    let now = Utc::now();
+    let one_year_ago = now - Duration::days(365);
+    let one_week_ago = now - Duration::days(7);
+
+    // Sybil edges: old (1 year ago)
+    spec.add_edge_at(sybil_hub, sybil_spoke_0, 1.0, one_year_ago);
+    spec.add_edge_at(sybil_hub, sybil_spoke_1, 1.0, one_year_ago);
+    spec.add_edge_at(sybil_hub, sybil_spoke_2, 1.0, one_year_ago);
+
+    // Legitimate edge: recent (1 week ago)
+    spec.add_edge_at(legit_anchor, legit_user, 1.0, one_week_ago);
+
+    // Exponential decay with half-life = 6 months; min_weight = 0.01
+    let decayed = spec.with_decay(
+        now,
+        |age| {
+            let days = age.num_days() as f32;
+            0.5f32.powf(days / 180.0)
+        },
+        0.01,
+    );
+
+    let edges = decayed.all_edges();
+
+    // Sybil edges (old) should decay to near-zero
+    for edge in &edges[0..3] {
+        assert!(
+            edge.weight < 0.3,
+            "Sybil edge (1 year old) should decay below 0.3, got {:.4}",
+            edge.weight
+        );
+    }
+
+    // Legitimate edge (recent) should remain high
+    let legit_weight = edges[3].weight;
+    assert!(
+        legit_weight > 0.95,
+        "Legitimate 1-week-old edge should stay above 0.95, got {legit_weight:.4}"
+    );
+
+    // Confirm the decay gap is substantial (at least 3x difference)
+    let sybil_weight = edges[0].weight;
+    assert!(
+        legit_weight > sybil_weight * 3.0,
+        "Legitimate edge ({legit_weight:.4}) should be 3x stronger than Sybil edge ({sybil_weight:.4})"
+    );
 }

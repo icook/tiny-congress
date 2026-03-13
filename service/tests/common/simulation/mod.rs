@@ -58,6 +58,7 @@ pub struct SimEdge {
     pub to: Uuid,
     pub weight: f32,
     pub revoked: bool,
+    pub created_at: Option<chrono::DateTime<chrono::Utc>>,
 }
 
 // ---------------------------------------------------------------------------
@@ -71,6 +72,7 @@ pub struct SimEdge {
 /// - Generated randomly by proptest's `Arbitrary`
 /// - Passed to predicates for behavioral invariant checking
 /// - Serialized/deserialized for reproducible test cases
+#[derive(Clone)]
 pub struct GraphSpec {
     nodes: Vec<SimNode>,
     edges: Vec<SimEdge>,
@@ -106,6 +108,7 @@ impl GraphSpec {
             to,
             weight,
             revoked: false,
+            created_at: None,
         });
     }
 
@@ -116,6 +119,7 @@ impl GraphSpec {
             to,
             weight,
             revoked: true,
+            created_at: None,
         });
     }
 
@@ -185,6 +189,65 @@ impl GraphSpec {
     /// Number of distinct endorsers of a node (active edges only).
     pub fn endorser_count(&self, node_id: Uuid) -> usize {
         self.inbound_edges(node_id).len()
+    }
+
+    /// Add an edge with a specific creation timestamp.
+    pub fn add_edge_at(
+        &mut self,
+        from: Uuid,
+        to: Uuid,
+        weight: f32,
+        created_at: chrono::DateTime<chrono::Utc>,
+    ) {
+        self.edges.push(SimEdge {
+            from,
+            to,
+            weight,
+            revoked: false,
+            created_at: Some(created_at),
+        });
+    }
+
+    /// Mutable access to all edges (used by topology helpers to set timestamps).
+    pub fn all_edges_mut(&mut self) -> &mut Vec<SimEdge> {
+        &mut self.edges
+    }
+
+    /// Apply time decay to all edges based on their age relative to `now`.
+    ///
+    /// `decay_fn` takes the edge age (as Duration) and returns a weight multiplier
+    /// in [0.0, 1.0]. Edges whose decayed weight falls below `min_weight` are
+    /// clamped to `min_weight` (not removed).
+    pub fn apply_decay(
+        &mut self,
+        now: chrono::DateTime<chrono::Utc>,
+        decay_fn: impl Fn(chrono::Duration) -> f32,
+        min_weight: f32,
+    ) {
+        for edge in &mut self.edges {
+            if edge.revoked {
+                continue;
+            }
+            if let Some(created) = edge.created_at {
+                let age = now - created;
+                let multiplier = decay_fn(age).clamp(0.0, 1.0);
+                edge.weight = (edge.weight * multiplier).max(min_weight);
+            }
+        }
+    }
+
+    /// Create a snapshot of the spec at a given time, with decay applied.
+    ///
+    /// Returns a new `GraphSpec` with decayed weights; does not modify `self`.
+    pub fn with_decay(
+        &self,
+        now: chrono::DateTime<chrono::Utc>,
+        decay_fn: impl Fn(chrono::Duration) -> f32,
+        min_weight: f32,
+    ) -> Self {
+        let mut spec = self.clone();
+        spec.apply_decay(now, decay_fn, min_weight);
+        spec
     }
 }
 
