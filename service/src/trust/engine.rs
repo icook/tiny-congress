@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use sqlx::PgPool;
 use uuid::Uuid;
 
+use crate::trust::max_flow::FlowGraph;
 use crate::trust::repo::TrustRepo;
 
 /// A computed trust score for a single user, relative to an anchor.
@@ -13,7 +14,7 @@ pub struct ComputedScore {
     pub user_id: Uuid,
     /// Minimum weighted hop-count distance from the anchor. `None` if unreachable.
     pub trust_distance: Option<f32>,
-    /// Approximate path diversity (count of distinct reachable direct endorsers).
+    /// Vertex connectivity (maximum number of internally node-disjoint paths) from the anchor.
     pub path_diversity: i32,
 }
 
@@ -24,11 +25,11 @@ struct DistanceRow {
     trust_distance: f32,
 }
 
-/// Intermediate row type for diversity query result.
+/// Intermediate row type for edge loading (diversity computation).
 #[derive(sqlx::FromRow)]
-struct DiversityRow {
-    user_id: Uuid,
-    path_diversity: i32,
+struct EdgeRow {
+    endorser_id: Uuid,
+    subject_id: Uuid,
 }
 
 /// Computes and materializes trust scores from the endorsement graph.
@@ -68,6 +69,7 @@ WITH RECURSIVE trust_graph AS (
     WHERE e.endorser_id = $1
       AND e.revoked_at IS NULL
       AND e.endorser_id IS NOT NULL
+      AND e.topic = 'trust'
 
     UNION ALL
 
@@ -82,6 +84,7 @@ WITH RECURSIVE trust_graph AS (
       AND NOT (e.subject_id = ANY(tg.path))
       AND e.revoked_at IS NULL
       AND e.endorser_id IS NOT NULL
+      AND e.topic = 'trust'
 )
 SELECT user_id, MIN(distance) AS trust_distance
 FROM trust_graph
@@ -116,14 +119,13 @@ GROUP BY user_id
         Ok(scores)
     }
 
-    /// Compute approximate path diversity for each user reachable from `anchor_id`.
+    /// Compute vertex connectivity (exact node-disjoint path count via Edmonds-Karp max-flow)
+    /// for each user reachable from `anchor_id`.
     ///
-    /// The approximation counts, for each target user, the number of distinct
-    /// active endorsers that are themselves reachable from the anchor (including
-    /// the anchor itself). This captures the key sybil-resistance property at
-    /// demo scale: a hub-and-spoke attacker who endorses N users through a single
-    /// node gives those users diversity=1, while a user endorsed by K independent
-    /// reachable nodes gets diversity=K.
+    /// Loads the reachable subgraph into memory and runs max-flow on a vertex-split graph
+    /// (Menger's theorem) to count the maximum number of internally node-disjoint paths
+    /// from the anchor to each target. This is resistant to dense adversarial clusters:
+    /// a fully-connected ring attached through a single bridge node scores diversity=1.
     ///
     /// # Errors
     ///
@@ -132,32 +134,61 @@ GROUP BY user_id
         &self,
         anchor_id: Uuid,
     ) -> Result<Vec<(Uuid, i32)>, sqlx::Error> {
-        // Step 1: collect all reachable user IDs (including the anchor itself).
+        // Step 1: collect all reachable user IDs (the anchor is included in the distance results).
         let distances = self.compute_distances_from(anchor_id).await?;
-        let mut reachable: Vec<Uuid> = distances.iter().map(|s| s.user_id).collect();
-        reachable.push(anchor_id);
+        let reachable: Vec<Uuid> = distances.iter().map(|s| s.user_id).collect();
 
-        // Step 2: for each target user, count distinct active endorsers in the reachable set.
-        let rows: Vec<DiversityRow> = sqlx::query_as(
+        // Step 2: build a stable index map Uuid → usize for the reachable set.
+        let index_map: HashMap<Uuid, usize> = reachable
+            .iter()
+            .enumerate()
+            .map(|(i, &id)| (id, i))
+            .collect();
+        let n = reachable.len();
+
+        // Step 3: load all edges within the reachable subgraph.
+        let edges: Vec<EdgeRow> = sqlx::query_as(
             r"
-SELECT
-    e.subject_id                        AS user_id,
-    COUNT(DISTINCT e.endorser_id)::int  AS path_diversity
-FROM reputation__endorsements e
-WHERE e.revoked_at IS NULL
-  AND e.endorser_id IS NOT NULL
-  AND e.endorser_id = ANY($1)
-GROUP BY e.subject_id
+SELECT endorser_id, subject_id
+FROM reputation__endorsements
+WHERE revoked_at IS NULL
+  AND endorser_id IS NOT NULL
+  AND topic = 'trust'
+  AND endorser_id = ANY($1)
+  AND subject_id = ANY($1)
             ",
         )
         .bind(&reachable)
         .fetch_all(&self.pool)
         .await?;
 
-        Ok(rows
-            .into_iter()
-            .map(|r| (r.user_id, r.path_diversity))
-            .collect())
+        // Step 4: build the FlowGraph from the edge list.
+        let mut graph = FlowGraph::new(n);
+        for edge in &edges {
+            if let (Some(&from), Some(&to)) = (
+                index_map.get(&edge.endorser_id),
+                index_map.get(&edge.subject_id),
+            ) {
+                graph.add_edge(from, to);
+            }
+        }
+
+        // Step 5: the anchor index in the reachable list (always index 0 since
+        // compute_distances_from inserts it first).
+        let anchor_index = index_map.get(&anchor_id).copied().unwrap_or(0);
+
+        // Step 6: for each reachable node except the anchor, compute vertex connectivity.
+        let results = reachable
+            .iter()
+            .enumerate()
+            .filter(|(_, &id)| id != anchor_id)
+            .map(|(node_index, &user_id)| {
+                let connectivity = graph.vertex_connectivity(anchor_index, node_index);
+                (user_id, connectivity)
+            })
+            .collect();
+
+        Ok(results)
     }
 
     /// Run both computations and write the results to `trust__score_snapshots`.
