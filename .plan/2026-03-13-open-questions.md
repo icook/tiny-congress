@@ -6,26 +6,29 @@
 
 ---
 
-## Current state (2026-03-13)
+## Current state (2026-03-13, updated)
 
-**Where things stand:** The simulation harness is built and tested (shipped in PR #663). GraphSpec extraction and proptest/temporal extensions are on PR #673 (pending CI). Three denouncement mechanisms have been simulated; two are rejected, one is the chosen baseline. Three draft ADRs need simulation evidence to accept.
+**Where things stand:** Phase 1 (denouncer-only revocation validation → ADR-024) and Phase 2 (weight variance stress-testing → ADR-023 confirmed) are complete. PR #673 merged. Phase 3 (time decay → ADR-025) is in progress. 31+ named adversarial scenarios run; all mechanism decisions are now backed by simulation evidence.
 
 **Active branches/PRs:**
 - **PR #643** (`test/624-trust-simulation-harness`) — this `.plan/` design workspace. Reference only, not meant to merge.
-- **PR #673** (`feature/662-graphspec-extraction`) — GraphSpec extraction, behavioral predicates, proptest integration, temporal extensions. Must merge before Phase 1 can start.
+- **PR #673** (`feature/662-graphspec-extraction`) — GraphSpec extraction, behavioral predicates, proptest integration, temporal extensions. **Merged.**
+- **PR #678** — adversarial simulation suite (Phase 1 + Phase 2 deliverables). ADR-024 accepted with evidence.
 - **`sim/open-questions-workspace`** — latest updates to this doc and the phased plan.
 
-**Key decisions already made:**
+**Key decisions finalized:**
 - Nuclear edge removal: REJECTED (weaponizable)
 - Score penalty: REJECTED (stacks linearly, weaponizable)
-- Denouncer-only revocation: CHOSEN as baseline mechanism (ADR-024 draft)
+- Denouncer-only revocation: CHOSEN and ACCEPTED (ADR-024, 2026-03-13)
+- ADR-023: ACCEPTED with weight table stress-tested across adversarial topologies
 - Loss function: bias defensive — false negatives >> false positives in cost. Blue casualties from cascade acceptable. Asymmetry narrows at scale.
 - Renewal mechanism: re-swap (no new UX needed)
 - Denouncement propagation = sponsorship cascade (same mechanism, not separate concepts)
+- Penalty operating point: 2.0 distance / -1 diversity (confirmed by sweep)
 
-**What's next:** Phase 1 of the simulation plan — validate denouncer-only revocation + cascade against adversarial topologies to accept ADR-024. See `.plan/2026-03-13-simulation-phases-plan.md` for the full 14-step plan.
+**What's next:** Phase 3 — time decay simulation to accept ADR-025. See `.plan/2026-03-13-simulation-phases-plan.md` for the full plan.
 
-**Open question scoreboard:** 19 questions total. 7 resolved (Q1-2 mechanism rejection, Q7 loss function, Q9 cross-ref, Q13 renewal, Q17 cascade=propagation, plus ADR-023 accepted). 10 answerable by simulation (Q4-6, Q8, Q12, Q14-16, Q18-19). 2 deferred for design (Q3 adjudication, #656 weight UI).
+**Open question scoreboard:** 19 questions total. 16 resolved (Q1-2 mechanism rejection, Q4-6 weight variance, Q7 loss function, Q8 propagation penalty values, Q9 cross-ref, Q13 renewal, Q16-19 propagation/cascade, Q17 cascade=propagation, plus ADR-023 and ADR-024 accepted). 3 remaining (Q12 decay model, Q14 slot auto-release, Q15 temporal simulation). 2 deferred for design (Q3 adjudication, #656 weight UI).
 
 ---
 
@@ -122,17 +125,21 @@ Endorsing someone who later gets denounced should carry consequences. This is "p
 - [x] **Q17 resolved** — denouncement propagation IS the sponsorship cascade, same mechanism
 
 ### Phase 1: Validate denouncer-only revocation → accept ADR-024
-- [ ] Add `apply_denouncer_revocation(denouncer, target)` to mechanisms.rs
-- [ ] Re-run comparison with all 4 mechanisms across existing adversarial scenarios
-- [ ] New scenario: coordinated denouncement (3 independent denouncers vs. well-connected target)
-- [ ] New scenario: insufficient denouncement (single denouncer vs. well-connected target, confirm survival)
-- [ ] **Simulate propagation** (Q8, Q16, Q18, Q19) — run `apply_sponsorship_cascade` alongside denouncer-only revocation; sweep penalty values (Q8); test one-hop vs. multi-hop (Q16); test proportionality scaling (Q18); verify no circular cascades (Q19)
-- [ ] Accept ADR-024 with simulation evidence
+- [x] Add `apply_denouncer_revocation(denouncer, target)` to mechanisms.rs
+- [x] Re-run comparison with all 4 mechanisms across existing adversarial scenarios
+- [x] New scenario: coordinated denouncement (3 independent denouncers vs. well-connected target)
+- [x] New scenario: insufficient denouncement (single denouncer vs. well-connected target, confirm survival)
+- [x] **Simulate propagation** (Q8, Q16, Q18, Q19) — run `apply_sponsorship_cascade` alongside denouncer-only revocation; sweep penalty values (Q8); test one-hop vs. multi-hop (Q16); test proportionality scaling (Q18); verify no circular cascades (Q19)
+- [x] Accept ADR-024 with simulation evidence
+
+Complete — ADR-024 accepted with 31 simulation tests (PR #678)
 
 ### Phase 2: Weight variance → stress-test ADR-023
-- [ ] Mixed-weight adversarial scenarios using ADR-023 table values (Q4)
-- [ ] Weight sweep on mercenary-bot scenario (Q5 calibration criteria)
-- [ ] Verify Sybil at max-weight still fails diversity checks (Q6)
+- [x] Mixed-weight adversarial scenarios using ADR-023 table values (Q4)
+- [x] Weight sweep on mercenary-bot scenario (Q5 calibration criteria)
+- [x] Verify Sybil at max-weight still fails diversity checks (Q6)
+
+Complete — weight table stress-tested across adversarial topologies (PR #678)
 
 ### Phase 3: Time decay experiments → accept ADR-025
 - [ ] Compare 3 decay functions: exponential, step, linear (Q12)
