@@ -45,7 +45,7 @@
 
 "Low-Medium" at 100k is not a problem to solve — it's the nature of adversarial systems at scale. Confidence improves over time with operational experience but never reaches "proven."
 
-**Open question scoreboard:** 23 questions total. 16 resolved through simulation + ADR acceptance. 4 new scale questions (Q20-Q23). 3 deferred for design/engineering.
+**Open question scoreboard:** 28 questions total. 17 resolved (16 via simulation + ADR acceptance, Q21 ticketed). 4 scale questions (Q20, Q22-Q23). 5 design spikes (Q24-Q28). 2 deferred.
 
 **Scale readiness:** See `.plan/2026-03-13-scale-readiness-matrix.md` for the tier-by-tier gate criteria and evidence requirements. Tiers 0-1 PASS. Tier 2 BLOCKED on #680, #681, #682.
 
@@ -148,30 +148,61 @@ See `.plan/2026-03-13-scale-analysis-findings.md` for full analysis. Summary:
 ### Open questions (scale)
 
 20. **Real topology modeling.** BA produces unrealistically high connectivity. Need community-structure generators (stochastic block model: dense intra-community, sparse inter-community) to test whether thresholds hold for realistic social graphs. **Ticket: #680.**
-21. **Engine sparse max-flow migration.** When to migrate? Current dense impl works at demo scale (~100). Sparse impl proven correct. Could port incrementally. **Ticket: #681.**
+21. ~~**Engine sparse max-flow migration.**~~ **TICKETED (#685).** Sparse Edmonds-Karp implementation proven in simulation framework. Port to engine.
 22. **Sybil mesh countermeasures.** With diversity=bridge_count proven, what additional detection beyond the diversity threshold? Options: temporal analysis (simultaneous endorsements), graph structure (dense cluster with few external connections), behavioral signals. **Ticket: #682.**
 23. **Community-structure testing.** Stochastic block model graphs to re-run all scale tests. Would surface whether current thresholds need adjustment for realistic social structure. Part of #680.
 
 ---
 
-## Next actions (roughly prioritized)
+## Design spikes needed (not yet ticketable)
 
-### Done (mechanism phases)
-- [x] **Phase 1: ADR-024 accepted** — denouncer-only revocation validated with 31 simulation scenarios (PR #678)
-- [x] **Phase 2: ADR-023 stress-tested** — weight variance scenarios, max-weight Sybil still fails diversity (PR #678)
-- [x] **Phase 3: ADR-025 accepted** — step function decay (1.0/0.5/0.0), temporal adversarial scenarios (PR #679)
-- [x] **All 4 trust ADRs accepted** — mechanism design phase complete
+These items are identified but need design work before they can be scoped into implementation tickets.
 
-### Done (scale simulation)
-- [x] **Scale simulation framework** — BA graph generation, sparse max-flow, Sybil mesh analysis (PR #684)
-- [x] **Scale confidence assessment** — high to 5k, medium to 10k, low-medium to 100k
+24. **Sybil detection heuristics design.** Three families identified (structural, temporal, behavioral — see scale readiness matrix Tier 3) but no concrete design exists. Questions: which specific heuristics to implement first? What thresholds? How to integrate with the trust engine (advisory flag vs hard gate)? What false positive rate is acceptable? How do heuristics interact with each other? The red team doc notes that structural heuristics force attackers to waste endorsement slots (hardest to evade), making them the highest-value first target.
 
-### Active (scale hardening)
-- [ ] **Community-structure topology testing** (#680) — stochastic block model graphs, re-run scale tests
-- [ ] **Correlated failure scenarios** (#682) — realistic cohort clustering, not just BA redundancy
-- [ ] **Engine sparse max-flow migration** (#681) — port sparse Edmonds-Karp to `service/src/trust/max_flow.rs`
+25. **Multi-phase attack campaign simulation framework.** Red team doc identifies a systematic blind spot: all current simulations test single-mechanism effects on static topologies. Real attacks are multi-phase (infiltrate → establish trust → create mesh → attack). Need: a campaign builder or DSL that models sequential attacker actions with cumulative graph mutations. This is framework design, not a scenario addition.
 
-### Deferred (needs design, not simulation)
-- [ ] **Multi-method weight UI** — #656: add swap method + relationship depth selection to endorsement flow
-- [ ] **Adjudication process design** (Q3) — governance process for severe slashing; its own ADR
-- [ ] **Sybil mesh countermeasures** (#682) — temporal/structural detection beyond diversity threshold
+26. **Adjudication/governance process design.** The mechanism for severe action (full disconnection, slashing) is explicitly deferred to a governance process. Questions: who can raise a motion to slash? What quorum of diverse, deeply-trusted users is required? What evidence format? What appeal process? This is a social/political design problem that can only be informed by real community norms — it's premature to design before a community exists. Likely its own ADR.
+
+27. **Account compromise detection and response procedures.** Red team doc A2 identifies account takeover as P0. The blast radius simulation (#690) tests the *impact*, but the *response* is undesigned. Questions: how to detect behavior change post-compromise? How to revoke compromised edges and notify affected endorsers? How to restore the legitimate owner's trust position? Is there an account recovery path when root key is lost? The Ed25519 trust boundary makes this harder — there's no "password reset" equivalent.
+
+28. **Anchor redundancy / multi-anchor design.** The anchor is a single point of failure. All trust measurements are relative to one root node. Questions: can the system support multiple anchors? What does trust mean when measured from different roots? How does anchor rotation work? This is a fundamental architecture question with no current design. Priority is low at demo scale but P2 for 100k (red team A5).
+
+---
+
+## Next actions — launch ticket tracker
+
+All tickets on the "Demo: Friends & Family (Mar 20)" milestone. Grouped by dependency and priority.
+
+### Done (mechanism design — complete)
+- [x] **Phase 1: ADR-024 accepted** — denouncer-only revocation (PR #678)
+- [x] **Phase 2: ADR-023 stress-tested** — weight variance (PR #678)
+- [x] **Phase 3: ADR-025 accepted** — step function decay (PR #679)
+- [x] **Phase 4: Scale simulation** — BA graphs, Sybil mesh analysis, sparse max-flow (PR #684)
+
+### Demo blockers
+- [ ] **#665** — CRITICAL: verified users can't vote (trust graph unreachable from room anchor)
+- [ ] **#656** — weight selection UI (expose ADR-023 table)
+- [ ] **#657** — wire denouncement to edge revocation backend (ADR-024)
+- [ ] **#658** — denouncement UI component
+- [ ] **#687** — trust score dashboard polish
+- [ ] **#688** — seed demo trust graph data
+
+### Growth prerequisites (needed before scaling past demo)
+- [ ] **#685** — engine sparse max-flow migration
+- [ ] **#686** — engine time decay integration (ADR-025)
+- [ ] **#647** — repurpose trust__user_influence table for slot model
+
+### Scale hardening (needed for 5k-10k confidence)
+- [ ] **#680** — SBM topology generation + threshold validation
+- [ ] **#681** — sophisticated Sybil mesh topologies
+- [ ] **#682** — correlated failure simulation
+- [ ] **#690** — account compromise blast radius simulation
+- [ ] **#689** — graph health monitoring dashboard
+
+### Needs design spike (see Q24-Q28 above)
+- [ ] Sybil detection heuristics (Q24)
+- [ ] Multi-phase attack campaign simulation (Q25)
+- [ ] Adjudication/governance process (Q26)
+- [ ] Account compromise response procedures (Q27)
+- [ ] Anchor redundancy (Q28)
