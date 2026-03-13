@@ -239,7 +239,9 @@ export function PollPage({ roomId, pollId }: PollPageProps) {
 
             {voteMutation.isError ? (
               <Alert icon={<IconAlertTriangle size={16} />} color="red">
-                {voteMutation.error.message}
+                {voteMutation.error.message.includes('trust graph')
+                  ? "Your account isn't yet connected to this room's trust network. Ask an existing member to endorse you, or try a different room."
+                  : voteMutation.error.message}
               </Alert>
             ) : null}
 

@@ -2,7 +2,7 @@
  * Developer documentation index — lists available technical reference pages.
  */
 
-import { IconBook2, IconCode } from '@tabler/icons-react';
+import { IconBook2, IconBrandGithub, IconCode } from '@tabler/icons-react';
 import { Link } from '@tanstack/react-router';
 import { Anchor, Badge, Card, Group, SimpleGrid, Stack, Text, Title } from '@mantine/core';
 
@@ -37,7 +37,10 @@ export function DevIndexPage() {
         <Anchor component={Link} to="/about">
           About
         </Anchor>
-        .
+        .{' '}
+        <Anchor href="https://github.com/icook/tiny-congress" target="_blank" rel="noopener">
+          <IconBrandGithub size={14} style={{ verticalAlign: 'text-bottom' }} /> Source on GitHub
+        </Anchor>
       </Text>
 
       <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
