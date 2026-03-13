@@ -392,6 +392,116 @@ async fn endorse_rejects_weight_zero() {
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 }
 
+// ─── Accept Invite auto-endorsement ──────────────────────────────────────────
+
+#[shared_runtime_test]
+async fn test_accept_invite_auto_enqueues_endorsement() {
+    let db = isolated_db().await;
+    let pool = db.pool().clone();
+
+    // Sign up endorser
+    let (app, endorser_keys, endorser_id) =
+        signup_and_get_account("inviteendorser", db.pool()).await;
+
+    // Sign up acceptor
+    let (json2, acceptor_keys) = valid_signup_with_keys("inviteacceptor");
+    let resp2 = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/auth/signup")
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(json2))
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+    let body2 = axum::body::to_bytes(resp2.into_body(), 1024 * 1024)
+        .await
+        .expect("body2");
+    let j2: Value = serde_json::from_slice(&body2).expect("json2");
+    let acceptor_id: uuid::Uuid = j2["account_id"]
+        .as_str()
+        .expect("account_id")
+        .parse()
+        .expect("uuid");
+
+    // Endorser creates an invite
+    let envelope_bytes = b"signed-invite-envelope";
+    let envelope_b64 = tc_crypto::encode_base64url(envelope_bytes);
+    let invite_body = serde_json::json!({
+        "envelope": envelope_b64,
+        "delivery_method": "qr",
+        "attestation": { "note": "auto-endorse test" }
+    })
+    .to_string();
+
+    let create_req = build_authed_request(
+        Method::POST,
+        "/trust/invites",
+        &invite_body,
+        &endorser_keys.device_signing_key,
+        &endorser_keys.device_kid,
+    );
+    let create_resp = app
+        .clone()
+        .oneshot(create_req)
+        .await
+        .expect("create response");
+    assert_eq!(create_resp.status(), StatusCode::CREATED);
+
+    let create_json = json_body(create_resp).await;
+    let invite_id = create_json["id"].as_str().expect("invite id");
+
+    // Acceptor accepts the invite
+    let accept_uri = format!("/trust/invites/{invite_id}/accept");
+    let accept_req = build_authed_request(
+        Method::POST,
+        &accept_uri,
+        "",
+        &acceptor_keys.device_signing_key,
+        &acceptor_keys.device_kid,
+    );
+    let accept_resp = app
+        .clone()
+        .oneshot(accept_req)
+        .await
+        .expect("accept response");
+    assert_eq!(accept_resp.status(), StatusCode::OK);
+
+    let accept_json = json_body(accept_resp).await;
+    assert_eq!(
+        accept_json["endorser_id"].as_str().expect("endorser_id"),
+        endorser_id.to_string()
+    );
+
+    // Assert a pending endorsement action exists for the endorser
+    use tinycongress_api::trust::repo::{PgTrustRepo, TrustRepo};
+    let trust_repo = PgTrustRepo::new(pool);
+    let pending = trust_repo
+        .claim_pending_actions(10)
+        .await
+        .expect("claim_pending_actions");
+
+    let endorse_action = pending.iter().find(|a| {
+        a.actor_id == endorser_id
+            && a.action_type == "endorse"
+            && a.payload["subject_id"]
+                .as_str()
+                .map(|s| s == acceptor_id.to_string())
+                .unwrap_or(false)
+    });
+
+    assert!(
+        endorse_action.is_some(),
+        "expected a pending endorse action for endorser={endorser_id} subject={acceptor_id}, \
+         found actions: {pending:?}"
+    );
+
+    let _ = (endorser_keys, acceptor_keys); // suppress unused warnings
+}
+
 #[shared_runtime_test]
 async fn endorse_rejects_weight_above_one() {
     let db = isolated_db().await;

@@ -47,6 +47,8 @@
     "dayjs": "^1.11.19",
     "hash-wasm": "^4.12.0",
     "idb": "^8.0.3",
+    "qr-scanner": "^1.4.2",
+    "qrcode.react": "^4.2.0",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
     "react-error-boundary": "^6.0.3",

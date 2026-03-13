@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>QR Handshake Spike</title>
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <script src="https://unpkg.com/qrcode@1.5.4/build/qrcode.min.js"></script>
+  <script type="module">
+    // qr-scanner uses ES modules — import for comparison testing
+    import QrScanner from 'https://unpkg.com/qr-scanner@1.4.2/qr-scanner.min.js';
+    window.QrScannerLib = QrScanner;
+  </script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      background: #1a1b1e; color: #c1c2c5;
+      padding: 16px; max-width: 480px; margin: 0 auto;
+    }
+    h1 { font-size: 1.25rem; margin-bottom: 12px; color: #fff; }
+    h2 { font-size: 1rem; margin: 16px 0 8px; color: #a6a7ab; }
+    button {
+      display: block; width: 100%; padding: 12px;
+      font-size: 1rem; font-weight: 600;
+      border: none; border-radius: 8px; cursor: pointer;
+      margin-bottom: 8px; transition: opacity 0.15s;
+    }
+    button:active { opacity: 0.7; }
+    button:disabled { opacity: 0.4; cursor: not-allowed; }
+    .btn-primary { background: #228be6; color: #fff; }
+    .btn-secondary { background: #373a40; color: #c1c2c5; }
+    .btn-danger { background: #e03131; color: #fff; }
+    #qr-canvas { text-align: center; margin: 12px 0; }
+    #qr-canvas canvas { max-width: 280px; border-radius: 8px; }
+    #scanner-region { margin: 12px 0; border-radius: 8px; overflow: hidden; }
+    #scanner-region video { border-radius: 8px; }
+    .log {
+      background: #25262b; border-radius: 8px; padding: 12px;
+      font-family: 'SF Mono', 'Fira Code', monospace; font-size: 0.8rem;
+      max-height: 300px; overflow-y: auto; margin-top: 12px;
+      white-space: pre-wrap; word-break: break-all;
+    }
+    .log-entry { margin-bottom: 6px; border-bottom: 1px solid #373a40; padding-bottom: 6px; }
+    .log-time { color: #868e96; }
+    .log-ok { color: #51cf66; }
+    .log-err { color: #ff6b6b; }
+    .log-info { color: #74c0fc; }
+    .status { padding: 8px 12px; border-radius: 8px; margin: 8px 0; font-weight: 600; text-align: center; }
+    .status-success { background: #2b8a3e22; color: #51cf66; border: 1px solid #2b8a3e44; }
+    .status-error { background: #c9282822; color: #ff6b6b; border: 1px solid #c9282844; }
+    .result-text {
+      background: #25262b; border-radius: 8px; padding: 12px;
+      font-family: 'SF Mono', monospace; font-size: 0.85rem;
+      word-break: break-all; margin: 8px 0; color: #74c0fc;
+    }
+    details { margin-top: 16px; }
+    summary { cursor: pointer; color: #868e96; font-size: 0.85rem; }
+    .section { margin-bottom: 24px; border-bottom: 1px solid #373a40; padding-bottom: 16px; }
+    .badge {
+      display: inline-block; padding: 2px 8px; border-radius: 4px;
+      font-size: 0.75rem; font-weight: 600; margin-left: 8px;
+    }
+    .badge-native { background: #2b8a3e44; color: #51cf66; }
+    .badge-lib { background: #1864ab44; color: #74c0fc; }
+  </style>
+</head>
+<body>
+  <h1>QR Handshake Spike</h1>
+
+  <!-- Phase 1: QR Generation -->
+  <div class="section">
+    <h2>1. Generate QR Code</h2>
+    <button class="btn-primary" onclick="generateQR()">Generate QR Code</button>
+    <div id="qr-canvas"></div>
+    <div id="qr-url" class="result-text" style="display:none"></div>
+  </div>
+
+  <!-- Phase 1: QR Scanning -->
+  <div class="section">
+    <h2>2. Scan QR Code</h2>
+    <div id="scanner-controls">
+      <button class="btn-secondary" onclick="startScanner()">Start Scanner (html5-qrcode) <span class="badge badge-lib">comparison</span></button>
+      <button class="btn-primary" onclick="startScannerQrScanner()" id="btn-qrscanner">
+        Start Scanner (qr-scanner) <span class="badge badge-lib">recommended</span>
+      </button>
+      <button class="btn-secondary" onclick="startScannerNative()" id="btn-native" style="display:none">
+        Try Native BarcodeDetector
+      </button>
+      <button class="btn-danger" onclick="stopScanner()" id="btn-stop" style="display:none">Stop Scanner</button>
+    </div>
+    <div id="scanner-region"></div>
+    <div id="scan-result"></div>
+  </div>
+
+  <!-- Phase 2: Backend Round-Trip (placeholder) -->
+  <div class="section" id="phase2-section" style="display:none">
+    <h2>3. Backend Round-Trip</h2>
+    <p style="color:#868e96; font-size:0.85rem; margin-bottom:8px;">
+      Requires running backend. Configure API URL and device key below.
+    </p>
+    <input id="api-url" placeholder="API base URL (e.g. http://localhost:8080)"
+      style="width:100%;padding:8px;border-radius:6px;border:1px solid #373a40;background:#25262b;color:#c1c2c5;margin-bottom:8px;font-size:0.85rem;">
+    <input id="device-kid" placeholder="Device KID (22 chars, auto-generated)"
+      style="width:100%;padding:8px;border-radius:6px;border:1px solid #373a40;background:#25262b;color:#c1c2c5;margin-bottom:8px;font-size:0.85rem;" readonly>
+    <button class="btn-secondary" onclick="generateSpikeKeys()">Regenerate Spike Keys</button>
+    <button class="btn-primary" onclick="createInvite()">Create Invite (POST /trust/invites)</button>
+    <button class="btn-secondary" onclick="acceptInvite()" id="btn-accept" style="display:none">
+      Accept Scanned Invite
+    </button>
+    <div id="backend-result"></div>
+  </div>
+
+  <!-- Diagnostics Log -->
+  <details open>
+    <summary>Diagnostics Log</summary>
+    <div class="log" id="log"></div>
+  </details>
+
+  <script>
+    // --- Logging ---
+    function log(msg, level = 'info') {
+      const el = document.getElementById('log');
+      const time = new Date().toISOString().slice(11, 23);
+      const cls = level === 'ok' ? 'log-ok' : level === 'err' ? 'log-err' : 'log-info';
+      el.innerHTML += `<div class="log-entry"><span class="log-time">${time}</span> <span class="${cls}">${msg}</span></div>`;
+      el.scrollTop = el.scrollHeight;
+    }
+
+    // --- Environment Detection ---
+    (function detectEnv() {
+      const ua = navigator.userAgent;
+      log(`UA: ${ua}`);
+      log(`Platform: ${navigator.platform}`);
+      log(`Secure context: ${window.isSecureContext}`);
+      log(`Screen: ${screen.width}x${screen.height} @ ${devicePixelRatio}x`);
+
+      // Check BarcodeDetector support
+      if ('BarcodeDetector' in window) {
+        log('BarcodeDetector API: AVAILABLE', 'ok');
+        document.getElementById('btn-native').style.display = 'block';
+        BarcodeDetector.getSupportedFormats().then(formats => {
+          log(`Supported formats: ${formats.join(', ')}`, 'info');
+        });
+      } else {
+        log('BarcodeDetector API: not available', 'info');
+      }
+
+      // Check camera availability
+      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        log('getUserMedia: available', 'ok');
+        navigator.mediaDevices.enumerateDevices().then(devices => {
+          const cameras = devices.filter(d => d.kind === 'videoinput');
+          log(`Cameras found: ${cameras.length}`, cameras.length > 0 ? 'ok' : 'err');
+          cameras.forEach((c, i) => log(`  Camera ${i}: ${c.label || '(no label until permission granted)'}`));
+        });
+      } else {
+        log('getUserMedia: NOT available', 'err');
+      }
+    })();
+
+    // --- QR Generation ---
+    let lastGeneratedUrl = '';
+
+    function generateQR() {
+      const testId = crypto.randomUUID();
+      const url = `${location.origin}/handshake/${testId}`;
+      lastGeneratedUrl = url;
+
+      const canvas = document.getElementById('qr-canvas');
+      canvas.innerHTML = '';
+
+      const t0 = performance.now();
+      const qrCanvas = document.createElement('canvas');
+      QRCode.toCanvas(qrCanvas, url, {
+        width: 280,
+        margin: 2,
+        color: { dark: '#000000', light: '#ffffff' },
+        errorCorrectionLevel: 'M'
+      }, function(err) {
+        const dt = (performance.now() - t0).toFixed(1);
+        if (err) {
+          log(`QR generation failed: ${err.message}`, 'err');
+          return;
+        }
+        canvas.appendChild(qrCanvas);
+        log(`QR generated in ${dt}ms (${url.length} chars, ECL=M)`, 'ok');
+
+        const urlEl = document.getElementById('qr-url');
+        urlEl.style.display = 'block';
+        urlEl.textContent = url;
+      });
+    }
+
+    // --- QR Scanning (html5-qrcode) ---
+    let scanner = null;
+    let scanStartTime = 0;
+
+    function startScanner() {
+      if (scanner) { log('Scanner already running', 'err'); return; }
+
+      log('Requesting camera permission...');
+      scanStartTime = performance.now();
+
+      scanner = new Html5Qrcode('scanner-region');
+      const config = {
+        fps: 10,
+        qrbox: { width: 250, height: 250 },
+        aspectRatio: 1.0
+      };
+
+      scanner.start(
+        { facingMode: 'environment' },
+        config,
+        onScanSuccess,
+        onScanFailure
+      ).then(() => {
+        const dt = (performance.now() - scanStartTime).toFixed(0);
+        log(`Camera started in ${dt}ms`, 'ok');
+        document.getElementById('btn-stop').style.display = 'block';
+      }).catch(err => {
+        const dt = (performance.now() - scanStartTime).toFixed(0);
+        log(`Camera start failed after ${dt}ms: ${err}`, 'err');
+        scanner = null;
+        showScanResult(`Camera error: ${err}`, false);
+      });
+    }
+
+    let firstScanLogged = false;
+    function onScanSuccess(decodedText, decodedResult) {
+      const dt = (performance.now() - scanStartTime).toFixed(0);
+      if (!firstScanLogged) {
+        log(`First scan decoded in ${dt}ms total (camera init + focus + decode)`, 'ok');
+        firstScanLogged = true;
+      }
+      log(`Decoded: ${decodedText}`, 'ok');
+      log(`Format: ${decodedResult.result.format.formatName}`, 'info');
+      showScanResult(decodedText, true);
+
+      // Check if it's a handshake URL we can accept
+      const match = decodedText.match(/\/handshake\/([a-f0-9-]+)/);
+      if (match) {
+        log(`Invite ID extracted: ${match[1]}`, 'ok');
+        document.getElementById('btn-accept').style.display = 'block';
+        document.getElementById('btn-accept').dataset.inviteId = match[1];
+      }
+
+      stopScanner();
+    }
+
+    function onScanFailure(errorMessage) {
+      // Silently ignore — html5-qrcode fires this on every non-QR frame
+    }
+
+    function stopScanner() {
+      if (!scanner) return;
+      scanner.stop().then(() => {
+        log('Scanner stopped', 'info');
+        scanner = null;
+        firstScanLogged = false;
+        document.getElementById('btn-stop').style.display = 'none';
+      }).catch(err => {
+        log(`Stop error: ${err}`, 'err');
+        scanner = null;
+      });
+    }
+
+    // --- QR Scanning (nimiq/qr-scanner — recommended) ---
+    let qrScannerInstance = null;
+
+    async function startScannerQrScanner() {
+      if (!window.QrScannerLib) {
+        log('qr-scanner module not loaded yet — wait a moment and retry', 'err');
+        return;
+      }
+      if (qrScannerInstance) { log('qr-scanner already running', 'err'); return; }
+
+      log('Starting qr-scanner (recommended library)...');
+      scanStartTime = performance.now();
+
+      const video = document.createElement('video');
+      video.style.width = '100%';
+      video.style.borderRadius = '8px';
+      const container = document.getElementById('scanner-region');
+      container.innerHTML = '';
+      container.appendChild(video);
+
+      qrScannerInstance = new window.QrScannerLib(video, result => {
+        const dt = (performance.now() - scanStartTime).toFixed(0);
+        log(`qr-scanner decoded in ${dt}ms: ${result.data}`, 'ok');
+        showScanResult(result.data, true);
+
+        const match = result.data.match(/\/handshake\/([a-f0-9-]+)/);
+        if (match) {
+          log(`Invite ID extracted: ${match[1]}`, 'ok');
+          document.getElementById('btn-accept').style.display = 'block';
+          document.getElementById('btn-accept').dataset.inviteId = match[1];
+        }
+
+        qrScannerInstance.stop();
+        qrScannerInstance.destroy();
+        qrScannerInstance = null;
+        container.innerHTML = '';
+        document.getElementById('btn-stop').style.display = 'none';
+      }, {
+        preferredCamera: 'environment',
+        highlightScanRegion: true,
+        highlightCodeOutline: true,
+      });
+
+      try {
+        await qrScannerInstance.start();
+        const dt = (performance.now() - scanStartTime).toFixed(0);
+        log(`qr-scanner camera started in ${dt}ms`, 'ok');
+        document.getElementById('btn-stop').style.display = 'block';
+
+        // Override stop button for qr-scanner
+        document.getElementById('btn-stop').onclick = () => {
+          if (qrScannerInstance) {
+            qrScannerInstance.stop();
+            qrScannerInstance.destroy();
+            qrScannerInstance = null;
+            container.innerHTML = '';
+            document.getElementById('btn-stop').style.display = 'none';
+            log('qr-scanner stopped', 'info');
+          }
+        };
+      } catch (err) {
+        const dt = (performance.now() - scanStartTime).toFixed(0);
+        log(`qr-scanner failed after ${dt}ms: ${err}`, 'err');
+        showScanResult(`Camera error: ${err}`, false);
+        qrScannerInstance = null;
+      }
+    }
+
+    // --- QR Scanning (Native BarcodeDetector) ---
+    async function startScannerNative() {
+      if (!('BarcodeDetector' in window)) {
+        log('BarcodeDetector not available', 'err');
+        return;
+      }
+
+      log('Starting native BarcodeDetector scanner...');
+      scanStartTime = performance.now();
+
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
+        });
+        const dt = (performance.now() - scanStartTime).toFixed(0);
+        log(`Camera stream acquired in ${dt}ms`, 'ok');
+
+        const video = document.createElement('video');
+        video.srcObject = stream;
+        video.setAttribute('playsinline', 'true');
+        video.style.width = '100%';
+        video.style.borderRadius = '8px';
+
+        const container = document.getElementById('scanner-region');
+        container.innerHTML = '';
+        container.appendChild(video);
+        await video.play();
+
+        const detector = new BarcodeDetector({ formats: ['qr_code'] });
+        document.getElementById('btn-stop').style.display = 'block';
+
+        const scanLoop = async () => {
+          if (!video.srcObject) return;
+          try {
+            const barcodes = await detector.detect(video);
+            if (barcodes.length > 0) {
+              const dt = (performance.now() - scanStartTime).toFixed(0);
+              log(`Native scan decoded in ${dt}ms: ${barcodes[0].rawValue}`, 'ok');
+              showScanResult(barcodes[0].rawValue, true);
+              stream.getTracks().forEach(t => t.stop());
+              container.innerHTML = '';
+              document.getElementById('btn-stop').style.display = 'none';
+              return;
+            }
+          } catch (e) {
+            // frame not ready yet
+          }
+          requestAnimationFrame(scanLoop);
+        };
+        scanLoop();
+
+      } catch (err) {
+        log(`Native scanner failed: ${err}`, 'err');
+        showScanResult(`Camera error: ${err}`, false);
+      }
+    }
+
+    function showScanResult(text, success) {
+      const el = document.getElementById('scan-result');
+      if (success) {
+        el.innerHTML = `<div class="status status-success">Scan successful</div><div class="result-text">${text}</div>`;
+      } else {
+        el.innerHTML = `<div class="status status-error">${text}</div>`;
+      }
+    }
+
+    // --- Phase 2: Backend Round-Trip ---
+    document.getElementById('phase2-section').style.display = 'block';
+
+    // Base64url helpers (no WASM needed)
+    function base64urlEncode(bytes) {
+      const binStr = Array.from(bytes, b => String.fromCharCode(b)).join('');
+      return btoa(binStr).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    }
+
+    async function sha256Hex(data) {
+      const hash = await crypto.subtle.digest('SHA-256', data);
+      return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
+    }
+
+    // Ed25519 key pair for spike auth
+    let spikeKeyPair = null;
+    let spikeKid = null;
+
+    async function generateSpikeKeys() {
+      try {
+        spikeKeyPair = await crypto.subtle.generateKey('Ed25519', true, ['sign', 'verify']);
+        const pubRaw = await crypto.subtle.exportKey('raw', spikeKeyPair.publicKey);
+        const kidHash = await crypto.subtle.digest('SHA-256', pubRaw);
+        spikeKid = base64urlEncode(new Uint8Array(kidHash).slice(0, 16));
+        const pubHex = Array.from(new Uint8Array(pubRaw)).map(b => b.toString(16).padStart(2, '0')).join('');
+        log(`Spike key generated. KID: ${spikeKid}`, 'ok');
+        log(`Public key (hex): ${pubHex}`, 'info');
+        log('NOTE: Register this device key with an account before using backend calls', 'info');
+        document.getElementById('device-kid').value = spikeKid;
+        return spikeKid;
+      } catch (e) {
+        log(`Key generation failed (Ed25519 may not be supported): ${e}`, 'err');
+        return null;
+      }
+    }
+
+    async function buildSignedHeaders(method, path, bodyStr) {
+      if (!spikeKeyPair) { log('Generate spike keys first', 'err'); return null; }
+      const timestamp = Math.floor(Date.now() / 1000).toString();
+      const nonce = crypto.randomUUID();
+      const bodyBytes = new TextEncoder().encode(bodyStr);
+      const bodyHash = await sha256Hex(bodyBytes);
+      const canonical = `${method}\n${path}\n${timestamp}\n${nonce}\n${bodyHash}`;
+      const sig = await crypto.subtle.sign('Ed25519', spikeKeyPair.privateKey, new TextEncoder().encode(canonical));
+      return {
+        'Content-Type': 'application/json',
+        'X-Device-Kid': spikeKid,
+        'X-Signature': base64urlEncode(new Uint8Array(sig)),
+        'X-Timestamp': timestamp,
+        'X-Nonce': nonce,
+      };
+    }
+
+    let lastInviteId = null;
+
+    async function createInvite() {
+      const apiUrl = document.getElementById('api-url').value.trim();
+      if (!apiUrl) { log('Set API base URL first', 'err'); return; }
+      if (!spikeKeyPair) { await generateSpikeKeys(); }
+
+      const body = JSON.stringify({
+        envelope: base64urlEncode(new TextEncoder().encode('spike-test')),
+        delivery_method: 'qr',
+        attestation: { spike: true }
+      });
+      const path = '/trust/invites';
+      const headers = await buildSignedHeaders('POST', path, body);
+      if (!headers) return;
+
+      const t0 = performance.now();
+      try {
+        const res = await fetch(`${apiUrl}${path}`, { method: 'POST', headers, body });
+        const dt = (performance.now() - t0).toFixed(0);
+        const data = await res.json();
+        if (!res.ok) {
+          log(`Create invite failed (${res.status}) in ${dt}ms: ${JSON.stringify(data)}`, 'err');
+          return;
+        }
+        lastInviteId = data.id;
+        log(`Invite created in ${dt}ms: ${data.id} (expires: ${data.expires_at})`, 'ok');
+
+        // Generate QR with the invite URL
+        const inviteUrl = `${location.origin}/handshake/${data.id}`;
+        const canvas = document.getElementById('qr-canvas');
+        canvas.innerHTML = '';
+        const qrCanvas = document.createElement('canvas');
+        QRCode.toCanvas(qrCanvas, inviteUrl, { width: 280, margin: 2, errorCorrectionLevel: 'M' });
+        canvas.appendChild(qrCanvas);
+        document.getElementById('qr-url').style.display = 'block';
+        document.getElementById('qr-url').textContent = inviteUrl;
+        log(`QR generated for invite: ${inviteUrl}`, 'ok');
+
+        const resultEl = document.getElementById('backend-result');
+        resultEl.innerHTML = `<div class="status status-success">Invite created</div><div class="result-text">${JSON.stringify(data, null, 2)}</div>`;
+      } catch (e) {
+        log(`Network error creating invite: ${e}`, 'err');
+      }
+    }
+
+    async function acceptInvite() {
+      const apiUrl = document.getElementById('api-url').value.trim();
+      if (!apiUrl) { log('Set API base URL first', 'err'); return; }
+      if (!spikeKeyPair) { await generateSpikeKeys(); }
+
+      // Use invite ID from scanned QR or last created
+      const btnAccept = document.getElementById('btn-accept');
+      const inviteId = btnAccept.dataset.inviteId || lastInviteId;
+      if (!inviteId) { log('No invite ID — scan a QR or create an invite first', 'err'); return; }
+
+      const path = `/trust/invites/${inviteId}/accept`;
+      const headers = await buildSignedHeaders('POST', path, '');
+      if (!headers) return;
+
+      const t0 = performance.now();
+      try {
+        const res = await fetch(`${apiUrl}${path}`, { method: 'POST', headers });
+        const dt = (performance.now() - t0).toFixed(0);
+        const data = await res.json();
+        if (!res.ok) {
+          log(`Accept invite failed (${res.status}) in ${dt}ms: ${JSON.stringify(data)}`, 'err');
+          return;
+        }
+        log(`Invite accepted in ${dt}ms! Endorser: ${data.endorser_id}`, 'ok');
+        const resultEl = document.getElementById('backend-result');
+        resultEl.innerHTML = `<div class="status status-success">Invite accepted!</div><div class="result-text">${JSON.stringify(data, null, 2)}</div>`;
+      } catch (e) {
+        log(`Network error accepting invite: ${e}`, 'err');
+      }
+    }
+
+    // Auto-generate spike keys on load
+    generateSpikeKeys();
+  </script>
+</body>
+</html>

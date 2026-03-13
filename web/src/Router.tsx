@@ -15,6 +15,7 @@ import { AboutPage } from './pages/About.page';
 import { DevArchitecturePage } from './pages/DevArchitecture.page';
 import { DevDomainModelPage } from './pages/DevDomainModel.page';
 import { DevIndexPage } from './pages/DevIndex.page';
+import { EndorsePage } from './pages/Endorse.page';
 import { HomePage } from './pages/Home.page';
 import { KeysPage } from './pages/Keys.page';
 import { Layout } from './pages/Layout';
@@ -110,6 +111,15 @@ const settingsRoute = createRoute({
   component: SettingsPage,
 });
 
+const endorseRoute = createRoute({
+  getParentRoute: () => authRequiredLayout,
+  path: 'endorse',
+  component: EndorsePage,
+  validateSearch: (search: Record<string, unknown>): { invite?: string } => ({
+    invite: typeof search.invite === 'string' ? search.invite : undefined,
+  }),
+});
+
 const verifyCallbackRoute = createRoute({
   getParentRoute: () => authRequiredLayout,
   path: 'verify/callback',
@@ -149,7 +159,7 @@ const routeTree = rootRoute.addChildren([
   devArchitectureRoute,
   devDomainModelRoute,
   guestOnlyLayout.addChildren([signupRoute, loginRoute]),
-  authRequiredLayout.addChildren([settingsRoute, verifyCallbackRoute]),
+  authRequiredLayout.addChildren([settingsRoute, endorseRoute, verifyCallbackRoute]),
   roomsRoute,
   pollRoute,
 ]);

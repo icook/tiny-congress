@@ -1,6 +1,7 @@
 import {
   IconCode,
   IconDoor,
+  IconHeartHandshake,
   IconHome2,
   IconInfoCircle,
   IconLogin,
@@ -13,12 +14,14 @@ import { buildVerifierUrl, useVerificationStatus } from '@/features/verification
 import { useCrypto } from '@/providers/CryptoProvider';
 import { useDevice } from '@/providers/DeviceProvider';
 
-const navLinks = [
+const publicNavLinks = [
   { icon: IconHome2, label: 'Home', path: '/' },
   { icon: IconDoor, label: 'Rooms', path: '/rooms' },
   { icon: IconInfoCircle, label: 'About', path: '/about' },
   { icon: IconCode, label: 'Dev Docs', path: '/dev' },
 ];
+
+const authNavLinks = [{ icon: IconHeartHandshake, label: 'Endorse', path: '/endorse' }];
 
 const guestLinks = [
   { icon: IconLogin, label: 'Login', path: '/login' },
@@ -56,7 +59,7 @@ export function Navbar({ onNavigate }: NavbarProps) {
       style={{ borderRight: `1px solid ${borderColor}` }}
     >
       <Stack gap={4} style={{ flex: 1 }}>
-        {navLinks.map((link) => (
+        {[...publicNavLinks, ...(isAuthenticated ? authNavLinks : [])].map((link) => (
           <NavLink
             key={link.label}
             component={Link}
