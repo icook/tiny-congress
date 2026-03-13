@@ -444,6 +444,18 @@ async fn sim_weight_calibration() {
         1.0 / 0.3
     );
 
+    // Pipeline assertion: materialize scores, then verify target passes
+    // CommunityConstraint (distance=2.0 <= 5.0, diversity=3 >= 2).
+    report.materialize(db.pool()).await;
+    let constraint = CommunityConstraint::new(5.0, 2).expect("valid constraint");
+    let eligibility = report
+        .check_eligibility(target, &constraint, db.pool())
+        .await;
+    assert!(
+        eligibility.is_eligible,
+        "Weight calibration: target with distance=2.0 and diversity=3 should pass CommunityConstraint"
+    );
+
     report
         .write_dot(
             &g,
