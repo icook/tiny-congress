@@ -211,3 +211,87 @@ pub fn ring_diversity_bounded(
         PredicateResult::fail(name, violations.join("; "))
     }
 }
+
+/// Nodes with a finite distance should be reachable via active edges
+/// from the anchor. Guards against phantom reachability in the engine.
+pub fn unreachable_nodes_have_no_distance(
+    spec: &GraphSpec,
+    report: &SimulationReport,
+) -> PredicateResult {
+    use std::collections::{HashSet, VecDeque};
+
+    let name = "unreachable_nodes_have_no_distance";
+
+    // BFS from anchor over active edges
+    let anchor_id = report.anchor_id;
+    let mut reachable = HashSet::new();
+    let mut queue = VecDeque::new();
+    reachable.insert(anchor_id);
+    queue.push_back(anchor_id);
+
+    while let Some(current) = queue.pop_front() {
+        for edge in spec.outbound_edges(current) {
+            if reachable.insert(edge.to) {
+                queue.push_back(edge.to);
+            }
+        }
+    }
+
+    let mut violations = Vec::new();
+    for node in spec.all_nodes() {
+        let has_distance = report.distance(node.id).is_some();
+        let is_reachable = reachable.contains(&node.id);
+
+        if has_distance && !is_reachable {
+            violations.push(format!(
+                "{} has distance but no active path from anchor",
+                node.name
+            ));
+        }
+    }
+
+    if violations.is_empty() {
+        PredicateResult::pass(name)
+    } else {
+        PredicateResult::fail(name, violations.join("; "))
+    }
+}
+
+/// Nodes in an isolated cluster (≤1 external endorser) should have
+/// diversity bounded by external connections. A fully-connected cluster
+/// attached through a single bridge edge should have diversity ≤ 1.
+pub fn isolated_cluster_diversity_bounded(
+    spec: &GraphSpec,
+    report: &SimulationReport,
+    cluster_ids: &[uuid::Uuid],
+) -> PredicateResult {
+    let name = "isolated_cluster_diversity_bounded";
+    let mut violations = Vec::new();
+
+    let cluster_set: std::collections::HashSet<uuid::Uuid> = cluster_ids.iter().copied().collect();
+
+    for &id in cluster_ids {
+        let external_endorsers = spec
+            .inbound_edges(id)
+            .iter()
+            .filter(|e| !cluster_set.contains(&e.from))
+            .count();
+
+        let diversity = report.diversity(id);
+        let max_expected = external_endorsers.max(1) as i32;
+
+        if diversity > max_expected {
+            let node_name = spec.node_name(id);
+            violations.push(format!(
+                "{node_name}: diversity={diversity} > expected max={max_expected} \
+                 (external_endorsers={external_endorsers})"
+            ));
+        }
+    }
+
+    if violations.is_empty() {
+        PredicateResult::pass(name)
+    } else {
+        PredicateResult::fail(name, violations.join("; "))
+    }
+}

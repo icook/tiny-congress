@@ -11,6 +11,7 @@
 //!   endorsements) for running the trust engine against.
 
 pub mod comparison;
+pub mod generators;
 pub mod mechanisms;
 pub mod predicates;
 pub mod report;
