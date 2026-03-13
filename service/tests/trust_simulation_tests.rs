@@ -103,11 +103,12 @@ async fn sim_chain_infiltration() {
     let db = isolated_db().await;
     let mut g = GraphBuilder::new(db.pool().clone());
 
-    // Blue team: anchor + healthy web
+    // Blue team: anchor connected to all web nodes so the web is reachable
     let anchor = g.add_node("anchor", Team::Blue).await;
     let blue_web = topology::healthy_web(&mut g, "blue", Team::Blue, 5, 0.5, 1.0).await;
-    // Connect anchor to web
-    g.endorse(anchor, blue_web[0], 1.0).await;
+    for &web_node in &blue_web {
+        g.endorse(anchor, web_node, 1.0).await;
+    }
 
     // Red team: chain of 8 attached via social referral
     let red_chain = topology::chain(&mut g, "red", Team::Red, 8, 1.0).await;
@@ -283,6 +284,19 @@ async fn sim_red_cluster_single_attachment() {
         );
     }
 
+    // Document the diversity approximation limitation:
+    // The fully-connected red cluster members are all reachable from anchor,
+    // so the approximation counts them as distinct endorsers of each other.
+    // This gives red nodes diversity 4-5 despite connecting through a single
+    // bridge point — the same limitation as the colluding ring scenario.
+    // An exact computation (max-flow) would correctly give diversity=1.
+    for red in report.red_nodes() {
+        eprintln!(
+            "  Red cluster '{}': distance={:?}, diversity={} (approximation inflated)",
+            red.name, red.distance, red.diversity
+        );
+    }
+
     report
         .write_dot(
             &g,
@@ -314,8 +328,10 @@ async fn sim_social_referral_ceiling() {
     let report = SimulationReport::run(&g, anchor).await;
     eprintln!("\n=== Social Referral Ceiling ===\n{report}");
 
-    // Assert: hop 1 ≈ 3.33, hop 2 ≈ 6.67, hop 3 ≈ 10.0
-    // Nodes at hop 3+ should be at or beyond the 10.0 cutoff
+    // Distance per hop: 1/0.3 ≈ 3.33. The CTE checks `distance < 10.0`
+    // before traversal, so a node AT 10.0 is included in results (it was
+    // produced when the parent at 6.67 was traversed). Hop 4 at 13.33 is excluded.
+    // Result: chain_nodes[0]=3.33, [1]=6.67, [2]=10.0 (included), [3]+ excluded.
     let reachable_count = chain_nodes
         .iter()
         .filter(|&&id| report.distance(id).is_some())
