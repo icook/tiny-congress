@@ -34,7 +34,7 @@ The comparison framework produced initial results. Several mechanisms have been 
 
 ## Weight calibration
 
-ADR-022 proposes a weight table (swap method x relationship depth) but the values are initial estimates.
+ADR-023 proposes a weight table (swap method x relationship depth) but the values are initial estimates.
 
 ### Open questions
 
@@ -83,7 +83,7 @@ Endorsing someone who later gets denounced should carry consequences. This is "p
 
 ## Architectural questions
 
-9. **ADR-020 cross-reference.** ADR-020 says continuous influence "may be revisited for variable-cost endorsements." ADR-022 resolves this question (answer: no). ADR-020 should link to ADR-022 when it's accepted.
+9. **ADR-020 cross-reference.** ADR-020 says continuous influence "may be revisited for variable-cost endorsements." ADR-023 resolves this question (answer: no). ADR-020 should link to ADR-023 when it's accepted.
 10. **Denouncement budget interaction.** ADR-020 sets d=2 denouncement budget. With denouncer-only revocation as the baseline mechanism, the budget question simplifies: each denouncement costs 1 budget and revokes your edge to the target. The adjudication path (severe slashing) is a separate governance action, not a budget spend.
 11. **Engine runs twice per measurement.** `SimulationReport::run()` computes scores in memory, then `materialize()` calls `recompute_from_anchor` which re-runs the engine and writes to snapshots. Safe in tests, but 2x engine cost per measurement. Worth fixing if the simulation suite grows significantly.
 
@@ -93,10 +93,11 @@ Endorsing someone who later gets denounced should carry consequences. This is "p
 
 - [x] **Mechanism recommendation** — denouncer-only revocation as baseline; nuclear edge removal and score penalty rejected; adjudication for severe cases is future work
 - [ ] **Simulate denouncer-only revocation** — add `apply_denouncer_revocation(denouncer, target)` to mechanisms.rs, re-run comparison to verify it's effective enough against adversarial topologies
-- [ ] **Time decay design spike** (questions 12–15) — pick a decay model, sketch renewal UX, add temporal dimension to simulation harness
+- [ ] **Time decay in simulation** (questions 12–15) — add temporal axis to simulation harness; produce dev-targeted doc for UI rendering covering decay model, renewal UX, and edge cases. See ADR-025.
 - [ ] **Denouncement propagation design** (questions 16–19) — decide propagation depth, relationship to cascade, proportionality rules
 - [ ] **Add weight variance scenarios** (question 4) — mixed-weight topologies in the comparison
 - [ ] **Loss function conversation** (question 7) — needed before automated tuning
-- [ ] **ADR-020 ↔ ADR-022 cross-reference** (question 9) — quick edit once ADR-022 is accepted
-- [ ] **Finalize ADR-022** — currently Draft, needs review of weight table values
+- [ ] **Multi-method weight UI** — #656: add swap method + relationship depth selection to endorsement flow
+- [ ] **ADR-020 ↔ ADR-023 cross-reference** (question 9) — quick edit once ADR-023 is accepted
+- [ ] **Finalize ADR-023** — currently Draft, needs review of weight table values
 - [ ] **Adjudication process design** (question 3) — governance process for severe slashing; likely its own ADR

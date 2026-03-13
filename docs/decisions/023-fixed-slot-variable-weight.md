@@ -1,4 +1,4 @@
-# ADR-022: Fixed Slots with Variable Weight — No Fractional Budgets
+# ADR-023: Fixed Slots with Variable Weight — No Fractional Budgets
 
 ## Status
 Draft
@@ -67,7 +67,7 @@ These values are initial estimates. The simulation framework can be used to cali
 - **Self-reported relationship depth is gameable.** A Sybil operator will always claim "deep trust." Mitigated by the fact that the slot cost is fixed — even at max self-reported depth, they still only get k edges.
 
 ### Neutral
-- ADR-020's mention of revisiting continuous influence for variable-cost endorsements is resolved: the answer is no.
+- ADR-020's mention of revisiting continuous influence for variable-cost endorsements is resolved: the answer is no. ADR-020 should link to ADR-023 when this ADR is accepted.
 - The endorsement flow needs UI work to surface weight, but this aligns with the demo goal of making endorsement feel deliberate and meaningful.
 
 ## Alternatives considered
