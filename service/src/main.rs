@@ -171,8 +171,12 @@ async fn build_app(
 
     // Trust engine and service
     let trust_engine = Arc::new(TrustEngine::new(pool.clone()));
-    let trust_service: Arc<dyn TrustService> =
-        Arc::new(DefaultTrustService::new(trust_repo_for_service));
+    let reputation_repo_for_trust =
+        Arc::new(PgReputationRepo::new(pool.clone())) as Arc<dyn ReputationRepo>;
+    let trust_service: Arc<dyn TrustService> = Arc::new(DefaultTrustService::new(
+        trust_repo_for_service,
+        reputation_repo_for_trust,
+    ));
 
     // Rooms wiring
     let rooms_repo = Arc::new(PgRoomsRepo::new(pool.clone()));

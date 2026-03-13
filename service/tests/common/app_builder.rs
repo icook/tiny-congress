@@ -309,10 +309,15 @@ impl TestAppBuilder {
         // Trust wiring
         self.include_trust = true;
         let trust_repo = Arc::new(PgTrustRepo::new(pool.clone())) as Arc<dyn TrustRepo>;
-        let trust_service =
-            Arc::new(DefaultTrustService::new(trust_repo.clone())) as Arc<dyn TrustService>;
+        let reputation_repo =
+            Arc::new(PgReputationRepo::new(pool.clone())) as Arc<dyn ReputationRepo>;
+        let trust_service = Arc::new(DefaultTrustService::new(
+            trust_repo.clone(),
+            reputation_repo.clone(),
+        )) as Arc<dyn TrustService>;
         self.trust_repo = Some(trust_repo);
         self.trust_service = Some(trust_service);
+        self.reputation_repo = Some(reputation_repo);
 
         self.pool = Some(pool);
         self

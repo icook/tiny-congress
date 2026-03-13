@@ -110,13 +110,6 @@ pub trait TrustRepo: Send + Sync {
         user_id: Uuid,
     ) -> Result<InfluenceRecord, TrustRepoError>;
 
-    async fn update_influence(
-        &self,
-        user_id: Uuid,
-        staked_delta: f32,
-        spent_delta: f32,
-    ) -> Result<InfluenceRecord, TrustRepoError>;
-
     // Action queue operations
 
     async fn enqueue_action(
@@ -217,15 +210,6 @@ impl TrustRepo for PgTrustRepo {
         user_id: Uuid,
     ) -> Result<InfluenceRecord, TrustRepoError> {
         influence::get_or_create_influence(&self.pool, user_id).await
-    }
-
-    async fn update_influence(
-        &self,
-        user_id: Uuid,
-        staked_delta: f32,
-        spent_delta: f32,
-    ) -> Result<InfluenceRecord, TrustRepoError> {
-        influence::update_influence(&self.pool, user_id, staked_delta, spent_delta).await
     }
 
     async fn enqueue_action(

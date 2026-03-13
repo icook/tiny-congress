@@ -6,11 +6,15 @@ use async_trait::async_trait;
 use serde_json::json;
 use uuid::Uuid;
 
+use crate::reputation::repo::ReputationRepo;
 use crate::trust::repo::{TrustRepo, TrustRepoError};
 
 /// Errors returned by [`TrustService`] operations.
 #[derive(Debug, thiserror::Error)]
 pub enum TrustServiceError {
+    #[error("endorsement slots exhausted (max {max})")]
+    EndorsementSlotsExhausted { max: u32 },
+
     #[error("denouncement slots exhausted (max {max})")]
     DenouncementSlotsExhausted { max: i32 },
 
@@ -25,6 +29,9 @@ pub enum TrustServiceError {
 
     #[error("repository error: {0}")]
     Repo(#[from] TrustRepoError),
+
+    #[error("endorsement repo error: {0}")]
+    EndorsementRepo(#[from] crate::reputation::repo::EndorsementRepoError),
 }
 
 /// Service trait for trust action orchestration.
@@ -59,6 +66,9 @@ pub trait TrustService: Send + Sync {
 /// Default implementation of [`TrustService`] backed by a [`TrustRepo`].
 pub struct DefaultTrustService {
     trust_repo: Arc<dyn TrustRepo>,
+    reputation_repo: Arc<dyn ReputationRepo>,
+    /// Max active endorsement slots per user (k=3 demo, k=5 production)
+    endorsement_slots: u32,
     /// Max active denouncements per user
     max_denouncement_slots: i32, // d=2
     /// Max actions per day (resets at midnight UTC)
@@ -68,9 +78,11 @@ pub struct DefaultTrustService {
 impl DefaultTrustService {
     /// Create a new `DefaultTrustService` with default slot and quota limits.
     #[must_use]
-    pub fn new(trust_repo: Arc<dyn TrustRepo>) -> Self {
+    pub fn new(trust_repo: Arc<dyn TrustRepo>, reputation_repo: Arc<dyn ReputationRepo>) -> Self {
         Self {
             trust_repo,
+            reputation_repo,
+            endorsement_slots: 3,
             max_denouncement_slots: 2,
             daily_quota: 5,
         }
@@ -90,10 +102,28 @@ impl TrustService for DefaultTrustService {
             return Err(TrustServiceError::SelfAction);
         }
 
-        // Endorsement slot limit (k=3) enforced at worker dispatch time — see GitHub issue for cross-module design
         let daily_count = self.trust_repo.count_daily_actions(endorser_id).await?;
         if daily_count >= self.daily_quota {
             return Err(TrustServiceError::QuotaExceeded);
+        }
+
+        // Verifier accounts are exempt from endorsement slot limits
+        let is_verifier = self
+            .reputation_repo
+            .has_endorsement(endorser_id, "authorized_verifier")
+            .await
+            .unwrap_or(false);
+
+        if !is_verifier {
+            let active_count = self
+                .reputation_repo
+                .count_active_trust_endorsements_by(endorser_id)
+                .await?;
+            if active_count >= i64::from(self.endorsement_slots) {
+                return Err(TrustServiceError::EndorsementSlotsExhausted {
+                    max: self.endorsement_slots,
+                });
+            }
         }
 
         let payload = json!({

@@ -17,6 +17,7 @@ use super::repo::{TrustRepo, TrustRepoError};
 use super::service::{TrustService, TrustServiceError};
 use crate::identity::http::auth::AuthenticatedDevice;
 use crate::identity::http::ErrorResponse;
+use crate::reputation::repo::ReputationRepo;
 
 // ─── Request types ─────────────────────────────────────────────────────────
 
@@ -74,10 +75,9 @@ pub struct ScoresResponse {
 
 #[derive(Debug, Serialize)]
 pub struct BudgetResponse {
-    pub total_influence: f32,
-    pub staked_influence: f32,
-    pub spent_influence: f32,
-    pub available_influence: f32,
+    pub slots_total: u32,
+    pub slots_used: i64,
+    pub slots_available: i64,
 }
 
 #[derive(Debug, Serialize)]
@@ -236,26 +236,40 @@ async fn scores_me_handler(
     }
 }
 
+/// Demo endorsement slot count (k=3).
+const ENDORSEMENT_SLOTS: u32 = 3;
+
 async fn budget_handler(
-    Extension(trust_repo): Extension<Arc<dyn TrustRepo>>,
+    Extension(reputation_repo): Extension<Arc<dyn ReputationRepo>>,
     auth: AuthenticatedDevice,
 ) -> impl IntoResponse {
-    match trust_repo.get_or_create_influence(auth.account_id).await {
-        Ok(influence) => {
-            let available =
-                influence.total_influence - influence.staked_influence - influence.spent_influence;
+    match reputation_repo
+        .count_active_trust_endorsements_by(auth.account_id)
+        .await
+    {
+        Ok(used) => {
+            let total = ENDORSEMENT_SLOTS;
+            let available = i64::from(total) - used;
             (
                 StatusCode::OK,
                 Json(BudgetResponse {
-                    total_influence: influence.total_influence,
-                    staked_influence: influence.staked_influence,
-                    spent_influence: influence.spent_influence,
-                    available_influence: available,
+                    slots_total: total,
+                    slots_used: used,
+                    slots_available: available,
                 }),
             )
                 .into_response()
         }
-        Err(ref e) => trust_repo_error_response(e),
+        Err(ref e) => {
+            tracing::error!("Budget handler endorsement count error: {e}");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse {
+                    error: "Internal server error".to_string(),
+                }),
+            )
+                .into_response()
+        }
     }
 }
 
@@ -381,6 +395,13 @@ fn trust_service_error_response(e: &TrustServiceError) -> axum::response::Respon
             }),
         )
             .into_response(),
+        TrustServiceError::EndorsementSlotsExhausted { max } => (
+            StatusCode::TOO_MANY_REQUESTS,
+            Json(ErrorResponse {
+                error: format!("Endorsement slots exhausted (max {max})"),
+            }),
+        )
+            .into_response(),
         TrustServiceError::InsufficientBudget => (
             StatusCode::PAYMENT_REQUIRED,
             Json(ErrorResponse {
@@ -397,6 +418,16 @@ fn trust_service_error_response(e: &TrustServiceError) -> axum::response::Respon
             .into_response(),
         TrustServiceError::Repo(ref inner) => {
             tracing::error!("Trust service repo error: {inner}");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse {
+                    error: "Internal server error".to_string(),
+                }),
+            )
+                .into_response()
+        }
+        TrustServiceError::EndorsementRepo(ref inner) => {
+            tracing::error!("Trust service endorsement repo error: {inner}");
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(ErrorResponse {

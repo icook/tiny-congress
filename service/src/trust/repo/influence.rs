@@ -25,31 +25,3 @@ pub(super) async fn get_or_create_influence(
 
     Ok(record)
 }
-
-pub(super) async fn update_influence(
-    pool: &PgPool,
-    user_id: Uuid,
-    staked_delta: f32,
-    spent_delta: f32,
-) -> Result<InfluenceRecord, TrustRepoError> {
-    // Update atomically, enforcing that staked and spent are non-negative and
-    // that available influence (total - staked - spent) never goes below zero.
-    let maybe = sqlx::query_as::<_, InfluenceRecord>(
-        "UPDATE trust__user_influence \
-         SET staked_influence = staked_influence + $2, \
-             spent_influence  = spent_influence  + $3, \
-             updated_at       = now() \
-         WHERE user_id = $1 \
-           AND (staked_influence + $2) >= 0 \
-           AND (spent_influence  + $3) >= 0 \
-           AND (total_influence - (staked_influence + $2) - (spent_influence + $3)) >= 0 \
-         RETURNING user_id, total_influence, staked_influence, spent_influence, updated_at",
-    )
-    .bind(user_id)
-    .bind(staked_delta)
-    .bind(spent_delta)
-    .fetch_optional(pool)
-    .await?;
-
-    maybe.ok_or(TrustRepoError::InsufficientBudget)
-}
