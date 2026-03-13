@@ -8,17 +8,15 @@ pub(super) async fn create_denouncement(
     accuser_id: Uuid,
     target_id: Uuid,
     reason: &str,
-    influence_spent: f32,
 ) -> Result<DenouncementRecord, TrustRepoError> {
     sqlx::query_as::<_, DenouncementRecord>(
-        "INSERT INTO trust__denouncements (accuser_id, target_id, reason, influence_spent) \
-         VALUES ($1, $2, $3, $4) \
+        "INSERT INTO trust__denouncements (accuser_id, target_id, reason) \
+         VALUES ($1, $2, $3) \
          RETURNING *",
     )
     .bind(accuser_id)
     .bind(target_id)
     .bind(reason)
-    .bind(influence_spent)
     .fetch_one(pool)
     .await
     .map_err(|e| {
@@ -47,13 +45,14 @@ pub(super) async fn list_denouncements_against(
     Ok(records)
 }
 
+/// Count total denouncements filed by `accuser_id` (permanent budget — no refunds).
 pub(super) async fn count_active_denouncements_by(
     pool: &PgPool,
     accuser_id: Uuid,
 ) -> Result<i64, TrustRepoError> {
     let count = sqlx::query_scalar::<_, i64>(
         "SELECT COUNT(*) FROM trust__denouncements \
-         WHERE accuser_id = $1 AND resolved_at IS NULL",
+         WHERE accuser_id = $1",
     )
     .bind(accuser_id)
     .fetch_one(pool)

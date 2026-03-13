@@ -15,7 +15,6 @@ use uuid::Uuid;
 pub enum TrustRepoError {
     NotFound,
     Duplicate,
-    InsufficientBudget,
     Database(sqlx::Error),
 }
 
@@ -24,7 +23,6 @@ impl std::fmt::Display for TrustRepoError {
         match self {
             Self::NotFound => write!(f, "not found"),
             Self::Duplicate => write!(f, "duplicate"),
-            Self::InsufficientBudget => write!(f, "insufficient budget"),
             Self::Database(e) => write!(f, "database error: {e}"),
         }
     }
@@ -69,7 +67,6 @@ pub struct DenouncementRecord {
     pub accuser_id: Uuid,
     pub target_id: Uuid,
     pub reason: String,
-    pub influence_spent: f32,
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub resolved_at: Option<chrono::DateTime<chrono::Utc>>,
 }
@@ -134,7 +131,6 @@ pub trait TrustRepo: Send + Sync {
         accuser_id: Uuid,
         target_id: Uuid,
         reason: &str,
-        influence_spent: f32,
     ) -> Result<DenouncementRecord, TrustRepoError>;
 
     async fn list_denouncements_against(
@@ -242,16 +238,8 @@ impl TrustRepo for PgTrustRepo {
         accuser_id: Uuid,
         target_id: Uuid,
         reason: &str,
-        influence_spent: f32,
     ) -> Result<DenouncementRecord, TrustRepoError> {
-        denouncements::create_denouncement(
-            &self.pool,
-            accuser_id,
-            target_id,
-            reason,
-            influence_spent,
-        )
-        .await
+        denouncements::create_denouncement(&self.pool, accuser_id, target_id, reason).await
     }
 
     async fn list_denouncements_against(

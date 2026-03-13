@@ -131,14 +131,9 @@ impl TrustWorker {
                     .as_str()
                     .ok_or_else(|| anyhow::anyhow!("denounce payload missing 'reason'"))?
                     .to_string();
-                #[allow(clippy::cast_possible_truncation)]
-                let influence_cost = action.payload["influence_cost"]
-                    .as_f64()
-                    .ok_or_else(|| anyhow::anyhow!("denounce payload missing 'influence_cost'"))?
-                    as f32;
 
                 self.trust_repo
-                    .create_denouncement(action.actor_id, target_id, &reason, influence_cost)
+                    .create_denouncement(action.actor_id, target_id, &reason)
                     .await
                     .map_err(|e| anyhow::anyhow!("create_denouncement failed: {e}"))?;
             }

@@ -122,22 +122,12 @@ async fn test_denounce_enqueues_action() {
         .await
         .expect("create target");
 
-    // Seed influence so the accuser can afford the denouncement
-    sqlx::query(
-        "INSERT INTO trust__user_influence (user_id, total_influence) VALUES ($1, 100.0) \
-         ON CONFLICT DO NOTHING",
-    )
-    .bind(accuser.id)
-    .execute(&pool)
-    .await
-    .expect("seed influence");
-
     let rep_repo = Arc::new(PgReputationRepo::new(pool.clone())) as Arc<dyn ReputationRepo>;
     let repo = Arc::new(PgTrustRepo::new(pool));
     let service = DefaultTrustService::new(repo.clone(), rep_repo);
 
     service
-        .denounce(accuser.id, target.id, "spam", 1.0)
+        .denounce(accuser.id, target.id, "spam")
         .await
         .expect("denounce");
 
@@ -178,29 +168,19 @@ async fn test_denounce_slots_exhausted() {
         .await
         .expect("create target3");
 
-    // Seed influence for accuser
-    sqlx::query(
-        "INSERT INTO trust__user_influence (user_id, total_influence) VALUES ($1, 100.0) \
-         ON CONFLICT DO NOTHING",
-    )
-    .bind(accuser.id)
-    .execute(&pool)
-    .await
-    .expect("seed influence");
-
     let rep_repo = Arc::new(PgReputationRepo::new(pool.clone())) as Arc<dyn ReputationRepo>;
     let repo = Arc::new(PgTrustRepo::new(pool));
 
-    // Create 2 denouncements directly via repo (fills d=2 slots)
-    repo.create_denouncement(accuser.id, target1.id, "reason", 1.0)
+    // Create 2 denouncements directly via repo (fills d=2 permanent slots)
+    repo.create_denouncement(accuser.id, target1.id, "reason")
         .await
         .expect("denouncement 1");
-    repo.create_denouncement(accuser.id, target2.id, "reason", 1.0)
+    repo.create_denouncement(accuser.id, target2.id, "reason")
         .await
         .expect("denouncement 2");
 
     let service = DefaultTrustService::new(repo, rep_repo);
-    let result = service.denounce(accuser.id, target3.id, "spam", 1.0).await;
+    let result = service.denounce(accuser.id, target3.id, "spam").await;
 
     assert!(
         matches!(

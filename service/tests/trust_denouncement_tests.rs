@@ -26,14 +26,13 @@ async fn test_create_denouncement() {
 
     let repo = PgTrustRepo::new(pool);
     let record = repo
-        .create_denouncement(accuser.id, target.id, "spam behavior", 2.5)
+        .create_denouncement(accuser.id, target.id, "spam behavior")
         .await
         .expect("create_denouncement");
 
     assert_eq!(record.accuser_id, accuser.id);
     assert_eq!(record.target_id, target.id);
     assert_eq!(record.reason, "spam behavior");
-    assert!((record.influence_spent - 2.5).abs() < f32::EPSILON);
     assert!(record.resolved_at.is_none());
 }
 
@@ -55,12 +54,12 @@ async fn test_duplicate_denouncement_rejected() {
         .expect("create target");
 
     let repo = PgTrustRepo::new(pool);
-    repo.create_denouncement(accuser.id, target.id, "first", 1.0)
+    repo.create_denouncement(accuser.id, target.id, "first")
         .await
         .expect("first denouncement");
 
     let result = repo
-        .create_denouncement(accuser.id, target.id, "second", 1.0)
+        .create_denouncement(accuser.id, target.id, "second")
         .await;
 
     assert!(
@@ -93,10 +92,10 @@ async fn test_list_denouncements_against() {
         .expect("create target");
 
     let repo = PgTrustRepo::new(pool);
-    repo.create_denouncement(accuser1.id, target.id, "reason one", 1.0)
+    repo.create_denouncement(accuser1.id, target.id, "reason one")
         .await
         .expect("denouncement 1");
-    repo.create_denouncement(accuser2.id, target.id, "reason two", 2.0)
+    repo.create_denouncement(accuser2.id, target.id, "reason two")
         .await
         .expect("denouncement 2");
 
@@ -133,10 +132,10 @@ async fn test_count_active_denouncements_by() {
         .expect("create target2");
 
     let repo = PgTrustRepo::new(pool);
-    repo.create_denouncement(accuser.id, target1.id, "reason", 1.0)
+    repo.create_denouncement(accuser.id, target1.id, "reason")
         .await
         .expect("denouncement 1");
-    repo.create_denouncement(accuser.id, target2.id, "reason", 1.0)
+    repo.create_denouncement(accuser.id, target2.id, "reason")
         .await
         .expect("denouncement 2");
 
@@ -146,4 +145,46 @@ async fn test_count_active_denouncements_by() {
         .expect("count_active_denouncements_by");
 
     assert_eq!(count, 2);
+}
+
+/// Resolved denouncements still count toward the permanent budget (non-refundable).
+#[shared_runtime_test]
+async fn test_resolved_denouncement_still_counts() {
+    let db = isolated_db().await;
+    let pool = db.pool().clone();
+
+    let accuser = AccountFactory::new()
+        .with_seed(60)
+        .create(&pool)
+        .await
+        .expect("create accuser");
+
+    let target = AccountFactory::new()
+        .with_seed(61)
+        .create(&pool)
+        .await
+        .expect("create target");
+
+    let repo = PgTrustRepo::new(pool.clone());
+    repo.create_denouncement(accuser.id, target.id, "spam")
+        .await
+        .expect("denouncement");
+
+    // Simulate admin resolving the denouncement
+    sqlx::query(
+        "UPDATE trust__denouncements SET resolved_at = NOW() \
+         WHERE accuser_id = $1 AND target_id = $2",
+    )
+    .bind(accuser.id)
+    .bind(target.id)
+    .execute(&pool)
+    .await
+    .expect("resolve denouncement");
+
+    // The count must still be 1 — resolving does not refund the slot
+    let count = repo
+        .count_active_denouncements_by(accuser.id)
+        .await
+        .expect("count");
+    assert_eq!(count, 1);
 }
