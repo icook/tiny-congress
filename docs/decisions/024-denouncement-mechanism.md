@@ -41,6 +41,54 @@ Full disconnection (revoking all edges) or slashing is too consequential for an 
 
 This is a substantial design problem and will be addressed in a separate ADR when the governance model is designed.
 
+## Simulation Evidence
+
+31 simulation tests validate this mechanism across adversarial topologies. Key results:
+
+### Mechanism comparison (4 mechanisms × 2 scenarios)
+
+| Scenario | Mechanism | d_before | d_after | div_before→after | Blue casualties |
+|---|---|---|---|---|---|
+| hub_and_spoke | edge_removal | 4.33 | — | 1→0 | 0/3 |
+| hub_and_spoke | score_penalty | 4.33 | 7.33 | 1→0 | 0/3 |
+| hub_and_spoke | sponsorship_cascade | 4.33 | 4.33 | 1→1 | 0/3 |
+| hub_and_spoke | **denouncer_revocation** | 4.33 | — | 1→0 | 0/3 |
+| mercenary_bot | edge_removal | 2.00 | — | 3→0 | 0/7 |
+| mercenary_bot | score_penalty | 2.00 | 5.00 | 3→2 | 0/7 |
+| mercenary_bot | sponsorship_cascade | 2.00 | 2.00 | 3→3 | 1/7 |
+| mercenary_bot | **denouncer_revocation** | 2.00 | 3.00 | 3→2 | 0/7 |
+
+### Weaponization resistance (Sybil mass-denouncement of blue target)
+
+| Mechanism | Blue target survived? | Blue casualties |
+|---|---|---|
+| edge_removal | YES | 0/4 |
+| score_penalty | **NO** — distance 2.0→32.0 | 0/4 |
+| sponsorship_cascade | YES | 0/4 |
+| **denouncer_revocation** | **YES** — no change (no-op: attacker has no edge to target) | 0/4 |
+
+### Coordinated vs. insufficient denouncement
+
+| Scenario | Denouncers | Diversity before→after | Target eligible? |
+|---|---|---|---|
+| Coordinated | 3 of 4 bridges | 4→1 | Lost eligibility |
+| Insufficient | 1 of 4 bridges | 4→3 | Retained eligibility |
+
+### Denouncement propagation (cascade complement)
+
+| Mechanism | Mercenary d_after | div_after | Blue casualties |
+|---|---|---|---|
+| denouncer_revocation alone | 3.00 | 2 | 0/7 |
+| denouncer_revocation + cascade (2.0/1) | 3.00 | 2 | 1/7 |
+| full sponsorship_cascade | 2.00 | 3 | 1/7 |
+
+Cascade penalty sweep: values (1.0/1) through (3.0/1) produce 1/7 blue casualties; (4.0/2) increases to 2/7 without improving target blocking. The default 2.0/1 is the chosen operating point.
+
+### Propagation safety
+
+- **One-hop only (Q16):** Cascade penalties do not propagate beyond direct endorsers. Upstream nodes are unaffected.
+- **No circular cascades (Q19):** Ring topology (A→B→C→A) produces no runaway penalty accumulation. Each node penalized at most once.
+
 ## Consequences
 
 ### Positive
@@ -56,6 +104,7 @@ This is a substantial design problem and will be addressed in a separate ADR whe
 ### Neutral
 - ADR-020's denouncement budget (d=2) works naturally with this mechanism: each denouncement costs 1 budget and revokes 1 edge.
 - The simulation harness validates denouncer-only revocation across 31 adversarial scenarios (PR #678).
+- Denouncement propagation (cascade penalties on remaining endorsers) layers on top as a complement. The chosen cascade penalty is 2.0 distance / 1 diversity — lighter than the primary score penalty — applied to direct endorsers only (one-hop). This is implemented in `apply_denouncer_revocation_with_cascade` in the simulation harness.
 
 ## Alternatives considered
 
@@ -82,4 +131,6 @@ Not rejected but reframed: the "right" version of this is adjudication with gove
 - [ADR-023: Fixed slots with variable weight](023-fixed-slot-variable-weight.md) — slot model for endorsements
 - [ADR-019: Trust engine computation](019-trust-engine-computation.md) — distance/diversity scoring
 - [GitHub #624: Trust graph simulation](https://github.com/icook/tiny-congress/issues/624) — adversarial topology testing
-- PR #643: Simulation harness with mechanism comparison framework
+- PR #643/PR #676: Simulation design workspace with mechanism comparison framework
+- PR #663: Trust graph simulation harness implementation
+- `service/tests/trust_simulation_tests.rs`: 31 named simulation scenarios validating this mechanism
