@@ -189,7 +189,11 @@ export function PollPage({ roomId, pollId }: PollPageProps) {
 
             {!hasVoted && canVote ? (
               <Text size="sm" c="dimmed">
-                Move the sliders to set your position on each dimension, then submit.
+                Each slider is a different aspect of the question. Drag to set where you fall
+                between the two labeled positions, then submit.{' '}
+                <Text component={Link} to="/about#voting" size="sm" c="blue" inherit>
+                  How does this work?
+                </Text>
               </Text>
             ) : null}
 
@@ -274,6 +278,9 @@ export function PollPage({ roomId, pollId }: PollPageProps) {
               </Text>
             ) : null}
           </Group>
+          <Text size="xs" c="dimmed">
+            Each chart shows how responses are distributed across the spectrum.
+          </Text>
 
           {distributionQuery.isLoading ? <Loader size="sm" /> : null}
 
