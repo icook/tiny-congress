@@ -10,11 +10,13 @@
 //! - [`GraphBuilder`] — materializes a `GraphSpec` into real database rows (accounts,
 //!   endorsements) for running the trust engine against.
 
+pub mod analysis;
 pub mod comparison;
 pub mod generators;
 pub mod mechanisms;
 pub mod predicates;
 pub mod report;
+pub mod scale;
 pub mod topology;
 
 use std::collections::HashMap;
