@@ -381,6 +381,7 @@ mod tests {
             voter_count: 20,
             log_level: "info".to_string(),
             mock_llm: true,
+            poll_duration_secs: 86400,
         };
 
         let client = reqwest::Client::new();
