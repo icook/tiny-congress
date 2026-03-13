@@ -5,12 +5,14 @@
 **Goal:** Use the trust simulation harness to resolve open questions and advance ADR-024 (Draft→Accepted) and ADR-025 (Draft→Accepted). Stress-test ADR-023's weight table.
 **Prerequisite:** PR #673 (GraphSpec extraction) merged — provides `GraphSpec`, behavioral predicates, proptest generators, and temporal extensions.
 
+**STATUS: ALL THREE PHASES COMPLETE.** ADRs 024 and 025 accepted. ADR-023 stress-tested. See PR #678 (Phases 1-2) and PR #679 (Phase 3).
+
 ---
 
-## Phase 1: Validate denouncer-only revocation → accept ADR-024
+## Phase 1: Validate denouncer-only revocation → accept ADR-024 ✓ COMPLETE
 
 **Open questions resolved:** Q8 (penalty values), Q16 (propagation depth), Q18 (proportionality), Q19 (circular cascades)
-**Deliverables:** New mechanism in `mechanisms.rs`, 4+ new test scenarios, updated comparison table, ADR-024 accepted with evidence
+**Deliverables:** ✓ 31 simulation scenarios in PR #678. ADR-024 accepted 2026-03-13.
 
 ### Step 1: Add `apply_denouncer_revocation` to mechanisms.rs
 
@@ -92,10 +94,10 @@ Update `docs/decisions/024-denouncement-mechanism.md`:
 
 ---
 
-## Phase 2: Weight variance → stress-test ADR-023
+## Phase 2: Weight variance → stress-test ADR-023 ✓ COMPLETE
 
 **Open questions resolved:** Q4 (weight variance), Q5 (calibration criteria), Q6 (gameable self-reporting)
-**Deliverables:** Mixed-weight adversarial scenarios, weight sweep results, go/no-go on ADR-023 weight table
+**Deliverables:** ✓ Mixed-weight adversarial scenarios in PR #678. ADR-023 weight table validated.
 
 ### Step 7: Mixed-weight adversarial scenarios
 
@@ -134,10 +136,10 @@ Explicit test: Sybil hub-and-spoke with all edges at 1.0. Verify spokes still fa
 
 ---
 
-## Phase 3: Time decay experiments → accept ADR-025
+## Phase 3: Time decay experiments → accept ADR-025 ✓ COMPLETE
 
 **Open questions resolved:** Q12 (decay model), Q14 (slot auto-release), Q15 (simulation coverage)
-**Deliverables:** Decay function recommendation with data, temporal adversarial scenarios, ADR-025 accepted
+**Deliverables:** ✓ Step function chosen (1.0 yr1, 0.5 yr2, 0.0 after). Auto-release below 0.05. ADR-025 accepted 2026-03-13 (PR #679).
 
 ### Step 10: Define 3 candidate decay functions
 
@@ -215,9 +217,28 @@ Update `docs/decisions/025-trust-edge-time-decay.md`:
 
 ---
 
+---
+
+## Phase 4: Scale simulation (NEW)
+
+**Shipped in PR #684** (`test/680-scale-simulation-framework`). Pure-Rust, no-DB scale testing framework.
+
+**What was built:**
+- BA graph generation with LCG PRNG (deterministic, no rand crate)
+- Sparse Edmonds-Karp max-flow (O(E) space, handles 100k+ nodes)
+- Sybil mesh attachment and analysis
+- Correlated decay and bridge removal scenarios
+- 8 scale test scenarios (6 normal + 2 #[ignore] for 100k/benchmark)
+
+**Key findings:** See `.plan/2026-03-13-scale-analysis-findings.md`
+
+**Follow-up tickets:** #680 (community-structure topology), #681 (engine sparse migration), #682 (correlated failure / Sybil countermeasures)
+
+---
+
 ## Execution notes
 
-- **Branch strategy:** Each phase gets its own branch off master. Phase 1 is highest priority. Phases 2-3 are independent and can run in parallel after Phase 1.
-- **Test output:** All comparison tables write to `target/simulation/` for inspection. DOT files for visual debugging.
+- **All mechanism phases complete.** Phases 1-3 executed across PRs #678 and #679.
+- **Scale phase shipped.** PR #684 adds the scale testing framework.
 - **Loss function applied throughout:** Per Q7 resolution, accept blue casualties when they come with red blocking. `W_block >> W_collateral`.
-- **PR #673 must merge first** — Phase 1 needs `GraphSpec` for the new predicate-driven tests and Phase 3 needs temporal extensions.
+- **Next phase: topology realism.** BA graphs flatter the system. Community-structure testing (#680) is the highest-value next step.

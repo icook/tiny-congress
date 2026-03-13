@@ -2,33 +2,48 @@
 
 **Date:** 2026-03-13
 **Branch:** test/624-trust-simulation-harness (#643)
-**Context:** Consolidated from simulation harness build, adversarial audit, and mechanism comparison sessions. Updated with mechanism decisions from review conversation.
+**Context:** Consolidated from simulation harness build, adversarial audit, mechanism comparison, and scale simulation sessions.
 
 ---
 
 ## Current state (2026-03-13, updated)
 
-**Where things stand:** Phase 1 (denouncer-only revocation validation → ADR-024) and Phase 2 (weight variance stress-testing → ADR-023 confirmed) are complete. PR #673 merged. Phase 3 (time decay → ADR-025) is in progress. 31+ named adversarial scenarios run; all mechanism decisions are now backed by simulation evidence.
+**Where things stand:** All four trust ADRs are accepted with simulation evidence. The mechanism design phase is complete. Scale simulation (PR #684) has validated the system to ~5k users with high confidence. The remaining work is engineering (sparse max-flow migration) and topology realism (community-structure testing).
+
+**Key insight: getting to 100k is an engineering problem, not a design problem.** The trust mechanisms (distance, diversity, denouncement, decay) are scale-invariant — the math doesn't change with graph size. What breaks at scale is the engine implementation (dense O(n²) max-flow matrix) and our confidence in topology assumptions (BA graphs are unrealistically well-connected). See `.plan/2026-03-13-scale-analysis-findings.md` for full analysis.
 
 **Active branches/PRs:**
-- **PR #643** (`test/624-trust-simulation-harness`) — this `.plan/` design workspace. Reference only, not meant to merge.
-- **PR #673** (`feature/662-graphspec-extraction`) — GraphSpec extraction, behavioral predicates, proptest integration, temporal extensions. **Merged.**
-- **PR #678** — adversarial simulation suite (Phase 1 + Phase 2 deliverables). ADR-024 accepted with evidence.
-- **`sim/open-questions-workspace`** — latest updates to this doc and the phased plan.
+- **PR #676** (`sim/trust-simulation-design-workspace`) — this `.plan/` design workspace. Reference only, not meant to merge.
+- **PR #678** — adversarial simulation suite (Phases 1-2). ADR-024 accepted with 31 tests.
+- **PR #679** — time decay simulation (Phase 3). ADR-025 accepted.
+- **PR #684** (`test/680-scale-simulation-framework`) — scale simulation: BA graph generation, Sybil mesh analysis, sparse max-flow, 8 scale test scenarios.
 
-**Key decisions finalized:**
+**All trust ADRs accepted:**
+- ADR-020: Endorsement Slots & Denouncement Budget (k=10, d=2)
+- ADR-023: Fixed Slots with Variable Weight (weight table stress-tested in Phase 2, PR #678)
+- ADR-024: Denouncer-Only Edge Revocation (accepted 2026-03-13, 31 tests in PR #678)
+- ADR-025: Trust Edge Time Decay (step function: 1.0 yr1, 0.5 yr2, 0.0 after; accepted 2026-03-13, PR #679)
+
+**Key decisions made (mechanism phase):**
 - Nuclear edge removal: REJECTED (weaponizable)
 - Score penalty: REJECTED (stacks linearly, weaponizable)
-- Denouncer-only revocation: CHOSEN and ACCEPTED (ADR-024, 2026-03-13)
-- ADR-023: ACCEPTED with weight table stress-tested across adversarial topologies
-- Loss function: bias defensive — false negatives >> false positives in cost. Blue casualties from cascade acceptable. Asymmetry narrows at scale.
+- Denouncer-only revocation: ACCEPTED (ADR-024)
+- Cascade complement: 2.0/1 penalty, one-hop only
+- Loss function: bias defensive — false negatives >> false positives
 - Renewal mechanism: re-swap (no new UX needed)
-- Denouncement propagation = sponsorship cascade (same mechanism, not separate concepts)
+- Denouncement propagation = sponsorship cascade (same mechanism)
 - Penalty operating point: 2.0 distance / -1 diversity (confirmed by sweep)
+- Time decay: step function (1.0/0.5/0.0 at 1yr/2yr thresholds)
 
-**What's next:** Phase 3 — time decay simulation to accept ADR-025. See `.plan/2026-03-13-simulation-phases-plan.md` for the full plan.
+**Scale confidence assessment:**
 
-**Open question scoreboard:** 19 questions total. 16 resolved (Q1-2 mechanism rejection, Q4-6 weight variance, Q7 loss function, Q8 propagation penalty values, Q9 cross-ref, Q13 renewal, Q16-19 propagation/cascade, Q17 cascade=propagation, plus ADR-023 and ADR-024 accepted). 3 remaining (Q12 decay model, Q14 slot auto-release, Q15 temporal simulation). 2 deferred for design (Q3 adjudication, #656 weight UI).
+| Scale | Confidence | Key constraint |
+|---|---|---|
+| 1k–5k | **High** | Mechanisms are scale-invariant. BA simulations confirm robust connectivity. |
+| 5k–10k | **Medium** | Engine FlowGraph hits memory wall (O(n²) dense matrix). Sparse implementation proven in tests. |
+| 10k–100k | **Low-Medium** | Mechanism math is sound. Engine perf, realistic topology, and sophisticated Sybil strategies untested. |
+
+**Open question scoreboard:** 23 questions total. 16 resolved through simulation + ADR acceptance. 4 new scale questions (Q20-Q23). 3 deferred for design/engineering.
 
 ---
 
@@ -115,38 +130,44 @@ Endorsing someone who later gets denounced should carry consequences. This is "p
 
 ---
 
+## Scale simulation findings (PR #684)
+
+See `.plan/2026-03-13-scale-analysis-findings.md` for full analysis. Summary:
+
+1. **Sybil mesh diversity = bridge count, exactly.** Internal mesh endorsements don't inflate diversity. Security reduces to "how hard is it to compromise 2+ independent endorsers?"
+2. **Engine FlowGraph is the bottleneck.** Dense O(n²) matrix: 4MB at 1k, 100MB at 5k, 40GB at 100k. Sparse Edmonds-Karp (O(E)) proven identical in tests — needs to be ported to engine.
+3. **BA graphs at 1k-2k:** 100% reachable, mean distance 2.5, min diversity 3. Distance threshold 5.0 is generous.
+4. **10k validated (bonus run):** mean distance 2.958, max 5.0, min diversity 3 (sampled 1000), 100% reachable. ~993 seconds.
+5. **Bridge removal resilient:** removing 3 highest-degree nodes → 99.7% still reachable.
+6. **Correlated decay localized:** 100-node cohort with 2yr+ edges → 0 unreachable, 3 with increased distance. **Caveat:** BA topology flatters the system — real communities cluster harder.
+
+### Open questions (scale)
+
+20. **Real topology modeling.** BA produces unrealistically high connectivity. Need community-structure generators (stochastic block model: dense intra-community, sparse inter-community) to test whether thresholds hold for realistic social graphs. **Ticket: #680.**
+21. **Engine sparse max-flow migration.** When to migrate? Current dense impl works at demo scale (~100). Sparse impl proven correct. Could port incrementally. **Ticket: #681.**
+22. **Sybil mesh countermeasures.** With diversity=bridge_count proven, what additional detection beyond the diversity threshold? Options: temporal analysis (simultaneous endorsements), graph structure (dense cluster with few external connections), behavioral signals. **Ticket: #682.**
+23. **Community-structure testing.** Stochastic block model graphs to re-run all scale tests. Would surface whether current thresholds need adjustment for realistic social structure. Part of #680.
+
+---
+
 ## Next actions (roughly prioritized)
 
-### Done
-- [x] **Mechanism recommendation** — denouncer-only revocation as baseline; nuclear edge removal and score penalty rejected; adjudication for severe cases is future work
-- [x] **ADR-020 ↔ ADR-023 cross-reference** (question 9) — done
-- [x] **Finalize ADR-023** — accepted; weight table values are provisional, structural decision is final
-- [x] **Q13 resolved** — renewal = re-do handshake (re-swap overwrites slot with new weight + fresh timestamp)
-- [x] **Q17 resolved** — denouncement propagation IS the sponsorship cascade, same mechanism
+### Done (mechanism phases)
+- [x] **Phase 1: ADR-024 accepted** — denouncer-only revocation validated with 31 simulation scenarios (PR #678)
+- [x] **Phase 2: ADR-023 stress-tested** — weight variance scenarios, max-weight Sybil still fails diversity (PR #678)
+- [x] **Phase 3: ADR-025 accepted** — step function decay (1.0/0.5/0.0), temporal adversarial scenarios (PR #679)
+- [x] **All 4 trust ADRs accepted** — mechanism design phase complete
 
-### Phase 1: Validate denouncer-only revocation → accept ADR-024
-- [x] Add `apply_denouncer_revocation(denouncer, target)` to mechanisms.rs
-- [x] Re-run comparison with all 4 mechanisms across existing adversarial scenarios
-- [x] New scenario: coordinated denouncement (3 independent denouncers vs. well-connected target)
-- [x] New scenario: insufficient denouncement (single denouncer vs. well-connected target, confirm survival)
-- [x] **Simulate propagation** (Q8, Q16, Q18, Q19) — run `apply_sponsorship_cascade` alongside denouncer-only revocation; sweep penalty values (Q8); test one-hop vs. multi-hop (Q16); test proportionality scaling (Q18); verify no circular cascades (Q19)
-- [x] Accept ADR-024 with simulation evidence
+### Done (scale simulation)
+- [x] **Scale simulation framework** — BA graph generation, sparse max-flow, Sybil mesh analysis (PR #684)
+- [x] **Scale confidence assessment** — high to 5k, medium to 10k, low-medium to 100k
 
-Complete — ADR-024 accepted with 31 simulation tests (PR #678)
-
-### Phase 2: Weight variance → stress-test ADR-023
-- [x] Mixed-weight adversarial scenarios using ADR-023 table values (Q4)
-- [x] Weight sweep on mercenary-bot scenario (Q5 calibration criteria)
-- [x] Verify Sybil at max-weight still fails diversity checks (Q6)
-
-Complete — weight table stress-tested across adversarial topologies (PR #678)
-
-### Phase 3: Time decay experiments → accept ADR-025
-- [ ] Compare 3 decay functions: exponential, step, linear (Q12)
-- [ ] Temporal adversarial scenarios: Sybil attack window narrowing under decay (Q15)
-- [ ] Stale-but-legitimate edges: do real relationships survive without renewal?
-- [ ] Slot auto-release policy: what happens to decayed slots? (Q14)
+### Active (scale hardening)
+- [ ] **Community-structure topology testing** (#680) — stochastic block model graphs, re-run scale tests
+- [ ] **Correlated failure scenarios** (#682) — realistic cohort clustering, not just BA redundancy
+- [ ] **Engine sparse max-flow migration** (#681) — port sparse Edmonds-Karp to `service/src/trust/max_flow.rs`
 
 ### Deferred (needs design, not simulation)
 - [ ] **Multi-method weight UI** — #656: add swap method + relationship depth selection to endorsement flow
 - [ ] **Adjudication process design** (Q3) — governance process for severe slashing; its own ADR
+- [ ] **Sybil mesh countermeasures** (#682) — temporal/structural detection beyond diversity threshold
