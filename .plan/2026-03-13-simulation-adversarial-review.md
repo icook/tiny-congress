@@ -115,28 +115,40 @@ This isn't a hash — it's a linear function with strong periodicity. The genera
 
 ## Severity Summary
 
-| # | Issue | Severity | Exploitable? |
-|---|-------|----------|---|
-| 3 | Simulation doesn't test materialization + constraints | **High** | Test coverage gap |
-| 1 | Distance cutoff prunes connectivity scope | **Medium** | At scale — attacker controls diversity via weight manipulation |
-| 2 | CTE is exponential in dense subgraphs | **Medium** | DoS vector at 1,000+ users |
-| 5 | Scenarios too structurally simple | **Medium** | Incomplete validation |
-| 6 | Stale comments reference old approximation | **Low** | Misleading but not broken |
-| 4 | Cross-edge += relies on uniqueness constraint | **Low** | Only if schema invariant violated |
-| 8 | Double distance computation | **Low** | Performance only |
-| 7 | Deterministic hash produces structured graphs | **Low** | Weak test realism |
+| # | Issue | Severity | Exploitable? | Threshold |
+|---|-------|----------|---|---|
+| 3 | Simulation doesn't test materialization + constraints | **High** | Test coverage gap | **Now** — addressed by pipeline assertions (PR #643) |
+| 1 | Distance cutoff prunes connectivity scope | **Medium** | Attacker controls diversity via weight manipulation | **~500 users** with multi-community structure (3+ hops between communities) |
+| 2 | CTE is exponential in dense subgraphs | **Medium** | DoS vector — dense cluster makes `compute_distances_from` expensive | **~1,000 users** with dense clusters (avg degree >10); a 15-node clique generates millions of CTE rows |
+| 5 | Scenarios too structurally simple | **Medium** | Incomplete validation | Not a vulnerability — test coverage gap |
+| 6 | Stale comments reference old approximation | **Low** | Misleading but not broken | **Now** — addressed by comment fixes (PR #643) |
+| 4 | Cross-edge += relies on uniqueness constraint | **Low** | Only if schema invariant violated | **Never** if DB unique index holds; verify index exists |
+| 8 | Double distance computation | **Low** | Performance only | Same as #2 (~1,000 dense users) — doubles an already-expensive operation |
+| 7 | Deterministic hash produces structured graphs | **Low** | Weak test realism | Never a vulnerability |
+
+### Scale analysis
+
+The two findings that become real vulnerabilities pre-public-launch:
+
+- **#2 (CTE DoS)** is the most dangerous. It's a **resource attack, not a trust attack** — an attacker doesn't need to be in the trust graph, just create a dense endorsement cluster to make the DB work hard. Fix: query timeout + max recursion depth on the CTE.
+- **#1 (distance-connectivity coupling)** lets an attacker manipulate diversity scores by lengthening alternative paths past the 10.0 cutoff — effectively controlling whether someone passes a `min_diversity` constraint without touching the target's direct endorsements. Fix: decouple edge loading from distance reachability (load all edges, not just distance-reachable ones).
+
+Both are safe at demo scale (~100 users, sparse graph). Must be addressed before public launch.
 
 ---
 
 ## Recommended Actions
 
-### Before demo (March 20)
-- **#6**: Fix stale comments — 5 minutes, prevents confusion
-- **#3**: Add one integration test that runs `recompute_from_anchor` + `CommunityConstraint::check` on a simulation topology — proves the full pipeline works
+### Addressed (PR #643)
+- **#3**: Pipeline assertions added — `materialize()` + `check_eligibility()` on 3 adversarial topologies
+- **#6**: Stale comments updated to reference vertex connectivity
 
-### Post-demo
-- **#1**: Document the distance-connectivity coupling as an architectural assumption. Consider decoupling: load edges for *all* nodes in the DB, not just the distance-reachable set
-- **#2**: Add a query timeout or materialized-view approach for distance computation
+### Pre-public-launch (post-demo)
+- **#2**: Add a query timeout or max recursion depth to the distance CTE. Consider materialized-view approach for distance computation at scale.
+- **#1**: Decouple distance reachability from connectivity scope. Load edges for *all* nodes in the DB, not just the distance-reachable set.
+- **#4**: Verify unique index on `(endorser_id, subject_id, topic)` exists; add if missing.
+
+### Backlog
 - **#5**: Add multi-attachment, weight-exploitation, and graph-splitting scenarios
-- **#4**: Add a unique index on `(endorser_id, subject_id, topic)` if one doesn't exist
 - **#7**: Replace linear hash with a seeded PRNG for more realistic topology generation
+- **#8**: Deduplicate distance computation (resolved naturally if #2 is addressed)
