@@ -533,9 +533,29 @@ jobs:
           # Always retag from branch-master (last successful master build)
           SOURCE="${{ steps.registries.outputs.images }}/${{ matrix.image }}:branch-master"
           echo "No source changes for ${{ matrix.image }} — retagging ${SOURCE} as ${{ github.sha }}"
-          docker buildx imagetools create \
+
+          # On ARC the remote BuildKit driver doesn't carry registry config,
+          # so imagetools defaults to HTTPS and fails against HTTP-only Zot.
+          # Create a short-lived local builder with Zot configured as HTTP.
+          # On ARC the remote BuildKit driver doesn't carry registry config,
+          # so imagetools defaults to HTTPS and fails against HTTP-only Zot.
+          # Create a short-lived local builder with Zot configured as HTTP.
+          BUILDER=()
+          if [ "$RUNNER_ENVIRONMENT" = "self-hosted" ]; then
+            ZOT="zot.zot.svc.cluster.local:5000"
+            printf '[registry."%s"]\n  http = true\n  insecure = true\n' "$ZOT" \
+              > /tmp/buildkitd-zot.toml
+            docker buildx create --name zot-retag --driver docker-container \
+              --driver-opt network=host --config /tmp/buildkitd-zot.toml
+            BUILDER=(--builder zot-retag)
+          fi
+
+          docker buildx imagetools create "${BUILDER[@]}" \
             --tag "${{ steps.tags.outputs.sha_tag }}" \
             "${SOURCE}"
+
+          # Clean up the temporary builder if created
+          docker buildx rm zot-retag 2>/dev/null || true
 
       - name: Set build metadata
         if: steps.should-build.outputs.changed != 'false'
