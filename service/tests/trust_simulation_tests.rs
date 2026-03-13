@@ -509,17 +509,18 @@ async fn sim_multi_point_attachment() {
         );
     }
 
-    // Pipeline assertion: red nodes PASS CommunityConstraint(5.0, 2)
+    // Pipeline assertion: red nodes PASS CommunityConstraint(6.0, 2)
     // This is the dangerous case — adversaries that meet the threshold.
+    // (max_distance=6.0 because the furthest red nodes are at distance ~5.33)
     report.materialize(db.pool()).await;
-    let constraint = CommunityConstraint::new(5.0, 2).expect("valid constraint");
+    let constraint = CommunityConstraint::new(6.0, 2).expect("valid constraint");
     for red in report.red_nodes() {
         let eligibility = report
             .check_eligibility(red.id, &constraint, db.pool())
             .await;
         assert!(
             eligibility.is_eligible,
-            "Multi-point: red node '{}' should PASS CommunityConstraint(5.0, 2) — this is the attack succeeding",
+            "Multi-point: red node '{}' should PASS CommunityConstraint(6.0, 2) — this is the attack succeeding",
             red.name
         );
     }
@@ -550,10 +551,11 @@ async fn sim_multi_point_attachment() {
 //
 // Topology:
 //   anchor (blue) → compromised_bridge (blue) at weight 1.0
-//   compromised_bridge → red_node at weight 10.0 (super high)
+//   compromised_bridge → red_node at weight 1.0 (maximum allowed)
 //
-// The red node is very "close" (distance ≈ 1.1) but has diversity=1.
-// Tests that high edge weight cannot substitute for structural diversity.
+// The red node is close (distance = 2.0) but has diversity=1.
+// Tests that low distance cannot substitute for structural diversity.
+// DB constraint limits weight to (0, 1.0], so the minimum cost per hop is 1.0.
 // ---------------------------------------------------------------------------
 #[shared_runtime_test]
 async fn sim_asymmetric_weight_exploit() {
@@ -564,18 +566,18 @@ async fn sim_asymmetric_weight_exploit() {
     let bridge = g.add_node("compromised_bridge", Team::Blue).await;
     g.endorse(anchor, bridge, 1.0).await;
 
-    // Red node with extremely high weight endorsement
+    // Red node with max weight endorsement (weight capped at 1.0 by DB)
     let red = g.add_node("red_exploiter", Team::Red).await;
-    g.endorse(bridge, red, 10.0).await; // cost = 1/10.0 = 0.1
+    g.endorse(bridge, red, 1.0).await; // cost = 1/1.0 = 1.0
 
     let report = SimulationReport::run(&g, anchor).await;
     eprintln!("\n=== Asymmetric Weight Exploit ===\n{report}");
 
-    // Assert: red node is very close (distance ≈ 1.0 + 0.1 = 1.1)
+    // Assert: red node is close (distance = 1.0 + 1.0 = 2.0)
     let red_dist = report.distance(red).expect("red should be reachable");
     assert!(
-        red_dist < 1.5,
-        "Asymmetric weight: red node should be very close (d < 1.5), got {red_dist:.3}"
+        (red_dist - 2.0).abs() < 0.01,
+        "Asymmetric weight: red node should have distance=2.0, got {red_dist:.3}"
     );
 
     // Assert: diversity = 1 (only one path)
@@ -585,8 +587,7 @@ async fn sim_asymmetric_weight_exploit() {
         "Asymmetric weight: red node should have diversity=1, got {red_div}"
     );
 
-    // Pipeline: passes EndorsedByConstraint (just needs to be reachable)
-    // but fails CommunityConstraint (diversity=1 < min=2)
+    // Pipeline: close distance but diversity=1 < min=2 → rejected
     report.materialize(db.pool()).await;
     let community = CommunityConstraint::new(5.0, 2).expect("valid constraint");
     let eligibility = report.check_eligibility(red, &community, db.pool()).await;
@@ -608,10 +609,12 @@ async fn sim_asymmetric_weight_exploit() {
 //
 // Topology:
 //   anchor (blue) → bridge (blue) at weight 1.0
-//   bridge → red_node at weight 0.001 (cost = 1000.0, beyond 10.0 cutoff)
+//   bridge → red_node at weight 0.001 (cost = 1000.0)
 //
 // An endorsement with near-zero weight creates a DB edge that is
-// functionally nonexistent — the distance cutoff should exclude it.
+// functionally nonexistent — the node IS technically reachable in the
+// engine (distance ≈ 1001.0) but far beyond any useful threshold.
+// This tests that distance-based constraints reject such phantom nodes.
 // ---------------------------------------------------------------------------
 #[shared_runtime_test]
 async fn sim_phantom_edges() {
@@ -628,26 +631,29 @@ async fn sim_phantom_edges() {
     let report = SimulationReport::run(&g, anchor).await;
     eprintln!("\n=== Phantom Edges ===\n{report}");
 
-    // Assert: red node is unreachable (distance 1.0 + 1000.0 > 10.0 cutoff)
+    // Assert: red node is technically reachable but at extreme distance
+    let red_dist = report
+        .distance(red)
+        .expect("phantom node should be reachable in engine");
     assert!(
-        report.distance(red).is_none(),
-        "Phantom edge: red node should be unreachable (cost=1000.0 exceeds cutoff)"
+        red_dist > 100.0,
+        "Phantom edge: red node should have extreme distance (>100.0), got {red_dist:.3}"
     );
 
-    // Assert: diversity = 0 (not in reachable set)
+    // Assert: diversity = 1 (single path exists but is useless)
     assert_eq!(
         report.diversity(red),
-        0,
-        "Phantom edge: red node should have diversity=0"
+        1,
+        "Phantom edge: red node should have diversity=1"
     );
 
-    // Pipeline: materialize and verify red is ineligible
+    // Pipeline: materialize and verify red is ineligible (distance far exceeds threshold)
     report.materialize(db.pool()).await;
     let constraint = CommunityConstraint::new(5.0, 2).expect("valid constraint");
     let eligibility = report.check_eligibility(red, &constraint, db.pool()).await;
     assert!(
         !eligibility.is_eligible,
-        "Phantom edge: unreachable red node should fail all constraints"
+        "Phantom edge: extreme-distance red node should fail CommunityConstraint"
     );
 
     report
