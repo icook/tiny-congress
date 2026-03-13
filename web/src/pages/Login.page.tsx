@@ -108,7 +108,16 @@ export function LoginPage() {
       void navigate({ to: '/rooms' });
     } catch (err) {
       if (err instanceof Error) {
-        setLocalError(err.message);
+        if (
+          err.message.includes('Wrong password') ||
+          err.message.includes('Backup integrity check failed')
+        ) {
+          setLocalError(
+            'Incorrect password. There is no way to reset your backup password. If you\u2019ve lost it, this account cannot be recovered.'
+          );
+        } else {
+          setLocalError(err.message);
+        }
       }
     } finally {
       setIsGeneratingKeys(false);
@@ -152,6 +161,11 @@ export function LoginPage() {
               }}
               disabled={loginMutation.isPending || isGeneratingKeys}
             />
+
+            <Text size="xs" c="dimmed">
+              If you&apos;ve forgotten your backup password, there is currently no way to recover
+              your account.
+            </Text>
 
             {localError ? (
               <Alert icon={<IconAlertTriangle size={16} />} title="Login failed" color="red">

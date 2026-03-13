@@ -148,7 +148,9 @@ describe('LoginPage', () => {
     await user.type(screen.getByLabelText(/backup password/i), 'wrong-password');
     await user.click(screen.getByRole('button', { name: /log in/i }));
 
-    expect(await screen.findByText(/Wrong password or corrupted backup/)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/Incorrect password\. There is no way to reset/)
+    ).toBeInTheDocument();
     expect(mockMutateAsync).not.toHaveBeenCalled();
   });
 
@@ -178,7 +180,9 @@ describe('LoginPage', () => {
     await user.type(screen.getByLabelText(/backup password/i), 'my-password');
     await user.click(screen.getByRole('button', { name: /log in/i }));
 
-    expect(await screen.findByText(/Backup integrity check failed/)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/Incorrect password\. There is no way to reset/)
+    ).toBeInTheDocument();
     // Login API should NOT have been called
     expect(mockMutateAsync).not.toHaveBeenCalled();
   });
