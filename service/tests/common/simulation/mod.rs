@@ -103,6 +103,36 @@ impl GraphBuilder {
         });
     }
 
+    /// Revoke an existing endorsement (set revoked_at = now()).
+    ///
+    /// Panics if no active endorsement exists from→to.
+    pub async fn revoke(&mut self, from: Uuid, to: Uuid) {
+        let result = sqlx::query(
+            "UPDATE reputation__endorsements SET revoked_at = now() \
+             WHERE endorser_id = $1 AND subject_id = $2 AND topic = 'trust' AND revoked_at IS NULL",
+        )
+        .bind(from)
+        .bind(to)
+        .execute(&self.pool)
+        .await
+        .expect("revoke endorsement query failed");
+        assert_eq!(
+            result.rows_affected(),
+            1,
+            "expected to revoke exactly 1 endorsement from {} to {}",
+            from,
+            to
+        );
+        // Mark in local edge list
+        if let Some(edge) = self
+            .edges
+            .iter_mut()
+            .find(|e| e.from == from && e.to == to && !e.revoked)
+        {
+            edge.revoked = true;
+        }
+    }
+
     pub fn node(&self, name: &str) -> Uuid {
         *self
             .name_to_id

@@ -72,6 +72,31 @@ pub async fn colluding_ring(
     nodes
 }
 
+/// Create a fully connected cluster: every node endorses every other node.
+///
+/// Returns all node IDs.
+pub async fn fully_connected_cluster(
+    g: &mut GraphBuilder,
+    prefix: &str,
+    team: Team,
+    size: usize,
+    weight: f32,
+) -> Vec<Uuid> {
+    let mut nodes = Vec::with_capacity(size);
+    for i in 0..size {
+        let node = g.add_node(&format!("{prefix}_cluster_{i}"), team).await;
+        nodes.push(node);
+    }
+    for i in 0..size {
+        for j in 0..size {
+            if i != j {
+                g.endorse(nodes[i], nodes[j], weight).await;
+            }
+        }
+    }
+    nodes
+}
+
 /// Create a healthy web: nodes with deterministic interconnections.
 ///
 /// `density` is the proportion (0.0-1.0) of possible directed edges to create.
