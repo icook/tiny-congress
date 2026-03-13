@@ -99,7 +99,7 @@ impl SimulationReport {
     /// Refresh in-memory scores from the `trust__score_snapshots` table.
     ///
     /// Call this after any direct DB mutations to the snapshot (e.g., score
-    /// penalty UPDATEs) so that `distance()` and `diversity()` reflect the
+    /// penalty updates) so that `distance()` and `diversity()` reflect the
     /// actual snapshot state used by `check_eligibility`.
     pub async fn refresh_from_snapshot(&mut self, pool: &PgPool) {
         let rows: Vec<(Uuid, Option<f32>, Option<i32>)> = sqlx::query_as(
