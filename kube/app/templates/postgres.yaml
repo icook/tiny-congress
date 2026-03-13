@@ -105,13 +105,10 @@ spec:
           readOnlyRootFilesystem: true
           capabilities:
             drop: [ALL]
+        {{- with .Values.postgres.exporter.resources }}
         resources:
-          requests:
-            cpu: 10m
-            memory: 32Mi
-          limits:
-            cpu: 100m
-            memory: 64Mi
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
       {{- end }}
       volumes:
       - name: postgres-data
