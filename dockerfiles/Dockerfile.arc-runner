@@ -25,6 +25,11 @@ ARG SHELLCHECK_VERSION=v0.10.0
 ARG HELM_VERSION=v3.17.3
 ARG YQ_VERSION=v4.52.4
 ARG KUBECTL_VERSION=v1.32.0
+# Rust ecosystem tools — versions sourced from .github/tool-versions.
+ARG WASM_PACK_VERSION=v0.14.0
+ARG CARGO_LLVM_COV_VERSION=v0.8.4
+ARG CARGO_DENY_VERSION=0.19.0
+ARG CARGO_MACHETE_VERSION=v0.9.1
 # Keep in sync with @playwright/test version in web/yarn.lock
 ARG PLAYWRIGHT_VERSION=1.57.0
 # Rust version — single source of truth is mise.toml.
@@ -63,10 +68,27 @@ RUN set -eux; \
     # kubectl (e2e-tests job; kind-action installs kind but not kubectl)
     curl -fsSL "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl" \
       -o /usr/local/bin/kubectl && chmod +x /usr/local/bin/kubectl; \
+    # wasm-pack (build-wasm job)
+    curl -fsSL "https://github.com/rustwasm/wasm-pack/releases/download/${WASM_PACK_VERSION}/wasm-pack-${WASM_PACK_VERSION}-x86_64-unknown-linux-musl.tar.gz" \
+      | tar xz --strip-components=1 -C /usr/local/bin \
+        "wasm-pack-${WASM_PACK_VERSION}-x86_64-unknown-linux-musl/wasm-pack"; \
+    # cargo-llvm-cov (rust-checks coverage job)
+    curl -fsSL "https://github.com/taiki-e/cargo-llvm-cov/releases/download/${CARGO_LLVM_COV_VERSION}/cargo-llvm-cov-x86_64-unknown-linux-gnu.tar.gz" \
+      | tar xz -C /usr/local/bin cargo-llvm-cov; \
+    # cargo-deny (backend-checks dependency audit)
+    curl -fsSL "https://github.com/EmbarkStudios/cargo-deny/releases/download/${CARGO_DENY_VERSION}/cargo-deny-${CARGO_DENY_VERSION}-x86_64-unknown-linux-musl.tar.gz" \
+      | tar xz --strip-components=1 -C /usr/local/bin \
+        "cargo-deny-${CARGO_DENY_VERSION}-x86_64-unknown-linux-musl/cargo-deny"; \
+    # cargo-machete (backend-checks unused dependency check)
+    curl -fsSL "https://github.com/bnjbvr/cargo-machete/releases/download/${CARGO_MACHETE_VERSION}/cargo-machete-${CARGO_MACHETE_VERSION}-x86_64-unknown-linux-musl.tar.gz" \
+      | tar xz --strip-components=1 -C /usr/local/bin \
+        "cargo-machete-${CARGO_MACHETE_VERSION}-x86_64-unknown-linux-musl/cargo-machete"; \
     # smoke-test all installations
     just --version && hadolint --version && actionlint --version && \
     shellcheck --version && helm version --short && python3 --version && \
-    yq --version && kubectl version --client
+    yq --version && kubectl version --client && \
+    wasm-pack --version && cargo-llvm-cov --version && \
+    cargo-deny --version && cargo-machete --version
 
 # Pre-install Playwright Chromium OS-level dependencies so e2e-tests jobs skip
 # the apt-get step entirely when the browser binary is restored from cache.
