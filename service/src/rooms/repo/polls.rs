@@ -12,6 +12,8 @@ pub struct PollRecord {
     pub question: String,
     pub description: Option<String>,
     pub status: String,
+    pub closes_at: Option<DateTime<Utc>>,
+    pub agenda_position: Option<i32>,
     pub created_at: DateTime<Utc>,
     pub activated_at: Option<DateTime<Utc>>,
     pub closed_at: Option<DateTime<Utc>>,
@@ -49,6 +51,8 @@ struct PollRow {
     question: String,
     description: Option<String>,
     status: String,
+    closes_at: Option<DateTime<Utc>>,
+    agenda_position: Option<i32>,
     created_at: DateTime<Utc>,
     activated_at: Option<DateTime<Utc>>,
     closed_at: Option<DateTime<Utc>>,
@@ -74,6 +78,8 @@ fn poll_row_to_record(row: PollRow) -> PollRecord {
         question: row.question,
         description: row.description,
         status: row.status,
+        closes_at: row.closes_at,
+        agenda_position: row.agenda_position,
         created_at: row.created_at,
         activated_at: row.activated_at,
         closed_at: row.closed_at,
@@ -104,20 +110,23 @@ pub async fn create_poll<'e, E>(
     room_id: Uuid,
     question: &str,
     description: Option<&str>,
+    agenda_position: Option<i32>,
 ) -> Result<PollRecord, PollRepoError>
 where
     E: sqlx::Executor<'e, Database = sqlx::Postgres>,
 {
     let row = sqlx::query_as::<_, PollRow>(
         r"
-        INSERT INTO rooms__polls (room_id, question, description)
-        VALUES ($1, $2, $3)
-        RETURNING id, room_id, question, description, status, created_at, activated_at, closed_at
+        INSERT INTO rooms__polls (room_id, question, description, agenda_position)
+        VALUES ($1, $2, $3, $4)
+        RETURNING id, room_id, question, description, status, closes_at, agenda_position,
+                  created_at, activated_at, closed_at
         ",
     )
     .bind(room_id)
     .bind(question)
     .bind(description)
+    .bind(agenda_position)
     .fetch_one(executor)
     .await?;
 
@@ -136,7 +145,7 @@ where
 {
     let rows = sqlx::query_as::<_, PollRow>(
         r"
-        SELECT id, room_id, question, description, status, created_at, activated_at, closed_at
+        SELECT id, room_id, question, description, status, closes_at, agenda_position, created_at, activated_at, closed_at
         FROM rooms__polls WHERE room_id = $1 ORDER BY created_at ASC
         ",
     )
@@ -156,7 +165,7 @@ where
 {
     sqlx::query_as::<_, PollRow>(
         r"
-        SELECT id, room_id, question, description, status, created_at, activated_at, closed_at
+        SELECT id, room_id, question, description, status, closes_at, agenda_position, created_at, activated_at, closed_at
         FROM rooms__polls WHERE id = $1
         ",
     )
@@ -274,4 +283,135 @@ where
     .await?;
 
     Ok(rows.into_iter().map(dim_row_to_record).collect())
+}
+
+// ─── Lifecycle queries ───────────────────────────────────────────────────
+
+/// List all draft polls in a room's agenda, ordered by position.
+///
+/// # Errors
+///
+/// Returns `Database` on connection failure.
+pub async fn list_agenda<'e, E>(
+    executor: E,
+    room_id: Uuid,
+) -> Result<Vec<PollRecord>, PollRepoError>
+where
+    E: sqlx::Executor<'e, Database = sqlx::Postgres>,
+{
+    let rows = sqlx::query_as::<_, PollRow>(
+        r"
+        SELECT id, room_id, question, description, status, created_at,
+               activated_at, closed_at, closes_at, agenda_position
+        FROM rooms__polls
+        WHERE room_id = $1 AND status = 'draft' AND agenda_position IS NOT NULL
+        ORDER BY agenda_position ASC
+        ",
+    )
+    .bind(room_id)
+    .fetch_all(executor)
+    .await?;
+    Ok(rows.into_iter().map(poll_row_to_record).collect())
+}
+
+/// Find the next draft poll in a room's agenda (lowest `agenda_position`).
+///
+/// # Errors
+///
+/// Returns `Database` on connection failure.
+pub async fn next_agenda_poll<'e, E>(
+    executor: E,
+    room_id: Uuid,
+) -> Result<Option<PollRecord>, PollRepoError>
+where
+    E: sqlx::Executor<'e, Database = sqlx::Postgres>,
+{
+    let row = sqlx::query_as::<_, PollRow>(
+        r"
+        SELECT id, room_id, question, description, status, closes_at, agenda_position,
+               created_at, activated_at, closed_at
+        FROM rooms__polls
+        WHERE room_id = $1 AND status = 'draft' AND agenda_position IS NOT NULL
+        ORDER BY agenda_position ASC
+        LIMIT 1
+        ",
+    )
+    .bind(room_id)
+    .fetch_optional(executor)
+    .await?;
+
+    Ok(row.map(poll_row_to_record))
+}
+
+/// Return the next available agenda position for a room.
+///
+/// Returns `MAX(agenda_position) + 1`, or `0` if no polls have positions.
+///
+/// # Errors
+///
+/// Returns `Database` on connection failure.
+pub async fn next_agenda_position<'e, E>(executor: E, room_id: Uuid) -> Result<i32, PollRepoError>
+where
+    E: sqlx::Executor<'e, Database = sqlx::Postgres>,
+{
+    let row: (Option<i32>,) =
+        sqlx::query_as(r"SELECT MAX(agenda_position) FROM rooms__polls WHERE room_id = $1")
+            .bind(room_id)
+            .fetch_one(executor)
+            .await?;
+
+    Ok(row.0.map_or(0, |max| max + 1))
+}
+
+/// Set the `closes_at` timestamp on a poll.
+///
+/// # Errors
+///
+/// Returns `NotFound` if no poll exists with this ID.
+pub async fn set_poll_closes_at<'e, E>(
+    executor: E,
+    poll_id: Uuid,
+    closes_at: DateTime<Utc>,
+) -> Result<(), PollRepoError>
+where
+    E: sqlx::Executor<'e, Database = sqlx::Postgres>,
+{
+    let result = sqlx::query(r"UPDATE rooms__polls SET closes_at = $1 WHERE id = $2")
+        .bind(closes_at)
+        .bind(poll_id)
+        .execute(executor)
+        .await?;
+
+    if result.rows_affected() == 0 {
+        return Err(PollRepoError::NotFound);
+    }
+    Ok(())
+}
+
+/// Find the currently active poll in a room (if any).
+///
+/// # Errors
+///
+/// Returns `Database` on connection failure.
+pub async fn get_active_poll<'e, E>(
+    executor: E,
+    room_id: Uuid,
+) -> Result<Option<PollRecord>, PollRepoError>
+where
+    E: sqlx::Executor<'e, Database = sqlx::Postgres>,
+{
+    let row = sqlx::query_as::<_, PollRow>(
+        r"
+        SELECT id, room_id, question, description, status, closes_at, agenda_position,
+               created_at, activated_at, closed_at
+        FROM rooms__polls
+        WHERE room_id = $1 AND status = 'active'
+        LIMIT 1
+        ",
+    )
+    .bind(room_id)
+    .fetch_optional(executor)
+    .await?;
+
+    Ok(row.map(poll_row_to_record))
 }

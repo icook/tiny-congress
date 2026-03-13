@@ -287,6 +287,7 @@ impl TestAppBuilder {
         self.rooms_service = Some(Arc::new(DefaultRoomsService::new(
             rooms_repo as Arc<dyn RoomsRepo>,
             trust_repo,
+            pool.clone(),
         )) as Arc<dyn RoomsService>);
 
         self.pool = Some(pool);
