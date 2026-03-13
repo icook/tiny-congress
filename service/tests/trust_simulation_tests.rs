@@ -8,6 +8,8 @@
 
 mod common;
 
+use common::simulation::comparison::{ComparisonTable, MechanismComparison};
+use common::simulation::mechanisms;
 use common::simulation::report::SimulationReport;
 use common::simulation::{topology, GraphBuilder, Team};
 use common::test_db::isolated_db;
@@ -889,4 +891,252 @@ async fn sim_mercenary_bot() {
             std::path::Path::new("target/simulation/mercenary_bot.dot"),
         )
         .expect("write DOT");
+}
+
+// ---------------------------------------------------------------------------
+// Mechanism comparison: runs 3 mechanisms against key scenarios
+// ---------------------------------------------------------------------------
+#[shared_runtime_test]
+async fn sim_mechanism_comparison() {
+    let mut table = ComparisonTable::new();
+
+    // --- Hub-and-spoke: can mechanisms remove spokes? ---
+    for mechanism_name in &["edge_removal", "score_penalty", "sponsorship_cascade"] {
+        let db = isolated_db().await;
+        let mut g = GraphBuilder::new(db.pool().clone());
+
+        let anchor = g.add_node("anchor", Team::Blue).await;
+        let bridge = g.add_node("bridge", Team::Blue).await;
+        let extra_blue = g.add_node("extra_blue", Team::Blue).await;
+        g.endorse(anchor, bridge, 1.0).await;
+        g.endorse(anchor, extra_blue, 1.0).await;
+
+        let hub = g.add_node("red_hub", Team::Red).await;
+        g.endorse(bridge, hub, 0.3).await;
+        let spoke = g.add_node("red_spoke_0", Team::Red).await;
+        g.endorse(hub, spoke, 1.0).await;
+
+        // Before
+        let before = SimulationReport::run(&g, anchor).await;
+        before.materialize(db.pool()).await;
+        let constraint = CommunityConstraint::new(5.0, 2).expect("valid");
+        let before_elig = before.check_eligibility(hub, &constraint, db.pool()).await;
+
+        // Apply mechanism to hub
+        let after = match *mechanism_name {
+            "edge_removal" => mechanisms::apply_edge_removal(&mut g, hub, anchor, db.pool()).await,
+            "score_penalty" => {
+                mechanisms::apply_score_penalty(&g, hub, anchor, db.pool(), 3.0, 1).await
+            }
+            "sponsorship_cascade" => {
+                mechanisms::apply_sponsorship_cascade(&mut g, hub, anchor, db.pool()).await
+            }
+            _ => unreachable!(),
+        };
+        let after_elig = after.check_eligibility(hub, &constraint, db.pool()).await;
+
+        // Count blue casualties
+        let blue_ids: Vec<_> = g.nodes_by_team(Team::Blue);
+        let blue_casualties = blue_ids
+            .iter()
+            .filter(|&&id| before.diversity(id) >= 2 && after.diversity(id) < 2)
+            .count();
+
+        table.add(MechanismComparison {
+            scenario: "hub_and_spoke".to_string(),
+            mechanism: mechanism_name.to_string(),
+            target_name: "red_hub".to_string(),
+            before_distance: before.distance(hub),
+            before_diversity: before.diversity(hub),
+            before_eligible: before_elig.is_eligible,
+            after_distance: after.distance(hub),
+            after_diversity: after.diversity(hub),
+            after_eligible: after_elig.is_eligible,
+            blue_casualties,
+            blue_total: blue_ids.len(),
+            survived_weaponization: None,
+        });
+    }
+
+    // --- Mercenary bot: can mechanisms remove a well-integrated attacker? ---
+    for mechanism_name in &["edge_removal", "score_penalty", "sponsorship_cascade"] {
+        let db = isolated_db().await;
+        let mut g = GraphBuilder::new(db.pool().clone());
+
+        let anchor = g.add_node("anchor", Team::Blue).await;
+        let blue_web = topology::healthy_web(&mut g, "blue", Team::Blue, 6, 0.4, 1.0).await;
+        g.endorse(anchor, blue_web[0], 1.0).await;
+        g.endorse(anchor, blue_web[1], 1.0).await;
+        g.endorse(anchor, blue_web[2], 1.0).await;
+
+        let mercenary = g.add_node("mercenary", Team::Red).await;
+        g.endorse(blue_web[0], mercenary, 1.0).await;
+        g.endorse(blue_web[3], mercenary, 1.0).await;
+        g.endorse(blue_web[5], mercenary, 1.0).await;
+
+        let before = SimulationReport::run(&g, anchor).await;
+        before.materialize(db.pool()).await;
+        let constraint = CommunityConstraint::new(5.0, 2).expect("valid");
+        let before_elig = before
+            .check_eligibility(mercenary, &constraint, db.pool())
+            .await;
+
+        let after = match *mechanism_name {
+            "edge_removal" => {
+                mechanisms::apply_edge_removal(&mut g, mercenary, anchor, db.pool()).await
+            }
+            "score_penalty" => {
+                mechanisms::apply_score_penalty(&g, mercenary, anchor, db.pool(), 3.0, 1).await
+            }
+            "sponsorship_cascade" => {
+                mechanisms::apply_sponsorship_cascade(&mut g, mercenary, anchor, db.pool()).await
+            }
+            _ => unreachable!(),
+        };
+        let after_elig = after
+            .check_eligibility(mercenary, &constraint, db.pool())
+            .await;
+
+        let blue_ids = g.nodes_by_team(Team::Blue);
+        let blue_casualties = blue_ids
+            .iter()
+            .filter(|&&id| before.diversity(id) >= 2 && after.diversity(id) < 2)
+            .count();
+
+        table.add(MechanismComparison {
+            scenario: "mercenary_bot".to_string(),
+            mechanism: mechanism_name.to_string(),
+            target_name: "mercenary".to_string(),
+            before_distance: before.distance(mercenary),
+            before_diversity: before.diversity(mercenary),
+            before_eligible: before_elig.is_eligible,
+            after_distance: after.distance(mercenary),
+            after_diversity: after.diversity(mercenary),
+            after_eligible: after_elig.is_eligible,
+            blue_casualties,
+            blue_total: blue_ids.len(),
+            survived_weaponization: None,
+        });
+    }
+
+    // Print comparison table
+    eprintln!("\n=== Mechanism Comparison ===\n{table}");
+
+    // Write to file
+    table
+        .write_to(std::path::Path::new(
+            "target/simulation/mechanism_comparison.txt",
+        ))
+        .expect("write comparison table");
+}
+
+// ---------------------------------------------------------------------------
+// Weaponization test: Sybil cluster mass-denounces a legitimate user
+//
+// Topology:
+//   anchor (blue) → 3 blue bridges → blue_target (well-connected)
+//   red hub → 5 red spokes (Sybil cluster, diversity=1 each)
+//   Each red node files d=2 denouncements against blue_target
+//
+// Question: does each mechanism protect blue_target from mass denouncement?
+// Edge removal: would remove blue_target's edges (BAD — weaponizable)
+// Score penalty: would degrade blue_target's score (BAD if penalties stack)
+// Sponsorship cascade: would penalize blue_target's endorsers (BAD)
+// ---------------------------------------------------------------------------
+#[shared_runtime_test]
+async fn sim_weaponization_resistance() {
+    let mut table = ComparisonTable::new();
+
+    for mechanism_name in &["edge_removal", "score_penalty", "sponsorship_cascade"] {
+        let db = isolated_db().await;
+        let mut g = GraphBuilder::new(db.pool().clone());
+
+        // Blue team: well-connected target
+        let anchor = g.add_node("anchor", Team::Blue).await;
+        let bridge_a = g.add_node("bridge_a", Team::Blue).await;
+        let bridge_b = g.add_node("bridge_b", Team::Blue).await;
+        let bridge_c = g.add_node("bridge_c", Team::Blue).await;
+        let blue_target = g.add_node("blue_target", Team::Blue).await;
+        g.endorse(anchor, bridge_a, 1.0).await;
+        g.endorse(anchor, bridge_b, 1.0).await;
+        g.endorse(anchor, bridge_c, 1.0).await;
+        g.endorse(bridge_a, blue_target, 1.0).await;
+        g.endorse(bridge_b, blue_target, 1.0).await;
+        g.endorse(bridge_c, blue_target, 1.0).await;
+
+        // Red team: Sybil cluster (irrelevant to topology, but they "denounce")
+        let _red_hub = g.add_node("red_hub", Team::Red).await;
+        for i in 0..5 {
+            let _spoke = g.add_node(&format!("red_spoke_{i}"), Team::Red).await;
+        }
+
+        // Before: blue_target should be eligible
+        let before = SimulationReport::run(&g, anchor).await;
+        before.materialize(db.pool()).await;
+        let constraint = CommunityConstraint::new(5.0, 2).expect("valid");
+        let before_elig = before
+            .check_eligibility(blue_target, &constraint, db.pool())
+            .await;
+        assert!(before_elig.is_eligible, "blue_target should start eligible");
+
+        // Simulate denouncement effect on blue_target
+        let after = match *mechanism_name {
+            "edge_removal" => {
+                mechanisms::apply_edge_removal(&mut g, blue_target, anchor, db.pool()).await
+            }
+            "score_penalty" => {
+                // 5 denouncers × 2 denouncements each = 10 denouncements
+                // Each adds distance 3.0 and removes diversity 1
+                mechanisms::apply_score_penalty(
+                    &g,
+                    blue_target,
+                    anchor,
+                    db.pool(),
+                    30.0, // 10 × 3.0
+                    10,   // 10 × 1
+                )
+                .await
+            }
+            "sponsorship_cascade" => {
+                mechanisms::apply_sponsorship_cascade(&mut g, blue_target, anchor, db.pool()).await
+            }
+            _ => unreachable!(),
+        };
+        let after_elig = after
+            .check_eligibility(blue_target, &constraint, db.pool())
+            .await;
+
+        let survived = after_elig.is_eligible;
+
+        let blue_ids = g.nodes_by_team(Team::Blue);
+        let blue_casualties = blue_ids
+            .iter()
+            .filter(|&&id| {
+                id != blue_target && before.diversity(id) >= 2 && after.diversity(id) < 2
+            })
+            .count();
+
+        table.add(MechanismComparison {
+            scenario: "weaponization".to_string(),
+            mechanism: mechanism_name.to_string(),
+            target_name: "blue_target".to_string(),
+            before_distance: before.distance(blue_target),
+            before_diversity: before.diversity(blue_target),
+            before_eligible: before_elig.is_eligible,
+            after_distance: after.distance(blue_target),
+            after_diversity: after.diversity(blue_target),
+            after_eligible: after_elig.is_eligible,
+            blue_casualties,
+            blue_total: blue_ids.len() - 1, // exclude target
+            survived_weaponization: Some(survived),
+        });
+    }
+
+    eprintln!("\n=== Weaponization Resistance ===\n{table}");
+
+    table
+        .write_to(std::path::Path::new(
+            "target/simulation/weaponization_resistance.txt",
+        ))
+        .expect("write weaponization table");
 }

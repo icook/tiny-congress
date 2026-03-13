@@ -3,6 +3,8 @@
 //! Constructs adversarial graph topologies with red/blue team designations
 //! and runs the real `TrustEngine` against them.
 
+pub mod comparison;
+pub mod mechanisms;
 pub mod report;
 pub mod topology;
 
