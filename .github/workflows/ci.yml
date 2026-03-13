@@ -1238,7 +1238,7 @@ jobs:
   deploy-gitops:
     name: Update gitops image digests
     if: >-
-      github.event_name == 'push' && github.ref == 'refs/heads/master' &&
+      always() && github.event_name == 'push' && github.ref == 'refs/heads/master' &&
       needs.ci-gate.result == 'success'
     needs: [ci-gate, detect-changes]
     runs-on: ${{ needs.detect-changes.outputs.runner-small }}
@@ -1388,7 +1388,7 @@ jobs:
     name: Upload CI reports to Dufs
     runs-on: ${{ needs.detect-changes.outputs.runner-small }}
     needs: [detect-changes, ci-gate, unit-tests, rust-checks, e2e-tests, frontend-checks, build-docs]
-    if: needs.ci-gate.result == 'success'
+    if: always() && needs.ci-gate.result == 'success'
     permissions:
       contents: read
       actions: read
