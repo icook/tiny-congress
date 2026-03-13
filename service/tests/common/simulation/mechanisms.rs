@@ -91,6 +91,48 @@ pub async fn apply_denouncer_revocation(
     report
 }
 
+/// Mechanism 3b: Denouncer-only revocation + sponsorship cascade.
+///
+/// Revokes the denouncer→target edge, THEN applies cascade penalties to
+/// remaining endorsers of the target. Combines the proportionality of
+/// denouncer-only with the "risk of endorsement" consequence.
+pub async fn apply_denouncer_revocation_with_cascade(
+    g: &mut GraphBuilder,
+    denouncer: Uuid,
+    target: Uuid,
+    anchor: Uuid,
+    pool: &PgPool,
+) -> SimulationReport {
+    // Revoke denouncer's edge
+    g.revoke(denouncer, target).await;
+    // Find remaining endorsers (after denouncer's edge is gone)
+    let remaining_endorsers: Vec<Uuid> = g
+        .all_edges()
+        .iter()
+        .filter(|e| e.to == target && !e.revoked)
+        .map(|e| e.from)
+        .collect();
+    // Re-run engine with denouncer's edge revoked
+    let mut report = SimulationReport::run(g, anchor).await;
+    report.materialize(pool).await;
+    // Apply cascade penalty to remaining endorsers
+    for &endorser in &remaining_endorsers {
+        sqlx::query(
+            "UPDATE trust__score_snapshots \
+             SET trust_distance = COALESCE(trust_distance, 0) + 2.0, \
+                 path_diversity = GREATEST(COALESCE(path_diversity, 0) - 1, 0) \
+             WHERE user_id = $1 AND context_user_id = $2",
+        )
+        .bind(endorser)
+        .bind(anchor)
+        .execute(pool)
+        .await
+        .expect("cascade penalty UPDATE failed");
+    }
+    report.refresh_from_snapshot(pool).await;
+    report
+}
+
 /// Mechanism 3: Sponsorship cascade.
 ///
 /// Revokes endorser→target edges AND applies score penalty to endorsers.
