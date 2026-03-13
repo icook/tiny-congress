@@ -2,27 +2,33 @@
 
 **Date:** 2026-03-13
 **Branch:** test/624-trust-simulation-harness (#643)
-**Context:** Consolidated from simulation harness build, adversarial audit, and mechanism comparison sessions.
+**Context:** Consolidated from simulation harness build, adversarial audit, and mechanism comparison sessions. Updated with mechanism decisions from review conversation.
 
 ---
 
 ## Mechanism selection
 
-The comparison framework produced initial results. No mechanism is clearly dominant.
+The comparison framework produced initial results. Several mechanisms have been ruled out; the design direction is converging on denouncer-only revocation + adjudicated slashing for severe cases.
 
 ### What the data shows
 
 | Mechanism | Removes bad actors? | Weaponization-resistant? | Collateral damage |
 |---|---|---|---|
-| Edge removal | Yes (target becomes unreachable) | YES — only affects target's edges | None in tested scenarios |
+| Edge removal (nuclear) | Yes (target becomes unreachable) | YES — only affects target's edges | None in tested scenarios |
 | Score penalty | Yes (distance/diversity degraded) | NO — stacks to overwhelm legitimate users | None in tested scenarios |
 | Sponsorship cascade | Partially (endorsers penalized, edges revoked) | YES — penalties hit endorsers, not target directly | 1/7 blue nodes in mercenary scenario |
 
-### Open questions
+### Decisions made
 
-1. **Is edge removal too aggressive?** It severs all inbound edges — the target is completely disconnected. Is there a softer version (revoke only the denouncer's edge to the target) that still works?
-2. **Can score penalty be made weaponization-resistant?** The current model stacks linearly (10 denouncements = 30.0 distance penalty). A cap or diminishing returns curve would resist mass-denouncement but might also weaken the mechanism against real bad actors.
-3. **Should we test a threshold cascade?** Require >= 2 independent denouncements before cascade fires. This directly addresses the weaponization problem — a single Sybil cluster's denouncements wouldn't meet the independence threshold. Highest-value hybrid to test next.
+1. **Nuclear edge removal is non-viable.** ~~REJECTED.~~ One denouncement severs all inbound edges — too easily weaponized. A single malicious actor can completely disconnect a legitimate user.
+2. **Score penalty is non-viable.** ~~REJECTED~~ (from simulation data). Stacks linearly and is trivially weaponizable by coordinated groups.
+3. **Denouncer-only edge revocation is the baseline mechanism.** When you denounce someone, your endorsement edge to them is revoked. You can't simultaneously endorse and denounce. This is the proportionate, obvious response — "I no longer vouch for this person." It's soft enough that a single bad-faith denouncement only costs the target one path, not all of them.
+4. **Threshold cascade becomes an adjudication problem.** The "right" approach for severe action (full disconnection, slashing) is not an automated threshold but a governance process: a motion is raised to slash, evidence is brought, and broad consensus from a diverse, deeply trusted quorum is solicited. The threshold should be set very conservatively — essentially "the graph is in consensus." This is future work beyond the simulation harness.
+
+### Remaining questions
+
+2. ~~Can score penalty be made weaponization-resistant?~~ **Deprioritized.** Mechanism rejected. A cap or diminishing returns curve could be revisited but the fundamental stacking problem makes this less attractive than denouncer-only revocation.
+3. **Adjudication design.** How does the governance process for severe slashing work? Who can raise a motion? What quorum is required? What evidence format? This is a substantial design problem — likely its own ADR.
 
 ---
 
@@ -49,19 +55,48 @@ The comparison framework supports sweeping penalty values programmatically.
 
 ---
 
+## Time decay
+
+Trust edges should decay over time — this naturally models real human interaction. Relationships that aren't renewed become stale.
+
+### Open questions
+
+12. **Decay model.** What function describes decay? Linear, exponential, step-function (e.g., weight halves after 1 year without interaction)? The choice affects how aggressively the graph prunes inactive relationships.
+13. **Renewal mechanism.** How does a user "renew" an endorsement to reset the decay clock? Re-performing the swap? A lightweight confirmation ("I still vouch for this person")? The UX cost of renewal determines how many edges survive long-term.
+14. **Interaction with slot budget.** A decayed endorsement still occupies a slot. Does the user need to explicitly revoke it to free the slot, or does it auto-release below some weight threshold? Auto-release is simpler for users but means the graph topology changes without explicit action.
+15. **Simulation coverage.** The current harness has no time dimension. Need to add a temporal axis to topologies (edge age) and measure how decay affects adversarial scenarios — e.g., does a Sybil cluster's attack window narrow naturally as fabricated edges decay?
+
+---
+
+## Denouncement propagation
+
+Endorsing someone who later gets denounced should carry consequences. This is "part of the risk of endorsement" — you stake your reputation when you vouch for someone.
+
+### Open questions
+
+16. **Propagation model.** How far does the consequence travel? Options: one hop (direct endorsers only), attenuated multi-hop (penalty decreases with distance from the denounced), or full cascade to the anchor. One-hop is simplest and most predictable.
+17. **Relationship to sponsorship cascade.** The existing `apply_sponsorship_cascade` mechanism already penalizes endorsers of the target. Denouncement propagation generalizes this — it's not just a mechanism applied by an admin, it's automatic. Should the simulation's sponsorship cascade evolve into the propagation model, or are they separate concepts?
+18. **Proportionality.** If Alice endorses Bob and Bob gets denounced by Charlie, how much should Alice's score suffer? The current cascade uses a fixed 2.0 distance / 1 diversity penalty. Should this scale with: how many people denounced Bob? How strong Alice's endorsement of Bob was? How long ago Alice endorsed Bob (interaction with time decay)?
+19. **Circular denouncement risk.** If propagation is automatic, can a denouncement cascade loop? A→B→C→A could create runaway penalty accumulation. Need to either prove this is impossible in the graph structure or add visited-set protection.
+
+---
+
 ## Architectural questions
 
 9. **ADR-020 cross-reference.** ADR-020 says continuous influence "may be revisited for variable-cost endorsements." ADR-022 resolves this question (answer: no). ADR-020 should link to ADR-022 when it's accepted.
-10. **Denouncement budget interaction.** ADR-020 sets d=2 denouncement budget. If we choose threshold cascade (question 3), the threshold interacts with the budget — with d=2 and threshold=2, a single user can't trigger a cascade alone, which may be desirable. Need to model this interaction.
+10. **Denouncement budget interaction.** ADR-020 sets d=2 denouncement budget. With denouncer-only revocation as the baseline mechanism, the budget question simplifies: each denouncement costs 1 budget and revokes your edge to the target. The adjudication path (severe slashing) is a separate governance action, not a budget spend.
 11. **Engine runs twice per measurement.** `SimulationReport::run()` computes scores in memory, then `materialize()` calls `recompute_from_anchor` which re-runs the engine and writes to snapshots. Safe in tests, but 2x engine cost per measurement. Worth fixing if the simulation suite grows significantly.
 
 ---
 
 ## Next actions (roughly prioritized)
 
-- [ ] **Review comparison output** and make a preliminary mechanism recommendation based on current data
-- [ ] **Test threshold cascade hybrid** (question 3) — add `apply_threshold_cascade` to mechanisms.rs
+- [x] **Mechanism recommendation** — denouncer-only revocation as baseline; nuclear edge removal and score penalty rejected; adjudication for severe cases is future work
+- [ ] **Simulate denouncer-only revocation** — add `apply_denouncer_revocation(denouncer, target)` to mechanisms.rs, re-run comparison to verify it's effective enough against adversarial topologies
+- [ ] **Time decay design spike** (questions 12–15) — pick a decay model, sketch renewal UX, add temporal dimension to simulation harness
+- [ ] **Denouncement propagation design** (questions 16–19) — decide propagation depth, relationship to cascade, proportionality rules
 - [ ] **Add weight variance scenarios** (question 4) — mixed-weight topologies in the comparison
 - [ ] **Loss function conversation** (question 7) — needed before automated tuning
 - [ ] **ADR-020 ↔ ADR-022 cross-reference** (question 9) — quick edit once ADR-022 is accepted
 - [ ] **Finalize ADR-022** — currently Draft, needs review of weight table values
+- [ ] **Adjudication process design** (question 3) — governance process for severe slashing; likely its own ADR
