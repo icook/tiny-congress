@@ -3,6 +3,7 @@
 **Date:** 2026-03-13
 **Premise:** The system is broken. You just need to show how.
 **Approach:** Top-down enumeration of every path to getting a fake identity trusted, weaponizing denouncement, or degrading the trust graph. Assumes a motivated attacker with moderate resources.
+**Important context:** This document describes attacks that are *known*. Real attackers will find attacks not listed here. The value of this analysis is not "we've covered everything" — it's "we've identified the attack surfaces and can build detection for the patterns." Operational security (monitoring, response, adaptation) is required regardless of how many attacks we enumerate.
 
 ---
 
@@ -222,3 +223,11 @@ An attacker wants one or more of:
 - **Account compromise needs its own simulation scenarios.** Model: attacker takes over account with diversity=3, distance=2.0. What can they do? How many Sybils can they bootstrap?
 - **Multi-phase attack scenarios need to be added to the simulation framework.** Not just "here's a topology, measure scores" but "here's a sequence of attacker actions, measure cumulative impact."
 - **Post-creation monitoring is not optional.** The current design treats eligibility as a gate. It needs to also be a continuous signal — ongoing structural/temporal/behavioral analysis.
+
+### The arms race reality
+
+This threat model is a snapshot. Attackers adapt. The 12 vectors above are the ones we can think of now — real attackers will find vectors we haven't enumerated. Every deployed trust system at scale (PageRank, Bitcoin, PKI, Reddit, Twitter) has been an ongoing arms race.
+
+The encouraging part: the mechanism design is unusually clean. `diversity = bridge_count` is a provable security reduction. Denouncer-only revocation is weaponization-resistant by construction. These properties don't degrade with scale.
+
+What does change with scale is the cost of attack entry (cheaper at higher N) and the value of detection (more critical at higher N). The system's long-term security depends not on pre-deployment analysis but on the feedback loop: **detect → respond → harden → repeat**. This document helps us build the first generation of detection. Production experience will teach us what we missed.

@@ -8,11 +8,13 @@
 
 ## Scale confidence assessment
 
-| Scale | Confidence | Reasoning |
-|---|---|---|
-| 1k–5k users | **High** | Local properties (diversity, distance, decay) are scale-invariant. Organic growth produces shallow graphs (most users within 3-4 hops). Batch reconciliation trivially fast. |
-| 5k–10k users | **Medium** | Distance stays low (BA mean ~2.6 at 2k). Diversity computation is the bottleneck — O(n²) dense matrix in FlowGraph hits memory wall. Need sparse max-flow in engine. |
-| 10k–100k users | **Low-Medium** | Mechanism design is sound (math doesn't change). But engine performance (path-finding, reconciliation), emergent topology (clustering, distance distribution), and sophisticated Sybil strategies are untested at this scale. |
+| Scale | Confidence | Nature of work | Reasoning |
+|---|---|---|---|
+| 1k–5k users | **High** | Build and verify (completable) | Mechanism properties are scale-invariant. Organic growth produces shallow graphs (most users within 3-4 hops). Batch reconciliation trivially fast. |
+| 5k–10k users | **Medium** | Build, verify, instrument (completable) | Distance stays low (BA mean ~2.6 at 2k). Diversity computation is the bottleneck — O(n²) dense matrix in FlowGraph hits memory wall. Need sparse max-flow + monitoring. |
+| 10k–100k users | **Low-Medium** | Ongoing operations (never done) | Mechanism math is sound. But engine performance, realistic topology, sophisticated Sybil strategies, and novel attack vectors are ongoing challenges. Requires detection, response, and adaptation — not just more testing. |
+
+**Note:** "Low-Medium" at 100k is not a problem to solve but the nature of adversarial systems at scale. No deployed trust system (PageRank, Bitcoin, PKI) was "proven robust" pre-launch. Confidence improves with operational experience but never reaches certainty.
 
 ## Key findings from scale simulation
 

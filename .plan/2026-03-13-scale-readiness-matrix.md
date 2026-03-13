@@ -1,19 +1,36 @@
 # Scale Readiness Matrix
 
-**Date:** 2026-03-13
-**Purpose:** Map scale milestones to evidence requirements. Each tier earns its confidence through tested results, not extrapolation from smaller tiers.
+**Date:** 2026-03-13 (revised)
+**Purpose:** Map scale milestones to evidence requirements and operational readiness. Each tier earns its confidence through tested results, not extrapolation from smaller tiers.
 
 ---
 
-## How to read this
+## What this matrix is — and what it isn't
+
+**This is a checklist of things to build**, not a certification that the system is safe. Passing all gates at a tier means "we've tested the attacks we can think of and they don't work." It does NOT mean "the system is secure against all attacks at this scale."
+
+Every deployed adversarial system — PageRank, Bitcoin, PKI, social media moderation — has been an ongoing arms race. None were proven robust before deployment. They launched with bounded confidence, got attacked in ways nobody predicted, and evolved. This system will follow the same pattern.
+
+**The honest framing:**
+
+| Tier range | Nature of work | Completable? |
+|---|---|---|
+| **Tiers 0-1** (to 1k) | Build and verify | **Yes.** Finite engineering work. Ship with confidence. |
+| **Tiers 2-3** (to 10k) | Build, verify, and instrument | **Yes** as engineering. Ship with monitoring. |
+| **Tiers 4-5** (to 100k) | Ongoing operations | **Never.** Ship with monitoring + response capability + acceptance that you'll be adapting. |
+
+The distinction is between **mechanism security** (mathematical, provable, completable — e.g., diversity = bridge_count) and **operational security** (adaptive, continuous, never done — e.g., detecting novel attack patterns, responding to account compromises). Mechanism security is done. Operational security is ongoing work that scales sublinearly with user count but never hits zero.
+
+## How to read gate criteria
 
 Each scale tier defines:
 - **Gate criteria** — what must be true before operating at this scale
 - **Must-pass tests** — automated simulation scenarios with specific assertions
 - **Evidence artifacts** — PRs, ADRs, simulation output that prove the gate is met
 - **Known risks accepted** — things explicitly deferred with reasoning documented
+- **Operational requirements** (Tiers 3+) — monitoring, response, and ongoing work needed at this scale
 
-A tier is **PASS** when all gate criteria have evidence. **BLOCKED** when work is identified but incomplete. **NOT STARTED** when the work hasn't been scoped or begun.
+A tier is **PASS** when all gate criteria have evidence. **BLOCKED** when work is identified but incomplete. **NOT STARTED** when the work hasn't been scoped or begun. Note: even **PASS** tiers carry residual risk — attackers will find things we haven't tested.
 
 ---
 
@@ -28,7 +45,7 @@ A tier is **PASS** when all gate criteria have evidence. **BLOCKED** when work i
 | Denouncement revokes endorser's edge only | ADR-024 accepted with simulation evidence | Done |
 | Time decay applies step function | ADR-025 accepted with simulation evidence (PR #679) | Done |
 
-**Known risks accepted:** Dense max-flow matrix is fine at n=100 (40KB). No monitoring. No Sybil detection beyond diversity threshold.
+**Known risks accepted:** Dense max-flow matrix is fine at n=100 (40KB). No monitoring. No Sybil detection beyond diversity threshold. At this scale, the attack surface is small enough that mechanism security alone is sufficient — operational security is not yet needed.
 
 ---
 
@@ -132,11 +149,21 @@ The diversity threshold alone is insufficient at scale. As population grows, the
 
 **Key uncertainty:** The DB-based trust engine (recursive CTE for Dijkstra, `FlowGraph` for max-flow) may need architectural changes at this tier. The simulation framework computes everything in-memory with sparse data structures. The engine computes via SQL + in-memory dense matrix. The gap between "simulation proves the math works" and "engine implements it efficiently" widens here.
 
+**Operational requirements (begins here):**
+- Trust graph health dashboard (mean distance, diversity distribution, reachability %, edge creation rate, denouncement rate)
+- Anomaly alerts for sudden topology changes
+- On-call response procedure for detected attacks
+- Regular (weekly) graph health review
+
+This is where the work shifts from "build and ship" to "build, ship, and operate." The engineering deliverables are finite, but operating the system is ongoing.
+
 ---
 
 ## Tier 4: Platform (50k users)
 
-**Status: NOT STARTED**
+**Status: NOT STARTED — and may never be "PASS" in the traditional sense**
+
+This tier is fundamentally different from Tiers 0-3. It cannot be completed through simulation and engineering alone. It requires operational experience, real-world attack data, and governance processes that can only be designed once a real community exists. The gate criteria below are necessary conditions, not sufficient ones.
 
 | Gate criteria | Evidence needed | Status |
 |---|---|---|
@@ -146,14 +173,26 @@ The diversity threshold alone is insufficient at scale. As population grows, the
 | 50k SBM simulation passes all tests | All Tier 2-3 tests at 50k. Verify no emergent behavior at scale. | Not started |
 | Sybil cost analysis completed | Empirical estimate: at 50k users, how many accounts are "cheaply" compromisable? Do they cluster on independent paths? Model the cost distribution — if price-to-sell is normal, what does the tail look like? | Not started |
 | Account compromise response procedures | Defined process for: detecting compromised accounts, revoking their edges, notifying affected endorsers, restoring legitimate owner's trust position. | Not started |
+| Incident response exercised | At least one real or simulated incident has been detected, investigated, and resolved using the playbook. | Not started |
 
 **Key uncertainty:** This tier introduces governance questions that simulation alone cannot answer. The adjudication process for severe slashing is a social/political design problem, not a technical one. The "right" quorum, evidence standard, and appeal process depend on community norms that don't exist yet at demo scale. Additionally, the Sybil cost analysis is partly empirical — it depends on the actual user population's behavior and economic incentives, which can't be fully modeled in simulation.
+
+**Operational requirements (ongoing, never "done"):**
+- All Tier 3 operational requirements, plus:
+- Incident response capability (detect → investigate → respond → learn)
+- Regular review of heuristic effectiveness (are detection rates holding? are attackers adapting?)
+- Cost-curve monitoring: is the empirical cost of Sybil entry tracking the theoretical model?
+- Community governance processes actually functioning (not just designed)
 
 ---
 
 ## Tier 5: Target (100k users)
 
-**Status: NOT STARTED**
+**Status: NOT STARTED — this tier is an ongoing operational commitment, not a deliverable**
+
+"100k users" is not a finish line. It is a scale at which the system requires continuous, active maintenance of trust properties. The gate criteria below describe the *minimum conditions* for operating at this scale with bounded confidence. Passing them does not mean the system is "proven robust" — it means you've tested the attacks you can think of, built detection for suspicious patterns, and have the operational capability to respond when something new emerges.
+
+Every real-world trust/reputation system at this scale (PageRank, Bitcoin, PKI, Reddit karma, Twitter verification) has been an ongoing arms race. This system will be too. The realistic expectation: the amount of active work decreases over time as attack classes get covered and heuristics improve, but it never hits zero.
 
 | Gate criteria | Evidence needed | Status |
 |---|---|---|
@@ -166,6 +205,8 @@ The diversity threshold alone is insufficient at scale. As population grows, the
 | Heuristic detection layer validated against adaptive attacker | Red team exercise includes an attacker who knows the heuristics and actively evades them. Measures residual detection rate. | Not started |
 
 **Key uncertainty:** The gap between synthetic topology testing and real-world behavior. Even SBM graphs are idealized. Real social networks have: degree-correlated clustering, temporal burstiness (people join in waves), geographic/cultural community structure, and adversarial actors who adapt. The red team exercise is the closest proxy for real-world confidence. Additionally, account compromise at scale (credential stuffing, phishing, purchased accounts) is a proven attack vector in other platforms — the trust boundary (Ed25519 keys, no server-side private material) makes it harder but not impossible.
+
+**The arms race reality:** Attackers adapt. A heuristic that catches 90% of Sybils today will catch fewer once attackers learn to evade it. New attack vectors will emerge that no simulation predicted. The system's long-term health depends not on pre-deployment testing but on the feedback loop: detect → respond → harden → repeat. This tier is not a gate you pass; it's a mode you operate in.
 
 ---
 
@@ -187,8 +228,10 @@ These risks span multiple tiers and could force revisiting earlier gates:
 
 ## Using this matrix
 
-**Before claiming a scale target:** Check which tier that target falls in. If the tier isn't PASS, enumerate what's BLOCKED and what's NOT STARTED. Don't extrapolate from lower tiers — each tier exists because the previous tier's evidence doesn't cover it.
+**Before claiming a scale target:** Check which tier that target falls in. If the tier isn't PASS, enumerate what's BLOCKED and what's NOT STARTED. Don't extrapolate from lower tiers — each tier exists because the previous tier's evidence doesn't cover it. Even at PASS tiers, the claim is "we've tested what we can think of," not "the system is safe."
 
 **When closing a work item:** Update the relevant gate criteria status and link the evidence (PR number, test name, ADR reference). A gate is PASS only when evidence exists, not when we believe it will pass.
 
 **When a test fails:** If a must-pass test fails at a higher tier, that tier is BLOCKED until either (a) the issue is fixed or (b) the gate criteria and risk acceptance are explicitly revised with reasoning.
+
+**When an attack succeeds in production:** This is expected. The response is: (1) mitigate the immediate impact, (2) add a simulation scenario reproducing the attack, (3) add detection heuristics, (4) update this matrix if gate criteria were insufficient. The matrix is a living document, not a static certification.

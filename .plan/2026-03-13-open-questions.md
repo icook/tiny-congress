@@ -8,9 +8,9 @@
 
 ## Current state (2026-03-13, updated)
 
-**Where things stand:** All four trust ADRs are accepted with simulation evidence. The mechanism design phase is complete. Scale simulation (PR #684) has validated the system to ~5k users with high confidence. The remaining work is engineering (sparse max-flow migration) and topology realism (community-structure testing).
+**Where things stand:** All four trust ADRs are accepted with simulation evidence. The mechanism design phase is complete. Scale simulation (PR #684) has validated the system to ~5k users with high confidence.
 
-**Key insight: getting to 100k is an engineering problem, not a design problem.** The trust mechanisms (distance, diversity, denouncement, decay) are scale-invariant — the math doesn't change with graph size. What breaks at scale is the engine implementation (dense O(n²) max-flow matrix) and our confidence in topology assumptions (BA graphs are unrealistically well-connected). See `.plan/2026-03-13-scale-analysis-findings.md` for full analysis.
+**Key distinction: mechanism security vs operational security.** The trust mechanisms (distance, diversity, denouncement, decay) are scale-invariant — the math doesn't change with graph size. This part is done and provable. What changes with scale is the operational challenge: engine performance (dense O(n²) max-flow matrix), topology realism (BA graphs flatter the system), and the arms race with attackers who adapt to whatever we build. Getting to 5k is engineering. Getting to 100k is engineering + ongoing operations. "Provably robust at 100k" is not achievable — for this system or any adversarial system at that scale. The realistic goal is bounded confidence with detection and response capability. See `.plan/2026-03-13-scale-readiness-matrix.md` for the tiered framing and `.plan/2026-03-13-scale-analysis-findings.md` for the data.
 
 **Active branches/PRs:**
 - **PR #676** (`sim/trust-simulation-design-workspace`) — this `.plan/` design workspace. Reference only, not meant to merge.
@@ -37,11 +37,13 @@
 
 **Scale confidence assessment:**
 
-| Scale | Confidence | Key constraint |
-|---|---|---|
-| 1k–5k | **High** | Mechanisms are scale-invariant. BA simulations confirm robust connectivity. |
-| 5k–10k | **Medium** | Engine FlowGraph hits memory wall (O(n²) dense matrix). Sparse implementation proven in tests. |
-| 10k–100k | **Low-Medium** | Mechanism math is sound. Engine perf, realistic topology, and sophisticated Sybil strategies untested. |
+| Scale | Confidence | Nature of work | Key constraint |
+|---|---|---|---|
+| 1k–5k | **High** | Build and verify (completable) | Mechanisms are scale-invariant. BA simulations confirm robust connectivity. |
+| 5k–10k | **Medium** | Build, verify, instrument (completable) | Engine FlowGraph hits memory wall (O(n²) dense matrix). Sparse implementation proven in tests. Need monitoring. |
+| 10k–100k | **Low-Medium** | Ongoing operations (never done) | Mechanism math is sound. Engine perf, realistic topology, sophisticated Sybil strategies untested. Requires active detection, response, and adaptation. |
+
+"Low-Medium" at 100k is not a problem to solve — it's the nature of adversarial systems at scale. Confidence improves over time with operational experience but never reaches "proven."
 
 **Open question scoreboard:** 23 questions total. 16 resolved through simulation + ADR acceptance. 4 new scale questions (Q20-Q23). 3 deferred for design/engineering.
 

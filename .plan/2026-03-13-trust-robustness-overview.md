@@ -1,20 +1,22 @@
 # Trust System Robustness Overview
 
-**Date:** 2026-03-13
-**Status:** Phase 1 + Phase 2 complete; Phase 3 in progress
-**Related PRs:** #673 (GraphSpec, merged), #678 (adversarial sim + mechanism acceptance)
+**Date:** 2026-03-13 (revised)
+**Status:** Phases 1-3 complete. Scale simulation complete. All 4 trust ADRs accepted.
+**Related PRs:** #673 (GraphSpec, merged), #678 (adversarial sim + mechanism acceptance), #679 (time decay), #684 (scale simulation)
 
 ---
 
 ## 1. Scale Target & Design Philosophy
 
-**Target:** ~100k users at launch (friends-and-family demo to full community rollout).
+**Target:** ~100k users (friends-and-family demo → community rollout → platform growth).
 
 **Core question:** Can you build a resilient trust system at scale with good UX for normal humans? The answer needs to work for someone who signs up via QR code at a community meeting, not just cryptography-literate early adopters.
 
+**Honest framing:** The mechanism design is done and provably sound (diversity = bridge_count, denouncer-only revocation, step decay). The system is confidently deployable to ~5k users today. Getting beyond that is an engineering AND operational challenge — not just building more things, but operating a system under adversarial pressure. "Provably robust at 100k" is not achievable for any adversarial system. The realistic goal is bounded confidence with detection and response capability. See `.plan/2026-03-13-scale-readiness-matrix.md` for the tiered breakdown.
+
 **Simulation-driven decisions.** Every mechanism in the trust system was accepted or rejected based on test evidence from adversarial graph simulations, not theoretical reasoning. The simulation harness runs the real `TrustEngine` against named adversarial topologies — no mocks, no approximations — and measures whether red nodes are blocked and blue nodes remain reachable. Mechanisms that look reasonable in theory but fail these tests are rejected.
 
-**Mechanisms are scale-specific.** The current set (endorsement slots, variable weights, denouncer-only revocation, one-hop cascade) targets the 100k threshold. Different parameters or additional mechanisms will be needed as the network grows past that — those are tracked in the "deferred past 100k" section below.
+**What simulation can and can't prove.** Simulation proves mechanism properties: "given this topology and these attacker actions, the system produces these scores." It cannot prove operational resilience: "when a real attacker adapts to your defenses, you'll detect and respond in time." The gap between these two is the arms race, and it's inherent to adversarial systems.
 
 ---
 
@@ -95,7 +97,9 @@ PR #673 introduced infrastructure for systematic invariant checking:
 
 ---
 
-## 4. Scale Analysis: What Works at 100k
+## 4. Scale Analysis: Mechanism Properties and Confidence Tiers
+
+The mechanisms below have provable, scale-invariant properties. The mechanism math is complete.
 
 | Mechanism | Scale Property | Status |
 |---|---|---|
@@ -103,54 +107,79 @@ PR #673 introduced infrastructure for systematic invariant checking:
 | Variable weights | Diversity metric bounds gaming regardless of weight values | Accepted (ADR-023) |
 | Denouncer-only revocation | Per-user budget (d=2) limits coordinated attacks. 100k users → 200k max denouncements total, but each costs attacker a slot | Accepted (ADR-024) |
 | One-hop cascade | Linear in edge count, bounded by slot limit | Accepted (ADR-024) |
-| Time decay | Passive Sybil resistance without user action | Phase 3 (next) |
+| Time decay | Passive Sybil resistance without user action. Step function: 1.0/0.5/0.0 at 1yr/2yr. | Accepted (ADR-025) |
 
-**Key scale insight:** The diversity metric is the core Sybil defense. A Sybil cluster can create arbitrarily many edges, but diversity counts *independent paths* through distinct community members. At 100k, the ratio of legitimate-to-Sybil paths makes it progressively harder for Sybils to achieve diversity ≥ 2. The slot budget (k=10) caps the number of paths any single user can contribute to the Sybil cluster's score. These two constraints compound: more Sybil nodes helps less than linearly because each new node must spend slots connecting to the legitimate graph, and those slots come at the cost of edges within the Sybil cluster.
+**Key scale insight:** The diversity metric is the core Sybil defense. Proven: diversity = bridge_count (Sybil mesh members achieve diversity exactly equal to the number of compromised bridge nodes on independent paths from anchor). Internal mesh endorsements cannot inflate diversity. This means Sybil resistance reduces to: "how hard is it to compromise 2+ accounts on genuinely independent paths?"
+
+**What this insight does NOT guarantee:** The *cost* of compromising 2 accounts decreases with population size (price-to-sell is distributed; more users = cheaper tail). Account takeover bypasses the endorsement ceremony entirely. The mechanism math is sound, but the security of the system at scale depends on detection and response — not just the mechanism properties. See `.plan/2026-03-13-red-team-threat-model.md` for the full attacker-perspective analysis.
+
+**Scale confidence tiers:**
+
+| Scale | Confidence | What it means |
+|---|---|---|
+| 1k–5k | **High** | Mechanism security sufficient. Completable engineering work. |
+| 5k–10k | **Medium** | Need sparse max-flow + monitoring. Engineering + initial operations. |
+| 10k–100k | **Low-Medium** | Need heuristic detection + response capability. Ongoing operations, never "done." |
 
 ---
 
-## 5. What's Deferred Past 100k
+## 5. What's Needed Beyond Mechanism Design
 
-| Mechanism | Why Deferred | Scale Trigger |
+The mechanism design is complete. What remains falls into two categories: **finite engineering** (completable) and **ongoing operations** (never done).
+
+### Finite engineering (completable)
+
+| Work item | Why needed | Ticket |
 |---|---|---|
-| Adjudication/slashing | Requires governance process design, quorum rules, evidence format | When trust status carries real-world consequences |
-| Multi-hop propagation | Collateral damage increases with graph density | When graph density exceeds simulation coverage |
-| Automated threshold cascade | Needs Sybil-resistant independence detection | When automated action is less risky than governance delay |
-| Dynamic parameter tuning | k, d, decay rate adaptation | When network growth patterns are observed empirically |
+| Sparse max-flow in engine | Dense O(n²) matrix hits memory wall at ~5k nodes | #681 |
+| Community-structure topology testing | BA graphs are unrealistically well-connected; need SBM to validate thresholds | #680 |
+| Correlated failure testing | Real communities cluster harder than BA; test cohort decay on realistic topology | #682 |
+| Sybil detection heuristics | Diversity threshold alone is insufficient at scale; need structural/temporal/behavioral detection | #682 |
+| Batch reconciliation profiling | Unknown performance at 10k+ nodes | Not yet filed |
 
-These are not oversights — they are deliberate deferrals. Building adjudication without real governance experience would produce speculative process design. Building multi-hop propagation without density data would require tuning against synthetic assumptions. Phase 3 (time decay) is the right next step precisely because the temporal extension infrastructure is now in place and the mechanism is low-risk: decay doesn't require user action, it naturally prunes inactive relationships.
+### Ongoing operations (never done)
+
+| Capability | Why needed | When needed |
+|---|---|---|
+| Graph health monitoring | Detect topology changes, anomalous endorsement patterns, diversity shifts | From ~5k users |
+| Incident response | Detect → investigate → respond → learn cycle for novel attacks | From ~5k users |
+| Heuristic tuning | Attackers adapt to detection; heuristics must evolve | Continuous once deployed |
+| Governance/adjudication | Severe action (slashing, disconnection) requires human judgment, not automation | When trust status carries real-world consequences |
+| Cost-curve monitoring | Empirical Sybil entry cost vs theoretical model; validate security assumptions | From ~10k users |
+| Account compromise response | Detect compromised accounts, revoke edges, notify endorsers, restore owner | From ~10k users |
+
+These are not oversights — they are the reality of operating any adversarial system at scale. The mechanism design is clean and provable. The operational work is adaptive and ongoing. Both are necessary.
 
 ---
 
 ## 6. Roadmap
 
-### Phase 3: Time Decay (Next — unblocked by PR #673)
+### Completed
 
-Three candidate decay functions:
-- **Exponential** (6-month half-life): smooth, natural-feeling decay; models fading memory of someone you met once
-- **Step function** (full → half → zero over 2 years): discrete, predictable; users know exactly when their endorsement needs renewal
-- **Linear**: simple to reason about; no abrupt drops
+- **Phase 1: Denouncement mechanism** — ADR-024 accepted. Denouncer-only revocation validated with 31 adversarial scenarios (PR #678).
+- **Phase 2: Weight variance** — ADR-023 stress-tested. Max-weight Sybil still fails diversity (PR #678).
+- **Phase 3: Time decay** — ADR-025 accepted. Step function (1.0/0.5/0.0 at 1yr/2yr), auto-release below 0.05, renewal = re-swap (PR #679).
+- **Phase 4: Scale simulation** — BA graphs at 1k-10k, Sybil mesh analysis, sparse max-flow proven, bridge removal tested (PR #684).
 
-Simulation deliverables:
-- Sybil attack window analysis: does a Sybil cluster's attack surface narrow naturally as fabricated edges decay?
-- Stale-but-legitimate edge test: do real relationships survive without renewal under each decay model?
-- Slot auto-release policy: what threshold triggers auto-release? Does auto-release create manipulation surface?
-
-**Renewal = re-swap.** No new UX needed. The existing swap flow handles it — re-do the handshake, which overwrites the slot with new weight + fresh timestamp.
-
-Deliverable: ADR-025 accepted with simulation evidence.
-
-### Near-term (pre-launch)
+### Near-term (pre-launch — finite, completable)
 
 - **Weight UI (#656):** Swap method + relationship depth selection in endorsement flow. Currently the weight is hardcoded; this exposes the ADR-023 table to users.
 - **Trust dashboard polish:** Score card, eligibility messaging, remediation path clarity.
 - **Seeded demo data:** Pre-populated trust graph for demo users so new visitors see a live, realistic network rather than an empty graph.
 
-### Post-launch
+### Scale hardening (pre-10k — finite, completable)
 
-- **Governance process design** — adjudication for severe cases (its own ADR, substantial design work).
-- **Network monitoring** — detecting Sybil cluster formation in production data.
-- **Cross-context trust** — how trust established in one community context informs trust in another.
+- **Community-structure topology testing (#680)** — SBM graphs to validate thresholds on realistic topology
+- **Engine sparse max-flow migration (#681)** — port sparse Edmonds-Karp to `max_flow.rs`
+- **Correlated failure scenarios (#682)** — realistic cohort decay, Sybil detection heuristics
+- **Graph health monitoring** — dashboard for distance, diversity, reachability, edge creation rate
+
+### Post-launch (ongoing, never done)
+
+- **Operational security** — monitoring, detection, incident response. This is not a deliverable; it's a mode of operation that begins at ~5k users and continues indefinitely.
+- **Governance process design** — adjudication for severe cases (its own ADR, substantial design work). Can only be designed once a real community exists.
+- **Heuristic evolution** — detection heuristics must adapt as attackers learn to evade them.
+- **Arms race management** — novel attacks will emerge. The response loop is: detect → mitigate → add simulation scenario → harden → repeat.
 
 ---
 

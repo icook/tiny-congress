@@ -242,3 +242,4 @@ Update `docs/decisions/025-trust-edge-time-decay.md`:
 - **Scale phase shipped.** PR #684 adds the scale testing framework.
 - **Loss function applied throughout:** Per Q7 resolution, accept blue casualties when they come with red blocking. `W_block >> W_collateral`.
 - **Next phase: topology realism.** BA graphs flatter the system. Community-structure testing (#680) is the highest-value next step.
+- **Important framing:** Phases 1-4 complete the *mechanism security* work — proving that the trust math is sound. This is the completable part. Scaling beyond ~5k users requires *operational security* (monitoring, detection, response) which is ongoing, adaptive work. See `.plan/2026-03-13-scale-readiness-matrix.md` for the tiered breakdown.
