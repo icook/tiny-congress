@@ -59,6 +59,10 @@ jobs:
             echo "actionlint=${ACTIONLINT_VERSION}"
             echo "shellcheck=${SHELLCHECK_VERSION}"
             echo "yq=${YQ_VERSION}"
+            echo "wasm_pack=${WASM_PACK_VERSION}"
+            echo "cargo_llvm_cov=${CARGO_LLVM_COV_VERSION}"
+            echo "cargo_deny=${CARGO_DENY_VERSION}"
+            echo "cargo_machete=${CARGO_MACHETE_VERSION}"
           } >> "$GITHUB_OUTPUT"
 
       - name: Build and push
@@ -80,6 +84,10 @@ jobs:
             ACTIONLINT_VERSION=${{ steps.versions.outputs.actionlint }}
             SHELLCHECK_VERSION=${{ steps.versions.outputs.shellcheck }}
             YQ_VERSION=${{ steps.versions.outputs.yq }}
+            WASM_PACK_VERSION=${{ steps.versions.outputs.wasm_pack }}
+            CARGO_LLVM_COV_VERSION=${{ steps.versions.outputs.cargo_llvm_cov }}
+            CARGO_DENY_VERSION=${{ steps.versions.outputs.cargo_deny }}
+            CARGO_MACHETE_VERSION=${{ steps.versions.outputs.cargo_machete }}
           cache-from: type=registry,ref=ghcr.io/${{ github.repository }}/arc-runner:cache
           cache-to: type=registry,ref=ghcr.io/${{ github.repository }}/arc-runner:cache,mode=max
           # Pass GITHUB_TOKEN as a BuildKit secret so cache-actions.sh can call

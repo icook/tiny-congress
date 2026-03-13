@@ -79,13 +79,27 @@ jobs:
           echo "✓ Codegen is up to date"
 
       # ── Security & dependency audit ──
+      # cargo-deny and cargo-machete are pre-installed in the ARC runner image.
+      # To upgrade, bump versions in .github/tool-versions and rebuild.
       - name: Install cargo-deny
         if: needs.detect-changes.outputs.api == 'true' || needs.detect-changes.outputs.ci == 'true'
-        uses: taiki-e/install-action@cargo-deny
+        run: |
+          source .github/tool-versions
+          if ! cargo-deny --version 2>/dev/null | grep -q "${CARGO_DENY_VERSION}"; then
+            curl -fsSL "https://github.com/EmbarkStudios/cargo-deny/releases/download/${CARGO_DENY_VERSION}/cargo-deny-${CARGO_DENY_VERSION}-x86_64-unknown-linux-musl.tar.gz" \
+              | tar xz --strip-components=1 -C /tmp "cargo-deny-${CARGO_DENY_VERSION}-x86_64-unknown-linux-musl/cargo-deny"
+            sudo install /tmp/cargo-deny /usr/local/bin/
+          fi
 
       - name: Install cargo-machete
         if: needs.detect-changes.outputs.api == 'true' || needs.detect-changes.outputs.ci == 'true'
-        uses: taiki-e/install-action@cargo-machete
+        run: |
+          source .github/tool-versions
+          if ! cargo-machete --version 2>/dev/null | grep -q "${CARGO_MACHETE_VERSION#v}"; then
+            curl -fsSL "https://github.com/bnjbvr/cargo-machete/releases/download/${CARGO_MACHETE_VERSION}/cargo-machete-${CARGO_MACHETE_VERSION}-x86_64-unknown-linux-musl.tar.gz" \
+              | tar xz --strip-components=1 -C /tmp "cargo-machete-${CARGO_MACHETE_VERSION}-x86_64-unknown-linux-musl/cargo-machete"
+            sudo install /tmp/cargo-machete /usr/local/bin/
+          fi
 
       - name: Run dependency audit
         if: needs.detect-changes.outputs.api == 'true' || needs.detect-changes.outputs.ci == 'true'
@@ -107,12 +121,28 @@ jobs:
 
       - uses: ./.github/actions/collect-telemetry
 
-      - name: Run kube-linter
-        uses: stackrox/kube-linter-action@v1
+      - name: Cache kube-linter
+        id: cache-kube-linter
+        uses: runs-on/cache@v4
         with:
-          directory: kube/
-          config: .kube-linter.yaml
-          version: "v0.8.1"
+          path: ~/.local/bin/kube-linter
+          key: kube-linter-${{ runner.os }}-${{ runner.arch }}
+
+      - name: Install kube-linter
+        run: |
+          source .github/tool-versions
+          if [ "${{ steps.cache-kube-linter.outputs.cache-hit }}" = "true" ] \
+             && kube-linter version 2>/dev/null | grep -q "${KUBE_LINTER_VERSION#v}"; then
+            echo "kube-linter ${KUBE_LINTER_VERSION} found in cache"
+          else
+            mkdir -p ~/.local/bin
+            curl -fsSL "https://github.com/stackrox/kube-linter/releases/download/${KUBE_LINTER_VERSION}/kube-linter-linux.tar.gz" \
+              | tar xz -C ~/.local/bin kube-linter
+          fi
+          echo "${HOME}/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Run kube-linter
+        run: kube-linter lint kube/ --config .kube-linter.yaml
 
       # Helm is pre-installed in the ARC runner image (dockerfiles/Dockerfile.arc-runner).
       # To upgrade, bump ARG HELM_VERSION there and rebuild via build-arc-runner.yml.
@@ -224,10 +254,25 @@ jobs:
       - name: Install just
         uses: extractions/setup-just@v3
 
-      - name: Install typos
-        uses: taiki-e/install-action@v2
+      - name: Cache typos-cli
+        id: cache-typos
+        uses: runs-on/cache@v4
         with:
-          tool: typos-cli
+          path: ~/.local/bin/typos
+          key: typos-cli-${{ runner.os }}-${{ runner.arch }}
+
+      - name: Install typos
+        if: steps.cache-typos.outputs.cache-hit != 'true'
+        run: |
+          TYPOS_TAG=$(curl -fsSL https://api.github.com/repos/crate-ci/typos/releases/latest | grep '"tag_name"' | sed 's/.*"tag_name": *"\([^"]*\)".*/\1/')
+          mkdir -p ~/.local/bin
+          curl -fsSL "https://github.com/crate-ci/typos/releases/download/${TYPOS_TAG}/typos-${TYPOS_TAG}-x86_64-unknown-linux-musl.tar.gz" \
+            | tar xz -C ~/.local/bin ./typos
+          echo "${HOME}/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Add typos to PATH
+        if: steps.cache-typos.outputs.cache-hit == 'true'
+        run: echo "${HOME}/.local/bin" >> "$GITHUB_PATH"
 
       - name: Install static-analysis tools
         run: |
@@ -403,8 +448,16 @@ jobs:
           targets: wasm32-unknown-unknown
           cache-dependencies: 'false'
 
+      # wasm-pack is pre-installed in the ARC runner image (dockerfiles/Dockerfile.arc-runner).
+      # To upgrade, bump WASM_PACK_VERSION in .github/tool-versions and rebuild.
       - name: Install wasm-pack
-        uses: taiki-e/install-action@wasm-pack
+        run: |
+          source .github/tool-versions
+          if ! wasm-pack --version 2>/dev/null | grep -q "${WASM_PACK_VERSION#v}"; then
+            curl -fsSL "https://github.com/rustwasm/wasm-pack/releases/download/${WASM_PACK_VERSION}/wasm-pack-${WASM_PACK_VERSION}-x86_64-unknown-linux-musl.tar.gz" \
+              | tar xz --strip-components=1 -C /tmp "wasm-pack-${WASM_PACK_VERSION}-x86_64-unknown-linux-musl/wasm-pack"
+            sudo install /tmp/wasm-pack /usr/local/bin/
+          fi
 
       - name: Build WASM
         run: |
@@ -771,8 +824,16 @@ jobs:
         with:
           components: llvm-tools-preview
 
+      # cargo-llvm-cov is pre-installed in the ARC runner image.
+      # To upgrade, bump CARGO_LLVM_COV_VERSION in .github/tool-versions and rebuild.
       - name: Install cargo-llvm-cov
-        uses: taiki-e/install-action@cargo-llvm-cov
+        run: |
+          source .github/tool-versions
+          if ! cargo llvm-cov --version 2>/dev/null | grep -q "${CARGO_LLVM_COV_VERSION#v}"; then
+            curl -fsSL "https://github.com/taiki-e/cargo-llvm-cov/releases/download/${CARGO_LLVM_COV_VERSION}/cargo-llvm-cov-x86_64-unknown-linux-gnu.tar.gz" \
+              | tar xz -C /tmp cargo-llvm-cov
+            sudo install /tmp/cargo-llvm-cov /usr/local/bin/
+          fi
 
       # ── SQLx snapshot check ──
       - name: Start postgres
