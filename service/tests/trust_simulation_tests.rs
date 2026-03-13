@@ -178,13 +178,9 @@ async fn sim_colluding_ring() {
     let report = SimulationReport::run(&g, anchor).await;
     eprintln!("\n=== Colluding Ring ===\n{report}");
 
-    // Key question: does the diversity approximation count ring members
-    // as distinct endorsers? The approximation counts "distinct reachable
-    // endorsers" — ring members ARE reachable from the anchor, so they
-    // count as distinct endorsers of each other.
-    //
-    // This is a known limitation of the approximation at demo scale.
-    // Record the actual values for calibration.
+    // Vertex connectivity correctly identifies all ring nodes as diversity=1:
+    // despite internal endorsements, the ring connects to the anchor through
+    // a single bridge node (the only vertex-disjoint path).
     for red in report.red_nodes() {
         eprintln!(
             "  Ring node '{}': distance={:?}, diversity={}",
@@ -298,15 +294,12 @@ async fn sim_red_cluster_single_attachment() {
         );
     }
 
-    // Document the diversity approximation limitation:
-    // The fully-connected red cluster members are all reachable from anchor,
-    // so the approximation counts them as distinct endorsers of each other.
-    // This gives red nodes diversity 4-5 despite connecting through a single
-    // bridge point — the same limitation as the colluding ring scenario.
-    // An exact computation (max-flow) would correctly give diversity=1.
+    // Vertex connectivity correctly identifies all red cluster nodes as
+    // diversity=1: despite being fully connected internally, the cluster
+    // connects to the anchor through a single blue bridge node.
     for red in report.red_nodes() {
         eprintln!(
-            "  Red cluster '{}': distance={:?}, diversity={} (approximation inflated)",
+            "  Red cluster '{}': distance={:?}, diversity={}",
             red.name, red.distance, red.diversity
         );
     }
