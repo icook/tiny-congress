@@ -62,3 +62,21 @@ runs:
           target
         key: rust-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
         restore-keys: rust-${{ runner.os }}-
+
+    # Enable sccache on ARC runners — uses in-cluster Garage S3 for shared
+    # compilation cache across jobs and runs. Credentials are injected into
+    # ARC pods via the gha-cache-s3-runner-credentials Kubernetes secret.
+    - name: Configure sccache
+      if: startsWith(runner.name, 'arc-runner')
+      shell: bash
+      run: |
+        echo "RUSTC_WRAPPER=sccache" >> "$GITHUB_ENV"
+        echo "SCCACHE_BUCKET=sccache" >> "$GITHUB_ENV"
+        echo "SCCACHE_ENDPOINT=http://garage.garage.svc.cluster.local:3900" >> "$GITHUB_ENV"
+        echo "SCCACHE_REGION=garage" >> "$GITHUB_ENV"
+        echo "SCCACHE_S3_USE_SSL=false" >> "$GITHUB_ENV"
+        echo "SCCACHE_IDLE_TIMEOUT=0" >> "$GITHUB_ENV"
+        # Validate credentials are present — fail fast if the K8s secret isn't mounted
+        : "${AWS_ACCESS_KEY_ID:?sccache requires AWS_ACCESS_KEY_ID from gha-cache-s3-runner-credentials}"
+        : "${AWS_SECRET_ACCESS_KEY:?sccache requires AWS_SECRET_ACCESS_KEY from gha-cache-s3-runner-credentials}"
+        echo "sccache configured (S3 endpoint: garage.garage.svc.cluster.local:3900)"

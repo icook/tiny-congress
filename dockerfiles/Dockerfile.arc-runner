@@ -30,6 +30,7 @@ ARG WASM_PACK_VERSION=v0.14.0
 ARG CARGO_LLVM_COV_VERSION=v0.8.4
 ARG CARGO_DENY_VERSION=0.19.0
 ARG CARGO_MACHETE_VERSION=v0.9.1
+ARG SCCACHE_VERSION=v0.14.0
 # Keep in sync with @playwright/test version in web/yarn.lock
 ARG PLAYWRIGHT_VERSION=1.57.0
 # Rust version — single source of truth is mise.toml.
@@ -83,12 +84,16 @@ RUN set -eux; \
     curl -fsSL "https://github.com/bnjbvr/cargo-machete/releases/download/${CARGO_MACHETE_VERSION}/cargo-machete-${CARGO_MACHETE_VERSION}-x86_64-unknown-linux-musl.tar.gz" \
       | tar xz --strip-components=1 -C /usr/local/bin \
         "cargo-machete-${CARGO_MACHETE_VERSION}-x86_64-unknown-linux-musl/cargo-machete"; \
+    # sccache (Rust compilation cache with Garage S3 backend)
+    curl -fsSL "https://github.com/mozilla/sccache/releases/download/${SCCACHE_VERSION}/sccache-${SCCACHE_VERSION}-x86_64-unknown-linux-musl.tar.gz" \
+      | tar xz --strip-components=1 -C /usr/local/bin \
+        "sccache-${SCCACHE_VERSION}-x86_64-unknown-linux-musl/sccache"; \
     # smoke-test all installations
     just --version && hadolint --version && actionlint --version && \
     shellcheck --version && helm version --short && python3 --version && \
     yq --version && kubectl version --client && \
     wasm-pack --version && test -x /usr/local/bin/cargo-llvm-cov && \
-    cargo-deny --version && cargo-machete --version
+    cargo-deny --version && cargo-machete --version && sccache --version
 
 # Pre-install Playwright Chromium OS-level dependencies so e2e-tests jobs skip
 # the apt-get step entirely when the browser binary is restored from cache.
