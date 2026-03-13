@@ -883,6 +883,9 @@ jobs:
     runs-on: ${{ needs.detect-changes.outputs.runner-large }}
     needs: [detect-changes]
     if: needs.detect-changes.outputs.api == 'true' || needs.detect-changes.outputs.ci == 'true'
+    env:
+      # Testcontainers default to tc-postgres:local which doesn't exist on CI.
+      TEST_POSTGRES_IMAGE: ghcr.io/${{ github.repository }}/postgres:branch-master
     steps:
       - name: Checkout
         uses: actions/checkout@v6
