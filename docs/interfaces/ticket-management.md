@@ -46,6 +46,11 @@ How urgent is this?
 Every issue must be assigned to a milestone. Pick the best-fitting open milestone;
 if none apply, create a new milestone before triage is complete.
 
+**Why this matters:** Milestones drive project board automation. The `sync-project.yml`
+workflow uses milestone events to add/archive issues on the project board and sync
+priority labels. **An issue without a milestone will not appear on the project board**
+and is effectively invisible to planning.
+
 ### Area Labels (Scope)
 
 What part of the system does this affect?
@@ -270,6 +275,19 @@ Consider GitHub Actions to:
 
 When PR references an issue:
 - When PR merges, automatically close issue
+
+### Project Board Sync (`sync-project.yml`)
+
+The `.github/workflows/sync-project.yml` workflow keeps the GitHub project board
+in sync with issue milestones and priority labels:
+
+- **Milestone added** → issue is added to the project board
+- **Milestone removed** → issue is archived from the project board
+- **`priority/*` label changed** → the board's Priority field is updated to match
+
+The workflow triggers on `issues` events (`milestoned`, `demilestoned`, `labeled`,
+`unlabeled`). It requires a `PROJECT_TOKEN` repository secret — a PAT with `project`
+scope.
 
 ## Label Setup Script
 
