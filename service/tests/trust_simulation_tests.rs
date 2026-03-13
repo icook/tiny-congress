@@ -1445,3 +1445,134 @@ fn sim_temporal_sybil_window_narrows() {
         "Legitimate edge ({legit_weight:.4}) should be 3x stronger than Sybil edge ({sybil_weight:.4})"
     );
 }
+
+// ---------------------------------------------------------------------------
+// Predicate test 5: anti-weaponization — single denouncement can't change
+// a blue node's eligibility
+//
+// Topology:
+//   anchor (blue) → bridge (blue) → target (blue)
+//   anchor → target (second independent path)
+//   attacker (red, attached to network)
+//
+// The attacker endorses the target (to have an edge to denounce), then
+// we simulate denouncement by revoking attacker→target. The predicate
+// checks that target's eligibility is unchanged.
+// ---------------------------------------------------------------------------
+#[shared_runtime_test]
+async fn sim_predicate_single_denounce_preserves_blue_eligibility() {
+    let db = isolated_db().await;
+    let mut g = GraphBuilder::new(db.pool().clone());
+
+    // Blue team: legitimate network with multiple paths to target
+    let anchor = g.add_node("anchor", Team::Blue).await;
+    let bridge = g.add_node("bridge", Team::Blue).await;
+    let target = g.add_node("blue_target", Team::Blue).await;
+    g.endorse(anchor, bridge, 1.0).await;
+    g.endorse(bridge, target, 1.0).await;
+    g.endorse(anchor, target, 1.0).await; // second path → diversity ≥ 2
+
+    // Red attacker is part of the network and endorses the target
+    let attacker = g.add_node("red_attacker", Team::Red).await;
+    g.endorse(bridge, attacker, 0.3).await;
+    g.endorse(attacker, target, 0.5).await;
+
+    // Before: target should be eligible (distance ≤ 5.0, diversity ≥ 2)
+    let before = SimulationReport::run(&g, anchor).await;
+    before.materialize(db.pool()).await;
+
+    // Simulate denouncement: attacker revokes endorsement of target
+    g.revoke(attacker, target).await;
+    let after = SimulationReport::run(&g, anchor).await;
+    after.materialize(db.pool()).await;
+
+    let result = predicates::no_single_denounce_changes_blue_eligibility(
+        g.spec(),
+        &before,
+        &after,
+        5.0, // max distance
+        2,   // min diversity
+    );
+    assert!(result.holds, "{}: {}", result.name, result.explanation);
+
+    // Also verify blue nodes are still reachable
+    let result = predicates::blue_nodes_reachable(g.spec(), &after);
+    assert!(result.holds, "{}: {}", result.name, result.explanation);
+}
+
+// ---------------------------------------------------------------------------
+// Temporal Scenario 3: hub_and_spoke_temporal topology generator correctness
+//
+// Pure unit test verifying that the temporal topology generator:
+//   - Creates the right number of nodes and edges
+//   - Sets staggered created_at timestamps on spoke edges
+//   - Preserves edge weights
+// No database needed — inspects GraphSpec directly after construction.
+// ---------------------------------------------------------------------------
+#[shared_runtime_test]
+async fn sim_temporal_hub_and_spoke_topology_structure() {
+    let db = isolated_db().await;
+    let mut g = GraphBuilder::new(db.pool().clone());
+
+    let base_time = chrono::DateTime::parse_from_rfc3339("2025-01-01T00:00:00Z")
+        .unwrap()
+        .with_timezone(&chrono::Utc);
+    let interval = chrono::Duration::days(30);
+    let spoke_count = 4;
+
+    let (hub, spokes) = topology::hub_and_spoke_temporal(
+        &mut g,
+        "test",
+        Team::Blue,
+        spoke_count,
+        0.8,
+        base_time,
+        interval,
+    )
+    .await;
+
+    // Correct node count: 1 hub + 4 spokes
+    assert_eq!(
+        g.all_nodes().len(),
+        5,
+        "should have 5 nodes (1 hub + 4 spokes)"
+    );
+    assert_eq!(
+        spokes.len(),
+        spoke_count,
+        "should return {spoke_count} spoke IDs"
+    );
+
+    // Correct edge count: hub → each spoke
+    let edges = g.all_edges();
+    assert_eq!(edges.len(), spoke_count, "should have {spoke_count} edges");
+
+    // All edges originate from the hub
+    for edge in edges {
+        assert_eq!(edge.from, hub, "all edges should originate from hub");
+        assert!(!edge.revoked, "no edges should be revoked");
+        assert!(
+            (edge.weight - 0.8).abs() < 0.001,
+            "edge weight should be 0.8"
+        );
+    }
+
+    // Timestamps are staggered: spoke_0 at base_time, spoke_1 at base_time + 30d, etc.
+    for (i, edge) in edges.iter().enumerate() {
+        let expected = base_time + interval * i32::try_from(i).unwrap();
+        let actual = edge
+            .created_at
+            .unwrap_or_else(|| panic!("spoke {i} edge should have created_at"));
+        assert_eq!(
+            actual, expected,
+            "spoke {i}: expected created_at={expected}, got {actual}"
+        );
+    }
+
+    // Timestamps are monotonically increasing
+    for window in edges.windows(2) {
+        let t0 = window[0].created_at.unwrap();
+        let t1 = window[1].created_at.unwrap();
+        assert!(t1 > t0, "timestamps should be monotonically increasing");
+    }
+}
