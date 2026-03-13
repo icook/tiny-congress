@@ -81,6 +81,7 @@ pub mod app_builder;
 pub mod factories;
 pub mod graphql;
 pub mod migration_helpers;
+pub mod simulation;
 
 pub mod test_db {
     use sqlx::postgres::{PgConnection, PgPool, PgPoolOptions};

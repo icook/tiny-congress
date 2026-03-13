@@ -12,12 +12,14 @@
 
 mod account;
 mod device_auth;
+mod endorsement;
 mod signup;
 mod signup_fixture;
 mod test_item;
 
 pub use account::{generate_test_keys, AccountFactory};
 pub use device_auth::{build_authed_request, sign_request, sign_request_at_timestamp};
+pub use endorsement::{insert_endorsement, insert_revoked_endorsement};
 pub use signup::{valid_signup_json, valid_signup_with_keys, SignupKeys};
 pub use signup_fixture::{signup_user, signup_user_in_pool};
 pub use test_item::TestItemFactory;
