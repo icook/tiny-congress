@@ -112,7 +112,6 @@ CREATE TABLE trust__denouncements (
     accuser_id UUID NOT NULL,
     target_id UUID NOT NULL,
     reason TEXT NOT NULL,
-    influence_spent FLOAT4 NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     resolved_at TIMESTAMPTZ);
 
@@ -381,8 +380,6 @@ CREATE UNIQUE INDEX trust__user_influence_pkey ON public.trust__user_influence U
 -- trust__denouncements: trust__denouncements_accuser_id_not_null (CHECK)
 -- trust__denouncements: trust__denouncements_created_at_not_null (CHECK)
 -- trust__denouncements: trust__denouncements_id_not_null (CHECK)
--- trust__denouncements: trust__denouncements_influence_spent_check (CHECK)
--- trust__denouncements: trust__denouncements_influence_spent_not_null (CHECK)
 -- trust__denouncements: trust__denouncements_pkey (PRIMARY KEY)
 -- trust__denouncements: trust__denouncements_reason_not_null (CHECK)
 -- trust__denouncements: trust__denouncements_target_id_not_null (CHECK)

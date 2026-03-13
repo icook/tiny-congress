@@ -42,7 +42,6 @@ pub struct RevokeRequest {
 pub struct DenounceRequest {
     pub target_id: Uuid,
     pub reason: String,
-    pub influence_cost: f32,
 }
 
 #[derive(Debug, Deserialize)]
@@ -78,6 +77,9 @@ pub struct BudgetResponse {
     pub slots_total: u32,
     pub slots_used: i64,
     pub slots_available: i64,
+    pub denouncements_total: u32,
+    pub denouncements_used: i64,
+    pub denouncements_available: i64,
 }
 
 #[derive(Debug, Serialize)]
@@ -195,12 +197,7 @@ async fn denounce_handler(
     };
 
     match trust_service
-        .denounce(
-            auth.account_id,
-            body.target_id,
-            &body.reason,
-            body.influence_cost,
-        )
+        .denounce(auth.account_id, body.target_id, &body.reason)
         .await
     {
         Ok(()) => (
@@ -238,39 +235,60 @@ async fn scores_me_handler(
 
 /// Demo endorsement slot count (k=3).
 const ENDORSEMENT_SLOTS: u32 = 3;
+/// Permanent denouncement budget per user (d=2, ADR-020).
+const DENOUNCEMENT_SLOTS: u32 = 2;
 
 async fn budget_handler(
     Extension(reputation_repo): Extension<Arc<dyn ReputationRepo>>,
+    Extension(trust_repo): Extension<Arc<dyn TrustRepo>>,
     auth: AuthenticatedDevice,
 ) -> impl IntoResponse {
-    match reputation_repo
+    let endorsements_used = match reputation_repo
         .count_active_trust_endorsements_by(auth.account_id)
         .await
     {
-        Ok(used) => {
-            let total = ENDORSEMENT_SLOTS;
-            let available = i64::from(total) - used;
-            (
-                StatusCode::OK,
-                Json(BudgetResponse {
-                    slots_total: total,
-                    slots_used: used,
-                    slots_available: available,
-                }),
-            )
-                .into_response()
-        }
+        Ok(n) => n,
         Err(ref e) => {
             tracing::error!("Budget handler endorsement count error: {e}");
-            (
+            return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(ErrorResponse {
                     error: "Internal server error".to_string(),
                 }),
             )
-                .into_response()
+                .into_response();
         }
-    }
+    };
+
+    let denouncements_used = match trust_repo
+        .count_active_denouncements_by(auth.account_id)
+        .await
+    {
+        Ok(n) => n,
+        Err(ref e) => {
+            tracing::error!("Budget handler denouncement count error: {e}");
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse {
+                    error: "Internal server error".to_string(),
+                }),
+            )
+                .into_response();
+        }
+    };
+
+    (
+        StatusCode::OK,
+        Json(BudgetResponse {
+            slots_total: ENDORSEMENT_SLOTS,
+            slots_used: endorsements_used,
+            slots_available: i64::from(ENDORSEMENT_SLOTS) - endorsements_used,
+            denouncements_total: DENOUNCEMENT_SLOTS,
+            denouncements_used,
+            denouncements_available: i64::from(DENOUNCEMENT_SLOTS) - denouncements_used,
+        }),
+    )
+        .into_response()
 }
 
 async fn create_invite_handler(
@@ -402,13 +420,6 @@ fn trust_service_error_response(e: &TrustServiceError) -> axum::response::Respon
             }),
         )
             .into_response(),
-        TrustServiceError::InsufficientBudget => (
-            StatusCode::PAYMENT_REQUIRED,
-            Json(ErrorResponse {
-                error: "Insufficient influence budget".to_string(),
-            }),
-        )
-            .into_response(),
         TrustServiceError::DenouncementSlotsExhausted { max } => (
             StatusCode::TOO_MANY_REQUESTS,
             Json(ErrorResponse {
@@ -452,13 +463,6 @@ fn trust_repo_error_response(e: &TrustRepoError) -> axum::response::Response {
             StatusCode::CONFLICT,
             Json(ErrorResponse {
                 error: "Duplicate entry".to_string(),
-            }),
-        )
-            .into_response(),
-        TrustRepoError::InsufficientBudget => (
-            StatusCode::PAYMENT_REQUIRED,
-            Json(ErrorResponse {
-                error: "Insufficient influence budget".to_string(),
             }),
         )
             .into_response(),

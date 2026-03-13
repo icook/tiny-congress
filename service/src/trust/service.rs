@@ -21,9 +21,6 @@ pub enum TrustServiceError {
     #[error("daily action quota exceeded")]
     QuotaExceeded,
 
-    #[error("insufficient influence budget")]
-    InsufficientBudget,
-
     #[error("cannot target yourself")]
     SelfAction,
 
@@ -59,7 +56,6 @@ pub trait TrustService: Send + Sync {
         accuser_id: Uuid,
         target_id: Uuid,
         reason: &str,
-        influence_cost: f32,
     ) -> Result<(), TrustServiceError>;
 }
 
@@ -161,7 +157,6 @@ impl TrustService for DefaultTrustService {
         accuser_id: Uuid,
         target_id: Uuid,
         reason: &str,
-        influence_cost: f32,
     ) -> Result<(), TrustServiceError> {
         if accuser_id == target_id {
             return Err(TrustServiceError::SelfAction);
@@ -172,27 +167,19 @@ impl TrustService for DefaultTrustService {
             return Err(TrustServiceError::QuotaExceeded);
         }
 
-        let active_denouncements = self
+        let total_denouncements = self
             .trust_repo
             .count_active_denouncements_by(accuser_id)
             .await?;
-        if active_denouncements >= i64::from(self.max_denouncement_slots) {
+        if total_denouncements >= i64::from(self.max_denouncement_slots) {
             return Err(TrustServiceError::DenouncementSlotsExhausted {
                 max: self.max_denouncement_slots,
             });
         }
 
-        let influence = self.trust_repo.get_or_create_influence(accuser_id).await?;
-        let available =
-            influence.total_influence - influence.staked_influence - influence.spent_influence;
-        if available < influence_cost {
-            return Err(TrustServiceError::InsufficientBudget);
-        }
-
         let payload = json!({
             "target_id": target_id,
             "reason": reason,
-            "influence_cost": influence_cost,
         });
         self.trust_repo
             .enqueue_action(accuser_id, "denounce", &payload)

@@ -218,15 +218,7 @@ async fn test_revoke_returns_202() {
 #[shared_runtime_test]
 async fn test_denounce_returns_202() {
     let db = isolated_db().await;
-    let (app, keys, account_id) = signup_and_get_account("denouncer1", db.pool()).await;
-
-    // Seed some influence so the user has budget
-    use tinycongress_api::trust::repo::{PgTrustRepo, TrustRepo};
-    let trust_repo = PgTrustRepo::new(db.pool().clone());
-    trust_repo
-        .get_or_create_influence(account_id)
-        .await
-        .expect("influence");
+    let (app, keys, _account_id) = signup_and_get_account("denouncer1", db.pool()).await;
 
     // Sign up a user to denounce
     let (json2, _) = valid_signup_with_keys("denouncee1");
@@ -250,8 +242,7 @@ async fn test_denounce_returns_202() {
 
     let body = serde_json::json!({
         "target_id": target_id,
-        "reason": "spamming",
-        "influence_cost": 0.0
+        "reason": "spamming"
     })
     .to_string();
     let request = build_authed_request(
@@ -320,12 +311,12 @@ async fn test_budget_returns_200() {
     assert_eq!(response.status(), StatusCode::OK);
 
     let json = json_body(response).await;
-    assert!(json["slots_total"].is_number());
-    assert!(json["slots_used"].is_number());
-    assert!(json["slots_available"].is_number());
     assert_eq!(json["slots_total"], 3);
     assert_eq!(json["slots_used"], 0);
     assert_eq!(json["slots_available"], 3);
+    assert_eq!(json["denouncements_total"], 2);
+    assert_eq!(json["denouncements_used"], 0);
+    assert_eq!(json["denouncements_available"], 2);
 }
 
 // ─── Invites ──────────────────────────────────────────────────────────────────
