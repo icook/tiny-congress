@@ -29,28 +29,28 @@ pub trait RoomConstraint: Send + Sync {
 // EndorsedByConstraint
 // ---------------------------------------------------------------------------
 
-/// User must appear in the trust graph reachable from `room_anchor_id`.
-pub struct EndorsedByConstraint;
+/// User must have an active endorsement with the configured `topic`.
+///
+/// The topic is drawn from `constraint_config.topic` (set by migration 14 from
+/// the old `eligibility_topic` column).
+pub struct EndorsedByConstraint {
+    pub topic: String,
+}
 
 #[async_trait]
 impl RoomConstraint for EndorsedByConstraint {
     async fn check(
         &self,
         user_id: Uuid,
-        room_anchor_id: Option<Uuid>,
+        _room_anchor_id: Option<Uuid>,
         trust_repo: &dyn TrustRepo,
     ) -> Result<Eligibility, anyhow::Error> {
-        let snapshot = trust_repo
-            .get_score(user_id, room_anchor_id)
+        let endorsed = trust_repo
+            .has_topic_endorsement(user_id, &self.topic)
             .await
             .map_err(|e| anyhow::anyhow!("trust repo error: {e}"))?;
 
-        // A snapshot can exist without `trust_distance` if only centrality was computed.
-        // `trust_distance` being present means the user is reachable from the anchor —
-        // the distance was set during graph traversal, so Some(d) = reachable.
-        let is_eligible = snapshot.as_ref().and_then(|s| s.trust_distance).is_some();
-
-        if is_eligible {
+        if endorsed {
             Ok(Eligibility {
                 is_eligible: true,
                 reason: None,
@@ -58,7 +58,10 @@ impl RoomConstraint for EndorsedByConstraint {
         } else {
             Ok(Eligibility {
                 is_eligible: false,
-                reason: Some("not reachable from room anchor in trust graph".to_string()),
+                reason: Some(format!(
+                    "no '{}' endorsement found; complete identity verification first",
+                    self.topic
+                )),
             })
         }
     }
@@ -266,7 +269,14 @@ pub fn build_constraint(
     config: &serde_json::Value,
 ) -> Result<Box<dyn RoomConstraint>, anyhow::Error> {
     match constraint_type {
-        "endorsed_by" => Ok(Box::new(EndorsedByConstraint)),
+        "endorsed_by" => {
+            let topic = config
+                .get("topic")
+                .and_then(|v| v.as_str())
+                .unwrap_or("identity_verified")
+                .to_string();
+            Ok(Box::new(EndorsedByConstraint { topic }))
+        }
         "community" => {
             let max_distance_f64 = get_f64_or_default(config, "max_distance", 5.0)?;
             if max_distance_f64 > f64::from(f32::MAX) {

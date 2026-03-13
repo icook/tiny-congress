@@ -12,89 +12,83 @@ use tinycongress_api::trust::constraints::{
 use tinycongress_api::trust::repo::{PgTrustRepo, TrustRepo};
 
 // ---------------------------------------------------------------------------
-// EndorsedByConstraint: user reachable from anchor → eligible
+// EndorsedByConstraint: user has matching topic endorsement → eligible
 // ---------------------------------------------------------------------------
 #[shared_runtime_test]
 async fn test_endorsed_by_eligible() {
     let db = isolated_db().await;
     let pool = db.pool().clone();
 
-    let anchor = AccountFactory::new()
+    let endorser = AccountFactory::new()
         .with_seed(80)
         .create(&pool)
         .await
-        .expect("create anchor");
+        .expect("create endorser");
     let user = AccountFactory::new()
         .with_seed(81)
         .create(&pool)
         .await
         .expect("create user");
 
-    // Insert endorsement edge and score snapshot
+    // Insert a topic endorsement for the user
     sqlx::query(
         "INSERT INTO reputation__endorsements (endorser_id, subject_id, topic, weight)
-         VALUES ($1, $2, 'trust', $3)",
+         VALUES ($1, $2, 'identity_verified', 1.0)",
     )
-    .bind(anchor.id)
+    .bind(endorser.id)
     .bind(user.id)
-    .bind(1.0_f32)
     .execute(&pool)
     .await
     .unwrap();
 
     let repo = PgTrustRepo::new(pool.clone());
-    repo.upsert_score(user.id, Some(anchor.id), Some(1.0), Some(1), None)
-        .await
-        .expect("upsert_score");
-
-    let constraint = EndorsedByConstraint;
+    let constraint = EndorsedByConstraint {
+        topic: "identity_verified".to_string(),
+    };
     let result = constraint
-        .check(user.id, Some(anchor.id), &repo)
+        .check(user.id, None, &repo)
         .await
         .expect("check should not error");
 
     assert!(
         result.is_eligible,
-        "User reachable from anchor should be eligible"
+        "User with matching topic endorsement should be eligible"
     );
     assert!(result.reason.is_none());
 }
 
 // ---------------------------------------------------------------------------
-// EndorsedByConstraint: no score snapshot → ineligible with reason
+// EndorsedByConstraint: no topic endorsement → ineligible with reason
 // ---------------------------------------------------------------------------
 #[shared_runtime_test]
 async fn test_endorsed_by_ineligible() {
     let db = isolated_db().await;
     let pool = db.pool().clone();
 
-    let anchor = AccountFactory::new()
-        .with_seed(82)
-        .create(&pool)
-        .await
-        .expect("create anchor");
     let user = AccountFactory::new()
         .with_seed(83)
         .create(&pool)
         .await
         .expect("create user");
 
-    // No score inserted — user is unreachable
+    // No endorsement inserted
     let repo = PgTrustRepo::new(pool.clone());
-    let constraint = EndorsedByConstraint;
+    let constraint = EndorsedByConstraint {
+        topic: "identity_verified".to_string(),
+    };
     let result = constraint
-        .check(user.id, Some(anchor.id), &repo)
+        .check(user.id, None, &repo)
         .await
         .expect("check should not error");
 
     assert!(
         !result.is_eligible,
-        "User with no score should be ineligible"
+        "User with no endorsement should be ineligible"
     );
     let reason = result.reason.expect("should have a reason");
     assert!(
-        reason.contains("not reachable"),
-        "Reason should mention 'not reachable', got: {reason}"
+        reason.contains("identity_verified"),
+        "Reason should mention the topic, got: {reason}"
     );
 }
 

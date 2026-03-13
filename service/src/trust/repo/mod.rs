@@ -184,6 +184,14 @@ pub trait TrustRepo: Send + Sync {
     ) -> Result<Option<ScoreSnapshot>, TrustRepoError>;
 
     async fn get_all_scores(&self, user_id: Uuid) -> Result<Vec<ScoreSnapshot>, TrustRepoError>;
+
+    /// Returns `true` if `user_id` has at least one active (non-revoked) endorsement
+    /// with the given `topic` in `reputation__endorsements`.
+    async fn has_topic_endorsement(
+        &self,
+        user_id: Uuid,
+        topic: &str,
+    ) -> Result<bool, TrustRepoError>;
 }
 
 /// `PostgreSQL` implementation of [`TrustRepo`].
@@ -320,5 +328,23 @@ impl TrustRepo for PgTrustRepo {
 
     async fn get_all_scores(&self, user_id: Uuid) -> Result<Vec<ScoreSnapshot>, TrustRepoError> {
         scores::get_all_scores(&self.pool, user_id).await
+    }
+
+    async fn has_topic_endorsement(
+        &self,
+        user_id: Uuid,
+        topic: &str,
+    ) -> Result<bool, TrustRepoError> {
+        let exists: bool = sqlx::query_scalar(
+            "SELECT EXISTS(\
+               SELECT 1 FROM reputation__endorsements \
+               WHERE subject_id = $1 AND topic = $2 AND revoked_at IS NULL\
+             )",
+        )
+        .bind(user_id)
+        .bind(topic)
+        .fetch_one(&self.pool)
+        .await?;
+        Ok(exists)
     }
 }
