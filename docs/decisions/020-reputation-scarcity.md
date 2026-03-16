@@ -1,7 +1,7 @@
 # ADR-020: Reputation Scarcity — Endorsement Slots and Action Budgets
 
 ## Status
-Proposed
+Accepted (2026-03-13)
 
 ## Context
 
@@ -21,9 +21,8 @@ For a friends-and-family demo where the "aha moment" is endorsement scarcity, us
 
 Each user has a fixed number of **endorsement slots** (k). Each active trust edge (non-revoked endorsement) occupies one slot.
 
-- **Demo value:** k = 3 (tight budget forces deliberate allocation).
-- **Production default:** k = 5 (subject to calibration from observed behavior).
-- **Display:** "2 of 3 endorsements used" — immediately comprehensible.
+- **Slot count:** k = 10. Updated from k=3/k=5 based on scale simulation findings (PR #684). k=10 balances endorsement capacity against graph density at target scales.
+- **Display:** "2 of 10 endorsements used" — immediately comprehensible.
 
 When all slots are occupied, the user must revoke an existing endorsement before creating a new one. There is no partial-strength endorsement — a slot is either used or available.
 
@@ -61,7 +60,7 @@ This will be a separate ADR when the model solidifies, likely informed by the re
 
 Users have a small, finite denouncement budget (d = 2). Filing a denouncement consumes one slot permanently (non-refundable). This prevents spam-flagging while allowing genuine concerns to be raised.
 
-Denouncements are recorded but **do not currently affect trust graph traversal**. The future penalty system will be designed separately.
+The mechanism for how denouncements affect the trust graph is defined in ADR-024 (denouncer-only edge revocation).
 
 ## Consequences
 

@@ -1,7 +1,7 @@
 # ADR-025: Trust Edge Time Decay
 
 ## Status
-Draft
+Accepted (2026-03-13)
 
 ## Context
 
@@ -23,12 +23,12 @@ The commitment is that time decay is a required property of the trust graph, not
 
 ### Open design questions
 
-These will be resolved by simulation experiments and documented in an update to this ADR:
+These were resolved by simulation experiments (PR #679):
 
-1. **Decay function.** Linear, exponential, or step-function (e.g., weight halves after 1 year without interaction). The choice affects how aggressively the graph prunes.
-2. **Renewal mechanism.** How a user resets the decay clock — re-performing the swap, a lightweight confirmation ("I still vouch for this person"), or automatic renewal on interaction. The UX cost of renewal determines how many edges survive long-term.
-3. **Slot interaction.** A fully decayed endorsement still occupies a slot. Options: require explicit revocation to free the slot, or auto-release below a weight floor. Auto-release is simpler for users but changes topology without explicit action.
-4. **Engine integration.** Decay could be applied at query time (effective_weight = weight × decay_factor(age)) or via periodic batch reconciliation (ADR-021). Query-time is more accurate; batch is simpler and aligns with existing reconciliation infrastructure.
+1. **Decay function.** Step function: weight is 1.0 at creation, drops to 0.5 at 1 year without renewal, and drops to 0.0 at 2 years. This provides a clear, predictable degradation timeline.
+2. **Renewal mechanism.** Re-swap (re-performing the handshake resets the decay clock and can upgrade the weight, e.g., text→QR as trust deepens). No new UX needed — the existing swap flow handles it.
+3. **Slot interaction.** Auto-release below weight 0.05 (fully decayed edges release the slot). This simplifies the user experience by not requiring explicit revocation of dead edges.
+4. **Engine integration.** Batch reconciliation (ADR-021 reconciliation cycle). Simpler than query-time decay and aligns with existing reconciliation infrastructure.
 
 ### Simulation deliverable
 
@@ -47,12 +47,12 @@ The simulation harness should produce a developer-targeted document covering:
 
 ### Negative
 - **Renewal burden.** Users must periodically confirm endorsements or lose them. If renewal is too costly, legitimate edges decay and the graph becomes sparse.
-- **Complexity.** Adds a temporal dimension to every trust computation. Must decide between query-time decay (accurate, slower) and batch decay (simpler, stale between reconciliation runs).
+- **Complexity.** Adds a temporal dimension to every trust computation. Batch decay was chosen (ADR-021 reconciliation cycle) over query-time decay.
 - **Edge cases.** A user whose endorsers all go inactive could lose trust standing through no fault of their own.
 
 ### Neutral
-- Interacts with ADR-023's weight model: decay modifies effective weight over time, adding a third dimension beyond swap method and relationship depth.
-- May influence denouncement propagation design: if Alice's endorsement of Bob has mostly decayed, should she still be penalized when Bob is denounced?
+- Interacts with ADR-023's weight model: the step function applies a decay multiplier to the base weight (swap method × relationship depth). At 1 year the effective weight is 0.5× the base; at 2 years the edge is removed entirely.
+- Interacts with ADR-024's denouncement cascade: if Alice's endorsement of Bob has decayed below 0.05 (auto-released), she no longer holds an edge to Bob and would not be penalized when Bob is denounced.
 
 ## References
 - [ADR-024: Denouncement mechanism](024-denouncement-mechanism.md) — denouncer-only revocation as baseline

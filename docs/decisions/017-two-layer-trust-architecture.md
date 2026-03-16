@@ -26,7 +26,7 @@ The trust system is split into two layers with distinct responsibilities:
 - All humans are welcome, even untrustworthy ones. An untrustworthy human has poor graph position (high distance, low diversity), which limits their scope of impact — but they are never expelled from the platform for being untrustworthy.
 - The trust engine computes graph metrics (distance, diversity, endorsement budget) and publishes them. It does not make access decisions.
 
-**Platform trust governs:** endorsement slot count, daily action budget, and participation in the identity/trust network itself. (Slot and budget specifics are defined in ADR-020 and ADR-021, both currently Proposed.)
+**Platform trust governs:** endorsement slot count, daily action budget, and participation in the identity/trust network itself. (Slot and budget specifics are defined in ADR-020 and ADR-021; ADR-021 is currently Proposed.)
 
 ### Layer 2: Communication Permission (Rooms)
 
