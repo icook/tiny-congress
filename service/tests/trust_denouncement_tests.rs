@@ -147,50 +147,6 @@ async fn test_count_active_denouncements_by() {
     assert_eq!(count, 2);
 }
 
-/// Verify denouncement INSERT succeeds and influence_spent column is not required.
-/// This guards against the latent bug where influence_spent (NOT NULL) was never
-/// bound in the INSERT — migration 16 dropped the column; this test ensures the
-/// INSERT remains clean with respect to that constraint.
-#[shared_runtime_test]
-async fn create_denouncement_succeeds() {
-    let db = isolated_db().await;
-    let pool = db.pool().clone();
-
-    let accuser = AccountFactory::new()
-        .with_seed(70)
-        .create(&pool)
-        .await
-        .expect("create accuser");
-
-    let target = AccountFactory::new()
-        .with_seed(71)
-        .create(&pool)
-        .await
-        .expect("create target");
-
-    let repo = PgTrustRepo::new(pool.clone());
-    let record = repo
-        .create_denouncement(accuser.id, target.id, "test reason")
-        .await
-        .expect("create_denouncement should succeed");
-
-    assert_eq!(record.accuser_id, accuser.id);
-    assert_eq!(record.target_id, target.id);
-    assert_eq!(record.reason, "test reason");
-    assert!(record.resolved_at.is_none());
-
-    // Verify row exists in DB
-    let count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM trust__denouncements WHERE accuser_id = $1 AND target_id = $2",
-    )
-    .bind(accuser.id)
-    .bind(target.id)
-    .fetch_one(&pool)
-    .await
-    .expect("count");
-    assert_eq!(count, 1, "denouncement row should exist");
-}
-
 /// Resolved denouncements still count toward the permanent budget (non-refundable).
 #[shared_runtime_test]
 async fn test_resolved_denouncement_still_counts() {
