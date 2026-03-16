@@ -1577,3 +1577,57 @@ async fn sim_temporal_hub_and_spoke_topology_structure() {
         assert!(t1 > t0, "timestamps should be monotonically increasing");
     }
 }
+
+// ---------------------------------------------------------------------------
+// ADR-024: Denouncer revocation simulation
+//
+// Topology:
+//   anchor (blue) → alice (blue) → bob (blue)
+//   alice also endorses bob (two endorsers of bob: alice via two paths, anchor)
+//   Actually: anchor → alice → bob, anchor → carol → bob
+//   (bob has diversity=2 because two independent paths from anchor)
+//
+// Alice denounces bob → alice's endorsement of bob is revoked.
+// We expect: bob's diversity drops from 2 to 1 (only carol's path remains).
+// ---------------------------------------------------------------------------
+#[shared_runtime_test]
+async fn sim_denouncer_revocation_reduces_target_diversity() {
+    let db = isolated_db().await;
+    let mut g = GraphBuilder::new(db.pool().clone());
+
+    let anchor = g.add_node("anchor", Team::Blue).await;
+    let alice = g.add_node("alice", Team::Blue).await;
+    let carol = g.add_node("carol", Team::Blue).await;
+    let bob = g.add_node("bob", Team::Blue).await;
+
+    // Two independent paths to bob: anchor→alice→bob and anchor→carol→bob
+    g.endorse(anchor, alice, 1.0).await;
+    g.endorse(anchor, carol, 1.0).await;
+    g.endorse(alice, bob, 1.0).await;
+    g.endorse(carol, bob, 1.0).await;
+
+    // Baseline: bob should have diversity=2
+    let baseline = SimulationReport::run(&g, anchor).await;
+    let baseline_diversity = baseline.diversity(bob);
+    assert_eq!(
+        baseline_diversity, 2,
+        "bob should have diversity=2 before denouncement"
+    );
+
+    // Alice denounces bob → alice's endorsement revoked via apply_denouncer_revocation
+    let after = mechanisms::apply_denouncer_revocation(&mut g, alice, bob, anchor, db.pool()).await;
+
+    // Bob's diversity should now be 1 (only carol's path remains)
+    let after_diversity = after.diversity(bob);
+    assert_eq!(
+        after_diversity, 1,
+        "bob's diversity should drop to 1 after alice's denouncement revokes her edge"
+    );
+
+    // Bob is still reachable (via carol)
+    let after_distance = after.distance(bob);
+    assert!(
+        after_distance.is_some(),
+        "bob should still be reachable via carol after alice's edge is revoked"
+    );
+}
