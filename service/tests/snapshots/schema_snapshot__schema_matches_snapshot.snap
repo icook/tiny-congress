@@ -136,7 +136,7 @@ CREATE TABLE trust__invites (
     accepted_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     relationship_depth TEXT,
-    weight FLOAT8 NOT NULL DEFAULT 1.0);
+    weight FLOAT4 NOT NULL DEFAULT 1.0);
 
 CREATE TABLE trust__score_snapshots (
     id UUID NOT NULL DEFAULT gen_random_uuid(),
