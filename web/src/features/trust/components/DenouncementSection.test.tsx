@@ -21,7 +21,7 @@ function defaultMocks() {
     isLoading: false,
     isError: false,
     error: null,
-  } as ReturnType<typeof useMyDenouncements>);
+  } as unknown as ReturnType<typeof useMyDenouncements>);
 
   mockUseDenounce.mockReturnValue({
     mutateAsync: vi.fn(),
@@ -35,7 +35,7 @@ function defaultMocks() {
     isLoading: false,
     isError: false,
     error: null,
-  } as ReturnType<typeof useLookupAccount>);
+  } as unknown as ReturnType<typeof useLookupAccount>);
 }
 
 function makeBudget(overrides?: Partial<TrustBudget>): TrustBudget {
@@ -151,7 +151,7 @@ describe('DenouncementSection', () => {
       isLoading: false,
       isError: false,
       error: null,
-    } as ReturnType<typeof useMyDenouncements>);
+    } as unknown as ReturnType<typeof useMyDenouncements>);
     mockUseDenounce.mockReturnValue({
       mutateAsync: vi.fn(),
       isPending: false,
@@ -163,7 +163,7 @@ describe('DenouncementSection', () => {
       isLoading: false,
       isError: false,
       error: null,
-    } as ReturnType<typeof useLookupAccount>);
+    } as unknown as ReturnType<typeof useLookupAccount>);
 
     render(
       <DenouncementSection
