@@ -142,6 +142,11 @@ pub trait TrustRepo: Send + Sync {
         target_id: Uuid,
     ) -> Result<Vec<DenouncementRecord>, TrustRepoError>;
 
+    async fn list_denouncements_by(
+        &self,
+        accuser_id: Uuid,
+    ) -> Result<Vec<DenouncementRecord>, TrustRepoError>;
+
     async fn count_active_denouncements_by(&self, accuser_id: Uuid) -> Result<i64, TrustRepoError>;
 
     /// Returns `true` if `accuser_id` has an active (non-resolved) denouncement against `target_id`.
@@ -260,6 +265,13 @@ impl TrustRepo for PgTrustRepo {
         target_id: Uuid,
     ) -> Result<Vec<DenouncementRecord>, TrustRepoError> {
         denouncements::list_denouncements_against(&self.pool, target_id).await
+    }
+
+    async fn list_denouncements_by(
+        &self,
+        accuser_id: Uuid,
+    ) -> Result<Vec<DenouncementRecord>, TrustRepoError> {
+        denouncements::list_denouncements_by(&self.pool, accuser_id).await
     }
 
     async fn count_active_denouncements_by(&self, accuser_id: Uuid) -> Result<i64, TrustRepoError> {

@@ -9,8 +9,9 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
-use chrono::{Duration, Utc};
+use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
+use sqlx::PgPool;
 use uuid::Uuid;
 
 use super::repo::{TrustRepo, TrustRepoError};
@@ -111,6 +112,25 @@ pub struct AcceptInviteResponse {
     pub accepted_at: String,
 }
 
+#[derive(Debug, Serialize)]
+pub struct DenouncementResponse {
+    pub id: Uuid,
+    pub target_id: Uuid,
+    pub target_username: String,
+    pub reason: String,
+    pub created_at: String,
+}
+
+/// Row returned by the denouncements join query.
+#[derive(sqlx::FromRow)]
+struct DenouncementWithUsername {
+    pub id: Uuid,
+    pub target_id: Uuid,
+    pub target_username: String,
+    pub reason: String,
+    pub created_at: DateTime<Utc>,
+}
+
 // ─── Router ────────────────────────────────────────────────────────────────
 
 pub fn trust_router() -> Router {
@@ -118,6 +138,10 @@ pub fn trust_router() -> Router {
         .route("/trust/endorse", post(endorse_handler))
         .route("/trust/revoke", post(revoke_handler))
         .route("/trust/denounce", post(denounce_handler))
+        .route(
+            "/trust/denouncements/mine",
+            get(list_my_denouncements_handler),
+        )
         .route("/trust/scores/me", get(scores_me_handler))
         .route("/trust/budget", get(budget_handler))
         .route("/trust/invites", post(create_invite_handler))
@@ -211,6 +235,48 @@ async fn denounce_handler(
         )
             .into_response(),
         Err(ref e) => trust_service_error_response(e),
+    }
+}
+
+async fn list_my_denouncements_handler(
+    Extension(pool): Extension<PgPool>,
+    auth: AuthenticatedDevice,
+) -> impl IntoResponse {
+    let result = sqlx::query_as::<_, DenouncementWithUsername>(
+        "SELECT d.id, d.target_id, a.username AS target_username, d.reason, d.created_at \
+         FROM trust__denouncements d \
+         JOIN accounts a ON a.id = d.target_id \
+         WHERE d.accuser_id = $1 \
+         ORDER BY d.created_at DESC",
+    )
+    .bind(auth.account_id)
+    .fetch_all(&pool)
+    .await;
+
+    match result {
+        Ok(rows) => {
+            let denouncements = rows
+                .into_iter()
+                .map(|r| DenouncementResponse {
+                    id: r.id,
+                    target_id: r.target_id,
+                    target_username: r.target_username,
+                    reason: r.reason,
+                    created_at: r.created_at.to_rfc3339(),
+                })
+                .collect::<Vec<_>>();
+            (StatusCode::OK, Json(denouncements)).into_response()
+        }
+        Err(e) => {
+            tracing::error!("list_my_denouncements failed: {e}");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse {
+                    error: "Internal server error".to_string(),
+                }),
+            )
+                .into_response()
+        }
     }
 }
 

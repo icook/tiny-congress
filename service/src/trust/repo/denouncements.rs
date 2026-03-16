@@ -63,6 +63,22 @@ pub(super) async fn has_active_denouncement(
     Ok(count > 0)
 }
 
+pub(super) async fn list_denouncements_by(
+    pool: &PgPool,
+    accuser_id: Uuid,
+) -> Result<Vec<DenouncementRecord>, TrustRepoError> {
+    let records = sqlx::query_as::<_, DenouncementRecord>(
+        "SELECT * FROM trust__denouncements \
+         WHERE accuser_id = $1 \
+         ORDER BY created_at DESC",
+    )
+    .bind(accuser_id)
+    .fetch_all(pool)
+    .await?;
+
+    Ok(records)
+}
+
 /// Count total denouncements filed by `accuser_id` (permanent budget — no refunds).
 pub(super) async fn count_active_denouncements_by(
     pool: &PgPool,

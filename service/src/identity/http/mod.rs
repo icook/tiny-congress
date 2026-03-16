@@ -8,7 +8,7 @@ pub mod login;
 use std::sync::Arc;
 
 use axum::{
-    extract::Extension,
+    extract::{Extension, Query},
     http::StatusCode,
     response::IntoResponse,
     routing::{delete, get, post},
@@ -18,7 +18,8 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use super::service::{IdentityService, RootPubkey, SignupError, SignupRequest};
-use crate::identity::repo::AccountRecord;
+use crate::identity::http::auth::AuthenticatedDevice;
+use crate::identity::repo::{AccountRecord, AccountRepoError, IdentityRepo};
 use tc_crypto::Kid;
 
 /// Signup response
@@ -35,6 +36,19 @@ pub struct ErrorResponse {
     pub error: String,
 }
 
+/// Account lookup response — returns only what the UI needs to target a user.
+#[derive(Debug, Serialize)]
+pub struct AccountLookupResponse {
+    pub id: Uuid,
+    pub username: String,
+}
+
+/// Query parameters for the account lookup endpoint.
+#[derive(Debug, Deserialize)]
+pub struct AccountLookupQuery {
+    pub username: String,
+}
+
 /// Create identity router
 pub fn router() -> Router {
     Router::new()
@@ -49,6 +63,38 @@ pub fn router() -> Router {
             "/auth/devices/{kid}",
             delete(devices::revoke_device).patch(devices::rename_device),
         )
+        .route("/accounts/lookup", get(account_lookup))
+}
+
+/// Look up an account by username.
+///
+/// Returns `{ id, username }` so the caller can use the UUID for trust actions.
+/// Requires authentication — callers must have a valid device session.
+async fn account_lookup(
+    Extension(repo): Extension<Arc<dyn IdentityRepo>>,
+    Query(params): Query<AccountLookupQuery>,
+    _auth: AuthenticatedDevice,
+) -> impl IntoResponse {
+    let username = params.username.trim().to_string();
+    if username.is_empty() {
+        return bad_request("username is required");
+    }
+
+    match repo.get_account_by_username(&username).await {
+        Ok(account) => (
+            StatusCode::OK,
+            Json(AccountLookupResponse {
+                id: account.id,
+                username: account.username,
+            }),
+        )
+            .into_response(),
+        Err(AccountRepoError::NotFound) => not_found("user not found"),
+        Err(e) => {
+            tracing::error!("account_lookup DB error: {e}");
+            internal_error()
+        }
+    }
 }
 
 // ── Shared timestamp helpers ─────────────────────────────────────────────────

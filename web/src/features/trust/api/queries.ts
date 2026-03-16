@@ -7,12 +7,16 @@ import type { CryptoModule } from '@/providers/CryptoProvider';
 import {
   acceptInvite,
   createInvite,
+  denounce,
   endorse,
   getMyBudget,
   getMyScores,
+  listMyDenouncements,
   listMyInvites,
+  lookupAccount,
   revokeEndorsement,
   type CreateInvitePayload,
+  type DenouncementPayload,
   type EndorsePayload,
 } from './client';
 
@@ -109,6 +113,57 @@ export function useEndorse(deviceKid: string, privateKey: CryptoKey, wasmCrypto:
       void queryClient.invalidateQueries({ queryKey: ['trust-budget'] });
       void queryClient.invalidateQueries({ queryKey: ['trust-scores'] });
     },
+  });
+}
+
+export function useMyDenouncements(
+  deviceKid: string | null,
+  privateKey: CryptoKey | null,
+  wasmCrypto: CryptoModule | null
+) {
+  return useQuery({
+    queryKey: ['trust-denouncements', deviceKid],
+    queryFn: async () => {
+      if (!deviceKid || !privateKey || !wasmCrypto) {
+        throw new Error('Not authenticated');
+      }
+      return listMyDenouncements(deviceKid, privateKey, wasmCrypto);
+    },
+    enabled: Boolean(deviceKid && privateKey && wasmCrypto),
+    staleTime: 30_000,
+  });
+}
+
+export function useDenounce(deviceKid: string, privateKey: CryptoKey, wasmCrypto: CryptoModule) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: DenouncementPayload) =>
+      denounce(deviceKid, privateKey, wasmCrypto, payload),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['trust-denouncements'] });
+      void queryClient.invalidateQueries({ queryKey: ['trust-budget'] });
+      void queryClient.invalidateQueries({ queryKey: ['trust-scores'] });
+    },
+  });
+}
+
+export function useLookupAccount(
+  deviceKid: string | null,
+  privateKey: CryptoKey | null,
+  wasmCrypto: CryptoModule | null,
+  username: string
+) {
+  return useQuery({
+    queryKey: ['account-lookup', username],
+    queryFn: async () => {
+      if (!deviceKid || !privateKey || !wasmCrypto) {
+        throw new Error('Not authenticated');
+      }
+      return lookupAccount(deviceKid, privateKey, wasmCrypto, username);
+    },
+    enabled: Boolean(deviceKid && privateKey && wasmCrypto && username.trim()),
+    staleTime: 60_000,
+    retry: false,
   });
 }
 
