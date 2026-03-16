@@ -3,6 +3,8 @@
 ## Status
 Accepted
 
+**Amended 2026-03-16 (ADR-028):** Path diversity computation replaced. The original `COUNT(DISTINCT endorser_id)` approximation has been superseded by exact vertex-disjoint path count via Edmonds-Karp max-flow (PR #652). The approximation was exploitable: a colluding ring of 6 nodes scored diversity=6 under the old formula but diversity=1 under exact vertex connectivity. The `diversity = bridge_count` security reduction (ADR-030, proven in scale simulation PR #684) depends on the exact max-flow formulation.
+
 ## Context
 
 The trust graph needs two quantitative metrics to gate participation: a measure of *how close* someone is to known-trusted identities (depth), and a measure of *how independently verified* they are (width). Together these form the composite trust score.
@@ -61,24 +63,16 @@ GROUP BY user_id;
 
 Path diversity measures how many independent social circles vouch for a person. It answers: "if one branch of the trust graph is compromised, does this person still have a path to the anchor?"
 
-**Approximation (not exact max-flow):** For each target user, count the number of distinct active endorsers who are themselves reachable from the anchor:
+**Exact vertex-disjoint path count via Edmonds-Karp max-flow.** For each target user, compute the maximum number of vertex-disjoint paths from the anchor using the standard vertex-split construction: each node (except source and sink) is split into an in-node and out-node connected by a capacity-1 edge. Edmonds-Karp finds the maximum flow, which equals the number of vertex-disjoint paths by Menger's theorem.
 
-```sql
-SELECT
-    e.subject_id AS user_id,
-    COUNT(DISTINCT e.endorser_id)::int AS path_diversity
-FROM reputation__endorsements e
-WHERE e.revoked_at IS NULL
-  AND e.endorser_id IS NOT NULL
-  AND e.endorser_id = ANY(:reachable_user_ids)
-GROUP BY e.subject_id;
-```
+This is computed in-memory by `FlowGraph` in the trust engine:
+1. Build the flow graph from all active (non-revoked) endorsement edges.
+2. Apply vertex splitting so that each intermediate node can appear on at most one path.
+3. Run Edmonds-Karp to find max-flow from anchor to each target.
 
-This is a two-step process:
-1. Run `compute_distances_from(anchor)` to get the reachable set.
-2. For each user, count distinct endorsers within that reachable set.
+**Sybil-resistance property:** The vertex-disjoint formulation provides the `diversity = bridge_count` security reduction (ADR-030). A Sybil mesh of N fake nodes with dense internal endorsements achieves diversity exactly equal to the number of bridge nodes on independent paths from anchor — internal mesh endorsements cannot inflate the count. A colluding ring of 6 nodes with a single attachment point scores diversity=1 regardless of internal connectivity.
 
-**Sybil-resistance property:** A hub-and-spoke attacker who routes N endorsements through a single node gives each target `diversity = 1`. A user endorsed by K independent reachable nodes gets `diversity = K`. This is intentionally an approximation — true edge-disjoint path counting requires max-flow computation, which is prohibitive at scale and unnecessary at demo scale.
+**Superseded approximation:** The original implementation used `COUNT(DISTINCT endorser_id)` — counting distinct active endorsers reachable from the anchor. This approximation was exploitable: a colluding ring of 6 nodes where each endorses the next scored diversity=6 under the old formula (6 distinct endorsers) but diversity=1 under exact vertex connectivity (single attachment point). Replaced in PR #652 (fixes #648).
 
 ### Composite Trust Score
 
@@ -109,12 +103,12 @@ A placeholder exists for eigenvector centrality as a global (non-anchor-relative
 ### Positive
 - The CTE runs entirely in PostgreSQL — no external graph database needed.
 - The `1/weight` cost function creates a natural penalty for low-quality edges. Social referral chains are expensive; physical QR chains are cheap.
-- The diversity approximation is O(E) where E is the edge count in the reachable subgraph — tractable for demo scale.
+- The exact vertex-disjoint path count provides the `diversity = bridge_count` security reduction — a clean, auditable Sybil resistance claim (ADR-030).
 - Materialized scores make room eligibility checks a simple table lookup.
 
 ### Negative
 - The recursive CTE explores all paths up to distance 10.0, which can be expensive on dense graphs. The 10.0 cutoff is a tuning parameter that trades accuracy for performance.
-- The diversity approximation can overcount in some topologies (a user with two endorsers who share an upstream path gets diversity 2, even though the paths aren't truly independent). For demo scale this is acceptable.
+- The `FlowGraph` for max-flow uses a dense O(n^2) adjacency matrix. At 1k nodes this is ~4MB; at 5k it hits ~100MB. A sparse Edmonds-Karp implementation has been proven equivalent in simulation tests and needs to be ported to the engine (#681).
 - Anchor-scoped recomputation means Alice's view of the graph may disagree with Bob's view until both anchors are recomputed. The batch model resolves this by recomputing all anchors together.
 
 ### Neutral
@@ -131,9 +125,9 @@ A placeholder exists for eigenvector centrality as a global (non-anchor-relative
 - Load the graph into memory, compute paths in Rust.
 - Rejected because it duplicates state (graph in both DB and memory), requires synchronization, and the PostgreSQL CTE already expresses the algorithm correctly.
 
-### Exact edge-disjoint paths (max-flow)
-- Computes the true number of independent paths between two nodes.
-- Rejected for MVP due to computational cost (max-flow is O(V * E^2) in the general case). The distinct-endorser approximation provides adequate Sybil resistance at demo scale.
+### Distinct-endorser count approximation (superseded)
+- The original diversity implementation: `COUNT(DISTINCT endorser_id)` for each user's active endorsers reachable from anchor.
+- Superseded by exact vertex-disjoint max-flow in PR #652. The approximation was exploitable: colluding rings and dense Sybil clusters scored artificially high diversity because distinct endorsers do not imply distinct paths. The security reduction `diversity = bridge_count` (ADR-030) requires the exact formulation.
 
 ## References
 - [ADR-008: Account-based verifiers](008-account-based-verifiers.md) — verifier endorsements populate the same table the CTE traverses
@@ -141,6 +135,9 @@ A placeholder exists for eigenvector centrality as a global (non-anchor-relative
 - [ADR-018: Handshake protocol](018-handshake-protocol.md) — how edges are created and weighted
 - [ADR-020: Reputation scarcity](020-reputation-scarcity.md) — trust scores may influence slot allocation
 - [ADR-021: Batch reconciliation](021-batch-reconciliation.md) — when scores are recomputed
+- [ADR-030: Sybil resistance security reduction](030-sybil-resistance-security-reduction.md) — `diversity = bridge_count` proven from the vertex-disjoint formulation
 - `service/src/trust/engine.rs` — `compute_distances_from`, `compute_diversity_from`, `recompute_from_anchor`
 - `service/src/trust/repo/scores.rs` — `upsert_score`, `get_score`, `get_all_scores`
+- PR #652: Replaced endorser-count approximation with exact vertex connectivity (fixes #648)
+- PR #684: Scale simulation proving `diversity = bridge_count` across 1-5 bridge scenarios
 - TRD §3 (The Trust Engine) — original specification
