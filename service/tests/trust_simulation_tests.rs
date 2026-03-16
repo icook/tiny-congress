@@ -8,6 +8,7 @@
 
 mod common;
 
+use chrono::{Duration, Utc};
 use common::simulation::comparison::{ComparisonTable, MechanismComparison};
 use common::simulation::mechanisms;
 use common::simulation::predicates;
@@ -17,6 +18,50 @@ use common::test_db::isolated_db;
 use tc_test_macros::shared_runtime_test;
 use tinycongress_api::trust::constraints::{CommunityConstraint, CongressConstraint};
 use uuid::Uuid;
+
+// ===========================================================================
+// Phase 3: Decay function definitions (Step 10)
+//
+// Three candidate models for trust edge time decay. Each takes an edge age
+// and returns a weight multiplier in [0.0, 1.0].
+//
+// - Exponential: smooth, continuous decay with 6-month half-life
+// - Step: discrete tiers (full → half → zero) at annual boundaries
+// - Linear: straight-line decline to zero over 2 years
+// ===========================================================================
+
+/// Exponential decay with 6-month half-life.
+///
+/// After 6 months: weight × 0.5. After 1 year: weight × 0.25.
+/// After 2 years: weight × 0.0625. Never truly reaches zero.
+fn exponential_decay(age: Duration) -> f32 {
+    let days = age.num_days() as f32;
+    0.5f32.powf(days / 180.0)
+}
+
+/// Step function: full weight for year 1, half for year 2, zero after.
+///
+/// Predictable for users: "your endorsement is good for a year, then
+/// weakens, then expires." Renewal pressure is gentle (annual).
+fn step_decay(age: Duration) -> f32 {
+    let days = age.num_days();
+    if days < 365 {
+        1.0
+    } else if days < 730 {
+        0.5
+    } else {
+        0.0
+    }
+}
+
+/// Linear decay to zero over 2 years (730 days).
+///
+/// Steady, predictable decline. After 1 year: 0.5. After 18 months: 0.25.
+/// Edges reach zero weight exactly at the 2-year mark.
+fn linear_decay(age: Duration) -> f32 {
+    let fraction = age.num_days() as f32 / 730.0;
+    (1.0 - fraction).max(0.0)
+}
 
 // ---------------------------------------------------------------------------
 // Scenario 1: Hub-and-spoke Sybil attack
@@ -1575,5 +1620,606 @@ async fn sim_temporal_hub_and_spoke_topology_structure() {
         let t0 = window[0].created_at.unwrap();
         let t1 = window[1].created_at.unwrap();
         assert!(t1 > t0, "timestamps should be monotonically increasing");
+    }
+}
+
+// ===========================================================================
+// Phase 3: Time Decay Experiments (Steps 11-13)
+//
+// These tests validate ADR-025 by running decayed trust graphs through the
+// real TrustEngine and measuring how decay affects Sybil resistance,
+// legitimate user eligibility, and slot utilization.
+// ===========================================================================
+
+// ---------------------------------------------------------------------------
+// Step 11: Sybil attack window under time decay
+//
+// A Sybil cluster's edges are fabricated at a single point in time. As those
+// edges age and decay, at what point does the cluster lose eligibility?
+//
+// For each decay function, we build the same topology at 4 time points
+// (1 month, 6 months, 1 year, 2 years) and check whether Sybil spokes
+// pass CommunityConstraint(5.0, 2). The "attack window" is the longest
+// age at which spokes still pass.
+//
+// Topology:
+//   anchor (blue) → bridge (blue) → sybil_hub (red) → 5 sybil_spokes (red)
+//   anchor → blue_web (3 blue nodes, interconnected, recent edges)
+//
+// Blue web has fresh edges (1 week old) to ensure blue always passes.
+// Sybil edges are aged by applying decay to the initial weight (1.0).
+// ---------------------------------------------------------------------------
+#[shared_runtime_test]
+async fn sim_temporal_sybil_attack_window() {
+    let constraint = CommunityConstraint::new(5.0, 2).expect("valid constraint");
+
+    // Time points to test: 30d, 180d, 365d, 730d
+    let age_days = [30, 180, 365, 730];
+
+    // Decay functions to compare
+    let decay_fns: Vec<(&str, fn(Duration) -> f32)> = vec![
+        ("exponential", exponential_decay),
+        ("step", step_decay),
+        ("linear", linear_decay),
+    ];
+
+    println!("\n=== Sybil Attack Window ===");
+    println!(
+        "{:<14} {:>6} {:>8} {:>8} {:>10} {:>10}",
+        "Decay", "Age(d)", "Weight", "SpkDiv", "SpkDist", "Eligible?"
+    );
+
+    for (name, decay_fn) in &decay_fns {
+        for &days in &age_days {
+            let db = isolated_db().await;
+            let mut g = GraphBuilder::new(db.pool().clone());
+
+            // Blue team: anchor + bridge + 3-node web (fresh edges)
+            let anchor = g.add_node("anchor", Team::Blue).await;
+            let bridge = g.add_node("bridge", Team::Blue).await;
+            g.endorse(anchor, bridge, 1.0).await;
+
+            let mut blue_web = Vec::new();
+            for i in 0..3 {
+                let node = g.add_node(&format!("blue_web_{i}"), Team::Blue).await;
+                g.endorse(anchor, node, 1.0).await;
+                blue_web.push(node);
+            }
+            // Cross-endorse blue web for diversity
+            g.endorse(blue_web[0], blue_web[1], 0.8).await;
+            g.endorse(blue_web[1], blue_web[2], 0.8).await;
+            g.endorse(blue_web[2], blue_web[0], 0.8).await;
+
+            // Red team: Sybil hub-and-spoke with decayed edges
+            let sybil_hub = g.add_node("sybil_hub", Team::Red).await;
+            let sybil_age = Duration::days(days.into());
+            let sybil_weight = decay_fn(sybil_age);
+
+            // If edges have fully decayed (weight ≈ 0), skip insertion.
+            // This models auto-release: the Sybil cluster no longer exists.
+            let bridge_to_hub_weight = sybil_weight * 0.3;
+            let sybil_connected = sybil_weight >= 0.01 && bridge_to_hub_weight >= 0.01;
+            if sybil_connected {
+                g.endorse(bridge, sybil_hub, bridge_to_hub_weight).await;
+            }
+
+            let mut spokes = Vec::new();
+            for i in 0..5 {
+                let spoke = g.add_node(&format!("sybil_spoke_{i}"), Team::Red).await;
+                if sybil_connected {
+                    g.endorse(sybil_hub, spoke, sybil_weight).await;
+                }
+                spokes.push(spoke);
+            }
+
+            let report = SimulationReport::run(&g, anchor).await;
+            report.materialize(db.pool()).await;
+
+            // Check first spoke as representative (all spokes are symmetric)
+            let spoke_div = report.diversity(spokes[0]);
+            let spoke_dist = report.distance(spokes[0]);
+            let eligibility = report
+                .check_eligibility(spokes[0], &constraint, db.pool())
+                .await;
+
+            println!(
+                "{:<14} {:>6} {:>8.4} {:>8} {:>10.2} {:>10} {}",
+                name,
+                days,
+                sybil_weight,
+                spoke_div,
+                spoke_dist.unwrap_or(f32::INFINITY),
+                if eligibility.is_eligible { "YES" } else { "NO" },
+                if !sybil_connected {
+                    "(auto-released)"
+                } else {
+                    ""
+                }
+            );
+
+            // Core assertion: Sybil spokes should NEVER achieve diversity ≥ 2
+            // regardless of edge weight. This is the fundamental Sybil defense.
+            for &spoke in &spokes {
+                let div = report.diversity(spoke);
+                assert!(
+                    div < 2,
+                    "{name} @ {days}d: Sybil spoke should have diversity < 2, got {div}"
+                );
+            }
+
+            // If fully decayed, spokes should be completely disconnected
+            if !sybil_connected {
+                assert!(
+                    spoke_dist.is_none(),
+                    "{name} @ {days}d: fully decayed Sybil spoke should have no distance"
+                );
+            }
+
+            // Blue web should remain reachable and eligible at all time points
+            for &blue in &blue_web {
+                let blue_div = report.diversity(blue);
+                assert!(
+                    blue_div >= 2,
+                    "{name} @ {days}d: Blue node should have diversity >= 2, got {blue_div}"
+                );
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Step 12: Stale-but-legitimate edges — renewal pressure threshold
+//
+// A legitimate blue network where edges have various ages. As edges age
+// and decay, at what point do nodes lose eligibility?
+//
+// This tells us how often users need to "renew" (re-swap) to maintain
+// trust standing. The answer shapes the UX: too aggressive = annoying
+// renewal nagging; too gentle = stale edges carry trust signal too long.
+//
+// Topology:
+//   anchor (blue) → hub (blue) ←── 4 endorsers (blue), each at different ages
+//   Each endorser also connects back through a different path to anchor,
+//   providing path diversity for the hub.
+//
+// We test each decay function at ages: 6mo, 1yr, 18mo, 2yr, 3yr.
+// ---------------------------------------------------------------------------
+#[shared_runtime_test]
+async fn sim_temporal_stale_legitimate_edges() {
+    let constraint = CommunityConstraint::new(5.0, 2).expect("valid constraint");
+
+    let age_days = [180, 365, 548, 730, 1095];
+
+    let decay_fns: Vec<(&str, fn(Duration) -> f32)> = vec![
+        ("exponential", exponential_decay),
+        ("step", step_decay),
+        ("linear", linear_decay),
+    ];
+
+    println!("\n=== Stale Legitimate Edges ===");
+    println!(
+        "{:<14} {:>6} {:>8} {:>8} {:>10} {:>10}",
+        "Decay", "Age(d)", "Weight", "HubDiv", "HubDist", "Eligible?"
+    );
+
+    for (name, decay_fn) in &decay_fns {
+        for &days in &age_days {
+            let db = isolated_db().await;
+            let mut g = GraphBuilder::new(db.pool().clone());
+
+            let edge_age = Duration::days(days.into());
+            let decayed_weight = decay_fn(edge_age);
+
+            // anchor is always fresh (it's the root)
+            let anchor = g.add_node("anchor", Team::Blue).await;
+            let hub = g.add_node("hub", Team::Blue).await;
+
+            // 4 endorsers, each providing an independent path to hub
+            let mut endorsers = Vec::new();
+            let mut active_endorser_count = 0;
+            for i in 0..4 {
+                let endorser = g.add_node(&format!("endorser_{i}"), Team::Blue).await;
+                // anchor → endorser (fresh — anchor is always active)
+                g.endorse(anchor, endorser, 1.0).await;
+                // endorser → hub (aged — this is the stale edge)
+                // Skip if fully decayed (DB rejects weight=0; models auto-release)
+                if decayed_weight >= 0.01 {
+                    g.endorse(endorser, hub, decayed_weight).await;
+                    active_endorser_count += 1;
+                }
+                endorsers.push(endorser);
+            }
+
+            let report = SimulationReport::run(&g, anchor).await;
+            report.materialize(db.pool()).await;
+
+            let hub_div = report.diversity(hub);
+            let hub_dist = report.distance(hub);
+            let eligibility = report.check_eligibility(hub, &constraint, db.pool()).await;
+
+            println!(
+                "{:<14} {:>6} {:>8.4} {:>8} {:>10.2} {:>10} (active={})",
+                name,
+                days,
+                decayed_weight,
+                hub_div,
+                hub_dist.unwrap_or(f32::INFINITY),
+                if eligibility.is_eligible { "YES" } else { "NO" },
+                active_endorser_count
+            );
+
+            // With active endorsers carrying meaningful weight, hub should
+            // maintain diversity from independent paths.
+            if decayed_weight > 0.05 && active_endorser_count >= 2 {
+                assert!(
+                    hub_div >= 2,
+                    "{name} @ {days}d (weight={decayed_weight:.4}): hub with {active_endorser_count} \
+                     active endorsers should have diversity >= 2, got {hub_div}"
+                );
+            }
+
+            // If all edges fully decayed (auto-released), hub is disconnected
+            if active_endorser_count == 0 {
+                assert!(
+                    !eligibility.is_eligible,
+                    "{name} @ {days}d: hub with no active endorsers should not be eligible"
+                );
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Step 12b: Mixed-age legitimate network
+//
+// More realistic scenario: a blue network where endorsements were made at
+// different times. Some are fresh (re-swapped recently), others are stale.
+// Tests whether a well-connected node survives decay even when SOME
+// endorsements are old, as long as enough are recent.
+//
+// Topology:
+//   anchor → endorser_fresh_0  → target (weight decayed from 1 week ago)
+//   anchor → endorser_fresh_1  → target (weight decayed from 1 month ago)
+//   anchor → endorser_stale_0  → target (weight decayed from 18 months ago)
+//   anchor → endorser_stale_1  → target (weight decayed from 2.5 years ago)
+//
+// Target should remain eligible because the 2 fresh endorsements provide
+// sufficient diversity, even though the stale ones contribute little.
+// ---------------------------------------------------------------------------
+#[shared_runtime_test]
+async fn sim_temporal_mixed_age_network() {
+    let constraint = CommunityConstraint::new(5.0, 2).expect("valid constraint");
+
+    let decay_fns: Vec<(&str, fn(Duration) -> f32)> = vec![
+        ("exponential", exponential_decay),
+        ("step", step_decay),
+        ("linear", linear_decay),
+    ];
+
+    println!("\n=== Mixed-Age Legitimate Network ===");
+    println!(
+        "{:<14} {:>8} {:>8} {:>10} {:>10}",
+        "Decay", "TgtDiv", "TgtDist", "Eligible?", "FreshW"
+    );
+
+    // Edge ages: 2 fresh, 2 stale
+    let fresh_ages = [Duration::days(7), Duration::days(30)];
+    let stale_ages = [Duration::days(548), Duration::days(912)];
+
+    for (name, decay_fn) in &decay_fns {
+        let db = isolated_db().await;
+        let mut g = GraphBuilder::new(db.pool().clone());
+
+        let anchor = g.add_node("anchor", Team::Blue).await;
+        let target = g.add_node("target", Team::Blue).await;
+
+        // Fresh endorsers
+        let mut fresh_weights = Vec::new();
+        for (i, age) in fresh_ages.iter().enumerate() {
+            let endorser = g.add_node(&format!("fresh_{i}"), Team::Blue).await;
+            let w = decay_fn(*age);
+            g.endorse(anchor, endorser, 1.0).await;
+            g.endorse(endorser, target, w).await;
+            fresh_weights.push(w);
+        }
+
+        // Stale endorsers — skip fully decayed edges (models auto-release)
+        for (i, age) in stale_ages.iter().enumerate() {
+            let endorser = g.add_node(&format!("stale_{i}"), Team::Blue).await;
+            let w = decay_fn(*age);
+            g.endorse(anchor, endorser, 1.0).await;
+            if w >= 0.01 {
+                g.endorse(endorser, target, w).await;
+            }
+        }
+
+        let report = SimulationReport::run(&g, anchor).await;
+        report.materialize(db.pool()).await;
+
+        let tgt_div = report.diversity(target);
+        let tgt_dist = report.distance(target);
+        let eligibility = report
+            .check_eligibility(target, &constraint, db.pool())
+            .await;
+
+        println!(
+            "{:<14} {:>8} {:>10.2} {:>10} {:>10.4}",
+            name,
+            tgt_div,
+            tgt_dist.unwrap_or(f32::INFINITY),
+            if eligibility.is_eligible { "YES" } else { "NO" },
+            fresh_weights[0]
+        );
+
+        // Core assertion: with 2 fresh + 2 stale endorsers, target should
+        // remain eligible. The fresh endorsements carry enough weight.
+        assert!(
+            eligibility.is_eligible,
+            "{name}: target with 2 fresh + 2 stale endorsers should remain eligible"
+        );
+        assert!(
+            tgt_div >= 2,
+            "{name}: target should have diversity >= 2 from fresh endorsers, got {tgt_div}"
+        );
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Step 13: Slot auto-release policy
+//
+// Pure GraphSpec test (no database needed). A node has 10 endorsement slots
+// all occupied by edges of various ages. After applying decay, how many
+// edges fall below the auto-release threshold (weight < 0.05)?
+//
+// This informs the design question: should fully decayed slots auto-release,
+// or must users explicitly revoke?
+//
+// Node layout:
+//   hub → slot_0 (1 week old)
+//   hub → slot_1 (2 months old)
+//   hub → slot_2 (4 months old)
+//   ... through ...
+//   hub → slot_9 (3 years old)
+//
+// Ages are evenly spaced from 7 days to 1095 days (3 years).
+// ---------------------------------------------------------------------------
+#[test]
+fn sim_temporal_slot_auto_release() {
+    let now = Utc::now();
+    let auto_release_threshold = 0.05;
+
+    // 10 edges with ages from 7 days to 3 years, evenly spaced
+    let ages_days: Vec<i64> = (0..10).map(|i| 7 + i * 121).collect(); // 7, 128, 249, ..., 1096
+
+    let decay_fns: Vec<(&str, fn(Duration) -> f32)> = vec![
+        ("exponential", exponential_decay),
+        ("step", step_decay),
+        ("linear", linear_decay),
+    ];
+
+    println!("\n=== Slot Auto-Release Policy ===");
+    println!(
+        "{:<14} {:>10} {:>12} {:>14}",
+        "Decay", "Dead(<0.05)", "Weak(<0.2)", "Active(>=0.2)"
+    );
+
+    for (name, decay_fn) in &decay_fns {
+        let mut spec = GraphSpec::new();
+        let hub = Uuid::from_u128(1);
+        spec.add_node("hub", Team::Blue, hub);
+
+        for (i, &age) in ages_days.iter().enumerate() {
+            let slot = Uuid::from_u128((100 + i) as u128);
+            spec.add_node(&format!("slot_{i}"), Team::Blue, slot);
+            spec.add_edge_at(hub, slot, 1.0, now - Duration::days(age));
+        }
+
+        let decayed = spec.with_decay(now, decay_fn, 0.0);
+
+        let dead = decayed
+            .all_edges()
+            .iter()
+            .filter(|e| e.weight < auto_release_threshold)
+            .count();
+        let weak = decayed
+            .all_edges()
+            .iter()
+            .filter(|e| e.weight >= auto_release_threshold && e.weight < 0.2)
+            .count();
+        let active = decayed
+            .all_edges()
+            .iter()
+            .filter(|e| e.weight >= 0.2)
+            .count();
+
+        println!("{:<14} {:>10} {:>12} {:>14}", name, dead, weak, active);
+
+        // Verify all edges account for total
+        assert_eq!(dead + weak + active, 10, "should account for all 10 slots");
+
+        // Under exponential and linear decay, the oldest edges (3 years)
+        // should decay well below the threshold
+        let oldest_weight = decayed.all_edges().last().unwrap().weight;
+        if *name != "step" {
+            assert!(
+                oldest_weight < auto_release_threshold,
+                "{name}: 3-year-old edge should be below auto-release threshold, got {oldest_weight:.4}"
+            );
+        }
+
+        // The freshest edge (1 week old) should be essentially full weight
+        let freshest_weight = decayed.all_edges().first().unwrap().weight;
+        assert!(
+            freshest_weight > 0.95,
+            "{name}: 1-week-old edge should retain >95% weight, got {freshest_weight:.4}"
+        );
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Step 13b: Slot auto-release impact on scores
+//
+// Engine-backed test: does removing "dead" edges (weight < 0.05) actually
+// change a node's trust scores? If decayed edges contribute negligibly
+// to distance/diversity, auto-release is safe.
+//
+// Topology:
+//   anchor → endorser_fresh → target (weight 1.0)
+//   anchor → endorser_stale → target (weight 0.01, simulating 2.5yr decay)
+//   anchor → target (direct path, weight 1.0)
+//
+// Compare scores with the stale edge present vs. revoked.
+// ---------------------------------------------------------------------------
+#[shared_runtime_test]
+async fn sim_temporal_auto_release_score_impact() {
+    let db = isolated_db().await;
+    let mut g = GraphBuilder::new(db.pool().clone());
+    let constraint = CommunityConstraint::new(5.0, 2).expect("valid constraint");
+
+    let anchor = g.add_node("anchor", Team::Blue).await;
+    let target = g.add_node("target", Team::Blue).await;
+    let fresh_endorser = g.add_node("fresh_endorser", Team::Blue).await;
+    let stale_endorser = g.add_node("stale_endorser", Team::Blue).await;
+
+    // Fresh path: anchor → fresh_endorser → target
+    g.endorse(anchor, fresh_endorser, 1.0).await;
+    g.endorse(fresh_endorser, target, 1.0).await;
+
+    // Stale path: anchor → stale_endorser → target (near-zero weight)
+    g.endorse(anchor, stale_endorser, 1.0).await;
+    g.endorse(stale_endorser, target, 0.01).await;
+
+    // Direct path for diversity
+    g.endorse(anchor, target, 1.0).await;
+
+    // Measure with stale edge present
+    let report_with = SimulationReport::run(&g, anchor).await;
+    report_with.materialize(db.pool()).await;
+    let div_with = report_with.diversity(target);
+    let dist_with = report_with.distance(target);
+    let elig_with = report_with
+        .check_eligibility(target, &constraint, db.pool())
+        .await;
+
+    // Revoke the stale edge (simulating auto-release)
+    g.revoke(stale_endorser, target).await;
+
+    let report_without = SimulationReport::run(&g, anchor).await;
+    report_without.materialize(db.pool()).await;
+    let div_without = report_without.diversity(target);
+    let dist_without = report_without.distance(target);
+    let elig_without = report_without
+        .check_eligibility(target, &constraint, db.pool())
+        .await;
+
+    println!("\n=== Auto-Release Score Impact ===");
+    println!(
+        "With stale edge:    div={div_with}, dist={dist_with:?}, eligible={}",
+        elig_with.is_eligible
+    );
+    println!(
+        "Without stale edge: div={div_without}, dist={dist_without:?}, eligible={}",
+        elig_without.is_eligible
+    );
+
+    // Key assertion: eligibility should not change when removing a near-zero edge
+    assert_eq!(
+        elig_with.is_eligible, elig_without.is_eligible,
+        "Auto-releasing a near-zero edge should not change eligibility"
+    );
+
+    // Diversity may change by at most 1 (the stale path may or may not count)
+    let div_delta = (div_with as i32 - div_without as i32).unsigned_abs();
+    assert!(
+        div_delta <= 1,
+        "Diversity change from auto-release should be <= 1, got {div_delta}"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Step 11b: Decay function comparison — which function best separates
+// Sybil from legitimate at the 6-month mark?
+//
+// At 6 months, exponential has halved Sybil edges, step is still at
+// full weight, and linear is at 0.75. This test directly compares the
+// "separation power" — the ratio of legitimate-to-Sybil edge weight.
+//
+// This is a pure GraphSpec test for clarity.
+// ---------------------------------------------------------------------------
+#[test]
+fn sim_temporal_decay_function_comparison() {
+    let now = Utc::now();
+
+    let decay_fns: Vec<(&str, fn(Duration) -> f32)> = vec![
+        ("exponential", exponential_decay),
+        ("step", step_decay),
+        ("linear", linear_decay),
+    ];
+
+    // Time points where the difference matters
+    let check_points = [90, 180, 365, 548, 730];
+
+    println!("\n=== Decay Function Comparison ===");
+    println!(
+        "{:<14} {:>6} {:>10} {:>10} {:>10}",
+        "Function", "Age(d)", "Sybil(1yr)", "Legit(1wk)", "Ratio"
+    );
+
+    for (name, decay_fn) in &decay_fns {
+        for &days in &check_points {
+            let mut spec = GraphSpec::new();
+            let a = Uuid::from_u128(1);
+            let b = Uuid::from_u128(2);
+            let c = Uuid::from_u128(3);
+            spec.add_node("anchor", Team::Blue, a);
+            spec.add_node("sybil_target", Team::Red, b);
+            spec.add_node("legit_target", Team::Blue, c);
+
+            // Sybil edge: created `days` ago (attacker established presence)
+            spec.add_edge_at(a, b, 1.0, now - Duration::days(days.into()));
+            // Legitimate edge: created 1 week ago (recent interaction)
+            spec.add_edge_at(a, c, 1.0, now - Duration::days(7));
+
+            let decayed = spec.with_decay(now, decay_fn, 0.001);
+            let edges = decayed.all_edges();
+            let sybil_w = edges[0].weight;
+            let legit_w = edges[1].weight;
+            let ratio = if sybil_w > 0.001 {
+                legit_w / sybil_w
+            } else {
+                f32::INFINITY
+            };
+
+            println!(
+                "{:<14} {:>6} {:>10.4} {:>10.4} {:>10.1}",
+                name, days, sybil_w, legit_w, ratio
+            );
+        }
+    }
+
+    // Verify key properties:
+    // 1. Exponential has the best separation at 6 months (ratio should be ~2x)
+    let exp_6mo_sybil = exponential_decay(Duration::days(180));
+    let exp_6mo_legit = exponential_decay(Duration::days(7));
+    assert!(
+        exp_6mo_legit / exp_6mo_sybil > 1.8,
+        "Exponential should have >1.8x separation at 6 months"
+    );
+
+    // 2. Step function provides NO separation during year 1 (both are 1.0)
+    let step_6mo_sybil = step_decay(Duration::days(180));
+    let step_6mo_legit = step_decay(Duration::days(7));
+    assert!(
+        (step_6mo_sybil - step_6mo_legit).abs() < 0.001,
+        "Step function should not separate within year 1"
+    );
+
+    // 3. All functions converge to near-zero for very old edges
+    for decay_fn in [exponential_decay, step_decay, linear_decay] {
+        let old_weight = decay_fn(Duration::days(730));
+        assert!(
+            old_weight < 0.1,
+            "All functions should produce weight < 0.1 at 2 years, got {old_weight:.4}"
+        );
     }
 }
