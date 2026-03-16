@@ -3,7 +3,7 @@ import {
   DELIVERY_METHODS,
   RELATIONSHIP_DEPTHS,
   weightLabel,
-} from './weightCalculator';
+} from './endorsementWeight';
 
 describe('computeWeight', () => {
   it('computes QR + years as 1.0', () => {
