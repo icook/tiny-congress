@@ -134,7 +134,9 @@ CREATE TABLE trust__invites (
     accepted_by UUID,
     expires_at TIMESTAMPTZ NOT NULL,
     accepted_at TIMESTAMPTZ,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now());
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    relationship_depth TEXT,
+    weight FLOAT8 NOT NULL DEFAULT 1.0);
 
 CREATE TABLE trust__score_snapshots (
     id UUID NOT NULL DEFAULT gen_random_uuid(),
@@ -416,6 +418,8 @@ CREATE UNIQUE INDEX trust__user_influence_pkey ON public.trust__user_influence U
 -- trust__invites: trust__invites_expires_at_not_null (CHECK)
 -- trust__invites: trust__invites_id_not_null (CHECK)
 -- trust__invites: trust__invites_pkey (PRIMARY KEY)
+-- trust__invites: trust__invites_relationship_depth_check (CHECK)
+-- trust__invites: trust__invites_weight_not_null (CHECK)
 -- trust__score_snapshots: trust__score_snapshots_computed_at_not_null (CHECK)
 -- trust__score_snapshots: trust__score_snapshots_id_not_null (CHECK)
 -- trust__score_snapshots: trust__score_snapshots_pkey (PRIMARY KEY)
