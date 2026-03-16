@@ -25,7 +25,15 @@ async fn test_create_and_get_invite() {
     let expires_at = chrono::Utc::now() + Duration::hours(24);
 
     let created = repo
-        .create_invite(endorser.id, &envelope, "qr", &attestation, expires_at)
+        .create_invite(
+            endorser.id,
+            &envelope,
+            "qr",
+            None,
+            1.0,
+            &attestation,
+            expires_at,
+        )
         .await
         .expect("create_invite");
 
@@ -64,7 +72,15 @@ async fn test_accept_invite() {
     let expires_at = chrono::Utc::now() + Duration::hours(24);
 
     let invite = repo
-        .create_invite(endorser.id, &[0u8], "email", &attestation, expires_at)
+        .create_invite(
+            endorser.id,
+            &[0u8],
+            "email",
+            None,
+            1.0,
+            &attestation,
+            expires_at,
+        )
         .await
         .expect("create_invite");
 
@@ -105,7 +121,15 @@ async fn test_accept_already_accepted_invite_rejected() {
     let expires_at = chrono::Utc::now() + Duration::hours(24);
 
     let invite = repo
-        .create_invite(endorser.id, &[0u8], "qr", &attestation, expires_at)
+        .create_invite(
+            endorser.id,
+            &[0u8],
+            "qr",
+            None,
+            1.0,
+            &attestation,
+            expires_at,
+        )
         .await
         .expect("create_invite");
 
@@ -144,7 +168,15 @@ async fn test_accept_expired_invite_rejected() {
     let expires_at = chrono::Utc::now() - Duration::hours(1);
 
     let invite = repo
-        .create_invite(endorser.id, &[0u8], "qr", &attestation, expires_at)
+        .create_invite(
+            endorser.id,
+            &[0u8],
+            "qr",
+            None,
+            1.0,
+            &attestation,
+            expires_at,
+        )
         .await
         .expect("create_invite");
 
@@ -171,12 +203,28 @@ async fn test_list_invites_by_endorser() {
     let attestation = serde_json::json!({});
     let expires_at = chrono::Utc::now() + Duration::hours(24);
 
-    repo.create_invite(endorser.id, &[1u8], "qr", &attestation, expires_at)
-        .await
-        .expect("invite 1");
-    repo.create_invite(endorser.id, &[2u8], "email", &attestation, expires_at)
-        .await
-        .expect("invite 2");
+    repo.create_invite(
+        endorser.id,
+        &[1u8],
+        "qr",
+        None,
+        1.0,
+        &attestation,
+        expires_at,
+    )
+    .await
+    .expect("invite 1");
+    repo.create_invite(
+        endorser.id,
+        &[2u8],
+        "email",
+        None,
+        1.0,
+        &attestation,
+        expires_at,
+    )
+    .await
+    .expect("invite 2");
 
     let list = repo
         .list_invites_by_endorser(endorser.id)
@@ -185,4 +233,78 @@ async fn test_list_invites_by_endorser() {
 
     assert_eq!(list.len(), 2);
     assert!(list.iter().all(|i| i.endorser_id == endorser.id));
+}
+
+#[shared_runtime_test]
+async fn test_invite_stores_weight_and_relationship_depth() {
+    let db = isolated_db().await;
+    let pool = db.pool().clone();
+
+    let endorser = AccountFactory::new()
+        .with_seed(69)
+        .create(&pool)
+        .await
+        .expect("create endorser");
+
+    let repo = PgTrustRepo::new(pool);
+    let attestation = serde_json::json!({});
+    let expires_at = chrono::Utc::now() + Duration::hours(24);
+
+    // video + months: 0.7 * 0.7 = 0.49
+    let invite = repo
+        .create_invite(
+            endorser.id,
+            &[0u8],
+            "video",
+            Some("months"),
+            0.49,
+            &attestation,
+            expires_at,
+        )
+        .await
+        .expect("create_invite with weight");
+
+    assert_eq!(invite.delivery_method, "video");
+    assert_eq!(invite.relationship_depth.as_deref(), Some("months"));
+    assert!(
+        (invite.weight - 0.49).abs() < 0.001,
+        "expected weight ~0.49, got {}",
+        invite.weight
+    );
+}
+
+#[shared_runtime_test]
+async fn test_invite_weight_defaults_to_one() {
+    let db = isolated_db().await;
+    let pool = db.pool().clone();
+
+    let endorser = AccountFactory::new()
+        .with_seed(70)
+        .create(&pool)
+        .await
+        .expect("create endorser");
+
+    let repo = PgTrustRepo::new(pool);
+    let attestation = serde_json::json!({});
+    let expires_at = chrono::Utc::now() + Duration::hours(24);
+
+    let invite = repo
+        .create_invite(
+            endorser.id,
+            &[0u8],
+            "qr",
+            None,
+            1.0,
+            &attestation,
+            expires_at,
+        )
+        .await
+        .expect("create_invite default weight");
+
+    assert!(
+        (invite.weight - 1.0).abs() < f32::EPSILON,
+        "expected weight 1.0, got {}",
+        invite.weight
+    );
+    assert!(invite.relationship_depth.is_none());
 }

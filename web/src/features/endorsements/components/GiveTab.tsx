@@ -1,8 +1,26 @@
 import { useState } from 'react';
 import { IconCheck, IconCopy } from '@tabler/icons-react';
 import { QRCodeSVG } from 'qrcode.react';
-import { Alert, Button, CopyButton, Group, Stack, Text, Tooltip } from '@mantine/core';
+import {
+  Alert,
+  Badge,
+  Button,
+  CopyButton,
+  Group,
+  Select,
+  Stack,
+  Text,
+  Tooltip,
+} from '@mantine/core';
 import { notifications } from '@mantine/notifications';
+import {
+  computeWeight,
+  DELIVERY_METHODS,
+  RELATIONSHIP_DEPTHS,
+  weightLabel,
+  type DeliveryMethod,
+  type RelationshipDepth,
+} from '@/api/endorsementWeight';
 import type { CryptoModule } from '@/providers/CryptoProvider';
 import { useCreateInvite } from '../api';
 
@@ -17,13 +35,20 @@ export function GiveTab({ deviceKid, privateKey, crypto, slotsAvailable }: GiveT
   const createInviteMutation = useCreateInvite(deviceKid, privateKey, crypto);
   const [inviteUrl, setInviteUrl] = useState<string | null>(null);
   const [expiresAt, setExpiresAt] = useState<string | null>(null);
+  const [deliveryMethod, setDeliveryMethod] = useState<DeliveryMethod>('qr');
+  const [relationshipDepth, setRelationshipDepth] = useState<RelationshipDepth>('years');
+
+  const weight = computeWeight(deliveryMethod, relationshipDepth);
+  const label = weightLabel(weight);
+  const weightColor = weight >= 0.8 ? 'green' : weight >= 0.4 ? 'yellow' : 'orange';
 
   const handleCreate = () => {
     void createInviteMutation
       .mutateAsync({
         envelope: btoa('endorsement-invite'),
-        delivery_method: 'qr',
-        attestation: { method: 'physical_qr' },
+        delivery_method: deliveryMethod,
+        relationship_depth: relationshipDepth,
+        attestation: { method: deliveryMethod, relationship_depth: relationshipDepth },
       })
       .then((result) => {
         const url = `${window.location.origin}/endorse?invite=${result.id}`;
@@ -48,13 +73,44 @@ export function GiveTab({ deviceKid, privateKey, crypto, slotsAvailable }: GiveT
   }
 
   return (
-    <Stack align="center" gap="md" py="md">
+    <Stack gap="md" py="md">
       {inviteUrl == null ? (
-        <Button onClick={handleCreate} loading={createInviteMutation.isPending} size="lg">
-          Create Endorsement Invite
-        </Button>
-      ) : (
         <>
+          <Select
+            label="How are you connecting?"
+            description="How you're exchanging this invite affects endorsement strength."
+            data={DELIVERY_METHODS.map((m) => ({ value: m.value, label: m.label }))}
+            value={deliveryMethod}
+            onChange={(v) => {
+              if (v) {
+                setDeliveryMethod(v as DeliveryMethod);
+              }
+            }}
+          />
+          <Select
+            label="How long have you known this person?"
+            data={RELATIONSHIP_DEPTHS.map((d) => ({ value: d.value, label: d.label }))}
+            value={relationshipDepth}
+            onChange={(v) => {
+              if (v) {
+                setRelationshipDepth(v as RelationshipDepth);
+              }
+            }}
+          />
+          <Group gap="xs" align="center">
+            <Text size="sm" c="dimmed">
+              Endorsement strength:
+            </Text>
+            <Badge color={weightColor} variant="light">
+              {label} ({(weight * 100).toFixed(0)}%)
+            </Badge>
+          </Group>
+          <Button onClick={handleCreate} loading={createInviteMutation.isPending} size="lg">
+            Create Endorsement Invite
+          </Button>
+        </>
+      ) : (
+        <Stack align="center" gap="md">
           <QRCodeSVG value={inviteUrl} size={250} level="M" />
           <Text size="xs" c="dimmed" ta="center" maw={300} style={{ wordBreak: 'break-all' }}>
             {inviteUrl}
@@ -88,7 +144,7 @@ export function GiveTab({ deviceKid, privateKey, crypto, slotsAvailable }: GiveT
           >
             Create Another
           </Button>
-        </>
+        </Stack>
       )}
     </Stack>
   );

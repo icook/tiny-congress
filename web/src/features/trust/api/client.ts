@@ -50,6 +50,7 @@ export interface RevokePayload {
 export interface CreateInvitePayload {
   envelope: string;
   delivery_method: string;
+  relationship_depth?: string;
   attestation: Record<string, unknown>;
 }
 

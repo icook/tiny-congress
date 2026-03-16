@@ -83,6 +83,10 @@ pub struct InviteRecord {
     pub expires_at: chrono::DateTime<chrono::Utc>,
     pub accepted_at: Option<chrono::DateTime<chrono::Utc>>,
     pub created_at: chrono::DateTime<chrono::Utc>,
+    /// Relationship depth used to compute the endorsement weight.
+    pub relationship_depth: Option<String>,
+    /// Pre-computed endorsement weight in (0, 1.0], stored at invite creation time.
+    pub weight: f32,
 }
 
 /// A cached trust score snapshot for a user.
@@ -148,6 +152,8 @@ pub trait TrustRepo: Send + Sync {
         endorser_id: Uuid,
         envelope: &[u8],
         delivery_method: &str,
+        relationship_depth: Option<&str>,
+        weight: f32,
         attestation: &serde_json::Value,
         expires_at: chrono::DateTime<chrono::Utc>,
     ) -> Result<InviteRecord, TrustRepoError>;
@@ -258,6 +264,8 @@ impl TrustRepo for PgTrustRepo {
         endorser_id: Uuid,
         envelope: &[u8],
         delivery_method: &str,
+        relationship_depth: Option<&str>,
+        weight: f32,
         attestation: &serde_json::Value,
         expires_at: chrono::DateTime<chrono::Utc>,
     ) -> Result<InviteRecord, TrustRepoError> {
@@ -266,6 +274,8 @@ impl TrustRepo for PgTrustRepo {
             endorser_id,
             envelope,
             delivery_method,
+            relationship_depth,
+            weight,
             attestation,
             expires_at,
         )

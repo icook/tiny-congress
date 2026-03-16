@@ -15,6 +15,7 @@ use uuid::Uuid;
 
 use super::repo::{TrustRepo, TrustRepoError};
 use super::service::{TrustService, TrustServiceError};
+use super::weight::compute_endorsement_weight;
 use crate::identity::http::auth::AuthenticatedDevice;
 use crate::identity::http::ErrorResponse;
 use crate::reputation::repo::ReputationRepo;
@@ -48,6 +49,8 @@ pub struct DenounceRequest {
 pub struct CreateInviteRequest {
     pub envelope: String, // base64url-encoded bytes
     pub delivery_method: String,
+    pub relationship_depth: Option<String>,
+    pub weight: Option<f32>,
     pub attestation: serde_json::Value,
 }
 
@@ -310,6 +313,20 @@ async fn create_invite_handler(
             .into_response();
     };
 
+    // Use the client-supplied weight if present; otherwise compute from method + depth.
+    let weight = body.weight.unwrap_or_else(|| {
+        compute_endorsement_weight(&body.delivery_method, body.relationship_depth.as_deref())
+    });
+    if weight <= 0.0 || weight > 1.0 {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: "weight must be in range (0.0, 1.0]".to_string(),
+            }),
+        )
+            .into_response();
+    }
+
     let expires_at = Utc::now() + Duration::days(7);
 
     match trust_repo
@@ -317,6 +334,8 @@ async fn create_invite_handler(
             auth.account_id,
             &envelope_bytes,
             &body.delivery_method,
+            body.relationship_depth.as_deref(),
+            weight,
             &body.attestation,
             expires_at,
         )
@@ -377,12 +396,13 @@ async fn accept_invite_handler(
                 }
             };
 
-            // Auto-enqueue endorsement — the stored signed envelope is the endorser's authorization
+            // Auto-enqueue endorsement — the stored signed envelope is the endorser's authorization.
+            // Use the weight captured at invite creation time (set by the endorser's method choice).
             if let Err(e) = trust_service
                 .endorse(
                     invite.endorser_id,
                     auth.account_id,
-                    1.0,
+                    invite.weight,
                     Some(invite.attestation.clone()),
                 )
                 .await
