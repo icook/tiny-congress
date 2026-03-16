@@ -26,7 +26,7 @@ Brief summary for context; full details in `docs/domain-model.md` and the accept
 
 - **Ed25519 cryptographic identity.** Each user holds a root key (cold storage) and device keys (daily use). The server is a dumb witness — it stores signed data but never handles private key material.
 - **Endorsement slots (k=10, ADR-020).** Each user can endorse at most 10 others. Slots are finite and meaningful — endorsing someone is a real commitment, not a cheap click.
-- **Variable-weight edges (swap method × relationship depth, ADR-023).** The weight table: QR=1.0, video=0.49, text=0.2, email=0.1. Weight bounds are enforced at the DB layer. The trust engine computes distance and diversity scores from an anchor node across these weighted edges.
+- **Variable-weight edges (swap method × relationship depth, ADR-023).** The weight table: QR=1.0, video=0.49, text=0.2, email=0.1. Weight bounds are enforced at the DB layer. The trust engine computes distance and diversity scores from an anchor node across these weighted edges. **Note:** These weights measure trust relationship strength, not identity confidence. Identity verification ("is this person a unique human?") is a separate concern from trust endorsement ("I vouch for this person") — see Q30 in open questions. At launch, the QR handshake implicitly conflates both; separating them is future work needed before adding external identity providers.
 - **Denouncement budget (d=2, ADR-020).** Each user can denounce at most 2 people. Denouncing someone revokes your endorsement edge to them — you can't simultaneously vouch for and denounce someone.
 - **Trust engine.** Computes distance + diversity scores from an anchor node. Diversity counts independent paths through distinct community members — this is the core Sybil defense.
 
@@ -131,7 +131,7 @@ The mechanism design is complete. What remains falls into two categories: **fini
 
 | Work item | Why needed | Ticket |
 |---|---|---|
-| Sparse max-flow in engine | Dense O(n²) matrix hits memory wall at ~5k nodes | #681 |
+| Sparse max-flow in engine | Dense O(n²) matrix hits memory wall at ~5k nodes | #685 |
 | Community-structure topology testing | BA graphs are unrealistically well-connected; need SBM to validate thresholds | #680 |
 | Correlated failure testing | Real communities cluster harder than BA; test cohort decay on realistic topology | #682 |
 | Sybil detection heuristics | Diversity threshold alone is insufficient at scale; need structural/temporal/behavioral detection | #682 |
@@ -147,8 +147,11 @@ The mechanism design is complete. What remains falls into two categories: **fini
 | Governance/adjudication | Severe action (slashing, disconnection) requires human judgment, not automation | When trust status carries real-world consequences |
 | Cost-curve monitoring | Empirical Sybil entry cost vs theoretical model; validate security assumptions | From ~10k users |
 | Account compromise response | Detect compromised accounts, revoke edges, notify endorsers, restore owner | From ~10k users |
+| Identity verification infrastructure | Separate "unique human" verification from trust endorsement; support diverse verifiers | Before adding external identity providers |
 
 These are not oversights — they are the reality of operating any adversarial system at scale. The mechanism design is clean and provable. The operational work is adaptive and ongoing. Both are necessary.
+
+**Anchor at launch:** The founder is the trust root. This is pragmatic — every trust network starts from a founder's personal network. Multi-anchor migration is Tier 3+ work. See `.plan/2026-03-13-anchor-problem-statement.md`.
 
 ---
 

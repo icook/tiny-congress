@@ -12,40 +12,46 @@
 
 ## Architecture-level (explore now, before scale locks in assumptions)
 
-### Anchor-free trust scoring
+### Anchor-free trust scoring — SPIKE COMPLETED, RESULTS NEGATIVE
 
 **Idea:** Replace anchor-relative scoring (Dijkstra distance + max-flow diversity from a single root) with a global reputation system that has no distinguished root node.
 
-**Options:**
-1. **EigenTrust** — computes global trust vector from local trust ratings. Designed for P2P systems. Converges to a unique stationary distribution without requiring a root. Pre-trusted nodes are optional initialization, not structural requirements.
-2. **PageRank** — global reputation from link structure. Anchor-free by design. Well-understood at planetary scale (Google runs it on the web graph).
-3. **Multi-anchor intersection** — keep the current algorithm but compute from N anchors, require agreement. More robust than single anchor but doesn't eliminate the anchor concept.
-4. **Relative trust** — every node computes trust relative to itself. No distinguished root. O(n) per node, O(n²) total. Feasible at 100k.
+**Spike results (2026-03-13):** Implemented EigenTrust and PageRank, tested against adversarial topologies. **Both fail catastrophically at Sybil detection.** See `.plan/2026-03-13-anchor-problem-statement.md` for full analysis.
 
-**Why explore now:** The current mechanism design (slots, denouncement, decay) constrains graph *topology* — it's orthogonal to how *scores* are derived. Switching scoring systems doesn't invalidate any ADR. But the longer the system runs with anchor-relative scoring, the harder the migration. EigenTrust/PageRank are computationally trivial at target scales (100k graph fits in L3 cache, full PageRank in <1 second).
+| Scenario | Anchor-relative | EigenTrust/PageRank |
+|---|---|---|
+| Sybil mesh (1 bridge) | 1.36x blue advantage | 0.95x — **Sybils score higher** |
+| Sybil mesh (2 bridges) | 1.36x blue advantage | 0.94x — **Sybils score higher** |
+| Colluding ring | 5.4x blue advantage | 0.68x — **ring inflates scores 1.46x** |
 
-**Current anchor risks:** Single point of failure (red team A5). All trust measurements relative to one node. No anchor rotation procedure. No anchor compromise detection.
+**Root cause:** Anchor-free algorithms can't distinguish "endorsed by many real people" from "endorsed by many fake people endorsing each other." Dense internal mesh endorsements create self-reinforcing trust amplification loops. The anchor provides a reference point that breaks this symmetry — trust must originate from a known-good source.
 
-**Key question:** Anchor-relative trust has a clean security reduction (diversity = bridge_count from anchor). EigenTrust has different security properties — harder to reason about formally, but no single point of failure. Is the formal simplicity worth the fragility?
+**EigenTrust alpha sensitivity:** Low alpha (graph-driven) → Sybils score higher. High alpha (pretrust-driven) → scores converge to uniform (algorithm adds no value). No sweet spot exists.
 
-**Addresses:** Red team A5 (anchor compromise), open question Q28 (anchor redundancy)
+**Launch decision (2026-03-15):** Founder is the trust root at launch — pragmatic and accepted. Multi-anchor migration is Tier 3+ work (~10k users). Options for that migration:
+1. **Multi-anchor consensus** — compute from N anchors, require agreement. Preserves security reduction, distributes failure.
+2. **Personalized PageRank** — anchor-relative PageRank (used by SybilRank). Still requires an anchor but may offer smoother scoring.
+3. **Rotating/electable anchor** — keep the concept but make it a governance role, not a permanent identity.
+4. **Community detection hybrid** — use graph clustering to detect Sybil boundaries as a supplementary signal.
 
-### PageRank / EigenTrust as supplementary signals
+Research sweep completed — see `.plan/2026-03-13-anchor-problem-statement.md` for full analysis.
 
-**Idea:** Even without replacing the anchor-based scoring, run PageRank and EigenTrust as additional signals alongside distance/diversity. These provide orthogonal information: PageRank measures global influence (how connected you are to well-connected nodes), EigenTrust measures transitive trust quality.
+**Addresses:** Red team A5 (anchor compromise), open question Q28 (anchor redundancy), Q29 (anchor-free scoring)
 
-**Feasibility:**
+### PageRank / EigenTrust as supplementary signals — REFRAMED BY SPIKE
 
-| Scale | Edges (k=10 max) | Graph in RAM | PageRank (50 iterations) |
-|---|---|---|---|
-| 100k | 1M | ~16 MB | <1 second |
-| 1M | 10M | ~160 MB | ~5 seconds |
-| 100M | 1B | ~16 GB | ~3 minutes |
-| 8B | 80B | ~1.28 TB | ~67 minutes (needs distributed) |
+**Idea:** Run PageRank and EigenTrust as additional signals alongside distance/diversity. Originally proposed for Sybil detection and community influence scoring.
 
-At target scales, these are free to compute. Could run as a nightly batch job or even on every trust recomputation.
+**Spike finding:** EigenTrust/PageRank **cannot** separate Sybils from legitimate nodes (Sybils score equal or higher). However, they retain value for a different purpose: **anomaly detection.** A sudden change in a node's PageRank indicates a topology shift — useful for detecting compromised accounts or Sybil cluster formation — even if the absolute score doesn't reliably separate real from fake.
 
-**Value:** Additional dimensions for Sybil detection (low PageRank + high diversity = suspicious), anomaly detection (sudden PageRank change = topology shift), and richer trust UI ("your community influence score").
+**Revised value proposition:**
+- ~~Sybil detection (low PageRank + high diversity = suspicious)~~ — INVALIDATED. High PageRank correlates with Sybil mesh density, not legitimacy.
+- **Anomaly detection** (sudden PageRank change = topology shift) — VALID. Relative changes over time are meaningful even if absolute scores aren't.
+- ~~Community influence score for UI~~ — QUESTIONABLE. If Sybils can inflate their scores, displaying these to users is misleading.
+
+**Feasibility:** Still trivial at target scales (<1 second for 100k nodes). Spike measured 258ms for EigenTrust, 316ms for PageRank at 1k nodes.
+
+**Recommended use:** Nightly batch anomaly detection, not eligibility scoring.
 
 ---
 
@@ -106,7 +112,7 @@ At target scales, these are free to compute. Could run as a nightly batch job or
 - Same mechanism, different UX encouragement?
 - Different decay rate? (light endorsements decay faster — acquaintances fade)
 
-**Addresses:** SBM diversity problem, inter-community connectivity
+**Addresses:** SBM diversity problem, inter-community connectivity, verifier slot budget problem (Q30 — light endorsement tier is the leading option for how verifier entities participate in the graph without requiring k=∞)
 
 ---
 
@@ -199,6 +205,8 @@ At target scales, these are free to compute. Could run as a nightly batch job or
 - Liveness tests + decay = stronger account hygiene (inactive accounts lose weight AND get restricted)
 - Light endorsement tiers + group endorsement = more paths, more diversity, lower barrier to connection
 
-**The anchor question is foundational.** If the system moves to EigenTrust/PageRank scoring, several other concepts simplify: no anchor compromise risk, natural "global reputation" metric for moderator authority, richer signals for anomaly detection. But it changes the security model's formal properties.
+**The anchor question is foundational — and now empirically constrained.** The EigenTrust/PageRank spike (2026-03-13) demonstrated that naive anchor-free scoring fails at Sybil detection. The anchor provides a critical security property (breaking self-reinforcement symmetry) that global algorithms cannot replicate. The path forward is not "remove the anchor" but "make the anchor more accountable and redundant" — multi-anchor consensus, rotating anchors, or community-elected anchor sets. See `.plan/2026-03-13-anchor-problem-statement.md`.
+
+**EigenTrust/PageRank are NOT useful as eligibility signals** but retain value for **anomaly detection** (topology shift monitoring). The "rich graph analytics" composition above should be reframed: PageRank changes over time (not absolute values) are the useful signal.
 
 **Computational budget at target scales:** At 100k users with k=10, the entire graph is ~16 MB. You could run PageRank, EigenTrust, community detection, centrality computation, what-if analysis for every node, and anomaly detection — all in under a minute on a single core. Computation is not the constraint; design and governance are.

@@ -45,7 +45,7 @@ A tier is **PASS** when all gate criteria have evidence. **BLOCKED** when work i
 | Denouncement revokes endorser's edge only | ADR-024 accepted with simulation evidence | Done |
 | Time decay applies step function | ADR-025 accepted with simulation evidence (PR #679) | Done |
 
-**Known risks accepted:** Dense max-flow matrix is fine at n=100 (40KB). No monitoring. No Sybil detection beyond diversity threshold. At this scale, the attack surface is small enough that mechanism security alone is sufficient — operational security is not yet needed.
+**Known risks accepted:** Dense max-flow matrix is fine at n=100 (40KB). No monitoring. No Sybil detection beyond diversity threshold. **Anchor = founder** — the platform creator is the trust root, which is the natural shape of bootstrapping any trust network. At this scale, the attack surface is small enough that mechanism security alone is sufficient — operational security is not yet needed.
 
 ---
 
@@ -113,6 +113,7 @@ A tier is **PASS** when all gate criteria have evidence. **BLOCKED** when work i
 | Account compromise threat modeled | Simulation of account takeover scenarios: attacker inherits existing endorsed account's graph position. Measure blast radius and detection feasibility. | Not started |
 | 10k SBM simulation passes Tier 2 tests | Re-run all Tier 2 must-pass tests at 10k. Verify thresholds still hold. | Not started |
 | Trust graph health monitoring | Dashboard showing: mean distance, diversity distribution, reachability %, edge creation rate, denouncement rate, decay churn rate. | Not started |
+| Multi-anchor migration evaluated | Design for distributing trust root beyond founder. Options: multi-anchor consensus, rotating anchors, community-elected anchor sets. See `.plan/2026-03-13-anchor-problem-statement.md` | Not started |
 
 ### Sybil detection heuristic layer
 

@@ -92,7 +92,9 @@ An attacker wants one or more of:
 
 **Current defenses:** The anchor account presumably has strong key management. Multi-anchor or distributed anchor is a potential future mitigation.
 
-**Gaps:** Single anchor = single point of failure. No multi-anchor design exists. No anchor rotation procedure. No detection for anchor compromise.
+**Launch note (2026-03-15):** At launch, anchor = founder. This makes A5 equivalent to A2 (account compromise) for the founder's account specifically. The risk is bounded by demo scale — the founder personally knows most participants. Multi-anchor migration is Tier 3+ work (~10k users). See `.plan/2026-03-13-anchor-problem-statement.md`.
+
+**Gaps:** Single anchor = single point of failure. No multi-anchor design exists. No anchor rotation procedure. No detection for anchor compromise. These gaps are acceptable at launch scale but become critical at Tier 3+.
 
 **Simulation testable?** No — this is an operational security question, not a graph theory question.
 
@@ -215,7 +217,7 @@ An attacker wants one or more of:
 
 4. **Account compromise is a complete bypass.** The entire endorsement ceremony, weight table, and diversity threshold are designed to make *new identity creation* expensive. Account takeover skips all of it. The compromised account IS trusted — legitimately, by real people who knew the original owner.
 
-5. **The anchor is a single point of failure.** All trust is relative to one root. No multi-anchor design, no anchor rotation, no anchor compromise detection.
+5. **The anchor is a single point of failure at scale.** All trust is relative to one root. At launch, anchor = founder (acceptable — see `.plan/2026-03-13-anchor-problem-statement.md`). Multi-anchor migration needed at Tier 3+ (~10k).
 
 ### What changes
 

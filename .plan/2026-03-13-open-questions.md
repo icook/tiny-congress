@@ -45,7 +45,7 @@
 
 "Low-Medium" at 100k is not a problem to solve — it's the nature of adversarial systems at scale. Confidence improves over time with operational experience but never reaches "proven."
 
-**Open question scoreboard:** 28 questions total. 17 resolved (16 via simulation + ADR acceptance, Q21 ticketed). 4 scale questions (Q20, Q22-Q23). 5 design spikes (Q24-Q28). 2 deferred.
+**Open question scoreboard:** 30 questions total. 17 resolved (16 via simulation + ADR acceptance, Q21 ticketed). 2 launch-accepted (Q28-Q29: anchor is founder at launch, multi-anchor is Tier 3+). 4 scale questions (Q20, Q22-Q23). 6 design spikes (Q24-Q27, Q30). 1 deferred.
 
 **Scale readiness:** See `.plan/2026-03-13-scale-readiness-matrix.md` for the tier-by-tier gate criteria and evidence requirements. Tiers 0-1 PASS. Tier 2 BLOCKED on #680, #681, #682.
 
@@ -166,7 +166,34 @@ These items are identified but need design work before they can be scoped into i
 
 27. **Account compromise detection and response procedures.** Red team doc A2 identifies account takeover as P0. The blast radius simulation (#690) tests the *impact*, but the *response* is undesigned. Questions: how to detect behavior change post-compromise? How to revoke compromised edges and notify affected endorsers? How to restore the legitimate owner's trust position? Is there an account recovery path when root key is lost? The Ed25519 trust boundary makes this harder — there's no "password reset" equivalent.
 
-28. **Anchor redundancy / multi-anchor design.** The anchor is a single point of failure. All trust measurements are relative to one root node. Questions: can the system support multiple anchors? What does trust mean when measured from different roots? How does anchor rotation work? This is a fundamental architecture question with no current design. Priority is low at demo scale but P2 for 100k (red team A5).
+28. **Anchor redundancy / multi-anchor design.** ~~**LAUNCH: ACCEPTED (founder as root).**~~ The anchor is a single point of failure at scale, but at launch the founder IS the trust root — this is the natural shape of bootstrapping any trust network. Multi-anchor migration becomes relevant at Tier 3+ (~10k users) when the founder can't personally vouch for the network's integrity. Questions for later: can the system support multiple anchors? What does trust mean when measured from different roots? How does anchor rotation work? See `.plan/2026-03-13-anchor-problem-statement.md`.
+
+29. **~~Anchor-free scoring~~ → The Anchor Problem.** ~~**LAUNCH: ACCEPTED.**~~ EigenTrust/PageRank spike (2026-03-13) proved anchor-free scoring fails at Sybil detection — Sybil mesh nodes score equal to or higher than legitimate nodes. The anchor provides a critical security property (breaking self-reinforcing trust loops) that cannot be replicated without a trusted reference point. **Launch decision (2026-03-15):** founder is the trust root. The genesis-drop concern is acknowledged but pragmatically acceptable — every trust network starts from a founder's personal network. BrightID's experience validates that decentralizing trust before a user base exists creates worse problems. **Scale migration (Tier 3+):** multi-anchor consensus, rotating anchors, or community-elected anchor sets. Research sweep completed — see `.plan/2026-03-13-anchor-problem-statement.md` for full analysis and solution space.
+
+30. **Verifiers as graph participants (identity verification + slot budget).** The trust graph already carries identity signal — when a trusted person endorses someone via QR, they're attesting to both humanity and trust. External identity verifiers (BrightID, passport services, trusted community organizers) should participate as **entities in the trust graph**, not as a separate system. The founder endorses verifier entities with high trust; verifiers endorse verified humans; those humans get graph position through the verifier's path from anchor. This is elegant: the security model is unchanged (diversity = bridge_count still holds), a compromised verifier only affects paths through that verifier, and the graph doesn't need to know what a "verifier" is — it just sees edges.
+
+    **The core design problem is the slot budget.** A verifier entity needs to endorse potentially thousands of people, but k=10 is a core defense limiting attack surface per compromised account. Options:
+
+    **A. Variable k per entity.** Verifiers get k=1000 or unlimited. Simple to implement (per-account parameter). But creates structurally privileged accounts — high-value targets with outsized blast radius if compromised. Mitigation: verifier endorsements carry lower weight, so compromise yields many weak edges, not many strong ones.
+
+    **B. Light endorsement tier (general mechanism).** Everyone gets k=10 full endorsements + k=N light endorsements (lower weight, e.g. 0.1-0.2). Verifiers use the light tier. No special entity types — the mechanism is general and available to all users. Already described in trust expansion concepts as "additional endorsement tiers." Adds complexity to the endorsement model (two tiers), but the most architecturally clean option.
+
+    **C. Verifier entities use k=10 — scale through multiple instances.** No mechanism changes. BrightID operates 100 verifier nodes, each endorsing 10 people. Mirrors real-world structure (many notaries, not one mega-notary). Scaling headache (1000 users = 100 verifier instances), but zero new concepts. Works naturally when "verifiers" are trusted humans acting as identity checkers at community events.
+
+    **D. Room/group endorsement.** A "BrightID verification" room collectively endorses verified users (one edge from the room entity). Reuses room infrastructure. But rooms are designed for deliberation, not identity verification — conceptual overload.
+
+    **Trade-off summary:**
+
+    | Option | Mechanism complexity | Blast radius if compromised | Scales to 10k verified users? | Special entity types? |
+    |---|---|---|---|---|
+    | A. Variable k | Low (one parameter) | High (k=∞ node) | Yes | Yes |
+    | B. Light endorsement tier | Medium (new edge tier) | Low (low-weight edges) | Yes | No |
+    | C. Multiple k=10 instances | None | Low (k=10 per instance) | Awkward (needs 1000 instances) | No |
+    | D. Room endorsement | Low (reuse rooms) | Medium (room entity) | Yes | Sort of (rooms as verifiers) |
+
+    **Leaning:** Option B is most aligned with existing design principles (no special entities, general mechanism, bounded blast radius). Option C works naturally when verifiers are humans at community events. Option A is simplest if we accept that some entities are structurally different. The choice depends on whether verifiers are primarily automated services (favors A or B) or humans performing a role (favors C).
+
+    **When to build:** before growth outpaces the founder's personal network. Not needed at launch.
 
 ---
 
@@ -200,9 +227,12 @@ All tickets on the "Demo: Friends & Family (Mar 20)" milestone. Grouped by depen
 - [ ] **#690** — account compromise blast radius simulation
 - [ ] **#689** — graph health monitoring dashboard
 
-### Needs design spike (see Q24-Q28 above)
+### Launch-accepted (anchor decisions — revisit at Tier 3+)
+- [x] **Anchor as founder** (Q28, Q29) — founder is trust root at launch. Multi-anchor migration is Tier 3+ work. See `.plan/2026-03-13-anchor-problem-statement.md`
+
+### Needs design spike (see Q24-Q27, Q30 above)
 - [ ] Sybil detection heuristics (Q24)
 - [ ] Multi-phase attack campaign simulation (Q25)
 - [ ] Adjudication/governance process (Q26)
 - [ ] Account compromise response procedures (Q27)
-- [ ] Anchor redundancy (Q28)
+- [ ] Identity verification vs trust endorsement (Q30) — needed before adding external identity providers
