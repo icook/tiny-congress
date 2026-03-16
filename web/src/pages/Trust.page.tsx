@@ -4,7 +4,13 @@
 
 import { IconAlertTriangle, IconCheck, IconClock, IconX } from '@tabler/icons-react';
 import { Alert, Badge, Card, Loader, Stack, Table, Text, Title } from '@mantine/core';
-import { TrustScoreCard, useMyInvites, type Invite } from '@/features/trust';
+import {
+  DenouncementSection,
+  TrustScoreCard,
+  useMyInvites,
+  useTrustBudget,
+  type Invite,
+} from '@/features/trust';
 import { useCrypto } from '@/providers/CryptoProvider';
 import { useDevice } from '@/providers/DeviceProvider';
 
@@ -35,6 +41,7 @@ export function TrustPage() {
   const { crypto } = useCrypto();
 
   const invitesQuery = useMyInvites(deviceKid, privateKey, crypto);
+  const budgetQuery = useTrustBudget(deviceKid, privateKey, crypto);
 
   // Defensive safety net — route guard guarantees deviceKid is set
   if (!deviceKid) {
@@ -100,6 +107,13 @@ export function TrustPage() {
           ) : null}
         </Stack>
       </Card>
+
+      <DenouncementSection
+        deviceKid={deviceKid}
+        privateKey={privateKey}
+        wasmCrypto={crypto}
+        budget={budgetQuery.data}
+      />
     </Stack>
   );
 }
