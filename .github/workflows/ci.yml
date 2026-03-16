@@ -315,8 +315,20 @@ jobs:
       - name: Install just
         uses: extractions/setup-just@v3
 
-      - name: Build docs
-        run: just docs
+      - name: Cache rustdoc output
+        id: cache-docs
+        uses: runs-on/cache@v4
+        with:
+          path: target/doc
+          key: rustdoc-${{ runner.os }}-${{ hashFiles('Cargo.lock', 'service/src/**/*.rs', 'crates/**/*.rs') }}
+          restore-keys: rustdoc-${{ runner.os }}-
+
+      - name: Build Rust docs
+        if: steps.cache-docs.outputs.cache-hit != 'true'
+        run: cargo doc --workspace --no-deps
+
+      - name: Build TypeScript docs
+        run: cd web && yarn typedoc
 
       - name: Upload docs artifact
         uses: actions/upload-artifact@v6
