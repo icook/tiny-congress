@@ -3,23 +3,28 @@ use uuid::Uuid;
 
 use super::{InviteRecord, TrustRepoError};
 
+#[allow(clippy::too_many_arguments)]
 pub(super) async fn create_invite(
     pool: &PgPool,
     endorser_id: Uuid,
     envelope: &[u8],
     delivery_method: &str,
+    relationship_depth: Option<&str>,
+    weight: f32,
     attestation: &serde_json::Value,
     expires_at: chrono::DateTime<chrono::Utc>,
 ) -> Result<InviteRecord, TrustRepoError> {
     let record = sqlx::query_as::<_, InviteRecord>(
         "INSERT INTO trust__invites \
-         (endorser_id, envelope, delivery_method, attestation, expires_at) \
-         VALUES ($1, $2, $3, $4, $5) \
+         (endorser_id, envelope, delivery_method, relationship_depth, weight, attestation, expires_at) \
+         VALUES ($1, $2, $3, $4, $5, $6, $7) \
          RETURNING *",
     )
     .bind(endorser_id)
     .bind(envelope)
     .bind(delivery_method)
+    .bind(relationship_depth)
+    .bind(weight)
     .bind(attestation)
     .bind(expires_at)
     .fetch_one(pool)
