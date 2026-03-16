@@ -8,6 +8,24 @@ import type { CryptoModule } from '@/providers/CryptoProvider';
 
 // === Types ===
 
+export interface Denouncement {
+  id: string;
+  target_id: string;
+  target_username: string;
+  reason: string;
+  created_at: string;
+}
+
+export interface DenouncementPayload {
+  target_id: string;
+  reason: string;
+}
+
+export interface AccountLookup {
+  id: string;
+  username: string;
+}
+
 export interface ScoreSnapshot {
   subject_id: string;
   distance: number;
@@ -111,6 +129,38 @@ export async function endorse(
   payload: EndorsePayload
 ): Promise<void> {
   await signedFetchJson('/trust/endorse', 'POST', deviceKid, privateKey, wasmCrypto, payload);
+}
+
+export async function denounce(
+  deviceKid: string,
+  privateKey: CryptoKey,
+  wasmCrypto: CryptoModule,
+  payload: DenouncementPayload
+): Promise<{ message: string }> {
+  return signedFetchJson('/trust/denounce', 'POST', deviceKid, privateKey, wasmCrypto, payload);
+}
+
+export async function listMyDenouncements(
+  deviceKid: string,
+  privateKey: CryptoKey,
+  wasmCrypto: CryptoModule
+): Promise<Denouncement[]> {
+  return signedFetchJson('/trust/denouncements/mine', 'GET', deviceKid, privateKey, wasmCrypto);
+}
+
+export async function lookupAccount(
+  deviceKid: string,
+  privateKey: CryptoKey,
+  wasmCrypto: CryptoModule,
+  username: string
+): Promise<AccountLookup> {
+  return signedFetchJson(
+    `/accounts/lookup?username=${encodeURIComponent(username)}`,
+    'GET',
+    deviceKid,
+    privateKey,
+    wasmCrypto
+  );
 }
 
 export async function revokeEndorsement(

@@ -6,6 +6,9 @@ export {
   acceptInvite,
   endorse,
   revokeEndorsement,
+  denounce,
+  listMyDenouncements,
+  lookupAccount,
   useTrustScores,
   useTrustBudget,
   useMyInvites,
@@ -13,6 +16,9 @@ export {
   useAcceptInvite,
   useEndorse,
   useRevokeEndorsement,
+  useMyDenouncements,
+  useDenounce,
+  useLookupAccount,
 } from './api';
 export type {
   ScoreSnapshot,
@@ -21,5 +27,8 @@ export type {
   AcceptInviteResult,
   EndorsePayload,
   CreateInvitePayload,
+  Denouncement,
+  DenouncementPayload,
+  AccountLookup,
 } from './api';
-export { TrustScoreCard } from './components';
+export { TrustScoreCard, DenouncementSection } from './components';

@@ -6,6 +6,9 @@ export {
   acceptInvite,
   endorse,
   revokeEndorsement,
+  denounce,
+  listMyDenouncements,
+  lookupAccount,
 } from './client';
 export type {
   ScoreSnapshot,
@@ -14,6 +17,9 @@ export type {
   AcceptInviteResult,
   EndorsePayload,
   CreateInvitePayload,
+  Denouncement,
+  DenouncementPayload,
+  AccountLookup,
 } from './client';
 export {
   useTrustScores,
@@ -23,4 +29,7 @@ export {
   useAcceptInvite,
   useEndorse,
   useRevokeEndorsement,
+  useMyDenouncements,
+  useDenounce,
+  useLookupAccount,
 } from './queries';
