@@ -136,6 +136,24 @@ impl TrustWorker {
                     .create_denouncement(action.actor_id, target_id, &reason)
                     .await
                     .map_err(|e| anyhow::anyhow!("create_denouncement failed: {e}"))?;
+
+                // Revoke the denouncer's endorsement of the target if one exists.
+                // revoke_endorsement is a no-op when no active endorsement exists.
+                if let Err(e) = self
+                    .reputation_repo
+                    .revoke_endorsement(action.actor_id, target_id, "trust")
+                    .await
+                {
+                    tracing::debug!(
+                        actor_id = %action.actor_id,
+                        target_id = %target_id,
+                        "no endorsement to revoke on denouncement: {e}"
+                    );
+                }
+
+                self.trust_engine
+                    .recompute_from_anchor(action.actor_id, self.trust_repo.as_ref())
+                    .await?;
             }
 
             other => {
