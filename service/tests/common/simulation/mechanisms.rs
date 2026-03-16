@@ -66,6 +66,31 @@ pub async fn apply_score_penalty(
     report
 }
 
+/// Mechanism 4: Denouncer-only edge revocation (ADR-024).
+///
+/// Revokes a single directed edge from `denouncer` to `target`, models
+/// the side-effect of a denouncement on the denouncer's endorsement.
+/// Re-runs the engine and materializes scores.
+pub async fn apply_denouncer_revocation(
+    g: &mut GraphBuilder,
+    denouncer: Uuid,
+    target: Uuid,
+    anchor: Uuid,
+    pool: &PgPool,
+) -> SimulationReport {
+    // Revoke only the denouncer→target edge (if active)
+    let has_edge = g
+        .all_edges()
+        .iter()
+        .any(|e| e.from == denouncer && e.to == target && !e.revoked);
+    if has_edge {
+        g.revoke(denouncer, target).await;
+    }
+    let report = SimulationReport::run(g, anchor).await;
+    report.materialize(pool).await;
+    report
+}
+
 /// Mechanism 3: Sponsorship cascade.
 ///
 /// Revokes endorser→target edges AND applies score penalty to endorsers.
