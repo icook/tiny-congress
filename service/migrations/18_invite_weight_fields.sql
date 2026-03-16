@@ -13,4 +13,4 @@ ALTER TABLE trust__invites
 ALTER TABLE trust__invites
     ADD COLUMN IF NOT EXISTS relationship_depth TEXT
         CHECK (relationship_depth IN ('years', 'months', 'acquaintance')),
-    ADD COLUMN IF NOT EXISTS weight FLOAT NOT NULL DEFAULT 1.0;
+    ADD COLUMN IF NOT EXISTS weight REAL NOT NULL DEFAULT 1.0;
