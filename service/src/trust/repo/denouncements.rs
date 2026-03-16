@@ -45,6 +45,24 @@ pub(super) async fn list_denouncements_against(
     Ok(records)
 }
 
+/// Returns `true` if `accuser_id` has an active (non-resolved) denouncement against `target_id`.
+pub(super) async fn has_active_denouncement(
+    pool: &PgPool,
+    accuser_id: Uuid,
+    target_id: Uuid,
+) -> Result<bool, TrustRepoError> {
+    let count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM trust__denouncements \
+         WHERE accuser_id = $1 AND target_id = $2 AND resolved_at IS NULL",
+    )
+    .bind(accuser_id)
+    .bind(target_id)
+    .fetch_one(pool)
+    .await?;
+
+    Ok(count > 0)
+}
+
 /// Count total denouncements filed by `accuser_id` (permanent budget — no refunds).
 pub(super) async fn count_active_denouncements_by(
     pool: &PgPool,

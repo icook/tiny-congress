@@ -8,9 +8,10 @@ use common::factories::{insert_endorsement, AccountFactory};
 use common::test_db::isolated_db;
 use serde_json::json;
 use tc_test_macros::shared_runtime_test;
-use tinycongress_api::reputation::repo::PgReputationRepo;
+use tinycongress_api::reputation::repo::{PgReputationRepo, ReputationRepo};
 use tinycongress_api::trust::engine::TrustEngine;
 use tinycongress_api::trust::repo::{PgTrustRepo, TrustRepo, TrustRepoError};
+use tinycongress_api::trust::service::{DefaultTrustService, TrustService, TrustServiceError};
 use tinycongress_api::trust::worker::TrustWorker;
 
 #[shared_runtime_test]
@@ -360,4 +361,46 @@ async fn denouncement_without_endorsement_succeeds() {
     .await
     .expect("count");
     assert_eq!(count, 1, "denouncement row should exist");
+}
+
+// ---------------------------------------------------------------------------
+// Task 4: Mutual Exclusion — Cannot Endorse After Denouncing
+// ---------------------------------------------------------------------------
+
+/// After A denounces B, A must not be able to endorse B.
+/// The service layer must reject the endorsement attempt with DenouncementConflict.
+#[shared_runtime_test]
+async fn cannot_endorse_someone_you_denounced() {
+    let db = isolated_db().await;
+    let pool = db.pool().clone();
+
+    let endorser = AccountFactory::new()
+        .with_seed(90)
+        .create(&pool)
+        .await
+        .expect("create endorser");
+
+    let target = AccountFactory::new()
+        .with_seed(91)
+        .create(&pool)
+        .await
+        .expect("create target");
+
+    // Insert an active denouncement directly to simulate A having denounced B
+    let repo = PgTrustRepo::new(pool.clone());
+    repo.create_denouncement(endorser.id, target.id, "bad actor")
+        .await
+        .expect("create denouncement");
+
+    // Now try to endorse — should be rejected
+    let rep_repo = Arc::new(PgReputationRepo::new(pool.clone())) as Arc<dyn ReputationRepo>;
+    let trust_repo = Arc::new(PgTrustRepo::new(pool.clone()));
+    let service = DefaultTrustService::new(trust_repo, rep_repo);
+
+    let result = service.endorse(endorser.id, target.id, 1.0, None).await;
+
+    assert!(
+        matches!(result, Err(TrustServiceError::DenouncementConflict)),
+        "expected DenouncementConflict, got: {result:?}"
+    );
 }

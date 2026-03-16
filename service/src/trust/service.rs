@@ -24,6 +24,9 @@ pub enum TrustServiceError {
     #[error("cannot target yourself")]
     SelfAction,
 
+    #[error("cannot endorse a user you have denounced")]
+    DenouncementConflict,
+
     #[error("repository error: {0}")]
     Repo(#[from] TrustRepoError),
 
@@ -101,6 +104,16 @@ impl TrustService for DefaultTrustService {
         let daily_count = self.trust_repo.count_daily_actions(endorser_id).await?;
         if daily_count >= self.daily_quota {
             return Err(TrustServiceError::QuotaExceeded);
+        }
+
+        // Denouncement and endorsement are mutually exclusive: cannot endorse
+        // someone you have denounced (ADR-024).
+        let already_denounced = self
+            .trust_repo
+            .has_active_denouncement(endorser_id, subject_id)
+            .await?;
+        if already_denounced {
+            return Err(TrustServiceError::DenouncementConflict);
         }
 
         // Verifier accounts are exempt from endorsement slot limits

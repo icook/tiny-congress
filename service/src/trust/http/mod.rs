@@ -445,6 +445,13 @@ fn trust_service_error_response(e: &TrustServiceError) -> axum::response::Respon
             }),
         )
             .into_response(),
+        TrustServiceError::DenouncementConflict => (
+            StatusCode::CONFLICT,
+            Json(ErrorResponse {
+                error: "Cannot endorse a user you have denounced".to_string(),
+            }),
+        )
+            .into_response(),
         TrustServiceError::Repo(ref inner) => {
             tracing::error!("Trust service repo error: {inner}");
             (

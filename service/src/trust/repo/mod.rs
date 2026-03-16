@@ -140,6 +140,13 @@ pub trait TrustRepo: Send + Sync {
 
     async fn count_active_denouncements_by(&self, accuser_id: Uuid) -> Result<i64, TrustRepoError>;
 
+    /// Returns `true` if `accuser_id` has an active (non-resolved) denouncement against `target_id`.
+    async fn has_active_denouncement(
+        &self,
+        accuser_id: Uuid,
+        target_id: Uuid,
+    ) -> Result<bool, TrustRepoError>;
+
     // Invite operations
 
     #[allow(clippy::too_many_arguments)]
@@ -251,6 +258,14 @@ impl TrustRepo for PgTrustRepo {
 
     async fn count_active_denouncements_by(&self, accuser_id: Uuid) -> Result<i64, TrustRepoError> {
         denouncements::count_active_denouncements_by(&self.pool, accuser_id).await
+    }
+
+    async fn has_active_denouncement(
+        &self,
+        accuser_id: Uuid,
+        target_id: Uuid,
+    ) -> Result<bool, TrustRepoError> {
+        denouncements::has_active_denouncement(&self.pool, accuser_id, target_id).await
     }
 
     async fn create_invite(
