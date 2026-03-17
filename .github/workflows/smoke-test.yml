@@ -65,11 +65,8 @@ jobs:
 
       - name: Check sim worker — rooms exist
         run: |
-          QUERY='{"query":"{ rooms(first: 1) { edges { node { id } } } }"}'
           RESP=$(curl -sSf --max-time 15 \
-            -H "Content-Type: application/json" \
-            -d "$QUERY" \
-            "${{ steps.urls.outputs.api }}/graphql")
+            "${{ steps.urls.outputs.api }}/rooms")
           echo "Response: $RESP"
           echo "$RESP" | grep -q '"id"' || { echo "No rooms found — sim worker may not be running"; exit 1; }
           echo "Sim worker content verified"
