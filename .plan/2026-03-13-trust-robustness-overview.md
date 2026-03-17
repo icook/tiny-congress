@@ -26,7 +26,7 @@ Brief summary for context; full details in `docs/domain-model.md` and the accept
 
 - **Ed25519 cryptographic identity.** Each user holds a root key (cold storage) and device keys (daily use). The server is a dumb witness — it stores signed data but never handles private key material.
 - **Endorsement slots (k=10, ADR-020).** Each user can endorse at most 10 others. Slots are finite and meaningful — endorsing someone is a real commitment, not a cheap click.
-- **Variable-weight edges (swap method × relationship depth, ADR-023).** The weight table: QR=1.0, video=0.49, text=0.2, email=0.1. Weight bounds are enforced at the DB layer. The trust engine computes distance and diversity scores from an anchor node across these weighted edges. **Note:** These weights measure trust relationship strength, not identity confidence. Identity verification ("is this person a unique human?") is a separate concern from trust endorsement ("I vouch for this person") — see Q30 in open questions. At launch, the QR handshake implicitly conflates both; separating them is future work needed before adding external identity providers.
+- **Variable-weight edges (swap method × relationship depth, ADR-023).** The weight table: QR=1.0, video=0.7, text=0.2, email=0.1. Weight bounds are enforced at the DB layer. The trust engine computes distance and diversity scores from an anchor node across these weighted edges. **Note:** These weights measure trust relationship strength, not identity confidence. Identity verification ("is this person a unique human?") is a separate concern from trust endorsement ("I vouch for this person") — see Q30 in open questions. At launch, the QR handshake implicitly conflates both; separating them is future work needed before adding external identity providers.
 - **Denouncement budget (d=2, ADR-020).** Each user can denounce at most 2 people. Denouncing someone revokes your endorsement edge to them — you can't simultaneously vouch for and denounce someone.
 - **Trust engine.** Computes distance + diversity scores from an anchor node. Diversity counts independent paths through distinct community members — this is the core Sybil defense.
 
@@ -78,7 +78,7 @@ The sponsorship cascade is the one-hop consequence of denouncement: endorsers of
 
 ADR-023 accepted the structural decision (swap method × relationship depth determines weight) with provisional values. Simulation confirmed the values are safe.
 
-**Mixed-weight scenarios:** ADR-023 table values (QR=1.0, video=0.49, text=0.2, email=0.1) applied across all adversarial topologies. Outcome unchanged — red blocked, blue passes — across the realistic weight distribution.
+**Mixed-weight scenarios:** ADR-023 table values (QR=1.0, video=0.7, text=0.4, email=0.2) applied across all adversarial topologies. Outcome unchanged — red blocked, blue passes — across the realistic weight distribution.
 
 **Weight sweep:** 0.1 → 1.0 on the mercenary-bot scenario. Red nodes blocked at all weight levels. Weight affects score magnitude but not the blocking/passing outcome.
 

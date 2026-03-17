@@ -45,7 +45,7 @@
 
 "Low-Medium" at 100k is not a problem to solve — it's the nature of adversarial systems at scale. Confidence improves over time with operational experience but never reaches "proven."
 
-**Open question scoreboard:** 30 questions total. 17 resolved (16 via simulation + ADR acceptance, Q21 ticketed). 2 launch-accepted (Q28-Q29: anchor is founder at launch, multi-anchor is Tier 3+). 4 scale questions (Q20, Q22-Q23). 6 design spikes (Q24-Q27, Q30). 1 deferred.
+**Open question scoreboard:** 32 questions total. 17 resolved (16 via simulation + ADR acceptance, Q21 ticketed). 2 launch-accepted (Q28-Q29: anchor is founder at launch, multi-anchor is Tier 3+). 4 scale questions (Q20, Q22-Q23). 8 design spikes (Q24-Q27, Q30-Q32). 1 deferred.
 
 **Scale readiness:** See `.plan/2026-03-13-scale-readiness-matrix.md` for the tier-by-tier gate criteria and evidence requirements. Tiers 0-1 PASS. Tier 2 BLOCKED on #680, #681, #682.
 
@@ -128,7 +128,7 @@ Endorsing someone who later gets denounced should carry consequences. This is "p
 
 ## Architectural questions
 
-9. **ADR-020 cross-reference.** ADR-020 says continuous influence "may be revisited for variable-cost endorsements." ADR-023 resolves this question (answer: no). ADR-020 should link to ADR-023 when it's accepted.
+9. ~~**ADR-020 cross-reference.**~~ **[RESOLVED]** ADR-020 says continuous influence "may be revisited for variable-cost endorsements." ADR-023 resolves this question (answer: no). ADR-020 now references ADR-023 (already present in References section).
 10. **Denouncement budget interaction.** ADR-020 sets d=2 denouncement budget. With denouncer-only revocation as the baseline mechanism, the budget question simplifies: each denouncement costs 1 budget and revokes your edge to the target. The adjudication path (severe slashing) is a separate governance action, not a budget spend.
 11. **Engine runs twice per measurement.** `SimulationReport::run()` computes scores in memory, then `materialize()` calls `recompute_from_anchor` which re-runs the engine and writes to snapshots. Safe in tests, but 2x engine cost per measurement. Worth fixing if the simulation suite grows significantly.
 
@@ -195,6 +195,37 @@ These items are identified but need design work before they can be scoped into i
 
     **When to build:** before growth outpaces the founder's personal network. Not needed at launch.
 
+31. **Room types: container/module separation.** The current system has one room shape (polling) with three eligibility gates. The vision requires fundamentally different interaction models (slow exchange, ranking, report synthesis, deliberation) sharing a common container. The architectural question is where the boundary between container and module lives, and what the module interface looks like. Key sub-questions:
+
+    **a. Template vs module distinction.** Users create rooms from templates (config); developers create room types (code). Both are needed but they're different operations. How does the config_schema system work? What's configurable vs what requires a new module?
+
+    **b. Self-hosting unit.** Is the unit of federation a whole TC instance (Mastodon model) or a single room service plugging into central identity/trust (more like OAuth + microservice)? The latter is more powerful but requires a clean API contract at the module boundary.
+
+    **c. Private reducers.** Can a room type have a proprietary aggregation algorithm with auditable inputs/outputs? Tension with TC's transparency principle. Possible resolution: inputs and outputs are always public/auditable; the reduction function can be opaque if its correctness is verifiable (ZK proofs, deterministic replay).
+
+    **d. Module data isolation.** Each module owns its tables. In-binary modules share Postgres (schema prefixes?). Federated modules own their storage entirely. The migration path from shared-DB to federated needs to be clean.
+
+    **e. Lifecycle ownership.** The current `rooms__lifecycle_queue` manages poll rotation — module-specific behavior leaked into the container. In the module model, each module owns its lifecycle. The container lifecycle is simpler: room open/closed/archived.
+
+    **Implementation path:** Extract module interface from polling code → build slow exchange as second module (proves the abstraction) → config_schema as template system → federation as HTTP API contract. See `.plan/2026-03-17-room-types-architecture.md` for full design brief.
+
+32. **Trust engine: on-demand computation and Personalized PageRank.** The current engine pre-computes all `(anchor, user)` scores and materializes them in `trust__score_snapshots`. This creates the staleness/batch/provisional complexity that ADR-021 tries to manage. Three alternative approaches surfaced in the 2026-03-17 architecture session:
+
+    **a. On-demand computation (same metrics).** Replace snapshot lookups with on-demand single-pair computation. Distance: Dijkstra from anchor to target, early-terminate. Diversity: single-pair max-flow. Orders of magnitude cheaper than full-graph pre-computation. Score snapshots become a cache with TTL, not the source of truth. ADR-021 cooling-off still applies to *edge creation* but score computation is always fresh.
+
+    **b. Personalized PageRank (new metric).** PPR computes a probability distribution from a source node — "if I start random walks from myself, what fraction land on target?" Captures both distance and diversity in a single scalar. Better scaling (Monte Carlo walks are parallelizable, early-terminable, incrementally updatable). More philosophically aligned with personal trust ("how much do I trust X?" not "how much does the anchor trust X?"). But: requires re-validating all adversarial simulations against PPR instead of (distance, diversity). New ADR needed.
+
+    **c. Hybrid gate.** PPR as fast approximate eligibility screen, exact distance/diversity as confirmation for high-trust rooms.
+
+    **Key insight:** The pre-compute vs on-demand question is orthogonal to ADR-021. ADR-021's value is cooling-off and batch visibility for *edge creation*. Score computation doesn't need to be batched — it can always be on-demand against the current committed graph. Separating these two concerns eliminates the provisional-score complexity entirely.
+
+    **Simulation work needed before deciding:**
+    - Run adversarial test suite with PPR instead of (distance, diversity) — does PPR block Sybil meshes equally well?
+    - Benchmark on-demand single-pair computation at 1k, 5k, 10k graph sizes
+    - Evaluate UX: "2 hops away, 3 independent paths" (explainable) vs "trust score 0.0034" (opaque)
+
+    **When to build:** After demo. This is a design spike that needs simulation evidence, not whiteboard discussion. The simulation harness exists for exactly this purpose.
+
 ---
 
 ## Next actions — launch ticket tracker
@@ -208,7 +239,7 @@ All tickets on the "Demo: Friends & Family (Mar 20)" milestone. Grouped by depen
 - [x] **Phase 4: Scale simulation** — BA graphs, Sybil mesh analysis, sparse max-flow (PR #684)
 
 ### Demo blockers
-- [ ] **#665** — CRITICAL: verified users can't vote (trust graph unreachable from room anchor)
+- [ ] **#665 → #709** — CRITICAL: verified users can't vote. Fix: self-contained constraints + `identity_verified` Layer 1 type (PR #710)
 - [ ] **#656** — weight selection UI (expose ADR-023 table)
 - [ ] **#657** — wire denouncement to edge revocation backend (ADR-024)
 - [ ] **#658** — denouncement UI component
@@ -236,3 +267,5 @@ All tickets on the "Demo: Friends & Family (Mar 20)" milestone. Grouped by depen
 - [ ] Adjudication/governance process (Q26)
 - [ ] Account compromise response procedures (Q27)
 - [ ] Identity verification vs trust endorsement (Q30) — needed before adding external identity providers
+- [ ] Room types: container/module separation (Q31) — design brief at `.plan/2026-03-17-room-types-architecture.md`
+- [ ] Trust engine: on-demand computation + PPR evaluation (Q32) — needs simulation spike
