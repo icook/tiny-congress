@@ -358,75 +358,134 @@ def build_concurrency_section(jobs: list[dict]) -> str:
     return "\n".join(lines)
 
 
-def _build_dep_graph(jobs_by_name: dict[str, dict]) -> dict[str, list[str]]:
-    """Build the CI job dependency graph from known ci.yml structure.
+def _parse_ci_yml(
+    head_sha: str = "",
+) -> Optional[dict[str, tuple[str, list[str]]]]:
+    """Parse ci.yml to extract job definitions.
 
-    Names must match the `name:` field in ci.yml (what the GitHub API returns).
-    Matrix jobs (Build *, Scan *) are discovered dynamically from job names.
+    When *head_sha* is provided, reads ci.yml from that commit via
+    ``git show`` so the dep graph matches the workflow that actually ran.
+    Falls back to the working-tree copy if the git command fails.
+
+    Returns {job_id: (name_template, [needs_job_ids])} or None on failure.
     """
-    SCAN_PREFIX = "Scan "
-    BUILD_PREFIX = "Build "
+    try:
+        import yaml
+    except ImportError:
+        return None
 
-    deps: dict[str, list[str]] = {
-        "Detect changed paths": [],
-        "Backend checks": ["Detect changed paths"],
-        "Lint Kubernetes manifests": ["Detect changed paths"],
-        "Validate Grafana dashboards": ["Detect changed paths"],
-        "Frontend checks": ["Detect changed paths"],
-        "Static Analysis": ["Detect changed paths"],
-        "Build documentation": ["Detect changed paths"],
-        "Rust checks": ["Detect changed paths"],
-        "Build WASM": ["Detect changed paths"],
-        "Unit tests (Vitest)": ["Detect changed paths", "Build WASM"],
-    }
+    raw: Optional[str] = None
+    if head_sha:
+        try:
+            result = subprocess.run(
+                ["git", "show", f"{head_sha}:.github/workflows/ci.yml"],
+                capture_output=True, text=True, check=True,
+            )
+            raw = result.stdout
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            pass  # fall through to working-tree read
 
-    # Dynamically add build-images matrix jobs
-    for name in jobs_by_name:
-        if name.startswith(BUILD_PREFIX) and name not in deps:
-            if name in ("Build WASM", "Build documentation"):
-                continue
-            deps[name] = ["Detect changed paths"]
+    if raw is None:
+        ci_path = os.path.join(
+            os.path.dirname(__file__), "..", ".github", "workflows", "ci.yml"
+        )
+        try:
+            with open(ci_path) as f:
+                raw = f.read()
+        except OSError:
+            return None
 
-    # scan-images depend on their corresponding build job
-    for name in jobs_by_name:
-        if name.startswith(SCAN_PREFIX):
-            image = name[len(SCAN_PREFIX):]
-            build_name = f"Build {image}"
-            preds = ["Detect changed paths"]
-            if build_name in jobs_by_name:
-                preds.append(build_name)
-            deps[name] = preds
+    try:
+        data = yaml.safe_load(raw)
+    except yaml.YAMLError:
+        return None
 
-    # E2E tests depend on build-images + build-wasm
-    e2e_deps = ["Detect changed paths", "Build WASM"]
-    for name in jobs_by_name:
-        if name.startswith(BUILD_PREFIX) and name not in ("Build WASM", "Build documentation"):
-            e2e_deps.append(name)
-    deps["E2E tests"] = e2e_deps
+    jobs = data.get("jobs")
+    if not isinstance(jobs, dict):
+        return None
 
-    # ci-gate depends on everything
-    ci_gate_deps = [
-        "Detect changed paths", "Backend checks", "Lint Kubernetes manifests",
-        "Frontend checks", "Static Analysis", "Validate Grafana dashboards",
-        "Build WASM", "Unit tests (Vitest)", "Rust checks", "E2E tests",
-    ]
-    for name in jobs_by_name:
-        if name.startswith(BUILD_PREFIX) and name not in ("Build WASM", "Build documentation"):
-            ci_gate_deps.append(name)
-        elif name.startswith(SCAN_PREFIX):
-            ci_gate_deps.append(name)
-    deps["CI Gate"] = ci_gate_deps
+    result: dict[str, tuple[str, list[str]]] = {}
+    for job_id, job_def in jobs.items():
+        if not isinstance(job_def, dict):
+            continue
+        name = str(job_def.get("name", job_id))
+        needs = job_def.get("needs", [])
+        if isinstance(needs, str):
+            needs = [needs]
+        result[job_id] = (name, list(needs))
+    return result
+
+
+def _resolve_needs(
+    needs_ids: list[str],
+    ci_jobs: dict[str, tuple[str, list[str]]],
+    jobs_by_name: dict[str, dict],
+) -> list[str]:
+    """Resolve a list of job IDs from ci.yml `needs:` to API display names.
+
+    Matrix jobs (whose name templates contain `${{`) are expanded by matching
+    API-returned job names against the template prefix.
+    """
+    resolved: list[str] = []
+    for need_id in needs_ids:
+        if need_id not in ci_jobs:
+            continue
+        need_template = ci_jobs[need_id][0]
+        if "${{" in need_template:
+            # Matrix job — match API names by prefix (e.g. "Build " matches
+            # "Build tc-api-release", "Build postgres", etc.)
+            prefix = need_template.split("${{")[0]
+            resolved.extend(n for n in jobs_by_name if n.startswith(prefix))
+        else:
+            resolved.append(need_template)
+    return resolved
+
+
+def _build_dep_graph(
+    jobs_by_name: dict[str, dict], head_sha: str = ""
+) -> dict[str, list[str]]:
+    """Build the CI job dependency graph by parsing ci.yml.
+
+    Reads job definitions and `needs:` from the workflow file, resolving job IDs
+    to the display names returned by the GitHub API. Matrix jobs are expanded by
+    matching API names against the name template prefix.
+
+    When *head_sha* is provided, reads ci.yml from that commit so the graph
+    matches the workflow that actually ran (not the local working tree).
+    """
+    ci_jobs = _parse_ci_yml(head_sha)
+    if ci_jobs is None:
+        print(
+            "WARNING: Could not parse ci.yml — critical path may be inaccurate",
+            file=sys.stderr,
+        )
+        return {}
+
+    deps: dict[str, list[str]] = {}
+    for job_id, (name_template, needs_ids) in ci_jobs.items():
+        resolved = _resolve_needs(needs_ids, ci_jobs, jobs_by_name)
+        if "${{" in name_template:
+            # Matrix job — find all matching API names and give each the
+            # same resolved dependencies.
+            prefix = name_template.split("${{")[0]
+            for api_name in jobs_by_name:
+                if api_name.startswith(prefix):
+                    deps[api_name] = list(resolved)
+        else:
+            deps[name_template] = resolved
 
     return deps
 
 
-def _compute_critical_path_jobs(jobs_by_name: dict[str, dict]) -> list[str]:
+def _compute_critical_path_jobs(
+    jobs_by_name: dict[str, dict], head_sha: str = ""
+) -> list[str]:
     """Return the critical path as a list of job names from first to CI Gate.
 
     Walks backwards from CI Gate, always following the predecessor that
     completed latest (the one that actually held up the next job).
     """
-    deps = _build_dep_graph(jobs_by_name)
+    deps = _build_dep_graph(jobs_by_name, head_sha)
 
     if "CI Gate" not in jobs_by_name:
         return []
@@ -453,14 +512,16 @@ def _compute_critical_path_jobs(jobs_by_name: dict[str, dict]) -> list[str]:
     return path
 
 
-def build_critical_path(jobs: list[dict], run_started_at: datetime) -> str:
+def build_critical_path(
+    jobs: list[dict], run_started_at: datetime, head_sha: str = ""
+) -> str:
     """Format the critical path with per-job queue delay and execution time."""
     jobs_by_name: dict[str, dict] = {}
     for j in jobs:
         if j.get("started_at") and j.get("completed_at"):
             jobs_by_name[j["name"]] = j
 
-    path = _compute_critical_path_jobs(jobs_by_name)
+    path = _compute_critical_path_jobs(jobs_by_name, head_sha)
     if not path:
         return "_CI Gate job not found — cannot compute critical path._"
 
@@ -498,7 +559,7 @@ def build_critical_path(jobs: list[dict], run_started_at: datetime) -> str:
     return fmt_columns(["Job", "Queue", "Exec"], rows)
 
 
-def build_summary(jobs: list[dict], run_started_at: datetime) -> str:
+def build_summary(jobs: list[dict], run_started_at: datetime, head_sha: str = "") -> str:
     completed = [j for j in jobs if j.get("completed_at")]
     if not completed:
         return "_Run still in progress._"
@@ -522,7 +583,7 @@ def build_summary(jobs: list[dict], run_started_at: datetime) -> str:
     # This is the time spent waiting for runners, not doing work.
     exec_on_crit_path = wall_time  # fallback
     jobs_by_name = {j["name"]: j for j in completed}
-    crit_path = _compute_critical_path_jobs(jobs_by_name)
+    crit_path = _compute_critical_path_jobs(jobs_by_name, head_sha)
     if crit_path:
         exec_on_crit_path = 0.0
         for name in crit_path:
@@ -576,6 +637,7 @@ def main() -> None:
         print(f"ERROR: Could not fetch run {run_id}: {exc}", file=sys.stderr)
         sys.exit(1)
 
+    head_sha = run.get("head_sha", "")
     run_started_at = parse_time(run.get("run_started_at") or run.get("created_at"))
     if not run_started_at:
         print("ERROR: Could not parse run start time", file=sys.stderr)
@@ -643,12 +705,12 @@ def main() -> None:
 
     print("── Critical Path ───────────────────────────────────────────────────────")
     print()
-    print(build_critical_path(jobs, run_started_at))
+    print(build_critical_path(jobs, run_started_at, head_sha))
     print()
 
     print("── Summary ─────────────────────────────────────────────────────────────")
     print()
-    print(build_summary(jobs, run_started_at))
+    print(build_summary(jobs, run_started_at, head_sha))
     print()
 
     # Push Grafana annotations

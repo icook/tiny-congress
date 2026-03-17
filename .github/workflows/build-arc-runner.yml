@@ -63,6 +63,7 @@ jobs:
             echo "cargo_llvm_cov=${CARGO_LLVM_COV_VERSION}"
             echo "cargo_deny=${CARGO_DENY_VERSION}"
             echo "cargo_machete=${CARGO_MACHETE_VERSION}"
+            echo "sccache=${SCCACHE_VERSION}"
           } >> "$GITHUB_OUTPUT"
 
       - name: Build and push
@@ -88,6 +89,7 @@ jobs:
             CARGO_LLVM_COV_VERSION=${{ steps.versions.outputs.cargo_llvm_cov }}
             CARGO_DENY_VERSION=${{ steps.versions.outputs.cargo_deny }}
             CARGO_MACHETE_VERSION=${{ steps.versions.outputs.cargo_machete }}
+            SCCACHE_VERSION=${{ steps.versions.outputs.sccache }}
           cache-from: type=registry,ref=ghcr.io/${{ github.repository }}/arc-runner:cache
           cache-to: type=registry,ref=ghcr.io/${{ github.repository }}/arc-runner:cache,mode=max
           # Pass GITHUB_TOKEN as a BuildKit secret so cache-actions.sh can call
