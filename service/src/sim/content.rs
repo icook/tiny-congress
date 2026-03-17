@@ -6,6 +6,7 @@
 
 use anyhow::Result;
 use tracing::{debug, info};
+use uuid::Uuid;
 
 use super::client::SimClient;
 use super::identity::SimAccount;
@@ -21,9 +22,13 @@ pub struct InsertResult {
 /// Create rooms, polls, and dimensions via the HTTP API.
 ///
 /// For each room in `content`:
-/// 1. Create the room with `poll_duration_secs` (skip on 409 conflict).
+/// 1. Create the room with `identity_verified` constraint and `verifier_id` in config.
 /// 2. For each poll: create poll, add dimensions.
 ///    The rooms engine auto-activates the first poll.
+///
+/// `verifier_id` is the account UUID of the verifier that issues `identity_verified`
+/// endorsements. If `None`, rooms are created without a verifier config (not recommended
+/// for production — votes will be rejected until config is updated).
 ///
 /// # Errors
 ///
@@ -33,7 +38,10 @@ pub async fn insert_sim_content(
     admin_account: &SimAccount,
     content: &SimContent,
     poll_duration_secs: i32,
+    verifier_id: Option<Uuid>,
 ) -> Result<InsertResult, anyhow::Error> {
+    let constraint_config = verifier_id.map(|id| serde_json::json!({"verifier_ids": [id]}));
+
     let mut result = InsertResult {
         rooms_created: 0,
         rooms_skipped: 0,
@@ -48,7 +56,7 @@ pub async fn insert_sim_content(
                 &room.description,
                 "identity_verified",
                 "identity_verified",
-                None,
+                constraint_config.as_ref(),
                 Some(poll_duration_secs),
             )
             .await

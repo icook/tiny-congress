@@ -503,6 +503,44 @@ impl SimClient {
         Ok(resp)
     }
 
+    /// Look up an account by username (requires authentication).
+    ///
+    /// Returns the account UUID, which can be used as a `verifier_id` in room
+    /// constraint config.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the HTTP request fails or the response is not 2xx.
+    pub async fn lookup_account(&self, authed: &SimAccount, username: &str) -> Result<Uuid> {
+        let path = format!(
+            "/accounts/lookup?username={}",
+            urlencoding::encode(username)
+        );
+        let body: &[u8] = b"";
+        let headers = authed.sign_request("GET", &path, body);
+
+        let mut req = self
+            .http
+            .get(format!("{}{path}", self.api_url))
+            .header("Content-Type", "application/json");
+
+        for (key, value) in headers {
+            req = req.header(key, value);
+        }
+
+        let resp = req.send().await?;
+        let status = resp.status();
+        if !status.is_success() {
+            let body = resp.text().await.unwrap_or_default();
+            return Err(anyhow!("GET {path} returned {status}: {body}"));
+        }
+        let json: serde_json::Value = resp.json().await?;
+        let id_str = json["id"]
+            .as_str()
+            .ok_or_else(|| anyhow!("lookup_account: missing 'id' field in response"))?;
+        Uuid::parse_str(id_str).map_err(|e| anyhow!("lookup_account: invalid UUID: {e}"))
+    }
+
     /// Endorse a user for a topic via the verifier API.
     ///
     /// The `verifier` account must have an `authorized_verifier` endorsement

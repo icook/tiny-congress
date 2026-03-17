@@ -71,6 +71,22 @@ async fn main() -> Result<(), anyhow::Error> {
         );
     }
 
+    // Look up verifier's account_id for room constraint config.
+    // Rooms need verifier_ids so IdentityVerifiedConstraint can check endorsements.
+    let verifier_account_id = match client.lookup_account(&verifier, &verifier.username).await {
+        Ok(id) => {
+            tracing::info!(verifier_id = %id, "verifier account_id resolved");
+            Some(id)
+        }
+        Err(e) => {
+            tracing::warn!(
+                error = %e,
+                "could not resolve verifier account_id — rooms will be created without verifier_ids"
+            );
+            None
+        }
+    };
+
     // 5. Generate deterministic sim accounts
     let mut accounts: Vec<SimAccount> =
         (0..config.voter_count).map(SimAccount::from_seed).collect();
@@ -150,8 +166,14 @@ async fn main() -> Result<(), anyhow::Error> {
             "LLM content received"
         );
 
-        let result =
-            insert_sim_content(&client, admin, &content, config.poll_duration_secs).await?;
+        let result = insert_sim_content(
+            &client,
+            admin,
+            &content,
+            config.poll_duration_secs,
+            verifier_account_id,
+        )
+        .await?;
         tracing::info!(
             rooms_created = result.rooms_created,
             rooms_skipped = result.rooms_skipped,
