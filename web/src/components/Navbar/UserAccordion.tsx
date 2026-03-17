@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import {
   IconHeartHandshake,
   IconLogout,
@@ -7,7 +8,7 @@ import {
 } from '@tabler/icons-react';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { Accordion, Badge, Group, NavLink, Stack, Text, ThemeIcon } from '@mantine/core';
-import { useTrustScores } from '@/features/trust';
+import { getTierInfo, useTrustScores } from '@/features/trust';
 import { buildVerifierUrl, useVerificationStatus } from '@/features/verification';
 import { useCrypto } from '@/providers/CryptoProvider';
 import { useDevice } from '@/providers/DeviceProvider';
@@ -22,11 +23,9 @@ function TrustDot({
   username: string | null;
 }) {
   if (isVerified && trustScore) {
-    if (trustScore.distance <= 3.0 && trustScore.path_diversity >= 2) {
-      return <Badge size="xs" color="violet" circle />;
-    }
-    if (trustScore.distance <= 6.0 && trustScore.path_diversity >= 1) {
-      return <Badge size="xs" color="blue" circle />;
+    const tier = getTierInfo(trustScore.distance, trustScore.path_diversity);
+    if (tier) {
+      return <Badge size="xs" color={tier.color} circle />;
     }
     return <Badge size="xs" color="green" circle />;
   }
@@ -53,6 +52,8 @@ export function UserAccordion({ onNavigate }: UserAccordionProps) {
   const isVerified = verificationQuery.data?.isVerified ?? false;
   const trustScore = trustScoresQuery.data?.[0] ?? null;
 
+  const [opened, setOpened] = useState<string | null>(null);
+
   const handleLogout = () => {
     clearDevice();
     void navigate({ to: '/' });
@@ -60,7 +61,7 @@ export function UserAccordion({ onNavigate }: UserAccordionProps) {
   };
 
   return (
-    <Accordion variant="default" chevronPosition="right">
+    <Accordion variant="default" chevronPosition="right" value={opened} onChange={setOpened}>
       <Accordion.Item value="user">
         <Accordion.Control>
           <Group gap="xs" wrap="nowrap">

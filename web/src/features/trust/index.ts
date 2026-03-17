@@ -32,3 +32,5 @@ export type {
   AccountLookup,
 } from './api';
 export { TrustScoreCard, DenouncementSection } from './components';
+export { getTierInfo } from './tierInfo';
+export type { TierInfo } from './tierInfo';

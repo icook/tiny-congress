@@ -2,21 +2,12 @@ import { IconShield, IconUsers } from '@tabler/icons-react';
 import { Badge, Card, Group, Loader, Progress, Stack, Text, Title } from '@mantine/core';
 import type { CryptoModule } from '@/providers/CryptoProvider';
 import { useTrustBudget, useTrustScores } from '../api';
+import { getTierInfo } from '../tierInfo';
 
 interface TrustScoreCardProps {
   deviceKid: string | null;
   privateKey: CryptoKey | null;
   wasmCrypto: CryptoModule | null;
-}
-
-function getTierInfo(distance: number, diversity: number): { label: string; color: string } | null {
-  if (distance <= 3.0 && diversity >= 2) {
-    return { label: 'Congress', color: 'blue' };
-  }
-  if (distance <= 6.0 && diversity >= 1) {
-    return { label: 'Community', color: 'teal' };
-  }
-  return null;
 }
 
 export function TrustScoreCard({ deviceKid, privateKey, wasmCrypto }: TrustScoreCardProps) {
