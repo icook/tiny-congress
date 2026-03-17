@@ -95,9 +95,23 @@ jobs:
       - name: Setup web toolchain
         uses: ./.github/actions/setup-web
 
+      - name: Restore Playwright browser cache
+        id: pw-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-all-${{ runner.os }}-${{ hashFiles('web/yarn.lock') }}
+
       - name: Install Playwright browsers
         working-directory: web
         run: yarn playwright install --with-deps
+
+      - name: Save Playwright browser cache
+        if: always() && steps.pw-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-all-${{ runner.os }}-${{ hashFiles('web/yarn.lock') }}
 
       - name: Run Playwright tests
         working-directory: web
