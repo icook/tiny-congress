@@ -202,6 +202,16 @@ pub trait TrustRepo: Send + Sync {
     ) -> Result<Option<ScoreSnapshot>, TrustRepoError>;
 
     async fn get_all_scores(&self, user_id: Uuid) -> Result<Vec<ScoreSnapshot>, TrustRepoError>;
+
+    /// Returns `true` if `user_id` has an active endorsement with the given `topic`
+    /// from any of the supplied `verifier_ids`. Used by the `identity_verified` room
+    /// constraint to check Layer 1 attestation without touching the trust graph.
+    async fn has_identity_endorsement(
+        &self,
+        user_id: Uuid,
+        verifier_ids: &[Uuid],
+        topic: &str,
+    ) -> Result<bool, TrustRepoError>;
 }
 
 /// `PostgreSQL` implementation of [`TrustRepo`].
@@ -357,5 +367,29 @@ impl TrustRepo for PgTrustRepo {
 
     async fn get_all_scores(&self, user_id: Uuid) -> Result<Vec<ScoreSnapshot>, TrustRepoError> {
         scores::get_all_scores(&self.pool, user_id).await
+    }
+
+    async fn has_identity_endorsement(
+        &self,
+        user_id: Uuid,
+        verifier_ids: &[Uuid],
+        topic: &str,
+    ) -> Result<bool, TrustRepoError> {
+        let exists: bool = sqlx::query_scalar(
+            "SELECT EXISTS(
+                SELECT 1 FROM reputation__endorsements
+                WHERE subject_id = $1
+                  AND endorser_id = ANY($2)
+                  AND topic = $3
+                  AND revoked_at IS NULL
+            )",
+        )
+        .bind(user_id)
+        .bind(verifier_ids)
+        .bind(topic)
+        .fetch_one(&self.pool)
+        .await?;
+
+        Ok(exists)
     }
 }

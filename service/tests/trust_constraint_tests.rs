@@ -12,6 +12,76 @@ use tinycongress_api::trust::constraints::{
 use tinycongress_api::trust::repo::{PgTrustRepo, TrustRepo};
 
 // ---------------------------------------------------------------------------
+// has_identity_endorsement: verifier-attested users are recognised
+// ---------------------------------------------------------------------------
+#[shared_runtime_test]
+async fn test_has_identity_endorsement() {
+    let db = isolated_db().await;
+    let pool = db.pool().clone();
+
+    let verifier = AccountFactory::new()
+        .with_seed(100)
+        .create(&pool)
+        .await
+        .expect("create verifier");
+    let user = AccountFactory::new()
+        .with_seed(101)
+        .create(&pool)
+        .await
+        .expect("create user");
+    let other = AccountFactory::new()
+        .with_seed(102)
+        .create(&pool)
+        .await
+        .expect("create other");
+
+    let repo = PgTrustRepo::new(pool.clone());
+
+    // No endorsement yet — should return false
+    let result = repo
+        .has_identity_endorsement(user.id, &[verifier.id], "identity_verified")
+        .await
+        .unwrap();
+    assert!(!result, "user with no endorsement should return false");
+
+    // Insert identity_verified endorsement from verifier → user
+    sqlx::query(
+        "INSERT INTO reputation__endorsements (endorser_id, subject_id, topic, weight)
+         VALUES ($1, $2, 'identity_verified', $3)",
+    )
+    .bind(verifier.id)
+    .bind(user.id)
+    .bind(1.0_f32)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    // Now should return true
+    let result = repo
+        .has_identity_endorsement(user.id, &[verifier.id], "identity_verified")
+        .await
+        .unwrap();
+    assert!(result, "user with endorsement should return true");
+
+    // Different verifier — should return false
+    let result = repo
+        .has_identity_endorsement(user.id, &[other.id], "identity_verified")
+        .await
+        .unwrap();
+    assert!(
+        !result,
+        "user endorsed by different verifier should return false"
+    );
+
+    // Un-endorsed user — should return false
+    let result = repo
+        .has_identity_endorsement(other.id, &[verifier.id], "identity_verified")
+        .await
+        .unwrap();
+    assert!(!result, "un-endorsed user should return false");
+}
+
+// ---------------------------------------------------------------------------
 // EndorsedByConstraint: user reachable from anchor → eligible
 // ---------------------------------------------------------------------------
 #[shared_runtime_test]
