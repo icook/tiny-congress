@@ -1,5 +1,5 @@
-import { IconLogout, IconMoon, IconSettings, IconSun, IconUser } from '@tabler/icons-react';
-import { Outlet, useNavigate } from '@tanstack/react-router';
+import { IconMoon, IconSun } from '@tabler/icons-react';
+import { Outlet } from '@tanstack/react-router';
 import {
   ActionIcon,
   AppShell,
@@ -7,9 +7,7 @@ import {
   Burger,
   Group,
   Image,
-  Menu,
   Text,
-  UnstyledButton,
   useComputedColorScheme,
   useMantineColorScheme,
 } from '@mantine/core';
@@ -18,7 +16,6 @@ import logoDark from '@/logo-dark.svg';
 import logoLight from '@/logo-light.svg';
 import { Navbar } from '../components/Navbar/Navbar';
 import { getEnvironment } from '../config';
-import { useDevice } from '../providers/DeviceProvider';
 
 const ENV_BADGE_CONFIG: Record<string, { color: string; label: string }> = {
   demo: { color: 'blue', label: 'DEMO' },
@@ -36,47 +33,6 @@ function EnvironmentBadge() {
     <Badge color={config.color} variant="filled" size="sm">
       {config.label}
     </Badge>
-  );
-}
-
-function UserMenu() {
-  const { username, clearDevice } = useDevice();
-  const navigate = useNavigate();
-
-  const handleLogout = () => {
-    clearDevice();
-    void navigate({ to: '/' });
-  };
-
-  if (!username) {
-    return null;
-  }
-
-  return (
-    <Menu shadow="md" width={180} position="bottom-end">
-      <Menu.Target>
-        <UnstyledButton>
-          <Group gap="xs">
-            <IconUser size={18} />
-            <Text size="sm" fw={500}>
-              {username}
-            </Text>
-          </Group>
-        </UnstyledButton>
-      </Menu.Target>
-      <Menu.Dropdown>
-        <Menu.Item
-          leftSection={<IconSettings size={16} />}
-          onClick={() => void navigate({ to: '/settings' })}
-        >
-          Settings
-        </Menu.Item>
-        <Menu.Divider />
-        <Menu.Item leftSection={<IconLogout size={16} />} color="red" onClick={handleLogout}>
-          Logout
-        </Menu.Item>
-      </Menu.Dropdown>
-    </Menu>
   );
 }
 
@@ -123,7 +79,6 @@ export function Layout() {
             >
               {colorScheme === 'dark' ? <IconSun size={20} /> : <IconMoon size={20} />}
             </ActionIcon>
-            <UserMenu />
           </Group>
         </Group>
       </AppShell.Header>
