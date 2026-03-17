@@ -49,6 +49,7 @@ Verifiers are regular accounts authenticated via the same device-key signing pro
 - Rejected: over-engineered for the current scale, adds infrastructure complexity (token issuer, certificate management), and still requires a separate auth path
 
 ## References
+- [ADR-017: Two-layer trust architecture](017-two-layer-trust-architecture.md) — verifier accounts are platform trust infrastructure; the exemption from slot limits is defined there
 - PR #381, #384: Generalized verifier API implementation
 - `service/src/reputation/bootstrap.rs`: Bootstrap logic
 - `service/src/reputation/http/mod.rs`: Endorsement endpoint with `AuthenticatedDevice`

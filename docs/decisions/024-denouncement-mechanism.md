@@ -1,7 +1,7 @@
 # ADR-024: Denouncement Mechanism — Denouncer-Only Edge Revocation
 
 ## Status
-Draft
+Accepted (2026-03-13)
 
 ## Context
 
@@ -55,7 +55,7 @@ This is a substantial design problem and will be addressed in a separate ADR whe
 
 ### Neutral
 - ADR-020's denouncement budget (d=2) works naturally with this mechanism: each denouncement costs 1 budget and revokes 1 edge.
-- The simulation harness should add `apply_denouncer_revocation(denouncer, target)` to validate effectiveness against adversarial topologies.
+- The simulation harness validates denouncer-only revocation across 31 adversarial scenarios (PR #678).
 
 ## Alternatives considered
 
