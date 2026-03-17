@@ -222,6 +222,61 @@ impl RoomConstraint for CongressConstraint {
 }
 
 // ---------------------------------------------------------------------------
+// IdentityVerifiedConstraint (Layer 1)
+// ---------------------------------------------------------------------------
+
+/// Layer 1 constraint: checks identity attestation from recognised verifiers.
+///
+/// Queries `reputation__endorsements` directly — no trust graph traversal,
+/// no anchor. A user is eligible when any of the configured `verifier_ids`
+/// has issued them an active endorsement with the given `topic`
+/// (typically `"identity_verified"`).
+pub struct IdentityVerifiedConstraint {
+    verifier_ids: Vec<Uuid>,
+    topic: String,
+}
+
+impl IdentityVerifiedConstraint {
+    /// Create a new constraint requiring an endorsement from one of the given verifiers.
+    pub fn new(verifier_ids: Vec<Uuid>, topic: impl Into<String>) -> Self {
+        Self {
+            verifier_ids,
+            topic: topic.into(),
+        }
+    }
+}
+
+#[async_trait]
+impl RoomConstraint for IdentityVerifiedConstraint {
+    async fn check(
+        &self,
+        user_id: Uuid,
+        _room_anchor_id: Option<Uuid>, // Layer 1 does not use an anchor
+        trust_repo: &dyn TrustRepo,
+    ) -> Result<Eligibility, anyhow::Error> {
+        let verified = trust_repo
+            .has_identity_endorsement(user_id, &self.verifier_ids, &self.topic)
+            .await
+            .map_err(|e| anyhow::anyhow!("trust repo error: {e}"))?;
+
+        if verified {
+            Ok(Eligibility {
+                is_eligible: true,
+                reason: None,
+            })
+        } else {
+            Ok(Eligibility {
+                is_eligible: false,
+                reason: Some(
+                    "User has not completed identity verification from a recognised verifier"
+                        .to_string(),
+                ),
+            })
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Factory helpers
 // ---------------------------------------------------------------------------
 
@@ -291,6 +346,28 @@ pub fn build_constraint(
                 .map_err(|_| anyhow::anyhow!("min_diversity value out of range for i32"))?;
 
             Ok(Box::new(CongressConstraint::new(min_diversity)?))
+        }
+        "identity_verified" => {
+            let verifier_ids = config
+                .get("verifier_ids")
+                .and_then(|v| v.as_array())
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|v| v.as_str().and_then(|s| Uuid::parse_str(s).ok()))
+                        .collect::<Vec<_>>()
+                })
+                .ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "identity_verified constraint requires verifier_ids array in config"
+                    )
+                })?;
+            if verifier_ids.is_empty() {
+                anyhow::bail!("identity_verified constraint requires at least one verifier_id");
+            }
+            Ok(Box::new(IdentityVerifiedConstraint::new(
+                verifier_ids,
+                "identity_verified",
+            )))
         }
         other => Err(anyhow::anyhow!("unknown constraint type: {other}")),
     }
