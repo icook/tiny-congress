@@ -15,6 +15,7 @@ import { AboutPage } from './pages/About.page';
 import { DevArchitecturePage } from './pages/DevArchitecture.page';
 import { DevDomainModelPage } from './pages/DevDomainModel.page';
 import { DevIndexPage } from './pages/DevIndex.page';
+import { DocsIndexPage } from './pages/DocsIndex.page';
 import { EndorsePage } from './pages/Endorse.page';
 import { HomePage } from './pages/Home.page';
 import { KeysPage } from './pages/Keys.page';
@@ -46,6 +47,12 @@ const aboutRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: 'about',
   component: AboutPage,
+});
+
+const docsIndexRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: 'docs',
+  component: DocsIndexPage,
 });
 
 const devIndexRoute = createRoute({
@@ -162,6 +169,7 @@ const routeTree = rootRoute.addChildren([
   homeRoute,
   aboutRoute,
   keysRoute,
+  docsIndexRoute,
   devIndexRoute,
   devArchitectureRoute,
   devDomainModelRoute,

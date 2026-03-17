@@ -1,9 +1,11 @@
 import {
+  IconBook2,
   IconCode,
   IconDoor,
   IconHeartHandshake,
   IconHome2,
   IconInfoCircle,
+  IconKey,
   IconLogin,
   IconShieldCheck,
   IconShieldHalfFilled,
@@ -16,11 +18,9 @@ import { buildVerifierUrl, useVerificationStatus } from '@/features/verification
 import { useCrypto } from '@/providers/CryptoProvider';
 import { useDevice } from '@/providers/DeviceProvider';
 
-const publicNavLinks = [
+const topNavLinks = [
   { icon: IconHome2, label: 'Home', path: '/' },
   { icon: IconDoor, label: 'Rooms', path: '/rooms' },
-  { icon: IconInfoCircle, label: 'About', path: '/about' },
-  { icon: IconCode, label: 'Dev Docs', path: '/dev' },
 ];
 
 const authNavLinks = [
@@ -66,7 +66,7 @@ export function Navbar({ onNavigate }: NavbarProps) {
       style={{ borderRight: `1px solid ${borderColor}` }}
     >
       <Stack gap={4} style={{ flex: 1 }}>
-        {[...publicNavLinks, ...(isAuthenticated ? authNavLinks : [])].map((link) => (
+        {topNavLinks.map((link) => (
           <NavLink
             key={link.label}
             component={Link}
@@ -78,6 +78,75 @@ export function Navbar({ onNavigate }: NavbarProps) {
             fw={500}
           />
         ))}
+
+        <NavLink
+          component={Link}
+          to="/docs"
+          label="Docs"
+          leftSection={<IconBook2 size={18} stroke={1.5} />}
+          active={isActive('/docs')}
+          defaultOpened={
+            currentPath.startsWith('/about') ||
+            currentPath.startsWith('/keys') ||
+            currentPath.startsWith('/dev')
+          }
+          fw={500}
+        >
+          <NavLink
+            component={Link}
+            to="/about"
+            label="About"
+            leftSection={<IconInfoCircle size={16} stroke={1.5} />}
+            active={isActive('/about')}
+            onClick={onNavigate}
+          />
+          <NavLink
+            component={Link}
+            to="/keys"
+            label="How Keys Work"
+            leftSection={<IconKey size={16} stroke={1.5} />}
+            active={isActive('/keys')}
+            onClick={onNavigate}
+          />
+          <NavLink
+            component={Link}
+            to="/dev"
+            label="Dev Docs"
+            leftSection={<IconCode size={16} stroke={1.5} />}
+            active={isActive('/dev')}
+            defaultOpened={currentPath.startsWith('/dev/')}
+          >
+            <NavLink
+              component={Link}
+              to="/dev/architecture"
+              label="Architecture"
+              active={isActive('/dev/architecture')}
+              onClick={onNavigate}
+            />
+            <NavLink
+              component={Link}
+              to="/dev/domain-model"
+              label="Domain Model"
+              active={isActive('/dev/domain-model')}
+              onClick={onNavigate}
+            />
+          </NavLink>
+        </NavLink>
+
+        {isAuthenticated
+          ? authNavLinks.map((link) => (
+              <NavLink
+                key={link.label}
+                component={Link}
+                to={link.path}
+                label={link.label}
+                leftSection={<link.icon size={18} stroke={1.5} />}
+                active={isActive(link.path)}
+                onClick={onNavigate}
+                fw={500}
+              />
+            ))
+          : null}
       </Stack>
 
       {!isAuthenticated ? (
