@@ -9,7 +9,7 @@ import keysContent from '../content/keys.md?raw';
 
 export function KeysPage() {
   return (
-    <Stack gap="md">
+    <Stack gap="md" maw={780} mx="auto">
       <Group gap="xs">
         <IconKey size={20} />
         <Title order={2}>How Your Keys Work</Title>

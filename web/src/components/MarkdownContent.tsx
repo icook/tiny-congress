@@ -20,7 +20,7 @@ const components: Components = {
 /** Renders a markdown string with Mantine typography styles. */
 export function MarkdownContent({ children }: MarkdownContentProps) {
   return (
-    <Typography style={{ maxWidth: 780, marginInline: 'auto' }}>
+    <Typography>
       <Markdown
         remarkPlugins={[remarkGfm]}
         rehypePlugins={[rehypeRaw, rehypeSlug]}
