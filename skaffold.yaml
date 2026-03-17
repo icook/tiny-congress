@@ -102,6 +102,7 @@ deploy:
               drop:
                 - ALL
           frontend:
+            apiUrl: "http://localhost:8080"
             podSecurityContext:
               runAsNonRoot: false
             securityContext:
