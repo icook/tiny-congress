@@ -63,15 +63,55 @@ async fn endorse_user(pool: &sqlx::PgPool, account_id: uuid::Uuid, topic: &str) 
         .expect("endorsement");
 }
 
-/// Helper: seed a global trust score snapshot that makes `account_id` eligible to vote.
+/// Helper: create or return a deterministic anchor account for constraint tests.
 ///
-/// The `EndorsedByConstraint` with a nil anchor checks `trust_repo.get_score(user_id, None)`.
-/// Seeding a score with `trust_distance = Some(1.0)` makes the user reachable and eligible.
-async fn make_eligible(pool: &sqlx::PgPool, account_id: uuid::Uuid, _room_id: uuid::Uuid) {
+/// Uses seed 200 so it never collides with test user seeds. Returns the anchor's UUID.
+/// Safe to call multiple times on the same DB — returns the existing account on conflict.
+async fn get_or_create_anchor(pool: &sqlx::PgPool) -> uuid::Uuid {
+    use common::factories::{generate_test_keys, AccountFactory};
+    use tinycongress_api::identity::repo::AccountRepoError;
+
+    match AccountFactory::new().with_seed(200).create(pool).await {
+        Ok(account) => account.id,
+        Err(AccountRepoError::DuplicateKey | AccountRepoError::DuplicateUsername) => {
+            let (_, root_kid) = generate_test_keys(200);
+            sqlx::query_scalar("SELECT id FROM accounts WHERE root_kid = $1")
+                .bind(root_kid.as_str())
+                .fetch_one(pool)
+                .await
+                .expect("find existing anchor account")
+        }
+        Err(e) => panic!("create anchor account: {e}"),
+    }
+}
+
+/// Helper: set a room's constraint_config to use the given anchor UUID.
+///
+/// Rooms created via POST /rooms default to `endorsed_by` with no anchor.
+/// This helper writes the anchor directly so `build_constraint` succeeds.
+async fn set_room_anchor(pool: &sqlx::PgPool, room_id: uuid::Uuid, anchor: uuid::Uuid) {
+    sqlx::query("UPDATE rooms__rooms SET constraint_config = $1 WHERE id = $2")
+        .bind(serde_json::json!({"anchor_id": anchor}))
+        .bind(room_id)
+        .execute(pool)
+        .await
+        .expect("set room anchor");
+}
+
+/// Helper: seed a trust score snapshot that makes `account_id` eligible to vote in a room.
+///
+/// Creates a deterministic test anchor account (once per DB), sets the room's
+/// constraint_config to use that anchor, then seeds a trust score keyed to it.
+/// The `EndorsedByConstraint` will find the score and mark the user eligible.
+async fn make_eligible(pool: &sqlx::PgPool, account_id: uuid::Uuid, room_id: uuid::Uuid) {
     use tinycongress_api::trust::repo::{PgTrustRepo, TrustRepo};
+    let anchor = get_or_create_anchor(pool).await;
+
+    set_room_anchor(pool, room_id, anchor).await;
+
     let trust_repo = PgTrustRepo::new(pool.clone());
     trust_repo
-        .upsert_score(account_id, None, Some(1.0), Some(1), None)
+        .upsert_score(account_id, Some(anchor), Some(1.0), Some(1), None)
         .await
         .expect("trust score");
 }
@@ -481,6 +521,11 @@ async fn test_cast_vote_ineligible_user_returns_403() {
     let room = json_body(app.clone().oneshot(req).await.expect("response")).await;
     let room_id = room["id"].as_str().expect("room_id");
 
+    // Set a valid anchor so build_constraint succeeds (user has no score for it → 403)
+    let room_uuid: uuid::Uuid = room_id.parse().expect("room uuid");
+    let anchor = get_or_create_anchor(db.pool()).await;
+    set_room_anchor(db.pool(), room_uuid, anchor).await;
+
     let poll_body = serde_json::json!({"question": "Test?"}).to_string();
     let req = build_authed_request(
         Method::POST,
@@ -514,7 +559,7 @@ async fn test_cast_vote_ineligible_user_returns_403() {
     );
     app.clone().oneshot(req).await.expect("response");
 
-    // No endorsement — should get 403
+    // No trust score for the anchor — should get 403
     let vote_body = serde_json::json!({
         "votes": [{"dimension_id": dim_id, "value": 0.5}]
     })

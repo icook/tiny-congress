@@ -13,14 +13,15 @@ pub struct Eligibility {
 }
 
 /// Pluggable constraint that determines whether a user may participate in a room.
+///
+/// Constraints are self-contained policy objects: all configuration (including
+/// anchor identity for trust-graph constraints) is captured at construction
+/// time via `build_constraint`. Callers only need `user_id` and the repo.
 #[async_trait]
 pub trait RoomConstraint: Send + Sync {
-    /// Check whether `user_id` may participate in a room whose anchor/context is `room_anchor_id`.
-    /// Pass `None` when there is no specific anchor (global-context lookup).
     async fn check(
         &self,
         user_id: Uuid,
-        room_anchor_id: Option<Uuid>,
         trust_repo: &dyn TrustRepo,
     ) -> Result<Eligibility, anyhow::Error>;
 }
@@ -29,37 +30,44 @@ pub trait RoomConstraint: Send + Sync {
 // EndorsedByConstraint
 // ---------------------------------------------------------------------------
 
-/// User must appear in the trust graph reachable from `room_anchor_id`.
-pub struct EndorsedByConstraint;
+/// User must appear in the trust graph reachable from the configured anchor.
+pub struct EndorsedByConstraint {
+    anchor_id: Uuid,
+}
+
+impl EndorsedByConstraint {
+    /// Create a new constraint requiring the user to be reachable from `anchor_id`.
+    #[must_use]
+    pub const fn new(anchor_id: Uuid) -> Self {
+        Self { anchor_id }
+    }
+}
 
 #[async_trait]
 impl RoomConstraint for EndorsedByConstraint {
     async fn check(
         &self,
         user_id: Uuid,
-        room_anchor_id: Option<Uuid>,
         trust_repo: &dyn TrustRepo,
     ) -> Result<Eligibility, anyhow::Error> {
         let snapshot = trust_repo
-            .get_score(user_id, room_anchor_id)
+            .get_score(user_id, Some(self.anchor_id))
             .await
             .map_err(|e| anyhow::anyhow!("trust repo error: {e}"))?;
 
-        // A snapshot can exist without `trust_distance` if only centrality was computed.
-        // `trust_distance` being present means the user is reachable from the anchor —
-        // the distance was set during graph traversal, so Some(d) = reachable.
-        let is_eligible = snapshot.as_ref().and_then(|s| s.trust_distance).is_some();
-
-        if is_eligible {
-            Ok(Eligibility {
+        // `trust_distance` being present means the user is reachable from the anchor.
+        match snapshot.and_then(|s| s.trust_distance) {
+            Some(_) => Ok(Eligibility {
                 is_eligible: true,
                 reason: None,
-            })
-        } else {
-            Ok(Eligibility {
+            }),
+            None => Ok(Eligibility {
                 is_eligible: false,
-                reason: Some("not reachable from room anchor in trust graph".to_string()),
-            })
+                reason: Some(format!(
+                    "not reachable from room anchor {} in trust graph",
+                    self.anchor_id
+                )),
+            }),
         }
     }
 }
@@ -70,6 +78,7 @@ impl RoomConstraint for EndorsedByConstraint {
 
 /// User must have `trust_distance <= max_distance` AND `path_diversity >= min_diversity`.
 pub struct CommunityConstraint {
+    anchor_id: Uuid,
     max_distance: f32,
     min_diversity: i32,
 }
@@ -80,7 +89,11 @@ impl CommunityConstraint {
     /// # Errors
     ///
     /// Returns an error if `max_distance` is not in `(0.0, 100.0]` or `min_diversity < 1`.
-    pub fn new(max_distance: f32, min_diversity: i32) -> Result<Self, anyhow::Error> {
+    pub fn new(
+        anchor_id: Uuid,
+        max_distance: f32,
+        min_diversity: i32,
+    ) -> Result<Self, anyhow::Error> {
         if max_distance <= 0.0 || max_distance > 100.0 {
             return Err(anyhow::anyhow!(
                 "max_distance must be in (0.0, 100.0], got {max_distance}"
@@ -92,6 +105,7 @@ impl CommunityConstraint {
             ));
         }
         Ok(Self {
+            anchor_id,
             max_distance,
             min_diversity,
         })
@@ -103,11 +117,10 @@ impl RoomConstraint for CommunityConstraint {
     async fn check(
         &self,
         user_id: Uuid,
-        room_anchor_id: Option<Uuid>,
         trust_repo: &dyn TrustRepo,
     ) -> Result<Eligibility, anyhow::Error> {
         let snapshot = trust_repo
-            .get_score(user_id, room_anchor_id)
+            .get_score(user_id, Some(self.anchor_id))
             .await
             .map_err(|e| anyhow::anyhow!("trust repo error: {e}"))?;
 
@@ -162,6 +175,7 @@ impl RoomConstraint for CommunityConstraint {
 
 /// User must have `path_diversity >= min_diversity` (stricter sybil resistance).
 pub struct CongressConstraint {
+    anchor_id: Uuid,
     min_diversity: i32,
 }
 
@@ -171,13 +185,16 @@ impl CongressConstraint {
     /// # Errors
     ///
     /// Returns an error if `min_diversity < 1`.
-    pub fn new(min_diversity: i32) -> Result<Self, anyhow::Error> {
+    pub fn new(anchor_id: Uuid, min_diversity: i32) -> Result<Self, anyhow::Error> {
         if min_diversity < 1 {
             return Err(anyhow::anyhow!(
                 "min_diversity must be >= 1, got {min_diversity}"
             ));
         }
-        Ok(Self { min_diversity })
+        Ok(Self {
+            anchor_id,
+            min_diversity,
+        })
     }
 }
 
@@ -186,11 +203,10 @@ impl RoomConstraint for CongressConstraint {
     async fn check(
         &self,
         user_id: Uuid,
-        room_anchor_id: Option<Uuid>,
         trust_repo: &dyn TrustRepo,
     ) -> Result<Eligibility, anyhow::Error> {
         let snapshot = trust_repo
-            .get_score(user_id, room_anchor_id)
+            .get_score(user_id, Some(self.anchor_id))
             .await
             .map_err(|e| anyhow::anyhow!("trust repo error: {e}"))?;
 
@@ -251,7 +267,6 @@ impl RoomConstraint for IdentityVerifiedConstraint {
     async fn check(
         &self,
         user_id: Uuid,
-        _room_anchor_id: Option<Uuid>, // Layer 1 does not use an anchor
         trust_repo: &dyn TrustRepo,
     ) -> Result<Eligibility, anyhow::Error> {
         let verified = trust_repo
@@ -279,6 +294,14 @@ impl RoomConstraint for IdentityVerifiedConstraint {
 // ---------------------------------------------------------------------------
 // Factory helpers
 // ---------------------------------------------------------------------------
+
+fn parse_uuid_from_config(config: &serde_json::Value, key: &str) -> Result<Uuid, anyhow::Error> {
+    config
+        .get(key)
+        .and_then(|v| v.as_str())
+        .and_then(|s| Uuid::parse_str(s).ok())
+        .ok_or_else(|| anyhow::anyhow!("constraint config requires valid UUID for '{key}'"))
+}
 
 fn get_f64_or_default(
     config: &serde_json::Value,
@@ -321,8 +344,12 @@ pub fn build_constraint(
     config: &serde_json::Value,
 ) -> Result<Box<dyn RoomConstraint>, anyhow::Error> {
     match constraint_type {
-        "endorsed_by" => Ok(Box::new(EndorsedByConstraint)),
+        "endorsed_by" => {
+            let anchor_id = parse_uuid_from_config(config, "anchor_id")?;
+            Ok(Box::new(EndorsedByConstraint::new(anchor_id)))
+        }
         "community" => {
+            let anchor_id = parse_uuid_from_config(config, "anchor_id")?;
             let max_distance_f64 = get_f64_or_default(config, "max_distance", 5.0)?;
             if max_distance_f64 > f64::from(f32::MAX) {
                 return Err(anyhow::anyhow!("max_distance value too large"));
@@ -336,16 +363,18 @@ pub fn build_constraint(
                 .map_err(|_| anyhow::anyhow!("min_diversity value out of range for i32"))?;
 
             Ok(Box::new(CommunityConstraint::new(
+                anchor_id,
                 max_distance,
                 min_diversity,
             )?))
         }
         "congress" => {
+            let anchor_id = parse_uuid_from_config(config, "anchor_id")?;
             let min_diversity_i64 = get_i64_or_default(config, "min_diversity", 3)?;
             let min_diversity = i32::try_from(min_diversity_i64)
                 .map_err(|_| anyhow::anyhow!("min_diversity value out of range for i32"))?;
 
-            Ok(Box::new(CongressConstraint::new(min_diversity)?))
+            Ok(Box::new(CongressConstraint::new(anchor_id, min_diversity)?))
         }
         "identity_verified" => {
             let verifier_ids = config

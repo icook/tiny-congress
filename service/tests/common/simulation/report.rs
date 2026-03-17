@@ -91,7 +91,7 @@ impl SimulationReport {
     ) -> Eligibility {
         let repo = PgTrustRepo::new(pool.clone());
         constraint
-            .check(node_id, Some(self.anchor_id), &repo)
+            .check(node_id, &repo)
             .await
             .expect("constraint check failed")
     }

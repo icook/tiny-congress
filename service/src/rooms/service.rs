@@ -533,10 +533,9 @@ impl RoomsService for DefaultRoomsService {
                 VoteError::Internal("Internal server error".to_string())
             })?;
 
-        // Rooms do not currently have a creator account to serve as anchor.
-        // Pass None — constraints interpret this as a global-context lookup.
+        // Anchor and all other policy is encoded in the constraint config — just call check().
         let eligibility = constraint
-            .check(user_id, None, self.trust_repo.as_ref())
+            .check(user_id, self.trust_repo.as_ref())
             .await
             .map_err(|e| {
                 tracing::error!("Eligibility check failed: {e}");
