@@ -28,6 +28,8 @@ pub trait RoomsRepo: Send + Sync {
         description: Option<&str>,
         eligibility_topic: &str,
         poll_duration_secs: Option<i32>,
+        constraint_type: &str,
+        constraint_config: &serde_json::Value,
     ) -> Result<RoomRecord, RoomRepoError>;
     async fn list_rooms(&self, status: Option<&str>) -> Result<Vec<RoomRecord>, RoomRepoError>;
     async fn get_room(&self, room_id: Uuid) -> Result<RoomRecord, RoomRepoError>;
@@ -118,6 +120,8 @@ impl RoomsRepo for PgRoomsRepo {
         description: Option<&str>,
         eligibility_topic: &str,
         poll_duration_secs: Option<i32>,
+        constraint_type: &str,
+        constraint_config: &serde_json::Value,
     ) -> Result<RoomRecord, RoomRepoError> {
         rooms::create_room(
             &self.pool,
@@ -125,6 +129,8 @@ impl RoomsRepo for PgRoomsRepo {
             description,
             eligibility_topic,
             poll_duration_secs,
+            constraint_type,
+            constraint_config,
         )
         .await
     }

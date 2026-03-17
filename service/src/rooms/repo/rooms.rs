@@ -65,6 +65,8 @@ pub async fn create_room<'e, E>(
     description: Option<&str>,
     eligibility_topic: &str,
     poll_duration_secs: Option<i32>,
+    constraint_type: &str,
+    constraint_config: &serde_json::Value,
 ) -> Result<RoomRecord, RoomRepoError>
 where
     E: sqlx::Executor<'e, Database = sqlx::Postgres>,
@@ -73,7 +75,7 @@ where
         r"
         INSERT INTO rooms__rooms
             (name, description, eligibility_topic, poll_duration_secs, constraint_type, constraint_config)
-        VALUES ($1, $2, $3, $4, 'endorsed_by', jsonb_build_object('topic', $3))
+        VALUES ($1, $2, $3, $4, $5, $6)
         RETURNING id, name, description, eligibility_topic, status, poll_duration_secs, created_at, closed_at,
                   constraint_type, constraint_config
         ",
@@ -82,6 +84,8 @@ where
     .bind(description)
     .bind(eligibility_topic)
     .bind(poll_duration_secs)
+    .bind(constraint_type)
+    .bind(constraint_config)
     .fetch_one(executor)
     .await;
 

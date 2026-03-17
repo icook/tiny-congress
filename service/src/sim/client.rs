@@ -82,6 +82,9 @@ struct CreateRoomBody<'a> {
     name: &'a str,
     description: &'a str,
     eligibility_topic: &'a str,
+    constraint_type: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    constraint_config: Option<&'a serde_json::Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     poll_duration_secs: Option<i32>,
 }
@@ -270,12 +273,15 @@ impl SimClient {
     /// # Errors
     ///
     /// Returns an error if the HTTP request fails or the response is not 2xx.
+    #[allow(clippy::too_many_arguments)]
     pub async fn create_room(
         &self,
         account: &SimAccount,
         name: &str,
         description: &str,
         eligibility_topic: &str,
+        constraint_type: &str,
+        constraint_config: Option<&serde_json::Value>,
         poll_duration_secs: Option<i32>,
     ) -> Result<RoomResponse> {
         let path = "/rooms";
@@ -283,6 +289,8 @@ impl SimClient {
             name,
             description,
             eligibility_topic,
+            constraint_type,
+            constraint_config,
             poll_duration_secs,
         })?;
         let headers = account.sign_request("POST", path, &body);
@@ -701,6 +709,8 @@ mod tests {
             name: "Test Room",
             description: "A test room",
             eligibility_topic: "testing",
+            constraint_type: "identity_verified",
+            constraint_config: None,
             poll_duration_secs: Some(3600),
         };
         let json: serde_json::Value =

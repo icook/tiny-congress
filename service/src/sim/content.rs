@@ -47,6 +47,8 @@ pub async fn insert_sim_content(
                 &room.name,
                 &room.description,
                 "identity_verified",
+                "identity_verified",
+                None,
                 Some(poll_duration_secs),
             )
             .await

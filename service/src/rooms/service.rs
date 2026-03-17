@@ -79,6 +79,8 @@ pub trait RoomsService: Send + Sync {
         description: Option<&str>,
         eligibility_topic: &str,
         poll_duration_secs: Option<i32>,
+        constraint_type: &str,
+        constraint_config: &serde_json::Value,
     ) -> Result<RoomRecord, RoomError>;
     async fn rooms_needing_content(&self) -> Result<Vec<RoomRecord>, RoomError>;
     async fn list_rooms(&self, status: Option<&str>) -> Result<Vec<RoomRecord>, RoomError>;
@@ -182,6 +184,8 @@ impl RoomsService for DefaultRoomsService {
         description: Option<&str>,
         eligibility_topic: &str,
         poll_duration_secs: Option<i32>,
+        constraint_type: &str,
+        constraint_config: &serde_json::Value,
     ) -> Result<RoomRecord, RoomError> {
         if name.trim().is_empty() {
             return Err(RoomError::Validation(
@@ -194,6 +198,8 @@ impl RoomsService for DefaultRoomsService {
                 description,
                 eligibility_topic,
                 poll_duration_secs,
+                constraint_type,
+                constraint_config,
             )
             .await
             .map_err(|e| match e {

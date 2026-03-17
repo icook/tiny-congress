@@ -85,35 +85,42 @@ async fn get_or_create_anchor(pool: &sqlx::PgPool) -> uuid::Uuid {
     }
 }
 
-/// Helper: set a room's constraint_config to use the given anchor UUID.
+/// Helper: configure a room to use `identity_verified` constraint with the test verifier.
 ///
-/// Rooms created via POST /rooms default to `endorsed_by` with no anchor.
-/// This helper writes the anchor directly so `build_constraint` succeeds.
-async fn set_room_anchor(pool: &sqlx::PgPool, room_id: uuid::Uuid, anchor: uuid::Uuid) {
-    sqlx::query("UPDATE rooms__rooms SET constraint_config = $1 WHERE id = $2")
-        .bind(serde_json::json!({"anchor_id": anchor}))
-        .bind(room_id)
-        .execute(pool)
-        .await
-        .expect("set room anchor");
+/// Sets constraint_type = 'identity_verified' and constraint_config = {"verifier_ids": [verifier_id]}.
+/// Rooms created via POST /rooms already default to identity_verified; this helper ensures
+/// the verifier_ids config is set so `build_constraint` succeeds.
+async fn set_room_anchor(pool: &sqlx::PgPool, room_id: uuid::Uuid) {
+    let verifier = get_or_create_anchor(pool).await;
+    sqlx::query(
+        "UPDATE rooms__rooms SET constraint_type = 'identity_verified', constraint_config = $1 WHERE id = $2",
+    )
+    .bind(serde_json::json!({"verifier_ids": [verifier]}))
+    .bind(room_id)
+    .execute(pool)
+    .await
+    .expect("set room constraint");
 }
 
-/// Helper: seed a trust score snapshot that makes `account_id` eligible to vote in a room.
+/// Helper: make `account_id` eligible to vote in a room using `identity_verified` constraint.
 ///
-/// Creates a deterministic test anchor account (once per DB), sets the room's
-/// constraint_config to use that anchor, then seeds a trust score keyed to it.
-/// The `EndorsedByConstraint` will find the score and mark the user eligible.
+/// Configures the room's constraint to use a test verifier, then creates an
+/// `identity_verified` endorsement from that verifier to the account. The
+/// `IdentityVerifiedConstraint` will find the endorsement and mark the user eligible.
 async fn make_eligible(pool: &sqlx::PgPool, account_id: uuid::Uuid, room_id: uuid::Uuid) {
-    use tinycongress_api::trust::repo::{PgTrustRepo, TrustRepo};
-    let anchor = get_or_create_anchor(pool).await;
+    let verifier = get_or_create_anchor(pool).await;
 
-    set_room_anchor(pool, room_id, anchor).await;
+    set_room_anchor(pool, room_id).await;
 
-    let trust_repo = PgTrustRepo::new(pool.clone());
-    trust_repo
-        .upsert_score(account_id, Some(anchor), Some(1.0), Some(1), None)
-        .await
-        .expect("trust score");
+    sqlx::query(
+        "INSERT INTO reputation__endorsements (endorser_id, subject_id, topic, weight) \
+         VALUES ($1, $2, 'identity_verified', 1.0) ON CONFLICT DO NOTHING",
+    )
+    .bind(verifier)
+    .bind(account_id)
+    .execute(pool)
+    .await
+    .expect("identity endorsement");
 }
 
 /// Helper: parse JSON response body.
@@ -521,10 +528,9 @@ async fn test_cast_vote_ineligible_user_returns_403() {
     let room = json_body(app.clone().oneshot(req).await.expect("response")).await;
     let room_id = room["id"].as_str().expect("room_id");
 
-    // Set a valid anchor so build_constraint succeeds (user has no score for it → 403)
+    // Set a valid constraint config so build_constraint succeeds (user has no endorsement → 403)
     let room_uuid: uuid::Uuid = room_id.parse().expect("room uuid");
-    let anchor = get_or_create_anchor(db.pool()).await;
-    set_room_anchor(db.pool(), room_uuid, anchor).await;
+    set_room_anchor(db.pool(), room_uuid).await;
 
     let poll_body = serde_json::json!({"question": "Test?"}).to_string();
     let req = build_authed_request(
