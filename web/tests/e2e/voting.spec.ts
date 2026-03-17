@@ -25,8 +25,8 @@ test('unverified user sees verification gate on poll page @smoke', async ({ page
   // Should see verification gate (user is signed up but not verified)
   await expect(page.getByText(/verify your identity/i)).toBeVisible({ timeout: 10_000 });
 
-  // Sliders should be disabled
-  await expect(page.locator('.mantine-Slider-root input').first()).toBeDisabled();
+  // Sliders should be disabled (Mantine v8 sets aria-disabled on the thumb div, not the hidden input)
+  await expect(page.locator('[role="slider"]').first()).toHaveAttribute('aria-disabled', 'true');
 
   // Screenshot: verification gate
   await test.info().attach('verification-gate', {
