@@ -1,5 +1,3 @@
-## How Your Keys Work
-
 TinyCongress uses cryptographic keys instead of traditional passwords to prove
 your identity. Your keys are generated in your browser and never leave your
 device — the server only sees the public half, which can verify your identity

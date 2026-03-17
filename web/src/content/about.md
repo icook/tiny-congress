@@ -1,5 +1,3 @@
-## About TinyCongress
-
 TinyCongress is an experimental platform for structured group decision-making.
 Instead of simple yes/no polls, participants vote across multiple dimensions —
 capturing the nuance of how people actually think about complex issues.

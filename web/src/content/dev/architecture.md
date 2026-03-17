@@ -1,5 +1,3 @@
-## System Components
-
 TinyCongress has four major pieces: a React frontend, a Rust API server, a
 background trust engine, and a shared crypto library that runs on both sides.
 
