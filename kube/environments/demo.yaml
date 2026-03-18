@@ -59,6 +59,8 @@ sim:
   openrouterModel: "meta-llama/llama-3.3-70b-instruct"
   evidenceModel: "deepseek/deepseek-v3.2"
   roomTopic: "brand_ethics"
+  llmBaseUrl: "http://litellm.tiny-congress-demo.svc.cluster.local:4001"
+  exaBaseUrl: "http://exa-cache.tiny-congress-demo.svc.cluster.local:4002"
   targetRooms: 5
   votesPerPoll: 15
   voterCount: 20

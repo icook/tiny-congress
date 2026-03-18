@@ -309,6 +309,7 @@ struct BatteryEvidence {
 pub async fn battery(
     http: &reqwest::Client,
     api_key: &str,
+    llm_base_url: &str,
     company_name: &str,
     ticker: &str,
     pairs: &[BatteryConfig],
@@ -329,6 +330,7 @@ pub async fn battery(
         let result = llm::generate_company_evidence_with_overrides(
             http,
             api_key,
+            llm_base_url,
             &pair.model,
             pair.search,
             company_name,
@@ -340,9 +342,10 @@ pub async fn battery(
         match result {
             Ok((evidence, usage, raw, generation_id)) => {
                 // Fetch cost from OpenRouter generation stats (async, best-effort)
-                let cost_usd = llm::get_generation_cost(http, api_key, &generation_id)
-                    .await
-                    .unwrap_or(None);
+                let cost_usd =
+                    llm::get_generation_cost(http, api_key, llm_base_url, &generation_id)
+                        .await
+                        .unwrap_or(None);
 
                 tracing::info!(
                     model = %pair.model,
