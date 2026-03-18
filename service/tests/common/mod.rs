@@ -88,6 +88,7 @@ pub mod test_db {
     use sqlx::Connection;
     use sqlx_core::migrate::Migrator;
     use std::future::Future;
+    use std::io::{Read as _, Write as _};
     use std::path::Path;
     use std::sync::Arc;
     use std::sync::LazyLock;
@@ -95,6 +96,18 @@ pub mod test_db {
     use testcontainers::{runners::AsyncRunner, ContainerAsync, GenericImage, ImageExt};
     use tokio::runtime::Runtime;
     use tokio::sync::OnceCell;
+
+    const STATE_FILE: &str = "/tmp/tc-test-postgres.json";
+    const LOCK_FILE: &str = "/tmp/tc-test-postgres.lock";
+
+    /// Connection info for a shared test container, persisted to disk
+    /// so multiple test binaries can reuse the same container.
+    #[derive(serde::Serialize, serde::Deserialize)]
+    struct SharedContainerInfo {
+        container_id: String,
+        host: String,
+        port: u16,
+    }
 
     /// Global Tokio runtime shared across all tests.
     /// This ensures async cleanup happens while the runtime is still alive.
