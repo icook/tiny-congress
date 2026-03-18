@@ -870,3 +870,107 @@ async fn test_endorsement_check_endpoint() {
     let body = json_body(response).await;
     assert_eq!(body["has_endorsement"], true);
 }
+
+// ─── Evidence in poll detail ──────────────────────────────────────────────────
+
+#[shared_runtime_test]
+async fn test_poll_detail_includes_evidence() {
+    use tinycongress_api::rooms::repo::evidence::{insert_evidence, NewEvidence};
+
+    let db = isolated_db().await;
+    let (app, keys, _) = signup_and_get_account("evidenceuser", db.pool()).await;
+
+    // Create room
+    let body = serde_json::json!({"name": "Evidence Room"}).to_string();
+    let req = build_authed_request(
+        Method::POST,
+        "/rooms",
+        &body,
+        &keys.device_signing_key,
+        &keys.device_kid,
+    );
+    let room = json_body(app.clone().oneshot(req).await.expect("response")).await;
+    let room_id = room["id"].as_str().expect("room_id");
+
+    // Create poll
+    let poll_body = serde_json::json!({"question": "Rate this company"}).to_string();
+    let req = build_authed_request(
+        Method::POST,
+        &format!("/rooms/{room_id}/polls"),
+        &poll_body,
+        &keys.device_signing_key,
+        &keys.device_kid,
+    );
+    let poll = json_body(app.clone().oneshot(req).await.expect("response")).await;
+    let poll_id = poll["id"].as_str().expect("poll_id");
+
+    // Add dimension
+    let dim_body = serde_json::json!({
+        "name": "Labor Practices",
+        "min_value": 0.0,
+        "max_value": 1.0,
+        "min_label": "Exploitative",
+        "max_label": "Exemplary"
+    })
+    .to_string();
+    let req = build_authed_request(
+        Method::POST,
+        &format!("/rooms/{room_id}/polls/{poll_id}/dimensions"),
+        &dim_body,
+        &keys.device_signing_key,
+        &keys.device_kid,
+    );
+    let dim = json_body(app.clone().oneshot(req).await.expect("response")).await;
+    let dim_id: uuid::Uuid = dim["id"].as_str().expect("dim_id").parse().expect("uuid");
+
+    // Insert evidence directly via repo
+    insert_evidence(
+        db.pool(),
+        dim_id,
+        &[
+            NewEvidence {
+                stance: "pro",
+                claim: "Offers above-minimum wages",
+                source: Some("https://example.com/wages"),
+            },
+            NewEvidence {
+                stance: "con",
+                claim: "Anti-union policies documented",
+                source: None,
+            },
+        ],
+    )
+    .await
+    .expect("insert evidence");
+
+    // GET poll detail
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri(format!("/rooms/{room_id}/polls/{poll_id}"))
+                .body(Body::empty())
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let detail = json_body(response).await;
+    assert_eq!(detail["poll"]["id"], poll_id);
+
+    let dims = detail["dimensions"].as_array().expect("dimensions array");
+    assert_eq!(dims.len(), 1);
+
+    let evidence = dims[0]["evidence"].as_array().expect("evidence array");
+    assert_eq!(evidence.len(), 2, "expected 2 evidence items");
+
+    // Evidence is ordered by stance DESC (pro before con), then created_at
+    let pro_item = evidence.iter().find(|e| e["stance"] == "pro").expect("pro");
+    assert_eq!(pro_item["claim"], "Offers above-minimum wages");
+    assert_eq!(pro_item["source"], "https://example.com/wages");
+    assert!(pro_item["id"].is_string());
+
+    let con_item = evidence.iter().find(|e| e["stance"] == "con").expect("con");
+    assert_eq!(con_item["claim"], "Anti-union policies documented");
+    assert!(con_item["source"].is_null());
+}
