@@ -3,6 +3,7 @@ export {
   useRoom,
   usePolls,
   usePollDetail,
+  useAgenda,
   usePollResults,
   usePollDistribution,
   useMyVotes,

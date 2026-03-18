@@ -6,6 +6,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { CryptoModule } from '@/providers/CryptoProvider';
 import {
   castVote,
+  getAgenda,
   getMyVotes,
   getPollDetail,
   getPollDistribution,
@@ -50,6 +51,16 @@ export function usePollDetail(roomId: string, pollId: string) {
     queryKey: ['poll-detail', pollId],
     queryFn: () => getPollDetail(roomId, pollId),
     enabled: Boolean(roomId && pollId),
+    refetchInterval: 20_000,
+  });
+}
+
+export function useAgenda(roomId: string) {
+  return useQuery<Poll[]>({
+    queryKey: ['agenda', roomId],
+    queryFn: () => getAgenda(roomId),
+    enabled: Boolean(roomId),
+    refetchInterval: 20_000,
   });
 }
 
