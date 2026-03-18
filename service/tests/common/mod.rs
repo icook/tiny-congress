@@ -65,6 +65,19 @@
 //! }
 //! ```
 //!
+//! ## Container Sharing
+//!
+//! A single Postgres container is shared across all test binaries in a
+//! `cargo test` run via a state file at `/tmp/tc-test-postgres.json`.
+//! The first binary to start creates the container; subsequent binaries
+//! reuse it via TCP health probe. This reduces container count from ~24
+//! to 1 during a full test run.
+//!
+//! To force a fresh container (e.g., after changing the postgres image):
+//! ```bash
+//! rm /tmp/tc-test-postgres.json
+//! ```
+//!
 //! # Why the shared runtime pattern?
 //!
 //! `#[tokio::test]` creates a runtime per test. When tests finish, async cleanup
@@ -76,6 +89,7 @@
 //!
 //! - `TEST_POSTGRES_IMAGE`: Override the postgres image (default: `tc-postgres:local`)
 //!   In CI, set to the GHCR image: `ghcr.io/icook/tiny-congress/postgres:$SHA`
+//! - `/tmp/tc-test-postgres.json`: Shared container state file. Delete to force a fresh container.
 
 pub mod app_builder;
 pub mod factories;
