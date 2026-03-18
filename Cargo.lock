@@ -3443,6 +3443,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "tc-engine-api"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "axum",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.17",
+ "uuid",
+]
+
+[[package]]
 name = "tc-test-macros"
 version = "0.1.0"
 dependencies = [
