@@ -14,4 +14,6 @@ data:
   SIM_VOTER_COUNT: {{ .Values.sim.voterCount | quote }}
   SIM_SYSTEM_PROMPT: {{ .Values.sim.systemPrompt | quote }}
   SIM_LOG_LEVEL: {{ .Values.sim.logLevel | quote }}
+  SIM_EVIDENCE_MODEL: {{ .Values.sim.evidenceModel | quote }}
+  SIM_ROOM_TOPIC: {{ .Values.sim.roomTopic | quote }}
 {{- end }}

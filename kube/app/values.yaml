@@ -259,6 +259,9 @@ sim:
   apiUrl: ""
   openrouterApiKey: ""
   openrouterModel: "anthropic/claude-sonnet-4-6"
+  evidenceModel: "deepseek/deepseek-v3.2"
+  exaApiKey: ""
+  roomTopic: "civic"
   targetRooms: 5
   votesPerPoll: 15
   voterCount: 20

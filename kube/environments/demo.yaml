@@ -57,6 +57,8 @@ sim:
   schedule: "*/30 * * * *"
   apiUrl: "http://tc-demo.tiny-congress-demo.svc.cluster.local:8080"
   openrouterModel: "meta-llama/llama-3.3-70b-instruct"
+  evidenceModel: "deepseek/deepseek-v3.2"
+  roomTopic: "brand_ethics"
   targetRooms: 5
   votesPerPoll: 15
   voterCount: 20
