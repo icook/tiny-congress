@@ -48,6 +48,32 @@ async fn main() -> Result<(), anyhow::Error> {
     // 3. Create HTTP client
     let http = reqwest::Client::new();
 
+    // Battery mode: compare model+search pairs for a single company
+    if let Some(ref battery_path) = config.battery_config {
+        let company = config
+            .battery_company
+            .as_deref()
+            .unwrap_or("Sysco Corporation");
+        let ticker = config.battery_ticker.as_deref().unwrap_or("SYY");
+
+        tracing::info!(
+            config = %battery_path,
+            company,
+            ticker,
+            "battery mode — comparing model+search pairs"
+        );
+
+        let pairs_json =
+            std::fs::read_to_string(battery_path).context("failed to read battery config")?;
+        let pairs: Vec<brand::BatteryConfig> =
+            serde_json::from_str(&pairs_json).context("failed to parse battery config")?;
+
+        tracing::info!(pairs = pairs.len(), "loaded battery config");
+        brand::battery(&http, &config.openrouter_api_key, company, ticker, &pairs).await?;
+        tracing::info!("tc-sim battery complete");
+        return Ok(());
+    }
+
     // Dry-run mode: generate LLM content only, no API calls
     if config.dry_run {
         tracing::info!("dry-run mode — generating content without API");

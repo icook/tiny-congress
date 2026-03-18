@@ -2,7 +2,7 @@
 //! Phase 2 (per-company evidence generation) to populate the Brand Ethics room.
 
 use anyhow::Context;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::sim::{
@@ -262,6 +262,147 @@ struct DryRunDimension {
 struct DryRunEvidence {
     stance: String,
     claim: String,
+}
+
+/// A model+search configuration pair for battery testing.
+#[derive(Debug, Deserialize)]
+pub struct BatteryConfig {
+    pub model: String,
+    pub search: bool,
+}
+
+#[derive(Serialize)]
+struct BatteryOutput {
+    company: String,
+    ticker: String,
+    runs: Vec<BatteryRun>,
+}
+
+#[derive(Serialize)]
+struct BatteryRun {
+    model: String,
+    search: bool,
+    token_usage: Usage,
+    evidence: BatteryEvidence,
+    raw_response: String,
+}
+
+#[derive(Serialize)]
+struct BatteryEvidence {
+    relevance_hook: String,
+    dimensions: Vec<DryRunDimension>,
+}
+
+/// Run a battery of model+search combinations for a single company.
+/// Writes a comparison JSON file for side-by-side evaluation.
+///
+/// `pairs` is a list of `(model, search_enabled)` to test.
+///
+/// # Errors
+///
+/// Returns an error if any LLM call fails or the output file can't be written.
+pub async fn battery(
+    http: &reqwest::Client,
+    api_key: &str,
+    company_name: &str,
+    ticker: &str,
+    pairs: &[BatteryConfig],
+) -> Result<(), anyhow::Error> {
+    let mut runs = Vec::with_capacity(pairs.len());
+
+    for (i, pair) in pairs.iter().enumerate() {
+        tracing::info!(
+            run = i + 1,
+            total = pairs.len(),
+            model = %pair.model,
+            search = pair.search,
+            company = company_name,
+            "running battery..."
+        );
+
+        let result = llm::generate_company_evidence_with_overrides(
+            http,
+            api_key,
+            &pair.model,
+            pair.search,
+            company_name,
+            ticker,
+        )
+        .await;
+
+        match result {
+            Ok((evidence, usage, raw)) => {
+                let dimensions: Vec<DryRunDimension> = DIMENSIONS
+                    .iter()
+                    .map(|(dim_name, min_label, max_label)| {
+                        let evidence_cards = evidence
+                            .dimensions
+                            .get(*dim_name)
+                            .map(|de| {
+                                let mut cards = Vec::new();
+                                for claim in &de.pro {
+                                    cards.push(DryRunEvidence {
+                                        stance: "pro".to_string(),
+                                        claim: claim.clone(),
+                                    });
+                                }
+                                for claim in &de.con {
+                                    cards.push(DryRunEvidence {
+                                        stance: "con".to_string(),
+                                        claim: claim.clone(),
+                                    });
+                                }
+                                cards
+                            })
+                            .unwrap_or_default();
+
+                        DryRunDimension {
+                            name: (*dim_name).to_string(),
+                            min_label: (*min_label).to_string(),
+                            max_label: (*max_label).to_string(),
+                            evidence: evidence_cards,
+                        }
+                    })
+                    .collect();
+
+                runs.push(BatteryRun {
+                    model: pair.model.clone(),
+                    search: pair.search,
+                    token_usage: usage,
+                    evidence: BatteryEvidence {
+                        relevance_hook: evidence.relevance_hook,
+                        dimensions,
+                    },
+                    raw_response: raw,
+                });
+            }
+            Err(e) => {
+                tracing::error!(
+                    model = %pair.model,
+                    search = pair.search,
+                    error = %e,
+                    "battery run failed"
+                );
+            }
+        }
+    }
+
+    let output = BatteryOutput {
+        company: company_name.to_string(),
+        ticker: ticker.to_string(),
+        runs,
+    };
+
+    let json =
+        serde_json::to_string_pretty(&output).context("failed to serialize battery output")?;
+    let path = format!(
+        "battery_{}.json",
+        company_name.to_lowercase().replace(' ', "_")
+    );
+    std::fs::write(&path, &json).context("failed to write battery output")?;
+
+    tracing::info!(path = %path, "battery complete — output written");
+    Ok(())
 }
 
 /// Run LLM generation only, no API calls. Writes results to a JSON file

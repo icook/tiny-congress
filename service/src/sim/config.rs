@@ -43,6 +43,16 @@ pub struct SimConfig {
     /// Dry run: only run LLM generation and write output to JSON file, skip API calls
     #[serde(default)]
     pub dry_run: bool,
+    /// Battery test: path to a JSON file with model+search pairs to compare.
+    /// Format: `[{"model": "anthropic/claude-sonnet-4-6", "search": true}, ...]`
+    #[serde(default)]
+    pub battery_config: Option<String>,
+    /// Company name for battery test (e.g., "Sysco Corporation")
+    #[serde(default)]
+    pub battery_company: Option<String>,
+    /// Ticker for battery test (e.g., "SYY")
+    #[serde(default)]
+    pub battery_ticker: Option<String>,
 }
 
 fn default_model() -> String {

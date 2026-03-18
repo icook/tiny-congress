@@ -70,6 +70,13 @@ struct ChatRequest {
     messages: Vec<ChatMessage>,
     response_format: ResponseFormat,
     temperature: f32,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    plugins: Vec<Plugin>,
+}
+
+#[derive(Debug, Serialize)]
+struct Plugin {
+    id: String,
 }
 
 /// A single chat message in the `OpenRouter` request/response.
@@ -244,6 +251,7 @@ pub async fn generate_content(
             r#type: "json_object".to_string(),
         },
         temperature: 0.9,
+        plugins: Vec::new(),
     };
 
     let response = client
@@ -511,6 +519,7 @@ pub async fn generate_company_curation(
             r#type: "json_object".to_string(),
         },
         temperature: 0.7,
+        plugins: Vec::new(),
     };
 
     let response = client
@@ -583,6 +592,7 @@ pub async fn generate_company_evidence(
             r#type: "json_object".to_string(),
         },
         temperature: 0.7,
+        plugins: Vec::new(),
     };
 
     let response = client
@@ -623,6 +633,79 @@ pub async fn generate_company_evidence(
     let evidence: CompanyEvidence = serde_json::from_str(&first_choice.message.content)?;
 
     Ok((evidence, usage))
+}
+
+/// Generate company evidence with explicit model and search overrides.
+/// Used by the battery test to compare outputs across model/search combinations.
+///
+/// # Errors
+///
+/// Returns an error if the HTTP request fails or the response cannot be parsed.
+pub async fn generate_company_evidence_with_overrides(
+    client: &reqwest::Client,
+    api_key: &str,
+    model: &str,
+    search: bool,
+    company_name: &str,
+    ticker: &str,
+) -> Result<(CompanyEvidence, Usage, String), anyhow::Error> {
+    let messages = build_brand_evidence_messages(company_name, ticker);
+
+    let plugins = if search {
+        vec![Plugin {
+            id: "web".to_string(),
+        }]
+    } else {
+        Vec::new()
+    };
+
+    let request = ChatRequest {
+        model: model.to_string(),
+        messages,
+        response_format: ResponseFormat {
+            r#type: "json_object".to_string(),
+        },
+        temperature: 0.7,
+        plugins,
+    };
+
+    let response = client
+        .post("https://openrouter.ai/api/v1/chat/completions")
+        .header("Authorization", format!("Bearer {api_key}"))
+        .json(&request)
+        .send()
+        .await?;
+
+    let status = response.status();
+    if !status.is_success() {
+        let body = response.text().await.unwrap_or_default();
+        return Err(anyhow::anyhow!("OpenRouter API returned {status}: {body}"));
+    }
+
+    let chat_response: ChatResponse = response.json().await?;
+
+    let usage = chat_response.usage.unwrap_or_default();
+    tracing::info!(
+        model,
+        search,
+        prompt_tokens = usage.prompt_tokens,
+        completion_tokens = usage.completion_tokens,
+        total_tokens = usage.total_tokens,
+        company_name,
+        "llm_call battery"
+    );
+
+    let first_choice = chat_response
+        .choices
+        .into_iter()
+        .next()
+        .ok_or_else(|| anyhow::anyhow!("OpenRouter returned empty choices array"))?;
+
+    // Return raw content alongside parsed evidence for comparison
+    let raw = first_choice.message.content.clone();
+    let evidence: CompanyEvidence = serde_json::from_str(&first_choice.message.content)?;
+
+    Ok((evidence, usage, raw))
 }
 
 // ---------------------------------------------------------------------------
@@ -727,6 +810,9 @@ mod tests {
             room_topic: "civic".to_string(),
             company_count: 25,
             dry_run: false,
+            battery_config: None,
+            battery_company: None,
+            battery_ticker: None,
         };
 
         let client = reqwest::Client::new();
@@ -752,6 +838,9 @@ mod tests {
             room_topic: "civic".to_string(),
             company_count: 25,
             dry_run: false,
+            battery_config: None,
+            battery_company: None,
+            battery_ticker: None,
         };
 
         let messages = build_messages(&config, 2);
