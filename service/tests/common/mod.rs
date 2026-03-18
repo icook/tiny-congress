@@ -149,14 +149,19 @@ pub mod test_db {
     }
 
     /// Check if a container is alive by attempting a TCP connection.
-    /// Returns true if the port is accepting connections.
+    /// Returns true if any resolved address accepts a connection.
     fn is_container_alive(host: &str, port: u16) -> bool {
-        let addr = format!("{host}:{port}");
-        std::net::TcpStream::connect_timeout(
-            &addr.parse().expect("invalid socket addr"),
-            Duration::from_secs(2),
-        )
-        .is_ok()
+        use std::net::ToSocketAddrs;
+        // Resolve hostname first — `connect_timeout` requires a `SocketAddr`,
+        // not a hostname string. Try all resolved addresses because `localhost`
+        // resolves to `::1` first on macOS, but Docker only binds IPv4 ports.
+        let addr_str = format!("{host}:{port}");
+        let Ok(addrs) = addr_str.to_socket_addrs() else {
+            return false;
+        };
+        addrs
+            .into_iter()
+            .any(|addr| std::net::TcpStream::connect_timeout(&addr, Duration::from_secs(2)).is_ok())
     }
 
     fn read_state_file() -> Option<SharedContainerInfo> {
