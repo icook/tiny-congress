@@ -932,7 +932,12 @@ async fn sim_mechanism_comparison() {
     let mut table = ComparisonTable::new();
 
     // --- Hub-and-spoke: can mechanisms remove spokes? ---
-    for mechanism_name in &["edge_removal", "score_penalty", "sponsorship_cascade"] {
+    for mechanism_name in &[
+        "edge_removal",
+        "score_penalty",
+        "sponsorship_cascade",
+        "denouncer_revocation",
+    ] {
         let db = isolated_db().await;
         let mut g = GraphBuilder::new(db.pool().clone());
 
@@ -946,6 +951,9 @@ async fn sim_mechanism_comparison() {
         g.endorse(bridge, hub, 0.3).await;
         let spoke = g.add_node("red_spoke_0", Team::Red).await;
         g.endorse(hub, spoke, 1.0).await;
+
+        // Denouncer for this scenario: bridge (the blue node that endorses hub)
+        let denouncer_id = bridge;
 
         // Before
         let before = SimulationReport::run(&g, anchor).await;
@@ -961,6 +969,10 @@ async fn sim_mechanism_comparison() {
             }
             "sponsorship_cascade" => {
                 mechanisms::apply_sponsorship_cascade(&mut g, hub, anchor, db.pool()).await
+            }
+            "denouncer_revocation" => {
+                mechanisms::apply_denouncer_revocation(&mut g, denouncer_id, hub, anchor, db.pool())
+                    .await
             }
             _ => unreachable!(),
         };
@@ -990,7 +1002,12 @@ async fn sim_mechanism_comparison() {
     }
 
     // --- Mercenary bot: can mechanisms remove a well-integrated attacker? ---
-    for mechanism_name in &["edge_removal", "score_penalty", "sponsorship_cascade"] {
+    for mechanism_name in &[
+        "edge_removal",
+        "score_penalty",
+        "sponsorship_cascade",
+        "denouncer_revocation",
+    ] {
         let db = isolated_db().await;
         let mut g = GraphBuilder::new(db.pool().clone());
 
@@ -1004,6 +1021,9 @@ async fn sim_mechanism_comparison() {
         g.endorse(blue_web[0], mercenary, 1.0).await;
         g.endorse(blue_web[3], mercenary, 1.0).await;
         g.endorse(blue_web[5], mercenary, 1.0).await;
+
+        // Denouncer for this scenario: blue_web[0] (one of the three endorsers)
+        let denouncer_id = blue_web[0];
 
         let before = SimulationReport::run(&g, anchor).await;
         before.materialize(db.pool()).await;
@@ -1021,6 +1041,16 @@ async fn sim_mechanism_comparison() {
             }
             "sponsorship_cascade" => {
                 mechanisms::apply_sponsorship_cascade(&mut g, mercenary, anchor, db.pool()).await
+            }
+            "denouncer_revocation" => {
+                mechanisms::apply_denouncer_revocation(
+                    &mut g,
+                    denouncer_id,
+                    mercenary,
+                    anchor,
+                    db.pool(),
+                )
+                .await
             }
             _ => unreachable!(),
         };
@@ -1078,7 +1108,12 @@ async fn sim_mechanism_comparison() {
 async fn sim_weaponization_resistance() {
     let mut table = ComparisonTable::new();
 
-    for mechanism_name in &["edge_removal", "score_penalty", "sponsorship_cascade"] {
+    for mechanism_name in &[
+        "edge_removal",
+        "score_penalty",
+        "sponsorship_cascade",
+        "denouncer_revocation",
+    ] {
         let db = isolated_db().await;
         let mut g = GraphBuilder::new(db.pool().clone());
 
@@ -1096,7 +1131,7 @@ async fn sim_weaponization_resistance() {
         g.endorse(bridge_c, blue_target, 1.0).await;
 
         // Red team: Sybil cluster (irrelevant to topology, but they "denounce")
-        let _red_hub = g.add_node("red_hub", Team::Red).await;
+        let red_hub = g.add_node("red_hub", Team::Red).await;
         for i in 0..5 {
             let _spoke = g.add_node(&format!("red_spoke_{i}"), Team::Red).await;
         }
@@ -1130,6 +1165,18 @@ async fn sim_weaponization_resistance() {
             }
             "sponsorship_cascade" => {
                 mechanisms::apply_sponsorship_cascade(&mut g, blue_target, anchor, db.pool()).await
+            }
+            // red_hub has NO edge to blue_target — denouncer revocation is a
+            // no-op. blue_target should survive unchanged.
+            "denouncer_revocation" => {
+                mechanisms::apply_denouncer_revocation(
+                    &mut g,
+                    red_hub,
+                    blue_target,
+                    anchor,
+                    db.pool(),
+                )
+                .await
             }
             _ => unreachable!(),
         };
@@ -1173,6 +1220,1094 @@ async fn sim_weaponization_resistance() {
 }
 
 // ---------------------------------------------------------------------------
+// Scenario 15: Coordinated denouncement
+//
+// Topology:
+//   anchor (blue) → bridge_a (blue) → target (red)
+//   anchor → bridge_b (blue) → target
+//   anchor → bridge_c (blue) → target
+//   anchor → bridge_d (blue) → target
+//
+// Target has diversity=4 initially (4 independent endorsers through 4
+// blue bridges). Three bridges (a, b, c) denounce target. This proves
+// denouncer-only revocation CAN remove bad actors when enough independent
+// actors agree.
+// ---------------------------------------------------------------------------
+#[shared_runtime_test]
+async fn sim_coordinated_denouncement() {
+    let db = isolated_db().await;
+    let mut g = GraphBuilder::new(db.pool().clone());
+
+    let anchor = g.add_node("anchor", Team::Blue).await;
+    let bridge_a = g.add_node("bridge_a", Team::Blue).await;
+    let bridge_b = g.add_node("bridge_b", Team::Blue).await;
+    let bridge_c = g.add_node("bridge_c", Team::Blue).await;
+    let bridge_d = g.add_node("bridge_d", Team::Blue).await;
+    let target = g.add_node("target", Team::Red).await;
+
+    g.endorse(anchor, bridge_a, 1.0).await;
+    g.endorse(anchor, bridge_b, 1.0).await;
+    g.endorse(anchor, bridge_c, 1.0).await;
+    g.endorse(anchor, bridge_d, 1.0).await;
+    g.endorse(bridge_a, target, 1.0).await;
+    g.endorse(bridge_b, target, 1.0).await;
+    g.endorse(bridge_c, target, 1.0).await;
+    g.endorse(bridge_d, target, 1.0).await;
+
+    // Before: target has diversity=4
+    let before = SimulationReport::run(&g, anchor).await;
+    before.materialize(db.pool()).await;
+    let before_div = before.diversity(target);
+    assert_eq!(
+        before_div, 4,
+        "Coordinated denouncement: target should start with diversity=4, got {before_div}"
+    );
+    let constraint = CommunityConstraint::new(anchor, 5.0, 2).expect("valid");
+    let before_elig = before
+        .check_eligibility(target, &constraint, db.pool())
+        .await;
+    assert!(
+        before_elig.is_eligible,
+        "Coordinated denouncement: target should start eligible"
+    );
+
+    // Three bridges denounce target (a, b, c)
+    // Each call revokes one edge and re-runs the engine; we only need the
+    // final report so intermediate results are discarded with `let _ =`.
+    let _ =
+        mechanisms::apply_denouncer_revocation(&mut g, bridge_a, target, anchor, db.pool()).await;
+    let _ =
+        mechanisms::apply_denouncer_revocation(&mut g, bridge_b, target, anchor, db.pool()).await;
+    let after =
+        mechanisms::apply_denouncer_revocation(&mut g, bridge_c, target, anchor, db.pool()).await;
+
+    eprintln!("\n=== Coordinated Denouncement (after 3 denouncements) ===\n{after}");
+
+    // Assert: target diversity drops from 4 → 1 (only bridge_d remains)
+    let after_div = after.diversity(target);
+    assert_eq!(
+        after_div, 1,
+        "Coordinated denouncement: target diversity should drop to 1, got {after_div}"
+    );
+
+    // Assert: target loses eligibility under CommunityConstraint(5.0, 2)
+    let after_elig = after
+        .check_eligibility(target, &constraint, db.pool())
+        .await;
+    assert!(
+        !after_elig.is_eligible,
+        "Coordinated denouncement: target should lose eligibility (diversity=1 < min=2)"
+    );
+
+    // Assert: bridge_d's edge remains (didn't denounce)
+    let bridge_d_edge_active = g
+        .all_edges()
+        .iter()
+        .any(|e| e.from == bridge_d && e.to == target && !e.revoked);
+    assert!(
+        bridge_d_edge_active,
+        "Coordinated denouncement: bridge_d's edge should remain active"
+    );
+
+    // Assert: no blue casualties — all blue nodes retain their scores
+    let blue_ids = g.nodes_by_team(Team::Blue);
+    let blue_casualties = blue_ids
+        .iter()
+        .filter(|&&id| before.diversity(id) >= 2 && after.diversity(id) < 2)
+        .count();
+    assert_eq!(
+        blue_casualties, 0,
+        "Coordinated denouncement: should have 0 blue casualties, got {blue_casualties}"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Scenario 16: Insufficient denouncement (single denouncer)
+//
+// Same topology as coordinated denouncement. Only bridge_a denounces.
+// Proves proportionality — a single actor cannot unilaterally remove a
+// well-connected node.
+// ---------------------------------------------------------------------------
+#[shared_runtime_test]
+async fn sim_insufficient_denouncement() {
+    let db = isolated_db().await;
+    let mut g = GraphBuilder::new(db.pool().clone());
+
+    let anchor = g.add_node("anchor", Team::Blue).await;
+    let bridge_a = g.add_node("bridge_a", Team::Blue).await;
+    let bridge_b = g.add_node("bridge_b", Team::Blue).await;
+    let bridge_c = g.add_node("bridge_c", Team::Blue).await;
+    let bridge_d = g.add_node("bridge_d", Team::Blue).await;
+    let target = g.add_node("target", Team::Red).await;
+
+    g.endorse(anchor, bridge_a, 1.0).await;
+    g.endorse(anchor, bridge_b, 1.0).await;
+    g.endorse(anchor, bridge_c, 1.0).await;
+    g.endorse(anchor, bridge_d, 1.0).await;
+    g.endorse(bridge_a, target, 1.0).await;
+    g.endorse(bridge_b, target, 1.0).await;
+    g.endorse(bridge_c, target, 1.0).await;
+    g.endorse(bridge_d, target, 1.0).await;
+
+    // Before: target has diversity=4
+    let before = SimulationReport::run(&g, anchor).await;
+    before.materialize(db.pool()).await;
+    let before_div = before.diversity(target);
+    assert_eq!(
+        before_div, 4,
+        "Insufficient denouncement: target should start with diversity=4, got {before_div}"
+    );
+
+    // Only bridge_a denounces
+    let after =
+        mechanisms::apply_denouncer_revocation(&mut g, bridge_a, target, anchor, db.pool()).await;
+
+    eprintln!("\n=== Insufficient Denouncement (1 of 4 denounce) ===\n{after}");
+
+    // Assert: target diversity drops from 4 → 3
+    let after_div = after.diversity(target);
+    assert_eq!(
+        after_div, 3,
+        "Insufficient denouncement: target diversity should drop to 3, got {after_div}"
+    );
+
+    // Assert: target RETAINS eligibility under CommunityConstraint(5.0, 2)
+    let constraint = CommunityConstraint::new(anchor, 5.0, 2).expect("valid");
+    let after_elig = after
+        .check_eligibility(target, &constraint, db.pool())
+        .await;
+    assert!(
+        after_elig.is_eligible,
+        "Insufficient denouncement: target should retain eligibility (diversity=3 >= min=2)"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Propagation comparison: denouncer mechanisms on mercenary-bot topology
+//
+// Topology:
+//   anchor (blue) → blue_web (6 nodes, healthy_web density=0.4, weight=1.0)
+//   anchor endorses blue_web[0], blue_web[1], blue_web[2]
+//   mercenary (red) ← endorsed by blue_web[0], blue_web[3], blue_web[5]
+//
+// Compare three denouncer mechanisms with blue_web[0] as denouncer:
+//   1. denouncer_revocation alone (target loses 1 path)
+//   2. denouncer_revocation_with_cascade (target loses 1 path + endorsers penalized)
+//   3. sponsorship_cascade (revokes ALL edges + penalties)
+// ---------------------------------------------------------------------------
+#[shared_runtime_test]
+async fn sim_propagation_comparison() {
+    let mut table = ComparisonTable::new();
+
+    for mechanism_name in &[
+        "denouncer_revocation",
+        "denouncer_revocation_with_cascade",
+        "sponsorship_cascade",
+    ] {
+        let db = isolated_db().await;
+        let mut g = GraphBuilder::new(db.pool().clone());
+
+        let anchor = g.add_node("anchor", Team::Blue).await;
+        let blue_web = topology::healthy_web(&mut g, "blue", Team::Blue, 6, 0.4, 1.0).await;
+        g.endorse(anchor, blue_web[0], 1.0).await;
+        g.endorse(anchor, blue_web[1], 1.0).await;
+        g.endorse(anchor, blue_web[2], 1.0).await;
+
+        let mercenary = g.add_node("mercenary", Team::Red).await;
+        g.endorse(blue_web[0], mercenary, 1.0).await;
+        g.endorse(blue_web[3], mercenary, 1.0).await;
+        g.endorse(blue_web[5], mercenary, 1.0).await;
+
+        // Before
+        let before = SimulationReport::run(&g, anchor).await;
+        before.materialize(db.pool()).await;
+        let constraint = CommunityConstraint::new(anchor, 5.0, 2).expect("valid");
+        let before_elig = before
+            .check_eligibility(mercenary, &constraint, db.pool())
+            .await;
+
+        // Apply mechanism (denouncer = blue_web[0])
+        let after = match *mechanism_name {
+            "denouncer_revocation" => {
+                mechanisms::apply_denouncer_revocation(
+                    &mut g,
+                    blue_web[0],
+                    mercenary,
+                    anchor,
+                    db.pool(),
+                )
+                .await
+            }
+            "denouncer_revocation_with_cascade" => {
+                mechanisms::apply_denouncer_revocation_with_cascade(
+                    &mut g,
+                    blue_web[0],
+                    mercenary,
+                    anchor,
+                    db.pool(),
+                )
+                .await
+            }
+            "sponsorship_cascade" => {
+                mechanisms::apply_sponsorship_cascade(&mut g, mercenary, anchor, db.pool()).await
+            }
+            _ => unreachable!(),
+        };
+        let after_elig = after
+            .check_eligibility(mercenary, &constraint, db.pool())
+            .await;
+
+        let blue_ids = g.nodes_by_team(Team::Blue);
+        let blue_casualties = blue_ids
+            .iter()
+            .filter(|&&id| {
+                let b_elig =
+                    before.diversity(id) >= 2 && before.distance(id).map_or(false, |d| d <= 5.0);
+                let a_elig =
+                    after.diversity(id) >= 2 && after.distance(id).map_or(false, |d| d <= 5.0);
+                b_elig && !a_elig
+            })
+            .count();
+
+        table.add(MechanismComparison {
+            scenario: "mercenary_propagation".to_string(),
+            mechanism: mechanism_name.to_string(),
+            target_name: "mercenary".to_string(),
+            before_distance: before.distance(mercenary),
+            before_diversity: before.diversity(mercenary),
+            before_eligible: before_elig.is_eligible,
+            after_distance: after.distance(mercenary),
+            after_diversity: after.diversity(mercenary),
+            after_eligible: after_elig.is_eligible,
+            blue_casualties,
+            blue_total: blue_ids.len(),
+            survived_weaponization: None,
+        });
+    }
+
+    eprintln!("\n=== Propagation Comparison ===\n{table}");
+    table
+        .write_to(std::path::Path::new(
+            "target/simulation/propagation_comparison.txt",
+        ))
+        .expect("write propagation comparison table");
+}
+
+// ---------------------------------------------------------------------------
+// Propagation depth (Q16): one-hop vs multi-hop cascade behavior
+//
+// Tests that cascade penalties apply only to direct (remaining) endorsers
+// of the target — they do NOT propagate further up the graph.
+//
+// Part 1: Chain where target has a single endorser who denounces.
+//   anchor → a → b → c → target (red)
+//   After c denounces target: c's edge revoked, no remaining endorsers,
+//   cascade has nothing to penalize beyond the revocation.
+//
+// Part 2: Chain where target has two endorsers; one denounces.
+//   anchor → a → b → c → target (red)
+//                 b → target
+//   After c denounces: c's edge revoked, b is remaining endorser → penalized.
+//   Verify: a is NOT penalized (cascade is one-hop, not recursive).
+// ---------------------------------------------------------------------------
+#[shared_runtime_test]
+async fn sim_propagation_depth() {
+    // --- Part 1: sole endorser denounces → no cascade targets ---
+    {
+        let db = isolated_db().await;
+        let mut g = GraphBuilder::new(db.pool().clone());
+
+        let anchor = g.add_node("anchor", Team::Blue).await;
+        let a = g.add_node("a", Team::Blue).await;
+        let b = g.add_node("b", Team::Blue).await;
+        let c = g.add_node("c", Team::Blue).await;
+        let target = g.add_node("target", Team::Red).await;
+        let extra = g.add_node("extra_endorser", Team::Blue).await;
+
+        g.endorse(anchor, a, 1.0).await;
+        g.endorse(a, b, 1.0).await;
+        g.endorse(b, c, 1.0).await;
+        g.endorse(c, target, 1.0).await;
+        // Give c diversity via an extra endorser
+        g.endorse(c, extra, 1.0).await;
+
+        let before = SimulationReport::run(&g, anchor).await;
+        before.materialize(db.pool()).await;
+
+        let c_dist_before = before.distance(c);
+        let c_div_before = before.diversity(c);
+
+        let after = mechanisms::apply_denouncer_revocation_with_cascade(
+            &mut g,
+            c,
+            target,
+            anchor,
+            db.pool(),
+        )
+        .await;
+
+        // Target should lose its only path
+        eprintln!("\n=== Propagation Depth Part 1 ===");
+        eprintln!(
+            "  target: distance {:?} → {:?}, diversity {} → {}",
+            before.distance(target),
+            after.distance(target),
+            before.diversity(target),
+            after.diversity(target),
+        );
+        // c was the only endorser; after revocation no remaining endorsers to penalize
+        // c itself should be unaffected by the cascade (cascade targets remaining endorsers,
+        // not the denouncer)
+        eprintln!(
+            "  c (denouncer): distance {:?} → {:?}, diversity {} → {}",
+            c_dist_before,
+            after.distance(c),
+            c_div_before,
+            after.diversity(c),
+        );
+        assert_eq!(
+            after.distance(c),
+            c_dist_before,
+            "Part 1: denouncer c should not be penalized"
+        );
+        assert_eq!(
+            after.diversity(c),
+            c_div_before,
+            "Part 1: denouncer c diversity should be unchanged"
+        );
+    }
+
+    // --- Part 2: two endorsers, one denounces → remaining gets penalty, upstream unaffected ---
+    {
+        let db = isolated_db().await;
+        let mut g = GraphBuilder::new(db.pool().clone());
+
+        let anchor = g.add_node("anchor", Team::Blue).await;
+        let a = g.add_node("a", Team::Blue).await;
+        let b = g.add_node("b", Team::Blue).await;
+        let c = g.add_node("c", Team::Blue).await;
+        let target = g.add_node("target", Team::Red).await;
+
+        g.endorse(anchor, a, 1.0).await;
+        g.endorse(a, b, 1.0).await;
+        g.endorse(b, c, 1.0).await;
+        g.endorse(c, target, 1.0).await;
+        g.endorse(b, target, 1.0).await; // b also endorses target
+
+        let before = SimulationReport::run(&g, anchor).await;
+        before.materialize(db.pool()).await;
+
+        let a_dist_before = before.distance(a);
+        let a_div_before = before.diversity(a);
+        let b_dist_before = before.distance(b).expect("b should be reachable");
+        let b_div_before = before.diversity(b);
+
+        let after = mechanisms::apply_denouncer_revocation_with_cascade(
+            &mut g,
+            c,
+            target,
+            anchor,
+            db.pool(),
+        )
+        .await;
+
+        eprintln!("\n=== Propagation Depth Part 2 ===");
+        eprintln!(
+            "  b (remaining endorser): distance {:?} → {:?}, diversity {} → {}",
+            Some(b_dist_before),
+            after.distance(b),
+            b_div_before,
+            after.diversity(b),
+        );
+        eprintln!(
+            "  a (upstream): distance {:?} → {:?}, diversity {} → {}",
+            a_dist_before,
+            after.distance(a),
+            a_div_before,
+            after.diversity(a),
+        );
+
+        // b should have been penalized (remaining endorser of target)
+        let b_dist_after = after.distance(b).expect("b should still be reachable");
+        assert!(
+            b_dist_after > b_dist_before,
+            "Part 2: b (remaining endorser) should have increased distance: {b_dist_before:.2} → {b_dist_after:.2}"
+        );
+        assert!(
+            after.diversity(b) < b_div_before,
+            "Part 2: b should have decreased diversity: {b_div_before} → {}",
+            after.diversity(b)
+        );
+
+        // a should be UNAFFECTED — cascade does not propagate upstream
+        assert_eq!(
+            after.distance(a),
+            a_dist_before,
+            "Part 2: a (upstream of b) should NOT be penalized — cascade is one-hop only"
+        );
+        assert_eq!(
+            after.diversity(a),
+            a_div_before,
+            "Part 2: a diversity should be unchanged"
+        );
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Circular cascade safety (Q19): penalties do not loop in ring topologies
+//
+// Topology:
+//   anchor (blue) → a (blue) → b (blue) → c (blue) → a  (ring)
+//   anchor → b  (gives b a direct anchor path)
+//   anchor → c  (gives c a direct anchor path)
+//
+// Apply denouncer_revocation_with_cascade(denouncer=c, target=a):
+//   - c→a edge revoked
+//   - Remaining endorsers of a: only the ring's remaining edges
+//   - Verify: penalties are one-shot, no recursive looping, each node
+//     penalized at most once
+// ---------------------------------------------------------------------------
+#[shared_runtime_test]
+async fn sim_circular_cascade_safety() {
+    let db = isolated_db().await;
+    let mut g = GraphBuilder::new(db.pool().clone());
+
+    let anchor = g.add_node("anchor", Team::Blue).await;
+    let a = g.add_node("ring_a", Team::Blue).await;
+    let b = g.add_node("ring_b", Team::Blue).await;
+    let c = g.add_node("ring_c", Team::Blue).await;
+
+    // Anchor connections — give each ring node a direct anchor path
+    g.endorse(anchor, a, 1.0).await;
+    g.endorse(anchor, b, 1.0).await;
+    g.endorse(anchor, c, 1.0).await;
+
+    // Ring: a→b→c→a
+    g.endorse(a, b, 1.0).await;
+    g.endorse(b, c, 1.0).await;
+    g.endorse(c, a, 1.0).await;
+
+    let before = SimulationReport::run(&g, anchor).await;
+    before.materialize(db.pool()).await;
+
+    let a_dist_before = before.distance(a).expect("a reachable");
+    let a_div_before = before.diversity(a);
+    let b_dist_before = before.distance(b).expect("b reachable");
+    let b_div_before = before.diversity(b);
+    let c_dist_before = before.distance(c).expect("c reachable");
+    let c_div_before = before.diversity(c);
+
+    eprintln!("\n=== Circular Cascade Safety (before) ===");
+    eprintln!(
+        "  a: d={a_dist_before:.2} div={a_div_before}  b: d={b_dist_before:.2} div={b_div_before}  c: d={c_dist_before:.2} div={c_div_before}"
+    );
+
+    // Denounce: c denounces a (revoke c→a, penalize remaining endorsers of a)
+    // Remaining endorsers of a after revoking c→a: anchor (anchor→a edge exists)
+    let after =
+        mechanisms::apply_denouncer_revocation_with_cascade(&mut g, c, a, anchor, db.pool()).await;
+
+    let a_dist_after = after.distance(a);
+    let a_div_after = after.diversity(a);
+    let b_dist_after = after.distance(b);
+    let b_div_after = after.diversity(b);
+    let c_dist_after = after.distance(c);
+    let c_div_after = after.diversity(c);
+
+    eprintln!("\n=== Circular Cascade Safety (after) ===");
+    eprintln!(
+        "  a: d={:?} div={a_div_after}  b: d={:?} div={b_div_after}  c: d={:?} div={c_div_after}",
+        a_dist_after, b_dist_after, c_dist_after,
+    );
+
+    // Verify: c (denouncer) is not penalized by cascade
+    assert_eq!(
+        c_dist_after,
+        Some(c_dist_before),
+        "Denouncer c should not be penalized"
+    );
+    assert_eq!(
+        c_div_after, c_div_before,
+        "Denouncer c diversity should be unchanged"
+    );
+
+    // Verify: b is not penalized (b does not endorse a)
+    assert_eq!(
+        b_dist_after,
+        Some(b_dist_before),
+        "b should not be penalized (b does not endorse a)"
+    );
+    assert_eq!(b_div_after, b_div_before, "b diversity should be unchanged");
+
+    // Verify: a loses the c→a path (diversity should drop by 1 from the
+    // engine recompute). The remaining endorser of a is anchor, which may
+    // get a cascade penalty but anchor is the context user and typically
+    // not in snapshots.
+    assert!(
+        a_div_after <= a_div_before,
+        "a should not gain diversity after losing c→a edge"
+    );
+
+    // Key safety property: no node's distance increased by more than the
+    // single cascade penalty (2.0). Runaway accumulation would show as
+    // distance increases >> 2.0.
+    for (name, dist_before, dist_after) in [
+        ("a", a_dist_before, a_dist_after),
+        ("b", b_dist_before, b_dist_after),
+        ("c", c_dist_before, c_dist_after),
+    ] {
+        if let Some(d_after) = dist_after {
+            let increase = d_after - dist_before;
+            assert!(
+                increase <= 2.5, // 2.0 penalty + small float tolerance
+                "Node {name}: distance increased by {increase:.2} (before={dist_before:.2}, after={d_after:.2}) — suggests runaway cascade"
+            );
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Penalty sweep (Q8/Q18): explore penalty value tradeoffs
+//
+// Tests different cascade penalty levels on the mercenary-bot topology
+// to find the sweet spot between effectiveness (mercenary loses eligibility)
+// and collateral damage (blue casualties).
+//
+// Sweep: (distance_penalty, diversity_penalty) =
+//   [(1.0, 1), (2.0, 1), (3.0, 1), (4.0, 2)]
+// ---------------------------------------------------------------------------
+#[shared_runtime_test]
+async fn sim_penalty_sweep() {
+    let penalty_levels: &[(f32, i32)] = &[(1.0, 1), (2.0, 1), (3.0, 1), (4.0, 2)];
+    let mut table = ComparisonTable::new();
+
+    for &(dist_penalty, div_penalty) in penalty_levels {
+        let db = isolated_db().await;
+        let mut g = GraphBuilder::new(db.pool().clone());
+
+        let anchor = g.add_node("anchor", Team::Blue).await;
+        let blue_web = topology::healthy_web(&mut g, "blue", Team::Blue, 6, 0.4, 1.0).await;
+        g.endorse(anchor, blue_web[0], 1.0).await;
+        g.endorse(anchor, blue_web[1], 1.0).await;
+        g.endorse(anchor, blue_web[2], 1.0).await;
+
+        let mercenary = g.add_node("mercenary", Team::Red).await;
+        g.endorse(blue_web[0], mercenary, 1.0).await;
+        g.endorse(blue_web[3], mercenary, 1.0).await;
+        g.endorse(blue_web[5], mercenary, 1.0).await;
+
+        // Before
+        let before = SimulationReport::run(&g, anchor).await;
+        before.materialize(db.pool()).await;
+        let constraint = CommunityConstraint::new(anchor, 5.0, 2).expect("valid");
+        let before_elig = before
+            .check_eligibility(mercenary, &constraint, db.pool())
+            .await;
+
+        // Apply denouncer_revocation_with_cascade using parameterized penalties
+        let after = mechanisms::apply_denouncer_revocation_with_cascade_params(
+            &mut g,
+            blue_web[0],
+            mercenary,
+            anchor,
+            db.pool(),
+            dist_penalty,
+            div_penalty,
+        )
+        .await;
+        let after_elig = after
+            .check_eligibility(mercenary, &constraint, db.pool())
+            .await;
+
+        let blue_ids = g.nodes_by_team(Team::Blue);
+        let blue_casualties = blue_ids
+            .iter()
+            .filter(|&&id| {
+                let b_elig =
+                    before.diversity(id) >= 2 && before.distance(id).map_or(false, |d| d <= 5.0);
+                let a_elig =
+                    after.diversity(id) >= 2 && after.distance(id).map_or(false, |d| d <= 5.0);
+                b_elig && !a_elig
+            })
+            .count();
+
+        let mech_label = format!("cascade(d+{dist_penalty:.0},div-{div_penalty})");
+        table.add(MechanismComparison {
+            scenario: "penalty_sweep".to_string(),
+            mechanism: mech_label,
+            target_name: "mercenary".to_string(),
+            before_distance: before.distance(mercenary),
+            before_diversity: before.diversity(mercenary),
+            before_eligible: before_elig.is_eligible,
+            after_distance: after.distance(mercenary),
+            after_diversity: after.diversity(mercenary),
+            after_eligible: after_elig.is_eligible,
+            blue_casualties,
+            blue_total: blue_ids.len(),
+            survived_weaponization: None,
+        });
+    }
+
+    eprintln!("\n=== Penalty Sweep (Q8/Q18) ===\n{table}");
+    table
+        .write_to(std::path::Path::new("target/simulation/penalty_sweep.txt"))
+        .expect("write penalty sweep table");
+}
+
+// ---------------------------------------------------------------------------
+// Step 7: Mixed-weight adversarial scenarios (ADR-023 weight table)
+//
+// Three variants of baseline adversarial scenarios where edge weights use
+// ADR-023 table values (1.0/0.49/0.2/0.1) instead of uniform 1.0.
+// Validates that weight manipulation cannot overcome structural defenses.
+// ---------------------------------------------------------------------------
+
+// Scenario A: Hub-and-spoke with mixed weights
+//
+// Topology:
+//   anchor → bridge at 1.0 (QR/years)
+//   bridge → red_hub at 0.2 (text/acquaintance — social referral)
+//   red_hub → 5 spokes at 1.0 (attacker claims max weight — worst case for Q6)
+//
+// The weaker bridge→hub edge (0.2 vs 0.3 in baseline) pushes distance higher.
+// Spokes still have diversity=1 regardless of weight.
+#[shared_runtime_test]
+async fn sim_mixed_weight_hub_and_spoke() {
+    let db = isolated_db().await;
+    let mut g = GraphBuilder::new(db.pool().clone());
+
+    // Blue team
+    let anchor = g.add_node("anchor", Team::Blue).await;
+    let bridge = g.add_node("bridge", Team::Blue).await;
+    g.endorse(anchor, bridge, 1.0).await; // QR/years
+
+    // Red team: hub attached via text/acquaintance weight
+    let hub = g.add_node("red_hub", Team::Red).await;
+    g.endorse(bridge, hub, 0.2).await; // text message / acquaintance
+
+    let mut spokes = Vec::new();
+    for i in 0..5 {
+        let spoke = g.add_node(&format!("red_spoke_{i}"), Team::Red).await;
+        g.endorse(hub, spoke, 1.0).await; // attacker claims max weight
+        spokes.push(spoke);
+    }
+
+    let report = SimulationReport::run(&g, anchor).await;
+    eprintln!("\n=== Mixed Weight: Hub-and-Spoke ===\n{report}");
+
+    // Assert: all spokes have diversity=1 (structural, not weight-dependent)
+    for &spoke in &spokes {
+        let div = report.diversity(spoke);
+        assert_eq!(
+            div, 1,
+            "Mixed weight hub-and-spoke: spoke should have diversity=1, got {div}"
+        );
+    }
+
+    // Assert: spokes have higher distance than uniform case
+    // Uniform case: anchor(1.0)→bridge(1/0.3≈3.33)→hub(1.0)→spoke ≈ 5.33
+    // Mixed case: anchor(1.0)→bridge(1/0.2=5.0)→hub(1.0)→spoke = 7.0
+    for &spoke in &spokes {
+        let dist = report.distance(spoke).expect("spoke should be reachable");
+        assert!(
+            dist > 5.5,
+            "Mixed weight: spoke distance should exceed uniform case (~5.33), got {dist:.3}"
+        );
+    }
+
+    // Pipeline: all spokes rejected by CommunityConstraint
+    report.materialize(db.pool()).await;
+    let constraint = CommunityConstraint::new(anchor, 5.0, 2).expect("valid constraint");
+    for &spoke in &spokes {
+        let eligibility = report
+            .check_eligibility(spoke, &constraint, db.pool())
+            .await;
+        assert!(
+            !eligibility.is_eligible,
+            "Mixed weight hub-and-spoke: spoke should be rejected by CommunityConstraint"
+        );
+    }
+
+    // Denouncer revocation: bridge denounces hub, spokes lose reachability
+    let after =
+        mechanisms::apply_denouncer_revocation(&mut g, bridge, hub, anchor, db.pool()).await;
+    for &spoke in &spokes {
+        let dist_after = after.distance(spoke);
+        assert!(
+            dist_after.is_none(),
+            "After denouncement: spoke should be unreachable (bridge was only path to hub)"
+        );
+    }
+}
+
+// Scenario B: Mercenary bot with mixed weights
+//
+// Topology:
+//   anchor → 3 direct endorsements at 1.0
+//   blue_web (6 nodes, healthy_web density=0.4, weight=0.49 — video call level)
+//   mercenary ← endorsed by blue_web[0] at 0.49, blue_web[3] at 0.2, blue_web[5] at 0.1
+//
+// Mercenary's endorsement edges use realistic ADR-023 weights instead of uniform 1.0.
+// Distance should be higher than uniform case; check if still passes CommunityConstraint.
+#[shared_runtime_test]
+async fn sim_mixed_weight_mercenary() {
+    let db = isolated_db().await;
+    let mut g = GraphBuilder::new(db.pool().clone());
+
+    let anchor = g.add_node("anchor", Team::Blue).await;
+
+    // Blue web at video-call weight (0.49)
+    let blue_web = topology::healthy_web(&mut g, "blue", Team::Blue, 6, 0.4, 0.49).await;
+    g.endorse(anchor, blue_web[0], 1.0).await;
+    g.endorse(anchor, blue_web[1], 1.0).await;
+    g.endorse(anchor, blue_web[2], 1.0).await;
+
+    // Mercenary with mixed endorsement weights
+    let mercenary = g.add_node("mercenary", Team::Red).await;
+    g.endorse(blue_web[0], mercenary, 0.49).await; // video call
+    g.endorse(blue_web[3], mercenary, 0.2).await; // text message
+    g.endorse(blue_web[5], mercenary, 0.1).await; // email link
+
+    let report = SimulationReport::run(&g, anchor).await;
+    eprintln!("\n=== Mixed Weight: Mercenary Bot ===\n{report}");
+
+    // Mercenary distance should be higher than uniform case (baseline was < 4.0)
+    let merc_dist = report
+        .distance(mercenary)
+        .expect("mercenary should be reachable");
+    eprintln!("  Mercenary distance: {merc_dist:.3} (uniform baseline was < 4.0)");
+
+    // Check diversity — may be lower due to weaker edges making some paths
+    // exceed cutoff. The structural diversity depends on which blue_web nodes
+    // are reachable from anchor.
+    let merc_div = report.diversity(mercenary);
+    eprintln!("  Mercenary diversity: {merc_div}");
+
+    // Pipeline: check eligibility with CommunityConstraint
+    report.materialize(db.pool()).await;
+    let constraint = CommunityConstraint::new(anchor, 5.0, 2).expect("valid constraint");
+    let eligibility = report
+        .check_eligibility(mercenary, &constraint, db.pool())
+        .await;
+    eprintln!(
+        "  Mercenary eligible (CommunityConstraint 5.0/2): {}",
+        eligibility.is_eligible
+    );
+
+    // Denouncer revocation: blue_web[0] denounces mercenary
+    let after =
+        mechanisms::apply_denouncer_revocation(&mut g, blue_web[0], mercenary, anchor, db.pool())
+            .await;
+    let after_div = after.diversity(mercenary);
+    let after_elig = after
+        .check_eligibility(mercenary, &constraint, db.pool())
+        .await;
+    eprintln!(
+        "  After denouncement: diversity={after_div}, eligible={}",
+        after_elig.is_eligible
+    );
+
+    // After losing the strongest endorsement (0.49 from blue_web[0]),
+    // mercenary should lose eligibility or have reduced scores
+    assert!(
+        after_div < merc_div || !after_elig.is_eligible,
+        "After denouncement: mercenary should have reduced diversity or lost eligibility"
+    );
+}
+
+// Scenario C: Colluding ring with mixed weights
+//
+// Topology:
+//   anchor → bridge at 1.0
+//   bridge → ring[0] at 0.2 (social referral / text message)
+//   ring internally: all edges at 1.0 (attackers claim max weight)
+//
+// Ring nodes have diversity=1 regardless of weight — the structural bottleneck
+// (single bridge) is what matters, not the edge weights.
+#[shared_runtime_test]
+async fn sim_mixed_weight_colluding_ring() {
+    let db = isolated_db().await;
+    let mut g = GraphBuilder::new(db.pool().clone());
+
+    // Blue team
+    let anchor = g.add_node("anchor", Team::Blue).await;
+    let bridge = g.add_node("bridge", Team::Blue).await;
+    g.endorse(anchor, bridge, 1.0).await;
+
+    // Red team: colluding ring with max internal weight
+    let ring = topology::colluding_ring(&mut g, "red", Team::Red, 6, 1.0).await;
+    // Attach via text-message-level weight (social referral)
+    g.endorse(bridge, ring[0], 0.2).await;
+
+    let report = SimulationReport::run(&g, anchor).await;
+    eprintln!("\n=== Mixed Weight: Colluding Ring ===\n{report}");
+
+    // Assert: all reachable ring nodes have diversity=1 regardless of internal
+    // weight. Unreachable nodes (beyond distance cutoff) get diversity=0.
+    for red in report.red_nodes() {
+        if red.distance.is_some() {
+            assert_eq!(
+                red.diversity, 1,
+                "Mixed weight ring: reachable node '{}' should have diversity=1, got {}",
+                red.name, red.diversity
+            );
+        } else {
+            // Unreachable nodes are even more blocked — diversity=0
+            assert_eq!(
+                red.diversity, 0,
+                "Mixed weight ring: unreachable node '{}' should have diversity=0, got {}",
+                red.name, red.diversity
+            );
+        }
+    }
+
+    // Assert: ring[0] is reachable at higher distance than uniform case
+    // Uniform: anchor(1.0)→bridge(1/0.3≈3.33)→ring[0] ≈ 4.33
+    // Mixed: anchor(1.0)→bridge(1/0.2=5.0)→ring[0] = 6.0
+    let ring0_dist = report
+        .distance(ring[0])
+        .expect("ring[0] should be reachable");
+    assert!(
+        ring0_dist > 4.5,
+        "Mixed weight ring: ring[0] distance should exceed uniform case, got {ring0_dist:.3}"
+    );
+
+    // Some ring nodes may be unreachable due to weaker bridge weight pushing
+    // them beyond the distance cutoff — this is even stronger protection.
+    let unreachable_count = report
+        .red_nodes()
+        .iter()
+        .filter(|n| n.distance.is_none())
+        .count();
+    eprintln!(
+        "  Ring nodes beyond cutoff: {unreachable_count}/{}",
+        report.red_nodes().len()
+    );
+
+    // Pipeline: all ring nodes rejected by CommunityConstraint (diversity=1 < 2)
+    report.materialize(db.pool()).await;
+    let constraint = CommunityConstraint::new(anchor, 5.0, 2).expect("valid constraint");
+    for red in report.red_nodes() {
+        let eligibility = report
+            .check_eligibility(red.id, &constraint, db.pool())
+            .await;
+        assert!(
+            !eligibility.is_eligible,
+            "Mixed weight ring: node '{}' should be rejected by CommunityConstraint",
+            red.name
+        );
+    }
+
+    // Denouncer revocation: bridge denounces ring[0], entire ring disconnected
+    let after =
+        mechanisms::apply_denouncer_revocation(&mut g, bridge, ring[0], anchor, db.pool()).await;
+    for red in after.red_nodes() {
+        assert!(
+            red.distance.is_none(),
+            "After denouncement: ring node '{}' should be unreachable",
+            red.name
+        );
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Step 8: Parameterized weight sweep for mercenary scenario
+//
+// Varies the weight of mercenary's 3 endorsement edges from 0.1 to 1.0 in
+// 0.1 increments. Records distance, diversity, eligibility, and post-denouncement
+// eligibility at each level.
+//
+// Acceptance criterion: all adversarial scenarios still produce the expected
+// outcome (red blocked or detected) across the weight range.
+// ---------------------------------------------------------------------------
+#[shared_runtime_test]
+async fn sim_weight_sweep_mercenary() {
+    eprintln!("\n=== Weight Sweep: Mercenary Bot ===");
+    eprintln!(
+        "{:<8} {:>10} {:>10} {:>10} {:>12}",
+        "Weight", "Distance", "Diversity", "Eligible?", "Post-Denounce"
+    );
+    eprintln!(
+        "{:<8} {:>10} {:>10} {:>10} {:>12}",
+        "------", "--------", "---------", "---------", "------------"
+    );
+
+    for weight_level in 1..=10 {
+        #[allow(clippy::cast_precision_loss)]
+        let weight = weight_level as f32 * 0.1;
+
+        let db = isolated_db().await;
+        let mut g = GraphBuilder::new(db.pool().clone());
+
+        let anchor = g.add_node("anchor", Team::Blue).await;
+        let constraint = CommunityConstraint::new(anchor, 5.0, 2).expect("valid constraint");
+        let blue_web = topology::healthy_web(&mut g, "blue", Team::Blue, 6, 0.4, 1.0).await;
+        g.endorse(anchor, blue_web[0], 1.0).await;
+        g.endorse(anchor, blue_web[1], 1.0).await;
+        g.endorse(anchor, blue_web[2], 1.0).await;
+
+        // Mercenary with uniform weight at current sweep level
+        let mercenary = g.add_node("mercenary", Team::Red).await;
+        g.endorse(blue_web[0], mercenary, weight).await;
+        g.endorse(blue_web[3], mercenary, weight).await;
+        g.endorse(blue_web[5], mercenary, weight).await;
+
+        let report = SimulationReport::run(&g, anchor).await;
+        report.materialize(db.pool()).await;
+
+        let dist = report.distance(mercenary);
+        let div = report.diversity(mercenary);
+        let elig = report
+            .check_eligibility(mercenary, &constraint, db.pool())
+            .await;
+
+        // Apply denouncer revocation (blue_web[0] denounces)
+        let after = mechanisms::apply_denouncer_revocation(
+            &mut g,
+            blue_web[0],
+            mercenary,
+            anchor,
+            db.pool(),
+        )
+        .await;
+        let post_elig = after
+            .check_eligibility(mercenary, &constraint, db.pool())
+            .await;
+
+        let dist_str = dist.map_or_else(|| "unreach".to_string(), |d| format!("{d:.3}"));
+        eprintln!(
+            "{:<8.1} {:>10} {:>10} {:>10} {:>12}",
+            weight, dist_str, div, elig.is_eligible, !post_elig.is_eligible
+        );
+    }
+
+    // The sweep itself is diagnostic — the key assertion is that denouncer
+    // revocation always reduces the mercenary's score regardless of weight.
+    // Re-run at max weight (1.0) as the critical test case:
+    let db = isolated_db().await;
+    let mut g = GraphBuilder::new(db.pool().clone());
+
+    let anchor = g.add_node("anchor", Team::Blue).await;
+    let blue_web = topology::healthy_web(&mut g, "blue", Team::Blue, 6, 0.4, 1.0).await;
+    g.endorse(anchor, blue_web[0], 1.0).await;
+    g.endorse(anchor, blue_web[1], 1.0).await;
+    g.endorse(anchor, blue_web[2], 1.0).await;
+
+    let mercenary = g.add_node("mercenary", Team::Red).await;
+    g.endorse(blue_web[0], mercenary, 1.0).await;
+    g.endorse(blue_web[3], mercenary, 1.0).await;
+    g.endorse(blue_web[5], mercenary, 1.0).await;
+
+    let before = SimulationReport::run(&g, anchor).await;
+    before.materialize(db.pool()).await;
+    let before_div = before.diversity(mercenary);
+
+    let after =
+        mechanisms::apply_denouncer_revocation(&mut g, blue_web[0], mercenary, anchor, db.pool())
+            .await;
+    let after_div = after.diversity(mercenary);
+
+    assert!(
+        after_div < before_div,
+        "At max weight: denouncer revocation should reduce diversity ({before_div} -> {after_div})"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Step 9: Max-weight Sybil diversity check (closes Q6)
+//
+// Topology:
+//   anchor → bridge at 1.0 (max weight)
+//   bridge → red_hub at 1.0 (max weight — worst case)
+//   red_hub → 5 spokes at 1.0 (max weight)
+//
+// All edges at maximum weight (1.0) give the shortest possible distance.
+// Despite minimal distance, spokes still fail diversity check because
+// they have only one endorser (hub). This closes Q6: the DB weight cap +
+// fixed slot cost + diversity metric together bound the damage from
+// gameable self-reporting. Weight manipulation cannot overcome diversity.
+// ---------------------------------------------------------------------------
+#[shared_runtime_test]
+async fn sim_max_weight_sybil_diversity_check() {
+    let db = isolated_db().await;
+    let mut g = GraphBuilder::new(db.pool().clone());
+
+    // All edges at maximum weight — worst case for weight gaming
+    let anchor = g.add_node("anchor", Team::Blue).await;
+    let bridge = g.add_node("bridge", Team::Blue).await;
+    g.endorse(anchor, bridge, 1.0).await;
+
+    let hub = g.add_node("red_hub", Team::Red).await;
+    g.endorse(bridge, hub, 1.0).await; // max weight — shortest distance
+
+    let mut spokes = Vec::new();
+    for i in 0..5 {
+        let spoke = g.add_node(&format!("red_spoke_{i}"), Team::Red).await;
+        g.endorse(hub, spoke, 1.0).await; // max weight
+        spokes.push(spoke);
+    }
+
+    let report = SimulationReport::run(&g, anchor).await;
+    eprintln!("\n=== Max Weight Sybil Diversity Check ===\n{report}");
+
+    // Assert: all spokes have diversity=1 (only endorsed by hub)
+    // Weight=1.0 does NOT grant additional diversity.
+    for &spoke in &spokes {
+        let div = report.diversity(spoke);
+        assert_eq!(
+            div, 1,
+            "Max weight Sybil: spoke should have diversity=1, got {div}"
+        );
+    }
+
+    // Assert: distance is minimized at max weight
+    // anchor→bridge(1.0) + bridge→hub(1.0) + hub→spoke(1.0) = 3.0
+    for &spoke in &spokes {
+        let dist = report.distance(spoke).expect("spoke should be reachable");
+        assert!(
+            (dist - 3.0).abs() < 0.01,
+            "Max weight: spoke distance should be 3.0 (minimum possible), got {dist:.3}"
+        );
+    }
+
+    // Pipeline: diversity is the binding constraint, not distance.
+    // Spokes at distance=3.0 pass the distance check (3.0 <= 5.0) but
+    // fail diversity (1 < 2).
+    report.materialize(db.pool()).await;
+    let constraint = CommunityConstraint::new(anchor, 5.0, 2).expect("valid constraint");
+    for &spoke in &spokes {
+        let eligibility = report
+            .check_eligibility(spoke, &constraint, db.pool())
+            .await;
+        assert!(
+            !eligibility.is_eligible,
+            "Max weight Sybil: spoke should FAIL CommunityConstraint despite short distance \
+             (diversity=1 < min_diversity=2)"
+        );
+    }
+
+    // Verify hub also fails (diversity=1, only path through bridge)
+    let hub_div = report.diversity(hub);
+    assert_eq!(
+        hub_div, 1,
+        "Max weight Sybil: hub should have diversity=1, got {hub_div}"
+    );
+    let hub_elig = report.check_eligibility(hub, &constraint, db.pool()).await;
+    assert!(
+        !hub_elig.is_eligible,
+        "Max weight Sybil: hub should FAIL CommunityConstraint (diversity=1 < 2)"
+    );
+
+    // Q6 conclusion: weight=1.0 gives distance=3.0 (the minimum for 3 hops),
+    // but diversity=1 blocks eligibility. The DB weight cap (0 < weight <= 1.0)
+    // ensures minimum cost=1.0 per hop, and the diversity metric ensures
+    // structural independence that weight cannot fake.
+    eprintln!(
+        "\n  Q6 closed: max weight produces min distance=3.0, but diversity=1 \
+         blocks all spokes. Weight manipulation cannot overcome the diversity check."
+    );
+}
+
 // Predicate test 1: hub-and-spoke invariants
 //
 // Builds the same hub-and-spoke topology as Scenario 1 but asserts via
@@ -1186,7 +2321,6 @@ async fn sim_predicate_hub_spoke_invariants() {
     let anchor = g.add_node("anchor", Team::Blue).await;
     let bridge = g.add_node("bridge", Team::Blue).await;
     g.endorse(anchor, bridge, 1.0).await;
-
     let hub = g.add_node("red_hub", Team::Red).await;
     g.endorse(bridge, hub, 0.3).await;
     for i in 0..5 {

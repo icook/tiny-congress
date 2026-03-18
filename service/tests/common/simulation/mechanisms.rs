@@ -68,9 +68,12 @@ pub async fn apply_score_penalty(
 
 /// Mechanism 4: Denouncer-only edge revocation (ADR-024).
 ///
-/// Revokes a single directed edge from `denouncer` to `target`, models
-/// the side-effect of a denouncement on the denouncer's endorsement.
-/// Re-runs the engine and materializes scores.
+/// Only revokes the denouncer→target edge. The denouncer is saying "I no longer
+/// vouch for this person." A single denouncement costs the target one path, not
+/// all of them — proportionate and weaponization-resistant.
+///
+/// If no active edge exists from denouncer→target, this is a no-op —
+/// a node cannot revoke an endorsement it never made.
 pub async fn apply_denouncer_revocation(
     g: &mut GraphBuilder,
     denouncer: Uuid,
@@ -78,7 +81,7 @@ pub async fn apply_denouncer_revocation(
     anchor: Uuid,
     pool: &PgPool,
 ) -> SimulationReport {
-    // Revoke only the denouncer→target edge (if active)
+    // Check if an active edge exists from denouncer → target
     let has_edge = g
         .all_edges()
         .iter()
@@ -88,6 +91,66 @@ pub async fn apply_denouncer_revocation(
     }
     let report = SimulationReport::run(g, anchor).await;
     report.materialize(pool).await;
+    report
+}
+
+/// Mechanism 3b: Denouncer-only revocation + sponsorship cascade.
+///
+/// Revokes the denouncer→target edge, THEN applies cascade penalties to
+/// remaining endorsers of the target. Combines the proportionality of
+/// denouncer-only with the "risk of endorsement" consequence.
+pub async fn apply_denouncer_revocation_with_cascade(
+    g: &mut GraphBuilder,
+    denouncer: Uuid,
+    target: Uuid,
+    anchor: Uuid,
+    pool: &PgPool,
+) -> SimulationReport {
+    apply_denouncer_revocation_with_cascade_params(g, denouncer, target, anchor, pool, 2.0, 1).await
+}
+
+/// Mechanism 3b (parameterized): Denouncer revocation with configurable cascade.
+///
+/// Same as `apply_denouncer_revocation_with_cascade` but with configurable
+/// penalty values for parameter sweeps.
+pub async fn apply_denouncer_revocation_with_cascade_params(
+    g: &mut GraphBuilder,
+    denouncer: Uuid,
+    target: Uuid,
+    anchor: Uuid,
+    pool: &PgPool,
+    distance_penalty: f32,
+    diversity_penalty: i32,
+) -> SimulationReport {
+    // Revoke denouncer→target edge
+    g.revoke(denouncer, target).await;
+    // Re-run engine with the edge revoked
+    let mut report = SimulationReport::run(g, anchor).await;
+    report.materialize(pool).await;
+    // Find remaining endorsers of target (active inbound edges after revocation)
+    let remaining_endorsers: Vec<Uuid> = g
+        .all_edges()
+        .iter()
+        .filter(|e| e.to == target && !e.revoked)
+        .map(|e| e.from)
+        .collect();
+    // Apply penalty to remaining endorsers' snapshots
+    for &endorser in &remaining_endorsers {
+        sqlx::query(
+            "UPDATE trust__score_snapshots \
+             SET trust_distance = COALESCE(trust_distance, 0) + $1, \
+                 path_diversity = GREATEST(COALESCE(path_diversity, 0) - $2, 0) \
+             WHERE user_id = $3 AND context_user_id = $4",
+        )
+        .bind(distance_penalty)
+        .bind(diversity_penalty)
+        .bind(endorser)
+        .bind(anchor)
+        .execute(pool)
+        .await
+        .expect("cascade penalty UPDATE failed");
+    }
+    report.refresh_from_snapshot(pool).await;
     report
 }
 
