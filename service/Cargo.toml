@@ -79,10 +79,11 @@ hyper = "1.6"
 insta = { version = "1.41", features = ["json", "redactions"] }
 proptest = "1"
 tower = { version = "0.5", features = ["util"] }
-testcontainers = "0.26"
+testcontainers = { version = "0.26", features = ["watchdog"] }
 tokio = { version = "1", features = ["sync", "rt-multi-thread"] }
 tc-test-macros = { path = "../crates/test-macros", version = "0.1.0" }
 tinycongress-api = { path = ".", version = "0.1.0", features = ["test-utils"] }
+libc = "0.2"
 
 [[bin]]
 name = "export_schema"
