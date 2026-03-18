@@ -9,6 +9,8 @@ export {
   useMyVotes,
   useCastVote,
 } from './api/queries';
+export { usePollCountdown } from './hooks/usePollCountdown';
+export type { CountdownState } from './hooks/usePollCountdown';
 export type {
   Room,
   Poll,
