@@ -235,7 +235,9 @@ pub mod test_db {
     /// Container is kept alive as long as the pool exists.
     pub struct TestDb {
         pool: PgPool,
-        _container: Arc<ContainerAsync<GenericImage>>,
+        /// Holds the container handle when this process started it.
+        /// None when reusing a container started by another process.
+        _container: Option<Arc<ContainerAsync<GenericImage>>>,
         database_url: String,
         /// Host for connecting to the container (localhost or remote Docker host)
         host: String,
@@ -279,53 +281,32 @@ pub mod test_db {
     pub async fn get_test_db() -> &'static TestDb {
         TEST_DB
             .get_or_init(|| async {
-                // Get image from env or use default local image
-                let image_full = std::env::var("TEST_POSTGRES_IMAGE")
-                    .unwrap_or_else(|_| "tc-postgres:local".to_string());
+                // Phase 1: Acquire lock and determine if we need a new container.
+                // Lock is released at the end of this block.
+                let (host, port, container) = {
+                    let _lock = FileLock::acquire();
 
-                // Parse image:tag format
-                let (image_name, image_tag) = image_full
-                    .rsplit_once(':')
-                    .unwrap_or((&image_full, "latest"));
+                    if let Some(info) = read_state_file() {
+                        if is_container_alive(&info.host, info.port) {
+                            // Container exists and is healthy — reuse it.
+                            (info.host, info.port, None)
+                        } else {
+                            // Stale state file — start a fresh container.
+                            start_and_register_container().await
+                        }
+                    } else {
+                        // No state file — start a fresh container.
+                        start_and_register_container().await
+                    }
+                    // _lock dropped here, releasing flock
+                };
 
-                // Start postgres container with custom image that includes pgmq.
-                // Label with the current PID so `just prune-testcontainers` can
-                // identify and remove orphans from crashed runs without clobbering
-                // containers owned by other live test processes.
-                let owner_pid = std::process::id().to_string();
-                let container = GenericImage::new(image_name, image_tag)
-                    .with_exposed_port(5432.into())
-                    .with_wait_for(testcontainers::core::WaitFor::message_on_stderr(
-                        "database system is ready to accept connections",
-                    ))
-                    .with_env_var("POSTGRES_USER", "postgres")
-                    .with_env_var("POSTGRES_PASSWORD", "postgres")
-                    .with_env_var("POSTGRES_DB", "tiny-congress")
-                    .with_label("tc-owner-pid", owner_pid)
-                    .start()
-                    .await
-                    .expect("Failed to start postgres container");
-
-                let host = container
-                    .get_host()
-                    .await
-                    .expect("Failed to get container host")
-                    .to_string();
-
-                let port = container
-                    .get_host_port_ipv4(5432)
-                    .await
-                    .expect("Failed to get postgres port");
-
-                // Wrap container in Arc to share ownership
-                let container = Arc::new(container);
-
-                // Build connection string
+                // Phase 2: Ensure migrations and template exist.
+                // These operations are idempotent — safe to run even if another
+                // binary already completed them.
                 let database_url =
                     format!("postgres://postgres:postgres@{host}:{port}/tiny-congress");
 
-                // Run migrations using a single connection (not a pool)
-                // so we can close it and create the template before opening the pool
                 let mut migration_conn = PgConnection::connect(&database_url)
                     .await
                     .expect("Failed to connect to test database for migrations");
@@ -342,9 +323,6 @@ pub mod test_db {
                     .await
                     .expect("Failed to run migrations");
 
-                // Create test_items table for test infrastructure.
-                // This table was removed from production migrations (migration 04)
-                // but tests still need it as a lightweight fixture table.
                 sqlx::query(
                     "CREATE TABLE IF NOT EXISTS test_items (
                         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -356,32 +334,43 @@ pub mod test_db {
                 .await
                 .expect("Failed to create test_items table");
 
-                // Close the migration connection so tiny-congress has no active sessions
                 drop(migration_conn);
 
-                // Create a template database for isolated_db() to use
-                // We do this while no connections exist to tiny-congress
+                // Create template if it does not already exist.
                 let maintenance_url =
                     format!("postgres://postgres:postgres@{host}:{port}/postgres");
                 let mut maint_conn = PgConnection::connect(&maintenance_url)
                     .await
-                    .expect("Failed to connect to postgres database for template creation");
+                    .expect("Failed to connect to postgres database for template check");
 
-                // Drop template if it exists (from previous test run)
-                sqlx::query("DROP DATABASE IF EXISTS \"tiny_congress_template\"")
+                let template_exists: bool = sqlx::query_scalar(
+                    "SELECT EXISTS(SELECT 1 FROM pg_database WHERE datname = 'tiny_congress_template')",
+                )
+                .fetch_one(&mut maint_conn)
+                .await
+                .expect("Failed to check template existence");
+
+                if !template_exists {
+                    // Terminate all connections to tiny-congress so Postgres allows
+                    // it to be used as a TEMPLATE source.
+                    let _ = sqlx::query(
+                        "SELECT pg_terminate_backend(pid) FROM pg_stat_activity \
+                         WHERE datname = 'tiny-congress' AND pid != pg_backend_pid()",
+                    )
+                    .execute(&mut maint_conn)
+                    .await;
+
+                    sqlx::query(
+                        "CREATE DATABASE \"tiny_congress_template\" TEMPLATE \"tiny-congress\"",
+                    )
                     .execute(&mut maint_conn)
                     .await
-                    .expect("Failed to drop old template");
+                    .expect("Failed to create template database");
+                }
 
-                // Create template database from tiny-congress
-                sqlx::query(
-                    "CREATE DATABASE \"tiny_congress_template\" TEMPLATE \"tiny-congress\"",
-                )
-                .execute(&mut maint_conn)
-                .await
-                .expect("Failed to create template database");
+                drop(maint_conn);
 
-                // Now create the pool for regular test usage
+                // Phase 3: Create pool for test usage.
                 let pool = PgPoolOptions::new()
                     .max_connections(5)
                     .acquire_timeout(Duration::from_secs(30))
@@ -389,7 +378,6 @@ pub mod test_db {
                     .await
                     .expect("Failed to connect to test database");
 
-                // Verify pool is working
                 sqlx_core::query_scalar::query_scalar::<_, i32>("SELECT 1")
                     .fetch_one(&pool)
                     .await
@@ -404,6 +392,55 @@ pub mod test_db {
                 }
             })
             .await
+    }
+
+    /// Start a new Postgres container and write its connection info to the state file.
+    ///
+    /// Must only be called while `FileLock` is held, so that concurrent test
+    /// binaries do not race to start duplicate containers.
+    async fn start_and_register_container(
+    ) -> (String, u16, Option<Arc<ContainerAsync<GenericImage>>>) {
+        let image_full = std::env::var("TEST_POSTGRES_IMAGE")
+            .unwrap_or_else(|_| "tc-postgres:local".to_string());
+
+        let (image_name, image_tag) = image_full
+            .rsplit_once(':')
+            .unwrap_or((&image_full, "latest"));
+
+        let owner_pid = std::process::id().to_string();
+        let container = GenericImage::new(image_name, image_tag)
+            .with_exposed_port(5432.into())
+            .with_wait_for(testcontainers::core::WaitFor::message_on_stderr(
+                "database system is ready to accept connections",
+            ))
+            .with_env_var("POSTGRES_USER", "postgres")
+            .with_env_var("POSTGRES_PASSWORD", "postgres")
+            .with_env_var("POSTGRES_DB", "tiny-congress")
+            .with_label("tc-owner-pid", owner_pid)
+            .start()
+            .await
+            .expect("Failed to start postgres container");
+
+        let host = container
+            .get_host()
+            .await
+            .expect("Failed to get container host")
+            .to_string();
+
+        let port = container
+            .get_host_port_ipv4(5432)
+            .await
+            .expect("Failed to get postgres port");
+
+        let container = Arc::new(container);
+
+        write_state_file(&SharedContainerInfo {
+            container_id: container.id().to_string(),
+            host: host.clone(),
+            port,
+        });
+
+        (host, port, Some(container))
     }
 
     /// RAII guard for an isolated test database created via PostgreSQL template copy.
