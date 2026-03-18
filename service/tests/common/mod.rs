@@ -298,7 +298,9 @@ pub mod test_db {
                         // No state file — start a fresh container.
                         start_and_register_container().await
                     }
-                    // _lock dropped here, releasing flock
+                    // _lock dropped here. The lock is intentionally held during container
+                    // start to prevent concurrent test binaries from racing to create
+                    // duplicate containers. Migrations (Phase 2) run after the lock releases.
                 };
 
                 // Phase 2: Ensure migrations and template exist.
