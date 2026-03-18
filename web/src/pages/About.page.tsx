@@ -10,7 +10,7 @@ export function AboutPage() {
   const { data, isPending, isError, error } = useQuery(buildInfoQuery);
 
   return (
-    <Stack gap="md">
+    <Stack gap="md" maw={780} mx="auto">
       <Group gap="xs">
         <IconInfoCircle size={20} />
         <Title order={2}>About TinyCongress</Title>

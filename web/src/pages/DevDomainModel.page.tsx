@@ -10,7 +10,7 @@ import domainModelContent from '../content/dev/domain-model.md?raw';
 
 export function DevDomainModelPage() {
   return (
-    <Stack gap="md">
+    <Stack gap="md" maw={780} mx="auto">
       <Group gap="xs">
         <Anchor component={Link} to="/dev" size="sm" c="dimmed">
           <Group gap={4}>

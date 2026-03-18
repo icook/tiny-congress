@@ -35,7 +35,7 @@ const devDocs: readonly DocEntry[] = [
 
 export function DocsIndexPage() {
   return (
-    <Stack gap="lg">
+    <Stack gap="lg" maw={780} mx="auto">
       <Group gap="xs">
         <IconBook2 size={20} />
         <Title order={2}>Documentation</Title>
