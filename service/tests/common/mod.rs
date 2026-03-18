@@ -138,6 +138,7 @@ pub mod test_db {
 
     impl Drop for FileLock {
         fn drop(&mut self) {
+            // SAFETY: flock on a valid fd is safe. LOCK_UN never blocks.
             unsafe {
                 libc::flock(
                     std::os::unix::io::AsRawFd::as_raw_fd(&self.file),
