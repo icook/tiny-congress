@@ -1,5 +1,6 @@
 //! Repository layer for rooms persistence
 
+pub mod evidence;
 pub mod lifecycle_queue;
 pub mod polls;
 pub mod rooms;
