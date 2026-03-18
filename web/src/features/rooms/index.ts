@@ -12,6 +12,7 @@ export {
 export { usePollCountdown } from './hooks/usePollCountdown';
 export { PollCountdown } from './components/PollCountdown';
 export { AgendaProgress } from './components/AgendaProgress';
+export { UpcomingPollPreview } from './components/UpcomingPollPreview';
 export type { CountdownState } from './hooks/usePollCountdown';
 export type {
   Room,
