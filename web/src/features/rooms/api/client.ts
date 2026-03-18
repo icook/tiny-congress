@@ -25,6 +25,7 @@ export interface Poll {
   description: string | null;
   status: string;
   created_at: string;
+  closes_at: string | null;
 }
 
 export interface Dimension {
@@ -98,6 +99,10 @@ export async function getRoom(roomId: string): Promise<Room> {
 
 export async function listPolls(roomId: string): Promise<Poll[]> {
   return fetchJson(`/rooms/${roomId}/polls`);
+}
+
+export async function getAgenda(roomId: string): Promise<Poll[]> {
+  return fetchJson(`/rooms/${roomId}/agenda`);
 }
 
 export async function getPollDetail(roomId: string, pollId: string): Promise<PollDetail> {
