@@ -148,6 +148,27 @@ pub mod test_db {
         }
     }
 
+    /// Check if a container is alive by attempting a TCP connection.
+    /// Returns true if the port is accepting connections.
+    fn is_container_alive(host: &str, port: u16) -> bool {
+        let addr = format!("{host}:{port}");
+        std::net::TcpStream::connect_timeout(
+            &addr.parse().expect("invalid socket addr"),
+            Duration::from_secs(2),
+        )
+        .is_ok()
+    }
+
+    fn read_state_file() -> Option<SharedContainerInfo> {
+        let data = std::fs::read_to_string(STATE_FILE).ok()?;
+        serde_json::from_str(&data).ok()
+    }
+
+    fn write_state_file(info: &SharedContainerInfo) {
+        let data = serde_json::to_string(info).expect("Failed to serialize container state");
+        std::fs::write(STATE_FILE, data).expect("Failed to write container state file");
+    }
+
     /// Global Tokio runtime shared across all tests.
     /// This ensures async cleanup happens while the runtime is still alive.
     static TEST_RUNTIME: LazyLock<Runtime> = LazyLock::new(|| {
