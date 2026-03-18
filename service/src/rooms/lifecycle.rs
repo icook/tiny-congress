@@ -6,12 +6,12 @@ use std::time::Duration;
 use sqlx::PgPool;
 
 use super::repo::lifecycle_queue::{read_lifecycle_event, LifecyclePayload};
-use super::service::RoomsService;
+use super::service::PollingService;
 
 /// Spawn the lifecycle consumer as a background tokio task.
 pub fn spawn_lifecycle_consumer(
     pool: PgPool,
-    service: Arc<dyn RoomsService>,
+    polling_service: Arc<dyn PollingService>,
     poll_interval: Duration,
 ) {
     tokio::spawn(async move {
@@ -27,7 +27,10 @@ pub fn spawn_lifecycle_consumer(
                     tracing::debug!(msg_id = msg.id, "processing lifecycle event");
                     match msg.payload {
                         LifecyclePayload::ClosePoll { poll_id, room_id } => {
-                            if let Err(e) = service.close_poll_and_advance(room_id, poll_id).await {
+                            if let Err(e) = polling_service
+                                .close_poll_and_advance(room_id, poll_id)
+                                .await
+                            {
                                 tracing::warn!(
                                     poll_id = %poll_id,
                                     room_id = %room_id,
@@ -37,7 +40,8 @@ pub fn spawn_lifecycle_consumer(
                             }
                         }
                         LifecyclePayload::ActivateNext { room_id } => {
-                            if let Err(e) = service.activate_next_from_agenda(room_id).await {
+                            if let Err(e) = polling_service.activate_next_from_agenda(room_id).await
+                            {
                                 tracing::warn!(
                                     room_id = %room_id,
                                     error = %e,

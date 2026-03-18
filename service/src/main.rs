@@ -20,8 +20,8 @@ use sqlx::PgPool;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
-use tc_engine_api::constraints::ConstraintRegistry;
 use tc_engine_api::engine::EngineRegistry;
+use tc_engine_polling::service::{DefaultPollingService, PollingService};
 use tinycongress_api::{
     build_info::BuildInfo,
     config::Config,
@@ -132,7 +132,7 @@ async fn build_app(
     build_info: BuildInfo,
     schema: Schema<QueryRoot, MutationRoot, EmptySubscription>,
     allow_origin: AllowOrigin,
-) -> Result<(Router, PgPool, Arc<dyn RoomsService>), anyhow::Error> {
+) -> Result<(Router, PgPool, Arc<dyn PollingService>), anyhow::Error> {
     let rest_v1 = Router::new().route("/build-info", get(rest::get_build_info));
 
     // Identity wiring
@@ -182,19 +182,20 @@ async fn build_app(
         reputation_repo_for_trust,
     ));
 
-    // Engine plugin infrastructure (empty registry — engines registered in later phases)
-    let _trust_graph_reader = Arc::new(TrustRepoGraphReader::new(trust_repo.clone()));
-    let _constraint_registry = Arc::new(ConstraintRegistry);
+    // Engine plugin infrastructure
+    let trust_graph_reader = Arc::new(TrustRepoGraphReader::new(trust_repo.clone()))
+        as Arc<dyn tc_engine_api::trust::TrustGraphReader>;
     let engine_registry = Arc::new(EngineRegistry::new());
 
-    // Rooms wiring
+    // Rooms wiring (room CRUD only)
     let rooms_repo = Arc::new(PgRoomsRepo::new(pool.clone()));
-    let rooms_service = Arc::new(DefaultRoomsService::new(
-        rooms_repo as Arc<dyn RoomsRepo>,
-        trust_repo,
-        pool.clone(),
-    )) as Arc<dyn RoomsService>;
-    let rooms_service_bg = rooms_service.clone();
+    let rooms_service = Arc::new(DefaultRoomsService::new(rooms_repo as Arc<dyn RoomsRepo>))
+        as Arc<dyn RoomsService>;
+
+    // Polling wiring (polls, votes, dimensions, lifecycle, results)
+    let polling_service = Arc::new(DefaultPollingService::new(pool.clone(), trust_graph_reader))
+        as Arc<dyn PollingService>;
+    let polling_service_bg = polling_service.clone();
 
     let (prometheus_layer, metric_handle) = PrometheusMetricLayer::pair();
 
@@ -226,6 +227,7 @@ async fn build_app(
         .layer(Extension(endorsement_service))
         .layer(Extension(reputation_repo_ext))
         .layer(Extension(rooms_service))
+        .layer(Extension(polling_service))
         .layer(Extension(trust_service))
         .layer(Extension(trust_repo_for_http))
         .layer(Extension(trust_engine.clone()))
@@ -275,7 +277,7 @@ async fn build_app(
     ));
     tokio::spawn(async move { trust_worker.run().await });
 
-    Ok((app, pool, rooms_service_bg))
+    Ok((app, pool, polling_service_bg))
 }
 
 #[tokio::main]
@@ -328,7 +330,7 @@ async fn main() -> Result<(), anyhow::Error> {
     };
 
     // Service wiring
-    let (app, pool_for_cleanup, rooms_service) =
+    let (app, pool_for_cleanup, polling_service) =
         build_app(&config, pool.clone(), build_info, schema, allow_origin).await?;
     let mut app = app;
 
@@ -336,7 +338,7 @@ async fn main() -> Result<(), anyhow::Error> {
 
     rooms::lifecycle::spawn_lifecycle_consumer(
         pool_for_cleanup,
-        rooms_service,
+        polling_service,
         Duration::from_secs(5),
     );
 

@@ -38,6 +38,7 @@ use axum::{
     Extension, Router,
 };
 use sqlx::PgPool;
+use tc_engine_polling::service::{DefaultPollingService, PollingService};
 use tinycongress_api::{
     build_info::BuildInfo,
     config::SecurityHeadersConfig,
@@ -62,6 +63,7 @@ use tinycongress_api::{
     },
     trust::{
         self,
+        graph_reader::TrustRepoGraphReader,
         repo::{PgTrustRepo, TrustRepo},
         service::{DefaultTrustService, TrustService},
     },
@@ -124,8 +126,10 @@ pub struct TestAppBuilder {
     endorsement_service: Option<Arc<dyn EndorsementService>>,
     /// Reputation repo for reputation routes
     reputation_repo: Option<Arc<dyn ReputationRepo>>,
-    /// Rooms service for room/poll routes
+    /// Rooms service for room CRUD routes
     rooms_service: Option<Arc<dyn RoomsService>>,
+    /// Polling service for poll/vote/dimension routes
+    polling_service: Option<Arc<dyn PollingService>>,
     /// Trust service for trust routes
     trust_service: Option<Arc<dyn TrustService>>,
     /// Trust repo for trust routes
@@ -162,6 +166,7 @@ impl TestAppBuilder {
             endorsement_service: None,
             reputation_repo: None,
             rooms_service: None,
+            polling_service: None,
             trust_service: None,
             trust_repo: None,
             cors_origins: None,
@@ -258,7 +263,7 @@ impl TestAppBuilder {
 
     /// Include rooms and reputation routes with a real database pool.
     ///
-    /// This wires up the full rooms + endorsement stack, matching main.rs.
+    /// This wires up the full rooms + polling + endorsement stack, matching main.rs.
     /// Identity routes are also enabled since room operations require auth.
     #[must_use]
     pub fn with_rooms_pool(mut self, pool: PgPool) -> Self {
@@ -278,17 +283,23 @@ impl TestAppBuilder {
         self.reputation_repo = Some(reputation_repo as Arc<dyn ReputationRepo>);
         self.endorsement_service = Some(endorsement_service.clone());
 
-        // Trust repo (needed for room constraint evaluation)
+        // Trust repo + graph reader (needed for constraint evaluation)
         let trust_repo = Arc::new(PgTrustRepo::new(pool.clone())) as Arc<dyn TrustRepo>;
+        let trust_graph_reader = Arc::new(TrustRepoGraphReader::new(trust_repo.clone()))
+            as Arc<dyn tc_engine_api::trust::TrustGraphReader>;
 
-        // Rooms wiring
+        // Rooms wiring (room CRUD only)
         self.include_rooms = true;
         let rooms_repo = Arc::new(PgRoomsRepo::new(pool.clone()));
         self.rooms_service = Some(Arc::new(DefaultRoomsService::new(
             rooms_repo as Arc<dyn RoomsRepo>,
-            trust_repo,
-            pool.clone(),
         )) as Arc<dyn RoomsService>);
+
+        // Polling wiring (polls, votes, dimensions, lifecycle, results)
+        self.polling_service = Some(Arc::new(DefaultPollingService::new(
+            pool.clone(),
+            trust_graph_reader,
+        )) as Arc<dyn PollingService>);
 
         self.pool = Some(pool);
         self
@@ -471,6 +482,10 @@ impl TestAppBuilder {
         }
 
         if let Some(service) = self.rooms_service {
+            app = app.layer(Extension(service));
+        }
+
+        if let Some(service) = self.polling_service {
             app = app.layer(Extension(service));
         }
 

@@ -15,7 +15,9 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use super::repo::evidence;
-use super::service::{CastVoteRequest, PollError, RoomError, RoomsService, VoteError};
+use super::service::{
+    CastVoteRequest, PollError, PollingService, RoomError, RoomsService, VoteError,
+};
 use crate::identity::http::auth::AuthenticatedDevice;
 use crate::identity::http::ErrorResponse;
 
@@ -279,10 +281,10 @@ async fn get_capacity(Extension(service): Extension<Arc<dyn RoomsService>>) -> i
 }
 
 async fn get_agenda(
-    Extension(service): Extension<Arc<dyn RoomsService>>,
+    Extension(polling): Extension<Arc<dyn PollingService>>,
     Path(room_id): Path<Uuid>,
 ) -> impl IntoResponse {
-    match service.get_agenda(room_id).await {
+    match polling.get_agenda(room_id).await {
         Ok(polls) => {
             let polls: Vec<_> = polls.into_iter().map(poll_to_response).collect();
             (StatusCode::OK, Json(polls)).into_response()
@@ -294,10 +296,10 @@ async fn get_agenda(
 // ─── Poll handlers ─────────────────────────────────────────────────────────
 
 async fn list_polls(
-    Extension(service): Extension<Arc<dyn RoomsService>>,
+    Extension(polling): Extension<Arc<dyn PollingService>>,
     Path(room_id): Path<Uuid>,
 ) -> impl IntoResponse {
-    match service.list_polls(room_id).await {
+    match polling.list_polls(room_id).await {
         Ok(polls) => {
             let polls: Vec<_> = polls.into_iter().map(poll_to_response).collect();
             (StatusCode::OK, Json(polls)).into_response()
@@ -307,15 +309,15 @@ async fn list_polls(
 }
 
 async fn get_poll_detail(
-    Extension(service): Extension<Arc<dyn RoomsService>>,
+    Extension(polling): Extension<Arc<dyn PollingService>>,
     Extension(pool): Extension<PgPool>,
     Path((_room_id, poll_id)): Path<(Uuid, Uuid)>,
 ) -> impl IntoResponse {
-    let poll = match service.get_poll(poll_id).await {
+    let poll = match polling.get_poll(poll_id).await {
         Ok(p) => p,
         Err(e) => return poll_error_response(e),
     };
-    let dimensions = match service.list_dimensions(poll_id).await {
+    let dimensions = match polling.list_dimensions(poll_id).await {
         Ok(d) => d,
         Err(e) => return poll_error_response(e),
     };
@@ -378,7 +380,7 @@ struct PollDetailResponse {
 }
 
 async fn create_poll(
-    Extension(service): Extension<Arc<dyn RoomsService>>,
+    Extension(polling): Extension<Arc<dyn PollingService>>,
     Path(room_id): Path<Uuid>,
     auth: AuthenticatedDevice,
 ) -> impl IntoResponse {
@@ -386,7 +388,7 @@ async fn create_poll(
         Ok(r) => r,
         Err(resp) => return resp,
     };
-    match service
+    match polling
         .create_poll(room_id, &req.question, req.description.as_deref())
         .await
     {
@@ -396,7 +398,7 @@ async fn create_poll(
 }
 
 async fn update_poll_status(
-    Extension(service): Extension<Arc<dyn RoomsService>>,
+    Extension(polling): Extension<Arc<dyn PollingService>>,
     Path((_room_id, poll_id)): Path<(Uuid, Uuid)>,
     auth: AuthenticatedDevice,
 ) -> impl IntoResponse {
@@ -405,8 +407,8 @@ async fn update_poll_status(
         Err(resp) => return resp,
     };
     let result = match req.status.as_str() {
-        "active" => service.activate_poll(poll_id).await,
-        "closed" => service.close_poll(poll_id).await,
+        "active" => polling.activate_poll(poll_id).await,
+        "closed" => polling.close_poll(poll_id).await,
         _ => {
             return (
                 StatusCode::BAD_REQUEST,
@@ -424,7 +426,7 @@ async fn update_poll_status(
 }
 
 async fn add_dimension(
-    Extension(service): Extension<Arc<dyn RoomsService>>,
+    Extension(polling): Extension<Arc<dyn PollingService>>,
     Path((_room_id, poll_id)): Path<(Uuid, Uuid)>,
     auth: AuthenticatedDevice,
 ) -> impl IntoResponse {
@@ -432,7 +434,7 @@ async fn add_dimension(
         Ok(r) => r,
         Err(resp) => return resp,
     };
-    match service
+    match polling
         .add_dimension(
             poll_id,
             &req.name,
@@ -552,7 +554,7 @@ async fn reset_poll(
 // ─── Vote handlers ─────────────────────────────────────────────────────────
 
 async fn cast_vote(
-    Extension(service): Extension<Arc<dyn RoomsService>>,
+    Extension(polling): Extension<Arc<dyn PollingService>>,
     Path((_room_id, poll_id)): Path<(Uuid, Uuid)>,
     auth: AuthenticatedDevice,
 ) -> impl IntoResponse {
@@ -560,7 +562,7 @@ async fn cast_vote(
         Ok(r) => r,
         Err(resp) => return resp,
     };
-    match service
+    match polling
         .cast_vote(poll_id, auth.account_id, &req.votes)
         .await
     {
@@ -580,10 +582,10 @@ async fn cast_vote(
 }
 
 async fn get_results(
-    Extension(service): Extension<Arc<dyn RoomsService>>,
+    Extension(polling): Extension<Arc<dyn PollingService>>,
     Path((_room_id, poll_id)): Path<(Uuid, Uuid)>,
 ) -> impl IntoResponse {
-    match service.get_poll_results(poll_id).await {
+    match polling.get_poll_results(poll_id).await {
         Ok(results) => {
             let response = PollResultsResponse {
                 poll: poll_to_response(results.poll),
@@ -610,10 +612,10 @@ async fn get_results(
 }
 
 async fn get_distribution(
-    Extension(service): Extension<Arc<dyn RoomsService>>,
+    Extension(polling): Extension<Arc<dyn PollingService>>,
     Path((_room_id, poll_id)): Path<(Uuid, Uuid)>,
 ) -> impl IntoResponse {
-    match service.get_poll_distribution(poll_id).await {
+    match polling.get_poll_distribution(poll_id).await {
         Ok(dist) => {
             let num_buckets = 10usize;
             let response = PollDistributionResponse {
@@ -646,11 +648,11 @@ async fn get_distribution(
 }
 
 async fn my_votes(
-    Extension(service): Extension<Arc<dyn RoomsService>>,
+    Extension(polling): Extension<Arc<dyn PollingService>>,
     Path((_room_id, poll_id)): Path<(Uuid, Uuid)>,
     auth: AuthenticatedDevice,
 ) -> impl IntoResponse {
-    match service.get_user_votes(poll_id, auth.account_id).await {
+    match polling.get_user_votes(poll_id, auth.account_id).await {
         Ok(votes) => {
             let votes: Vec<_> = votes
                 .into_iter()
