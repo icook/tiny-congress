@@ -28,6 +28,13 @@ export interface Poll {
   closes_at: string | null;
 }
 
+export interface Evidence {
+  id: string;
+  stance: 'pro' | 'con';
+  claim: string;
+  source: string | null;
+}
+
 export interface Dimension {
   id: string;
   name: string;
@@ -37,6 +44,7 @@ export interface Dimension {
   min_label: string | null;
   max_label: string | null;
   sort_order: number;
+  evidence: Evidence[];
 }
 
 export interface PollDetail {

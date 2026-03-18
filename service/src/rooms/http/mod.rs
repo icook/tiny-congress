@@ -1,17 +1,20 @@
 //! HTTP handlers for rooms and polling
 
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use axum::{
     extract::{Extension, Path},
     http::StatusCode,
     response::IntoResponse,
-    routing::{get, post},
+    routing::{delete, get, patch, post},
     Json, Router,
 };
 use serde::{Deserialize, Serialize};
+use sqlx::PgPool;
 use uuid::Uuid;
 
+use super::repo::evidence;
 use super::service::{CastVoteRequest, PollError, RoomError, RoomsService, VoteError};
 use crate::identity::http::auth::AuthenticatedDevice;
 use crate::identity::http::ErrorResponse;
@@ -50,6 +53,27 @@ pub struct DimensionResponse {
     pub sort_order: i32,
     pub min_label: Option<String>,
     pub max_label: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct EvidenceResponse {
+    pub id: String,
+    pub stance: String,
+    pub claim: String,
+    pub source: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct DimensionDetailResponse {
+    pub id: Uuid,
+    pub name: String,
+    pub description: Option<String>,
+    pub min_value: f32,
+    pub max_value: f32,
+    pub sort_order: i32,
+    pub min_label: Option<String>,
+    pub max_label: Option<String>,
+    pub evidence: Vec<EvidenceResponse>,
 }
 
 #[derive(Debug, Serialize)]
@@ -148,6 +172,18 @@ pub struct PollStatusRequest {
     pub status: String,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct CreateEvidenceBody {
+    pub evidence: Vec<EvidenceItem>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct EvidenceItem {
+    pub stance: String,
+    pub claim: String,
+    pub source: Option<String>,
+}
+
 // ─── Router ────────────────────────────────────────────────────────────────
 
 pub fn router() -> Router {
@@ -162,6 +198,20 @@ pub fn router() -> Router {
         .route("/rooms/{room_id}/polls/{poll_id}", get(get_poll_detail))
         .route("/rooms/{room_id}/polls/{poll_id}/status", post(update_poll_status))
         .route("/rooms/{room_id}/polls/{poll_id}/dimensions", post(add_dimension))
+        // Evidence endpoints
+        .route(
+            "/rooms/{room_id}/polls/{poll_id}/dimensions/{dimension_id}/evidence",
+            post(create_evidence),
+        )
+        .route(
+            "/rooms/{room_id}/polls/{poll_id}/evidence",
+            delete(delete_evidence),
+        )
+        // Sim-only: ring buffer reset
+        .route(
+            "/rooms/{room_id}/polls/{poll_id}/reset",
+            patch(reset_poll),
+        )
         // Vote + results
         .route("/rooms/{room_id}/polls/{poll_id}/vote", post(cast_vote))
         .route("/rooms/{room_id}/polls/{poll_id}/results", get(get_results))
@@ -258,6 +308,7 @@ async fn list_polls(
 
 async fn get_poll_detail(
     Extension(service): Extension<Arc<dyn RoomsService>>,
+    Extension(pool): Extension<PgPool>,
     Path((_room_id, poll_id)): Path<(Uuid, Uuid)>,
 ) -> impl IntoResponse {
     let poll = match service.get_poll(poll_id).await {
@@ -269,9 +320,53 @@ async fn get_poll_detail(
         Err(e) => return poll_error_response(e),
     };
 
+    let dimension_ids: Vec<Uuid> = dimensions.iter().map(|d| d.id).collect();
+    let evidence_records = match evidence::get_evidence_for_dimensions(&pool, &dimension_ids).await
+    {
+        Ok(ev) => ev,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(crate::identity::http::ErrorResponse {
+                    error: format!("Failed to fetch evidence: {e}"),
+                }),
+            )
+                .into_response()
+        }
+    };
+
+    let mut evidence_by_dim: HashMap<Uuid, Vec<EvidenceResponse>> = HashMap::new();
+    for ev in evidence_records {
+        evidence_by_dim
+            .entry(ev.dimension_id)
+            .or_default()
+            .push(EvidenceResponse {
+                id: ev.id.to_string(),
+                stance: ev.stance,
+                claim: ev.claim,
+                source: ev.source,
+            });
+    }
+
     let response = PollDetailResponse {
         poll: poll_to_response(poll),
-        dimensions: dimensions.into_iter().map(dim_to_response).collect(),
+        dimensions: dimensions
+            .into_iter()
+            .map(|d| {
+                let ev = evidence_by_dim.remove(&d.id).unwrap_or_default();
+                DimensionDetailResponse {
+                    id: d.id,
+                    name: d.name,
+                    description: d.description,
+                    min_value: d.min_value,
+                    max_value: d.max_value,
+                    sort_order: d.sort_order,
+                    min_label: d.min_label,
+                    max_label: d.max_label,
+                    evidence: ev,
+                }
+            })
+            .collect(),
     };
     (StatusCode::OK, Json(response)).into_response()
 }
@@ -279,7 +374,7 @@ async fn get_poll_detail(
 #[derive(Debug, Serialize)]
 struct PollDetailResponse {
     poll: PollResponse,
-    dimensions: Vec<DimensionResponse>,
+    dimensions: Vec<DimensionDetailResponse>,
 }
 
 async fn create_poll(
@@ -352,6 +447,105 @@ async fn add_dimension(
     {
         Ok(dim) => (StatusCode::CREATED, Json(dim_to_response(dim))).into_response(),
         Err(e) => poll_error_response(e),
+    }
+}
+
+// ─── Evidence handlers ─────────────────────────────────────────────────────
+
+async fn create_evidence(
+    Extension(pool): Extension<PgPool>,
+    Path((_room_id, poll_id, dimension_id)): Path<(Uuid, Uuid, Uuid)>,
+    Json(body): Json<CreateEvidenceBody>,
+) -> impl IntoResponse {
+    // Validate dimension belongs to the poll
+    let belongs: Option<(Uuid,)> = match sqlx::query_as(
+        "SELECT id FROM rooms__poll_dimensions WHERE id = $1 AND poll_id = $2",
+    )
+    .bind(dimension_id)
+    .bind(poll_id)
+    .fetch_optional(&pool)
+    .await
+    {
+        Ok(r) => r,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({ "error": format!("DB error: {e}") })),
+            )
+                .into_response()
+        }
+    };
+
+    if belongs.is_none() {
+        return (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({ "error": "Dimension not found for this poll" })),
+        )
+            .into_response();
+    }
+
+    let new_evidence: Vec<evidence::NewEvidence<'_>> = body
+        .evidence
+        .iter()
+        .map(|item| evidence::NewEvidence {
+            stance: &item.stance,
+            claim: &item.claim,
+            source: item.source.as_deref(),
+        })
+        .collect();
+
+    match evidence::insert_evidence(&pool, dimension_id, &new_evidence).await {
+        Ok(count) => (
+            StatusCode::CREATED,
+            Json(serde_json::json!({ "count": count })),
+        )
+            .into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({ "error": format!("Failed to insert evidence: {e}") })),
+        )
+            .into_response(),
+    }
+}
+
+async fn delete_evidence(
+    Extension(pool): Extension<PgPool>,
+    Path((_room_id, poll_id)): Path<(Uuid, Uuid)>,
+) -> impl IntoResponse {
+    match evidence::delete_evidence_for_poll(&pool, poll_id).await {
+        Ok(deleted) => (
+            StatusCode::OK,
+            Json(serde_json::json!({ "deleted": deleted })),
+        )
+            .into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({ "error": format!("Failed to delete evidence: {e}") })),
+        )
+            .into_response(),
+    }
+}
+
+/// Sim-only: reset a poll back to draft status, clearing all timing fields.
+/// Used by the ring buffer refill logic to recycle polls for a new cycle.
+async fn reset_poll(
+    Extension(pool): Extension<PgPool>,
+    Path((room_id, poll_id)): Path<(Uuid, Uuid)>,
+) -> Result<impl IntoResponse, StatusCode> {
+    let result = sqlx::query(
+        "UPDATE rooms__polls \
+         SET status = 'draft', closes_at = NULL, activated_at = NULL, closed_at = NULL \
+         WHERE id = $1 AND room_id = $2",
+    )
+    .bind(poll_id)
+    .bind(room_id)
+    .execute(&pool)
+    .await;
+
+    match result {
+        Ok(r) if r.rows_affected() == 0 => Err(StatusCode::NOT_FOUND),
+        Ok(_) => Ok(StatusCode::OK),
+        Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
     }
 }
 

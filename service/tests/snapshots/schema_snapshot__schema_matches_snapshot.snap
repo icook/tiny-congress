@@ -73,6 +73,14 @@ CREATE TABLE rooms__poll_dimensions (
     min_label TEXT,
     max_label TEXT);
 
+CREATE TABLE rooms__poll_evidence (
+    id UUID NOT NULL DEFAULT gen_random_uuid(),
+    dimension_id UUID NOT NULL,
+    stance TEXT NOT NULL,
+    claim TEXT NOT NULL,
+    source TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now());
+
 CREATE TABLE rooms__polls (
     id UUID NOT NULL DEFAULT gen_random_uuid(),
     room_id UUID NOT NULL,
@@ -228,6 +236,12 @@ CREATE UNIQUE INDEX rooms__poll_dimensions_pkey ON public.rooms__poll_dimensions
 -- rooms__poll_dimensions.uq_poll_dimensions_poll_name
 CREATE UNIQUE INDEX uq_poll_dimensions_poll_name ON public.rooms__poll_dimensions USING btree (poll_id, name)
 
+-- rooms__poll_evidence.idx_poll_evidence_dimension
+CREATE INDEX idx_poll_evidence_dimension ON public.rooms__poll_evidence USING btree (dimension_id)
+
+-- rooms__poll_evidence.rooms__poll_evidence_pkey
+CREATE UNIQUE INDEX rooms__poll_evidence_pkey ON public.rooms__poll_evidence USING btree (id)
+
 -- rooms__polls.idx_polls_room
 CREATE INDEX idx_polls_room ON public.rooms__polls USING btree (room_id)
 
@@ -292,6 +306,7 @@ CREATE UNIQUE INDEX trust__user_influence_pkey ON public.trust__user_influence U
 -- reputation__endorsements.subject_id -> accounts.id (ON UPDATE NO ACTION, ON DELETE CASCADE)
 -- reputation__external_identities.account_id -> accounts.id (ON UPDATE NO ACTION, ON DELETE CASCADE)
 -- rooms__poll_dimensions.poll_id -> rooms__polls.id (ON UPDATE NO ACTION, ON DELETE CASCADE)
+-- rooms__poll_evidence.dimension_id -> rooms__poll_dimensions.id (ON UPDATE NO ACTION, ON DELETE CASCADE)
 -- rooms__polls.room_id -> rooms__rooms.id (ON UPDATE NO ACTION, ON DELETE CASCADE)
 -- rooms__votes.dimension_id -> rooms__poll_dimensions.id (ON UPDATE NO ACTION, ON DELETE CASCADE)
 -- rooms__votes.poll_id -> rooms__polls.id (ON UPDATE NO ACTION, ON DELETE CASCADE)
@@ -365,6 +380,13 @@ CREATE UNIQUE INDEX trust__user_influence_pkey ON public.trust__user_influence U
 -- rooms__poll_dimensions: rooms__poll_dimensions_poll_id_not_null (CHECK)
 -- rooms__poll_dimensions: rooms__poll_dimensions_sort_order_not_null (CHECK)
 -- rooms__poll_dimensions: uq_poll_dimensions_poll_name (UNIQUE)
+-- rooms__poll_evidence: rooms__poll_evidence_claim_not_null (CHECK)
+-- rooms__poll_evidence: rooms__poll_evidence_created_at_not_null (CHECK)
+-- rooms__poll_evidence: rooms__poll_evidence_dimension_id_not_null (CHECK)
+-- rooms__poll_evidence: rooms__poll_evidence_id_not_null (CHECK)
+-- rooms__poll_evidence: rooms__poll_evidence_pkey (PRIMARY KEY)
+-- rooms__poll_evidence: rooms__poll_evidence_stance_check (CHECK)
+-- rooms__poll_evidence: rooms__poll_evidence_stance_not_null (CHECK)
 -- rooms__polls: rooms__polls_created_at_not_null (CHECK)
 -- rooms__polls: rooms__polls_id_not_null (CHECK)
 -- rooms__polls: rooms__polls_pkey (PRIMARY KEY)

@@ -9,6 +9,7 @@
 
 use anyhow::Context;
 use tinycongress_api::sim::{
+    brand,
     client::SimClient,
     config::SimConfig,
     content::insert_sim_content,
@@ -35,16 +36,54 @@ async fn main() -> Result<(), anyhow::Error> {
     tracing::info!(
         api_url = %config.api_url,
         model = %config.openrouter_model,
+        evidence_model = %config.evidence_model,
         target_rooms = config.target_rooms,
         votes_per_poll = config.votes_per_poll,
         voter_count = config.voter_count,
         poll_duration_secs = config.poll_duration_secs,
         api_key_len = config.openrouter_api_key.len(),
+        exa_key_len = config.exa_api_key.len(),
+        dry_run = config.dry_run,
         "sim config loaded"
     );
 
     // 3. Create HTTP client
     let http = reqwest::Client::new();
+
+    // Battery mode: compare model+search pairs for a single company
+    if let Some(ref battery_path) = config.battery_config {
+        let company = config
+            .battery_company
+            .as_deref()
+            .unwrap_or("Sysco Corporation");
+        let ticker = config.battery_ticker.as_deref().unwrap_or("SYY");
+
+        tracing::info!(
+            config = %battery_path,
+            company,
+            ticker,
+            "battery mode — comparing model+search pairs"
+        );
+
+        let pairs_json =
+            std::fs::read_to_string(battery_path).context("failed to read battery config")?;
+        let pairs: Vec<brand::BatteryConfig> =
+            serde_json::from_str(&pairs_json).context("failed to parse battery config")?;
+
+        tracing::info!(pairs = pairs.len(), "loaded battery config");
+        brand::battery(&http, &config.openrouter_api_key, company, ticker, &pairs).await?;
+        tracing::info!("tc-sim battery complete");
+        return Ok(());
+    }
+
+    // Dry-run mode: generate LLM content only, no API calls
+    if config.dry_run {
+        tracing::info!("dry-run mode — generating content without API");
+        brand::dry_run(&http, &config).await?;
+        tracing::info!("tc-sim dry run complete");
+        return Ok(());
+    }
+
     let client = SimClient::new(http.clone(), config.api_url.clone());
 
     // 4. Set up verifier account (login to register device key)
@@ -139,98 +178,109 @@ async fn main() -> Result<(), anyhow::Error> {
     }
     tracing::info!("account signup complete");
 
-    // 7. Check total rooms and capacity via API; track token usage
+    // 7. Track token usage; use account 0 as admin for content creation
     let mut session_usage = Usage::default();
-    let all_rooms = client.list_rooms().await?;
-    let total_rooms = all_rooms.len();
-    tracing::info!(
-        total_rooms,
-        target = config.target_rooms,
-        "room count check"
-    );
-
-    // Use account 0 as admin for content creation
     let admin = accounts.first().ok_or_else(|| {
         anyhow::anyhow!("voter_count must be >= 1 (need at least one account for content creation)")
     })?;
 
-    // 8. If below target, create new rooms with content
-    if total_rooms < config.target_rooms {
-        let rooms_needed = config.target_rooms - total_rooms;
-        tracing::info!(rooms_needed, "generating new rooms via LLM...");
+    if config.room_topic == "brand_ethics" {
+        tracing::info!("running in brand_ethics mode");
+        let brand_usage =
+            brand::seed_brand_ethics(&http, &client, &config, admin, verifier_account_id).await?;
+        session_usage += brand_usage;
 
-        let (content, usage) = generate_content(&http, &config, rooms_needed).await?;
-        session_usage += usage;
-        tracing::info!(
-            rooms_generated = content.rooms.len(),
-            "LLM content received"
-        );
-
-        let result = insert_sim_content(
-            &client,
-            admin,
-            &content,
-            config.poll_duration_secs,
-            verifier_account_id,
-        )
-        .await?;
-        tracing::info!(
-            rooms_created = result.rooms_created,
-            rooms_skipped = result.rooms_skipped,
-            polls_created = result.polls_created,
-            "content inserted"
-        );
+        // Ring buffer: refill if all polls exhausted (room shows up in capacity)
+        let refill_usage = brand::refill_if_needed(&http, &client, &config, admin).await?;
+        session_usage += refill_usage;
     } else {
-        tracing::info!("room target met, skipping room creation");
-    }
-
-    // 9. Check capacity — rooms needing new content (no active poll)
-    let capacity_rooms = client.get_capacity().await?;
-    if capacity_rooms.is_empty() {
-        tracing::info!("all rooms have active polls, no capacity fill needed");
-    } else {
+        // 8. Check total rooms and capacity via API
+        let all_rooms = client.list_rooms().await?;
+        let total_rooms = all_rooms.len();
         tracing::info!(
-            rooms_needing_content = capacity_rooms.len(),
-            "generating polls for rooms with capacity..."
+            total_rooms,
+            target = config.target_rooms,
+            "room count check"
         );
 
-        let (content, usage) = generate_content(&http, &config, capacity_rooms.len()).await?;
-        session_usage += usage;
-        tracing::info!(
-            rooms_generated = content.rooms.len(),
-            "LLM content received for capacity fill"
-        );
+        // If below target, create new rooms with content
+        if total_rooms < config.target_rooms {
+            let rooms_needed = config.target_rooms - total_rooms;
+            tracing::info!(rooms_needed, "generating new rooms via LLM...");
 
-        // Create polls in existing rooms that need content
-        let mut polls_created = 0;
-        for (cap_room, sim_room) in capacity_rooms.iter().zip(content.rooms.iter()) {
-            for poll in &sim_room.polls {
-                let poll_resp = client
-                    .create_poll(admin, cap_room.id, &poll.question, &poll.description)
-                    .await?;
+            let (content, usage) = generate_content(&http, &config, rooms_needed).await?;
+            session_usage += usage;
+            tracing::info!(
+                rooms_generated = content.rooms.len(),
+                "LLM content received"
+            );
 
-                for (i, dim) in poll.dimensions.iter().enumerate() {
-                    #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
-                    let sort_order = i as i32;
-                    client
-                        .add_dimension(
-                            admin,
-                            cap_room.id,
-                            poll_resp.id,
-                            &dim.name,
-                            &dim.description,
-                            dim.min,
-                            dim.max,
-                            sort_order,
-                            dim.min_label.as_deref(),
-                            dim.max_label.as_deref(),
-                        )
-                        .await?;
-                }
-                polls_created += 1;
-            }
+            let result = insert_sim_content(
+                &client,
+                admin,
+                &content,
+                config.poll_duration_secs,
+                verifier_account_id,
+            )
+            .await?;
+            tracing::info!(
+                rooms_created = result.rooms_created,
+                rooms_skipped = result.rooms_skipped,
+                polls_created = result.polls_created,
+                "content inserted"
+            );
+        } else {
+            tracing::info!("room target met, skipping room creation");
         }
-        tracing::info!(polls_created, "capacity fill complete");
+
+        // 9. Check capacity — rooms needing new content (no active poll)
+        let capacity_rooms = client.get_capacity().await?;
+        if capacity_rooms.is_empty() {
+            tracing::info!("all rooms have active polls, no capacity fill needed");
+        } else {
+            tracing::info!(
+                rooms_needing_content = capacity_rooms.len(),
+                "generating polls for rooms with capacity..."
+            );
+
+            let (content, usage) = generate_content(&http, &config, capacity_rooms.len()).await?;
+            session_usage += usage;
+            tracing::info!(
+                rooms_generated = content.rooms.len(),
+                "LLM content received for capacity fill"
+            );
+
+            // Create polls in existing rooms that need content
+            let mut polls_created = 0;
+            for (cap_room, sim_room) in capacity_rooms.iter().zip(content.rooms.iter()) {
+                for poll in &sim_room.polls {
+                    let poll_resp = client
+                        .create_poll(admin, cap_room.id, &poll.question, &poll.description)
+                        .await?;
+
+                    for (i, dim) in poll.dimensions.iter().enumerate() {
+                        #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
+                        let sort_order = i as i32;
+                        client
+                            .add_dimension(
+                                admin,
+                                cap_room.id,
+                                poll_resp.id,
+                                &dim.name,
+                                &dim.description,
+                                dim.min,
+                                dim.max,
+                                sort_order,
+                                dim.min_label.as_deref(),
+                                dim.max_label.as_deref(),
+                            )
+                            .await?;
+                    }
+                    polls_created += 1;
+                }
+            }
+            tracing::info!(polls_created, "capacity fill complete");
+        }
     }
 
     // 10. Cast simulated votes

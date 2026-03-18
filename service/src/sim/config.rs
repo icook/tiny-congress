@@ -34,10 +34,39 @@ pub struct SimConfig {
     /// Duration (in seconds) for polls created in sim rooms
     #[serde(default = "default_poll_duration_secs")]
     pub poll_duration_secs: i32,
+    /// Room topic mode (e.g., "civic" or "`brand_ethics`")
+    #[serde(default = "default_room_topic")]
+    pub room_topic: String,
+    /// Number of companies to curate from the S&P 500 (used in `brand_ethics` mode)
+    #[serde(default = "default_company_count")]
+    pub company_count: usize,
+    /// Exa API key for evidence search (required for `brand_ethics` mode unless `mock_llm`)
+    #[serde(default)]
+    pub exa_api_key: String,
+    /// Model for evidence synthesis step (default: Haiku for cost efficiency)
+    #[serde(default = "default_evidence_model")]
+    pub evidence_model: String,
+    /// Dry run: only run LLM generation and write output to JSON file, skip API calls
+    #[serde(default)]
+    pub dry_run: bool,
+    /// Battery test: path to a JSON file with model+search pairs to compare.
+    /// Format: `[{"model": "anthropic/claude-sonnet-4-6", "search": true}, ...]`
+    #[serde(default)]
+    pub battery_config: Option<String>,
+    /// Company name for battery test (e.g., "Sysco Corporation")
+    #[serde(default)]
+    pub battery_company: Option<String>,
+    /// Ticker for battery test (e.g., "SYY")
+    #[serde(default)]
+    pub battery_ticker: Option<String>,
 }
 
 fn default_model() -> String {
     "anthropic/claude-sonnet-4-6".to_string()
+}
+
+fn default_evidence_model() -> String {
+    "deepseek/deepseek-v3.2".to_string()
 }
 
 const fn default_target_rooms() -> usize {
@@ -66,6 +95,14 @@ fn default_log_level() -> String {
 
 const fn default_poll_duration_secs() -> i32 {
     86400 // 24 hours
+}
+
+fn default_room_topic() -> String {
+    "civic".to_string()
+}
+
+const fn default_company_count() -> usize {
+    25
 }
 
 impl SimConfig {

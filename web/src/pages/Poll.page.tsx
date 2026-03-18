@@ -20,6 +20,7 @@ import {
 } from '@mantine/core';
 import {
   AgendaProgress,
+  EvidenceCards,
   PollCountdown,
   UpcomingPollPreview,
   useAgenda,
@@ -376,6 +377,7 @@ function VoteSlider({
           {dimension.description}
         </Text>
       ) : null}
+      <EvidenceCards evidence={dimension.evidence} />
       <div style={{ paddingBottom: 8, paddingLeft: 8, paddingRight: 8 }}>
         <Slider
           value={value}
