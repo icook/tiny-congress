@@ -1262,7 +1262,7 @@ async fn sim_coordinated_denouncement() {
         before_div, 4,
         "Coordinated denouncement: target should start with diversity=4, got {before_div}"
     );
-    let constraint = CommunityConstraint::new(5.0, 2).expect("valid");
+    let constraint = CommunityConstraint::new(anchor, 5.0, 2).expect("valid");
     let before_elig = before
         .check_eligibility(target, &constraint, db.pool())
         .await;
@@ -1372,7 +1372,7 @@ async fn sim_insufficient_denouncement() {
     );
 
     // Assert: target RETAINS eligibility under CommunityConstraint(5.0, 2)
-    let constraint = CommunityConstraint::new(5.0, 2).expect("valid");
+    let constraint = CommunityConstraint::new(anchor, 5.0, 2).expect("valid");
     let after_elig = after
         .check_eligibility(target, &constraint, db.pool())
         .await;
@@ -1421,7 +1421,7 @@ async fn sim_propagation_comparison() {
         // Before
         let before = SimulationReport::run(&g, anchor).await;
         before.materialize(db.pool()).await;
-        let constraint = CommunityConstraint::new(5.0, 2).expect("valid");
+        let constraint = CommunityConstraint::new(anchor, 5.0, 2).expect("valid");
         let before_elig = before
             .check_eligibility(mercenary, &constraint, db.pool())
             .await;
@@ -1799,7 +1799,7 @@ async fn sim_penalty_sweep() {
         // Before
         let before = SimulationReport::run(&g, anchor).await;
         before.materialize(db.pool()).await;
-        let constraint = CommunityConstraint::new(5.0, 2).expect("valid");
+        let constraint = CommunityConstraint::new(anchor, 5.0, 2).expect("valid");
         let before_elig = before
             .check_eligibility(mercenary, &constraint, db.pool())
             .await;
@@ -1917,7 +1917,7 @@ async fn sim_mixed_weight_hub_and_spoke() {
 
     // Pipeline: all spokes rejected by CommunityConstraint
     report.materialize(db.pool()).await;
-    let constraint = CommunityConstraint::new(5.0, 2).expect("valid constraint");
+    let constraint = CommunityConstraint::new(anchor, 5.0, 2).expect("valid constraint");
     for &spoke in &spokes {
         let eligibility = report
             .check_eligibility(spoke, &constraint, db.pool())
@@ -1985,7 +1985,7 @@ async fn sim_mixed_weight_mercenary() {
 
     // Pipeline: check eligibility with CommunityConstraint
     report.materialize(db.pool()).await;
-    let constraint = CommunityConstraint::new(5.0, 2).expect("valid constraint");
+    let constraint = CommunityConstraint::new(anchor, 5.0, 2).expect("valid constraint");
     let eligibility = report
         .check_eligibility(mercenary, &constraint, db.pool())
         .await;
@@ -2086,7 +2086,7 @@ async fn sim_mixed_weight_colluding_ring() {
 
     // Pipeline: all ring nodes rejected by CommunityConstraint (diversity=1 < 2)
     report.materialize(db.pool()).await;
-    let constraint = CommunityConstraint::new(5.0, 2).expect("valid constraint");
+    let constraint = CommunityConstraint::new(anchor, 5.0, 2).expect("valid constraint");
     for red in report.red_nodes() {
         let eligibility = report
             .check_eligibility(red.id, &constraint, db.pool())
@@ -2132,8 +2132,6 @@ async fn sim_weight_sweep_mercenary() {
         "------", "--------", "---------", "---------", "------------"
     );
 
-    let constraint = CommunityConstraint::new(5.0, 2).expect("valid constraint");
-
     for weight_level in 1..=10 {
         #[allow(clippy::cast_precision_loss)]
         let weight = weight_level as f32 * 0.1;
@@ -2142,6 +2140,7 @@ async fn sim_weight_sweep_mercenary() {
         let mut g = GraphBuilder::new(db.pool().clone());
 
         let anchor = g.add_node("anchor", Team::Blue).await;
+        let constraint = CommunityConstraint::new(anchor, 5.0, 2).expect("valid constraint");
         let blue_web = topology::healthy_web(&mut g, "blue", Team::Blue, 6, 0.4, 1.0).await;
         g.endorse(anchor, blue_web[0], 1.0).await;
         g.endorse(anchor, blue_web[1], 1.0).await;
@@ -2275,7 +2274,7 @@ async fn sim_max_weight_sybil_diversity_check() {
     // Spokes at distance=3.0 pass the distance check (3.0 <= 5.0) but
     // fail diversity (1 < 2).
     report.materialize(db.pool()).await;
-    let constraint = CommunityConstraint::new(5.0, 2).expect("valid constraint");
+    let constraint = CommunityConstraint::new(anchor, 5.0, 2).expect("valid constraint");
     for &spoke in &spokes {
         let eligibility = report
             .check_eligibility(spoke, &constraint, db.pool())
@@ -2320,6 +2319,9 @@ async fn sim_predicate_hub_spoke_invariants() {
     let mut g = GraphBuilder::new(db.pool().clone());
 
     let anchor = g.add_node("anchor", Team::Blue).await;
+    let bridge = g.add_node("bridge", Team::Blue).await;
+    g.endorse(anchor, bridge, 1.0).await;
+    let hub = g.add_node("red_hub", Team::Red).await;
     g.endorse(bridge, hub, 0.3).await;
     for i in 0..5 {
         let spoke = g.add_node(&format!("red_spoke_{i}"), Team::Red).await;
