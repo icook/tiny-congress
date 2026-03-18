@@ -11,6 +11,7 @@ export {
 } from './api/queries';
 export { usePollCountdown } from './hooks/usePollCountdown';
 export { PollCountdown } from './components/PollCountdown';
+export { AgendaProgress } from './components/AgendaProgress';
 export type { CountdownState } from './hooks/usePollCountdown';
 export type {
   Room,
