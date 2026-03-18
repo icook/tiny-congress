@@ -41,11 +41,21 @@ async fn main() -> Result<(), anyhow::Error> {
         voter_count = config.voter_count,
         poll_duration_secs = config.poll_duration_secs,
         api_key_len = config.openrouter_api_key.len(),
+        dry_run = config.dry_run,
         "sim config loaded"
     );
 
     // 3. Create HTTP client
     let http = reqwest::Client::new();
+
+    // Dry-run mode: generate LLM content only, no API calls
+    if config.dry_run {
+        tracing::info!("dry-run mode — generating content without API");
+        brand::dry_run(&http, &config).await?;
+        tracing::info!("tc-sim dry run complete");
+        return Ok(());
+    }
+
     let client = SimClient::new(http.clone(), config.api_url.clone());
 
     // 4. Set up verifier account (login to register device key)

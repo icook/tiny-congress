@@ -45,7 +45,7 @@ pub struct SimDimension {
 }
 
 /// Token usage from a single `OpenRouter` API call.
-#[derive(Debug, Default, Clone, Copy, Deserialize)]
+#[derive(Debug, Default, Clone, Copy, Deserialize, Serialize)]
 pub struct Usage {
     pub prompt_tokens: u32,
     pub completion_tokens: u32,
@@ -726,6 +726,7 @@ mod tests {
             poll_duration_secs: 86400,
             room_topic: "civic".to_string(),
             company_count: 25,
+            dry_run: false,
         };
 
         let client = reqwest::Client::new();
@@ -750,6 +751,7 @@ mod tests {
             poll_duration_secs: 86400,
             room_topic: "civic".to_string(),
             company_count: 25,
+            dry_run: false,
         };
 
         let messages = build_messages(&config, 2);

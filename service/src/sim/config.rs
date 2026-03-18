@@ -40,6 +40,9 @@ pub struct SimConfig {
     /// Number of companies to curate from the S&P 500 (used in `brand_ethics` mode)
     #[serde(default = "default_company_count")]
     pub company_count: usize,
+    /// Dry run: only run LLM generation and write output to JSON file, skip API calls
+    #[serde(default)]
+    pub dry_run: bool,
 }
 
 fn default_model() -> String {

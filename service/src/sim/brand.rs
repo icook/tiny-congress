@@ -2,6 +2,7 @@
 //! Phase 2 (per-company evidence generation) to populate the Brand Ethics room.
 
 use anyhow::Context;
+use serde::Serialize;
 use uuid::Uuid;
 
 use crate::sim::{
@@ -231,4 +232,128 @@ pub async fn refill_if_needed(
 
     tracing::info!("ring buffer reset complete — lifecycle will activate first poll");
     Ok(usage)
+}
+
+// ─── Dry-run output types ──────────────────────────────────────────────────
+
+#[derive(Serialize)]
+struct DryRunOutput {
+    companies: Vec<DryRunCompany>,
+    token_usage: Usage,
+}
+
+#[derive(Serialize)]
+struct DryRunCompany {
+    ticker: String,
+    name: String,
+    relevance_hook: String,
+    dimensions: Vec<DryRunDimension>,
+}
+
+#[derive(Serialize)]
+struct DryRunDimension {
+    name: String,
+    min_label: String,
+    max_label: String,
+    evidence: Vec<DryRunEvidence>,
+}
+
+#[derive(Serialize)]
+struct DryRunEvidence {
+    stance: String,
+    claim: String,
+}
+
+/// Run LLM generation only, no API calls. Writes results to a JSON file
+/// for prompt iteration and quality review.
+///
+/// # Errors
+///
+/// Returns an error if any LLM call fails or the output file can't be written.
+pub async fn dry_run(http: &reqwest::Client, config: &SimConfig) -> Result<(), anyhow::Error> {
+    let mut total_usage = Usage::default();
+
+    // Phase 1: Curate companies
+    tracing::info!(
+        count = config.company_count,
+        "Phase 1: curating companies..."
+    );
+    let (curation, curation_usage) =
+        llm::generate_company_curation(http, config, config.company_count).await?;
+    total_usage += curation_usage;
+
+    tracing::info!(companies = curation.companies.len(), "companies curated");
+
+    // Phase 2: Generate evidence for each company
+    let mut companies = Vec::with_capacity(curation.companies.len());
+
+    for company in &curation.companies {
+        tracing::info!(
+            company = %company.name,
+            ticker = %company.ticker,
+            "Phase 2: generating evidence..."
+        );
+
+        let (evidence, ev_usage) =
+            llm::generate_company_evidence(http, config, &company.name, &company.ticker).await?;
+        total_usage += ev_usage;
+
+        let dimensions: Vec<DryRunDimension> = DIMENSIONS
+            .iter()
+            .map(|(dim_name, min_label, max_label)| {
+                let evidence_cards = evidence
+                    .dimensions
+                    .get(*dim_name)
+                    .map(|de| {
+                        let mut cards = Vec::new();
+                        for claim in &de.pro {
+                            cards.push(DryRunEvidence {
+                                stance: "pro".to_string(),
+                                claim: claim.clone(),
+                            });
+                        }
+                        for claim in &de.con {
+                            cards.push(DryRunEvidence {
+                                stance: "con".to_string(),
+                                claim: claim.clone(),
+                            });
+                        }
+                        cards
+                    })
+                    .unwrap_or_default();
+
+                DryRunDimension {
+                    name: (*dim_name).to_string(),
+                    min_label: (*min_label).to_string(),
+                    max_label: (*max_label).to_string(),
+                    evidence: evidence_cards,
+                }
+            })
+            .collect();
+
+        companies.push(DryRunCompany {
+            ticker: company.ticker.clone(),
+            name: company.name.clone(),
+            relevance_hook: evidence.relevance_hook.clone(),
+            dimensions,
+        });
+    }
+
+    let output = DryRunOutput {
+        companies,
+        token_usage: total_usage,
+    };
+
+    let json = serde_json::to_string_pretty(&output).context("failed to serialize output")?;
+    let path = "brand_ethics_dry_run.json";
+    std::fs::write(path, &json).context("failed to write output file")?;
+
+    tracing::info!(
+        path = path,
+        companies = output.companies.len(),
+        total_tokens = total_usage.total_tokens,
+        "dry run complete — output written"
+    );
+
+    Ok(())
 }
