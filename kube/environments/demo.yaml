@@ -1,4 +1,4 @@
-# Demo environment values for the sauce cluster (ibcook.com).
+# Demo environment values for the sauce cluster (tinycongress.com).
 #
 # Validated in CI: `helm template tc-demo kube/app -f kube/environments/demo.yaml`
 # Applied by Flux via HelmRelease valuesFiles (homelab-gitops).
@@ -11,14 +11,14 @@ replicaCount: 1
 frontend:
   environment: "demo"
   replicaCount: 1
-  apiUrl: "https://tc-api-demo.ibcook.com"
-  demoVerifierUrl: "https://tc-verify-demo.ibcook.com"
+  apiUrl: "https://demo-api.tinycongress.com"
+  demoVerifierUrl: "https://demo-verify.tinycongress.com"
   service:
     port: 80
     targetPort: 8080
 
 cors:
-  allowedOrigins: "https://tiny-congress-demo.ibcook.com"
+  allowedOrigins: "https://demo.tinycongress.com"
 
 resources:
   requests:
@@ -89,6 +89,6 @@ metrics:
 demoVerifier:
   enabled: true
   apiUrl: "http://tc-demo.tiny-congress-demo.svc.cluster.local:8080"
-  allowedCallback: "https://tiny-congress-demo.ibcook.com"
+  allowedCallback: "https://demo.tinycongress.com"
   ingress:
-    host: "tc-verify-demo.ibcook.com"
+    host: "demo-verify.tinycongress.com"
