@@ -105,9 +105,17 @@ pub struct CreateRoomRequest {
     #[serde(default = "default_eligibility_topic")]
     pub eligibility_topic: String,
     pub poll_duration_secs: Option<i32>,
+    #[serde(default = "default_constraint_type")]
+    pub constraint_type: String,
+    #[serde(default)]
+    pub constraint_config: serde_json::Value,
 }
 
 fn default_eligibility_topic() -> String {
+    "identity_verified".to_string()
+}
+
+fn default_constraint_type() -> String {
     "identity_verified".to_string()
 }
 
@@ -200,6 +208,8 @@ async fn create_room(
             req.description.as_deref(),
             &req.eligibility_topic,
             req.poll_duration_secs,
+            &req.constraint_type,
+            &req.constraint_config,
         )
         .await
     {

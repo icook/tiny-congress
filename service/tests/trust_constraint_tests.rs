@@ -7,9 +7,157 @@ use common::test_db::isolated_db;
 use serde_json::json;
 use tc_test_macros::shared_runtime_test;
 use tinycongress_api::trust::constraints::{
-    build_constraint, CommunityConstraint, CongressConstraint, EndorsedByConstraint, RoomConstraint,
+    build_constraint, CommunityConstraint, CongressConstraint, EndorsedByConstraint,
+    IdentityVerifiedConstraint, RoomConstraint,
 };
 use tinycongress_api::trust::repo::{PgTrustRepo, TrustRepo};
+
+// ---------------------------------------------------------------------------
+// has_identity_endorsement: verifier-attested users are recognised
+// ---------------------------------------------------------------------------
+#[shared_runtime_test]
+async fn test_has_identity_endorsement() {
+    let db = isolated_db().await;
+    let pool = db.pool().clone();
+
+    let verifier = AccountFactory::new()
+        .with_seed(100)
+        .create(&pool)
+        .await
+        .expect("create verifier");
+    let user = AccountFactory::new()
+        .with_seed(101)
+        .create(&pool)
+        .await
+        .expect("create user");
+    let other = AccountFactory::new()
+        .with_seed(102)
+        .create(&pool)
+        .await
+        .expect("create other");
+
+    let repo = PgTrustRepo::new(pool.clone());
+
+    // No endorsement yet — should return false
+    let result = repo
+        .has_identity_endorsement(user.id, &[verifier.id], "identity_verified")
+        .await
+        .unwrap();
+    assert!(!result, "user with no endorsement should return false");
+
+    // Insert identity_verified endorsement from verifier → user
+    sqlx::query(
+        "INSERT INTO reputation__endorsements (endorser_id, subject_id, topic, weight)
+         VALUES ($1, $2, 'identity_verified', $3)",
+    )
+    .bind(verifier.id)
+    .bind(user.id)
+    .bind(1.0_f32)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    // Now should return true
+    let result = repo
+        .has_identity_endorsement(user.id, &[verifier.id], "identity_verified")
+        .await
+        .unwrap();
+    assert!(result, "user with endorsement should return true");
+
+    // Different verifier — should return false
+    let result = repo
+        .has_identity_endorsement(user.id, &[other.id], "identity_verified")
+        .await
+        .unwrap();
+    assert!(
+        !result,
+        "user endorsed by different verifier should return false"
+    );
+
+    // Un-endorsed user — should return false
+    let result = repo
+        .has_identity_endorsement(other.id, &[verifier.id], "identity_verified")
+        .await
+        .unwrap();
+    assert!(!result, "un-endorsed user should return false");
+}
+
+// ---------------------------------------------------------------------------
+// IdentityVerifiedConstraint: verified user → eligible
+// ---------------------------------------------------------------------------
+#[shared_runtime_test]
+async fn test_identity_verified_eligible() {
+    let db = isolated_db().await;
+    let pool = db.pool().clone();
+
+    let verifier = AccountFactory::new()
+        .with_seed(103)
+        .create(&pool)
+        .await
+        .expect("create verifier");
+    let user = AccountFactory::new()
+        .with_seed(104)
+        .create(&pool)
+        .await
+        .expect("create user");
+
+    // Seed identity_verified endorsement
+    sqlx::query(
+        "INSERT INTO reputation__endorsements (endorser_id, subject_id, topic, weight)
+         VALUES ($1, $2, 'identity_verified', $3)",
+    )
+    .bind(verifier.id)
+    .bind(user.id)
+    .bind(1.0_f32)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let repo = PgTrustRepo::new(pool.clone());
+    let constraint = IdentityVerifiedConstraint::new(vec![verifier.id], "identity_verified");
+    let result = constraint
+        .check(user.id, &repo)
+        .await
+        .expect("check should not error");
+
+    assert!(result.is_eligible, "verified user should be eligible");
+    assert!(result.reason.is_none());
+}
+
+// ---------------------------------------------------------------------------
+// IdentityVerifiedConstraint: unverified user → ineligible with reason
+// ---------------------------------------------------------------------------
+#[shared_runtime_test]
+async fn test_identity_verified_ineligible() {
+    let db = isolated_db().await;
+    let pool = db.pool().clone();
+
+    let verifier = AccountFactory::new()
+        .with_seed(105)
+        .create(&pool)
+        .await
+        .expect("create verifier");
+    let user = AccountFactory::new()
+        .with_seed(106)
+        .create(&pool)
+        .await
+        .expect("create user");
+
+    // No endorsement
+    let repo = PgTrustRepo::new(pool.clone());
+    let constraint = IdentityVerifiedConstraint::new(vec![verifier.id], "identity_verified");
+    let result = constraint
+        .check(user.id, &repo)
+        .await
+        .expect("check should not error");
+
+    assert!(!result.is_eligible, "unverified user should be ineligible");
+    let reason = result.reason.expect("should have a reason");
+    assert!(
+        reason.contains("identity verification"),
+        "reason should mention identity verification, got: {reason}"
+    );
+}
 
 // ---------------------------------------------------------------------------
 // EndorsedByConstraint: user reachable from anchor → eligible
@@ -47,9 +195,9 @@ async fn test_endorsed_by_eligible() {
         .await
         .expect("upsert_score");
 
-    let constraint = EndorsedByConstraint;
+    let constraint = EndorsedByConstraint::new(anchor.id);
     let result = constraint
-        .check(user.id, Some(anchor.id), &repo)
+        .check(user.id, &repo)
         .await
         .expect("check should not error");
 
@@ -81,9 +229,9 @@ async fn test_endorsed_by_ineligible() {
 
     // No score inserted — user is unreachable
     let repo = PgTrustRepo::new(pool.clone());
-    let constraint = EndorsedByConstraint;
+    let constraint = EndorsedByConstraint::new(anchor.id);
     let result = constraint
-        .check(user.id, Some(anchor.id), &repo)
+        .check(user.id, &repo)
         .await
         .expect("check should not error");
 
@@ -122,9 +270,9 @@ async fn test_community_eligible() {
         .await
         .expect("upsert_score");
 
-    let constraint = CommunityConstraint::new(5.0, 2).unwrap();
+    let constraint = CommunityConstraint::new(anchor.id, 5.0, 2).unwrap();
     let result = constraint
-        .check(user.id, Some(anchor.id), &repo)
+        .check(user.id, &repo)
         .await
         .expect("check should not error");
 
@@ -158,9 +306,9 @@ async fn test_community_ineligible_distance() {
         .await
         .expect("upsert_score");
 
-    let constraint = CommunityConstraint::new(5.0, 2).unwrap();
+    let constraint = CommunityConstraint::new(anchor.id, 5.0, 2).unwrap();
     let result = constraint
-        .check(user.id, Some(anchor.id), &repo)
+        .check(user.id, &repo)
         .await
         .expect("check should not error");
 
@@ -199,9 +347,9 @@ async fn test_community_ineligible_diversity() {
         .await
         .expect("upsert_score");
 
-    let constraint = CommunityConstraint::new(5.0, 2).unwrap();
+    let constraint = CommunityConstraint::new(anchor.id, 5.0, 2).unwrap();
     let result = constraint
-        .check(user.id, Some(anchor.id), &repo)
+        .check(user.id, &repo)
         .await
         .expect("check should not error");
 
@@ -221,16 +369,25 @@ async fn test_community_ineligible_diversity() {
 // ---------------------------------------------------------------------------
 #[shared_runtime_test]
 async fn test_build_constraint_factory() {
-    // endorsed_by with empty config → Ok
-    let result = build_constraint("endorsed_by", &json!({}));
+    let anchor_id = uuid::Uuid::new_v4();
+
+    // endorsed_by with anchor_id → Ok
+    let result = build_constraint("endorsed_by", &json!({"anchor_id": anchor_id}));
     assert!(result.is_ok(), "endorsed_by should build successfully");
 
-    // community with max_distance override → Ok
-    let result = build_constraint("community", &json!({"max_distance": 4.0}));
+    // endorsed_by without anchor_id → Err
+    let result = build_constraint("endorsed_by", &json!({}));
+    assert!(result.is_err(), "endorsed_by without anchor_id should fail");
+
+    // community with anchor_id and max_distance override → Ok
+    let result = build_constraint(
+        "community",
+        &json!({"anchor_id": anchor_id, "max_distance": 4.0}),
+    );
     assert!(result.is_ok(), "community should build successfully");
 
-    // congress with default config → Ok
-    let result = build_constraint("congress", &json!({}));
+    // congress with anchor_id and default config → Ok
+    let result = build_constraint("congress", &json!({"anchor_id": anchor_id}));
     assert!(result.is_ok(), "congress should build successfully");
 
     // unknown type → Err
@@ -245,6 +402,31 @@ async fn test_build_constraint_factory() {
             );
         }
     }
+
+    // identity_verified with valid verifier_ids → Ok
+    let verifier_id = uuid::Uuid::new_v4();
+    let config = json!({"verifier_ids": [verifier_id.to_string()]});
+    let constraint = build_constraint("identity_verified", &config);
+    assert!(
+        constraint.is_ok(),
+        "identity_verified with verifier_ids should build successfully"
+    );
+
+    // identity_verified — missing verifier_ids → Err
+    let config = json!({});
+    let result = build_constraint("identity_verified", &config);
+    assert!(
+        result.is_err(),
+        "identity_verified without verifier_ids should fail"
+    );
+
+    // identity_verified — empty verifier_ids → Err
+    let config = json!({"verifier_ids": []});
+    let result = build_constraint("identity_verified", &config);
+    assert!(
+        result.is_err(),
+        "identity_verified with empty verifier_ids should fail"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -272,9 +454,9 @@ async fn test_community_both_fail() {
         .await
         .expect("upsert_score");
 
-    let constraint = CommunityConstraint::new(5.0, 2).unwrap();
+    let constraint = CommunityConstraint::new(anchor.id, 5.0, 2).unwrap();
     let result = constraint
-        .check(user.id, Some(anchor.id), &repo)
+        .check(user.id, &repo)
         .await
         .expect("check should not error");
 
@@ -317,9 +499,9 @@ async fn test_congress_eligible() {
         .await
         .expect("upsert_score");
 
-    let constraint = CongressConstraint::new(3).unwrap();
+    let constraint = CongressConstraint::new(anchor.id, 3).unwrap();
     let result = constraint
-        .check(user.id, Some(anchor.id), &repo)
+        .check(user.id, &repo)
         .await
         .expect("check should not error");
 
@@ -351,9 +533,9 @@ async fn test_congress_ineligible() {
 
     // No score inserted — no snapshot for this user
     let repo = PgTrustRepo::new(pool.clone());
-    let constraint = CongressConstraint::new(3).unwrap();
+    let constraint = CongressConstraint::new(anchor.id, 3).unwrap();
     let result = constraint
-        .check(user.id, Some(anchor.id), &repo)
+        .check(user.id, &repo)
         .await
         .expect("check should not error");
 

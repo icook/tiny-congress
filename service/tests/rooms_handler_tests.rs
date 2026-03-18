@@ -63,17 +63,64 @@ async fn endorse_user(pool: &sqlx::PgPool, account_id: uuid::Uuid, topic: &str) 
         .expect("endorsement");
 }
 
-/// Helper: seed a global trust score snapshot that makes `account_id` eligible to vote.
+/// Helper: create or return a deterministic anchor account for constraint tests.
 ///
-/// The `EndorsedByConstraint` with a nil anchor checks `trust_repo.get_score(user_id, None)`.
-/// Seeding a score with `trust_distance = Some(1.0)` makes the user reachable and eligible.
-async fn make_eligible(pool: &sqlx::PgPool, account_id: uuid::Uuid, _room_id: uuid::Uuid) {
-    use tinycongress_api::trust::repo::{PgTrustRepo, TrustRepo};
-    let trust_repo = PgTrustRepo::new(pool.clone());
-    trust_repo
-        .upsert_score(account_id, None, Some(1.0), Some(1), None)
-        .await
-        .expect("trust score");
+/// Uses seed 200 so it never collides with test user seeds. Returns the anchor's UUID.
+/// Safe to call multiple times on the same DB — returns the existing account on conflict.
+async fn get_or_create_anchor(pool: &sqlx::PgPool) -> uuid::Uuid {
+    use common::factories::{generate_test_keys, AccountFactory};
+    use tinycongress_api::identity::repo::AccountRepoError;
+
+    match AccountFactory::new().with_seed(200).create(pool).await {
+        Ok(account) => account.id,
+        Err(AccountRepoError::DuplicateKey | AccountRepoError::DuplicateUsername) => {
+            let (_, root_kid) = generate_test_keys(200);
+            sqlx::query_scalar("SELECT id FROM accounts WHERE root_kid = $1")
+                .bind(root_kid.as_str())
+                .fetch_one(pool)
+                .await
+                .expect("find existing anchor account")
+        }
+        Err(e) => panic!("create anchor account: {e}"),
+    }
+}
+
+/// Helper: configure a room to use `identity_verified` constraint with the test verifier.
+///
+/// Sets constraint_type = 'identity_verified' and constraint_config = {"verifier_ids": [verifier_id]}.
+/// Rooms created via POST /rooms already default to identity_verified; this helper ensures
+/// the verifier_ids config is set so `build_constraint` succeeds.
+async fn set_room_anchor(pool: &sqlx::PgPool, room_id: uuid::Uuid) {
+    let verifier = get_or_create_anchor(pool).await;
+    sqlx::query(
+        "UPDATE rooms__rooms SET constraint_type = 'identity_verified', constraint_config = $1 WHERE id = $2",
+    )
+    .bind(serde_json::json!({"verifier_ids": [verifier]}))
+    .bind(room_id)
+    .execute(pool)
+    .await
+    .expect("set room constraint");
+}
+
+/// Helper: make `account_id` eligible to vote in a room using `identity_verified` constraint.
+///
+/// Configures the room's constraint to use a test verifier, then creates an
+/// `identity_verified` endorsement from that verifier to the account. The
+/// `IdentityVerifiedConstraint` will find the endorsement and mark the user eligible.
+async fn make_eligible(pool: &sqlx::PgPool, account_id: uuid::Uuid, room_id: uuid::Uuid) {
+    let verifier = get_or_create_anchor(pool).await;
+
+    set_room_anchor(pool, room_id).await;
+
+    sqlx::query(
+        "INSERT INTO reputation__endorsements (endorser_id, subject_id, topic, weight) \
+         VALUES ($1, $2, 'identity_verified', 1.0) ON CONFLICT DO NOTHING",
+    )
+    .bind(verifier)
+    .bind(account_id)
+    .execute(pool)
+    .await
+    .expect("identity endorsement");
 }
 
 /// Helper: parse JSON response body.
@@ -481,6 +528,10 @@ async fn test_cast_vote_ineligible_user_returns_403() {
     let room = json_body(app.clone().oneshot(req).await.expect("response")).await;
     let room_id = room["id"].as_str().expect("room_id");
 
+    // Set a valid constraint config so build_constraint succeeds (user has no endorsement → 403)
+    let room_uuid: uuid::Uuid = room_id.parse().expect("room uuid");
+    set_room_anchor(db.pool(), room_uuid).await;
+
     let poll_body = serde_json::json!({"question": "Test?"}).to_string();
     let req = build_authed_request(
         Method::POST,
@@ -514,7 +565,7 @@ async fn test_cast_vote_ineligible_user_returns_403() {
     );
     app.clone().oneshot(req).await.expect("response");
 
-    // No endorsement — should get 403
+    // No trust score for the anchor — should get 403
     let vote_body = serde_json::json!({
         "votes": [{"dimension_id": dim_id, "value": 0.5}]
     })

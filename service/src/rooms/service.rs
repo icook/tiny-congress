@@ -79,6 +79,8 @@ pub trait RoomsService: Send + Sync {
         description: Option<&str>,
         eligibility_topic: &str,
         poll_duration_secs: Option<i32>,
+        constraint_type: &str,
+        constraint_config: &serde_json::Value,
     ) -> Result<RoomRecord, RoomError>;
     async fn rooms_needing_content(&self) -> Result<Vec<RoomRecord>, RoomError>;
     async fn list_rooms(&self, status: Option<&str>) -> Result<Vec<RoomRecord>, RoomError>;
@@ -182,6 +184,8 @@ impl RoomsService for DefaultRoomsService {
         description: Option<&str>,
         eligibility_topic: &str,
         poll_duration_secs: Option<i32>,
+        constraint_type: &str,
+        constraint_config: &serde_json::Value,
     ) -> Result<RoomRecord, RoomError> {
         if name.trim().is_empty() {
             return Err(RoomError::Validation(
@@ -194,6 +198,8 @@ impl RoomsService for DefaultRoomsService {
                 description,
                 eligibility_topic,
                 poll_duration_secs,
+                constraint_type,
+                constraint_config,
             )
             .await
             .map_err(|e| match e {
@@ -533,10 +539,9 @@ impl RoomsService for DefaultRoomsService {
                 VoteError::Internal("Internal server error".to_string())
             })?;
 
-        // Rooms do not currently have a creator account to serve as anchor.
-        // Pass None — constraints interpret this as a global-context lookup.
+        // Anchor and all other policy is encoded in the constraint config — just call check().
         let eligibility = constraint
-            .check(user_id, None, self.trust_repo.as_ref())
+            .check(user_id, self.trust_repo.as_ref())
             .await
             .map_err(|e| {
                 tracing::error!("Eligibility check failed: {e}");

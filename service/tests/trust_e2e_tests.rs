@@ -119,16 +119,16 @@ async fn test_demo_day_flow() {
     assert!(dave_score.is_none(), "Dave should be unreachable");
 
     // Step 6: Verify room constraint — Bob can enter, Dave cannot
-    let endorsed_by = EndorsedByConstraint;
+    let endorsed_by = EndorsedByConstraint::new(alice.id);
 
     let bob_eligibility = endorsed_by
-        .check(bob.id, Some(alice.id), trust_repo.as_ref())
+        .check(bob.id, trust_repo.as_ref())
         .await
         .expect("check bob eligibility");
     assert!(bob_eligibility.is_eligible, "Bob should be eligible");
 
     let dave_eligibility = endorsed_by
-        .check(dave.id, Some(alice.id), trust_repo.as_ref())
+        .check(dave.id, trust_repo.as_ref())
         .await
         .expect("check dave eligibility");
     assert!(!dave_eligibility.is_eligible, "Dave should not be eligible");

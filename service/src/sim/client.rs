@@ -82,6 +82,9 @@ struct CreateRoomBody<'a> {
     name: &'a str,
     description: &'a str,
     eligibility_topic: &'a str,
+    constraint_type: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    constraint_config: Option<&'a serde_json::Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     poll_duration_secs: Option<i32>,
 }
@@ -270,12 +273,15 @@ impl SimClient {
     /// # Errors
     ///
     /// Returns an error if the HTTP request fails or the response is not 2xx.
+    #[allow(clippy::too_many_arguments)]
     pub async fn create_room(
         &self,
         account: &SimAccount,
         name: &str,
         description: &str,
         eligibility_topic: &str,
+        constraint_type: &str,
+        constraint_config: Option<&serde_json::Value>,
         poll_duration_secs: Option<i32>,
     ) -> Result<RoomResponse> {
         let path = "/rooms";
@@ -283,6 +289,8 @@ impl SimClient {
             name,
             description,
             eligibility_topic,
+            constraint_type,
+            constraint_config,
             poll_duration_secs,
         })?;
         let headers = account.sign_request("POST", path, &body);
@@ -495,6 +503,44 @@ impl SimClient {
         Ok(resp)
     }
 
+    /// Look up an account by username (requires authentication).
+    ///
+    /// Returns the account UUID, which can be used as a `verifier_id` in room
+    /// constraint config.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the HTTP request fails or the response is not 2xx.
+    pub async fn lookup_account(&self, authed: &SimAccount, username: &str) -> Result<Uuid> {
+        let path = format!(
+            "/accounts/lookup?username={}",
+            urlencoding::encode(username)
+        );
+        let body: &[u8] = b"";
+        let headers = authed.sign_request("GET", &path, body);
+
+        let mut req = self
+            .http
+            .get(format!("{}{path}", self.api_url))
+            .header("Content-Type", "application/json");
+
+        for (key, value) in headers {
+            req = req.header(key, value);
+        }
+
+        let resp = req.send().await?;
+        let status = resp.status();
+        if !status.is_success() {
+            let body = resp.text().await.unwrap_or_default();
+            return Err(anyhow!("GET {path} returned {status}: {body}"));
+        }
+        let json: serde_json::Value = resp.json().await?;
+        let id_str = json["id"]
+            .as_str()
+            .ok_or_else(|| anyhow!("lookup_account: missing 'id' field in response"))?;
+        Uuid::parse_str(id_str).map_err(|e| anyhow!("lookup_account: invalid UUID: {e}"))
+    }
+
     /// Endorse a user for a topic via the verifier API.
     ///
     /// The `verifier` account must have an `authorized_verifier` endorsement
@@ -701,6 +747,8 @@ mod tests {
             name: "Test Room",
             description: "A test room",
             eligibility_topic: "testing",
+            constraint_type: "identity_verified",
+            constraint_config: None,
             poll_duration_secs: Some(3600),
         };
         let json: serde_json::Value =

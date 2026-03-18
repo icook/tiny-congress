@@ -76,7 +76,7 @@ async fn sim_hub_and_spoke_sybil_attack() {
     // Pipeline assertion: materialize scores, then verify spokes are
     // rejected by CommunityConstraint (diversity=1 < min_diversity=2).
     report.materialize(db.pool()).await;
-    let constraint = CommunityConstraint::new(5.0, 2).expect("valid constraint");
+    let constraint = CommunityConstraint::new(anchor, 5.0, 2).expect("valid constraint");
     for &spoke in &spokes {
         let eligibility = report
             .check_eligibility(spoke, &constraint, db.pool())
@@ -217,7 +217,7 @@ async fn sim_colluding_ring() {
     // Pipeline assertion: materialize scores, then verify ring nodes are
     // rejected by CongressConstraint (diversity=1 < min_diversity=2).
     report.materialize(db.pool()).await;
-    let constraint = CongressConstraint::new(2).expect("valid constraint");
+    let constraint = CongressConstraint::new(anchor, 2).expect("valid constraint");
     for red in report.red_nodes() {
         let eligibility = report
             .check_eligibility(red.id, &constraint, db.pool())
@@ -444,7 +444,7 @@ async fn sim_weight_calibration() {
     // Pipeline assertion: materialize scores, then verify target passes
     // CommunityConstraint (distance=2.0 <= 5.0, diversity=3 >= 2).
     report.materialize(db.pool()).await;
-    let constraint = CommunityConstraint::new(5.0, 2).expect("valid constraint");
+    let constraint = CommunityConstraint::new(anchor, 5.0, 2).expect("valid constraint");
     let eligibility = report
         .check_eligibility(target, &constraint, db.pool())
         .await;
@@ -515,7 +515,7 @@ async fn sim_multi_point_attachment() {
     // This is the dangerous case — adversaries that meet the threshold.
     // (max_distance=6.0 because the furthest red nodes are at distance ~5.33)
     report.materialize(db.pool()).await;
-    let constraint = CommunityConstraint::new(6.0, 2).expect("valid constraint");
+    let constraint = CommunityConstraint::new(anchor, 6.0, 2).expect("valid constraint");
     for red in report.red_nodes() {
         let eligibility = report
             .check_eligibility(red.id, &constraint, db.pool())
@@ -528,7 +528,7 @@ async fn sim_multi_point_attachment() {
     }
 
     // But CongressConstraint with higher diversity should still block
-    let strict_constraint = CongressConstraint::new(3).expect("valid constraint");
+    let strict_constraint = CongressConstraint::new(anchor, 3).expect("valid constraint");
     for red in report.red_nodes() {
         let eligibility = report
             .check_eligibility(red.id, &strict_constraint, db.pool())
@@ -597,7 +597,7 @@ async fn sim_asymmetric_weight_exploit() {
 
     // Pipeline: even at max weight, diversity=1 < min=2 → rejected
     report.materialize(db.pool()).await;
-    let community = CommunityConstraint::new(5.0, 2).expect("valid constraint");
+    let community = CommunityConstraint::new(anchor, 5.0, 2).expect("valid constraint");
     let eligibility = report.check_eligibility(red, &community, db.pool()).await;
     assert!(
         !eligibility.is_eligible,
@@ -657,7 +657,7 @@ async fn sim_phantom_edges() {
 
     // Pipeline: materialize and verify red is ineligible (distance far exceeds threshold)
     report.materialize(db.pool()).await;
-    let constraint = CommunityConstraint::new(5.0, 2).expect("valid constraint");
+    let constraint = CommunityConstraint::new(anchor, 5.0, 2).expect("valid constraint");
     let eligibility = report.check_eligibility(red, &constraint, db.pool()).await;
     assert!(
         !eligibility.is_eligible,
@@ -729,7 +729,7 @@ async fn sim_graph_splitting() {
 
     // Pipeline: materialize and check before state
     report_before.materialize(db.pool()).await;
-    let constraint = CommunityConstraint::new(5.0, 2).expect("valid constraint");
+    let constraint = CommunityConstraint::new(anchor, 5.0, 2).expect("valid constraint");
     let a_before = report_before
         .check_eligibility(downstream_a, &constraint, db.pool())
         .await;
@@ -841,7 +841,7 @@ async fn sim_coerced_handshake() {
 
     // Pipeline: coercer passes CommunityConstraint — this is the problem
     report.materialize(db.pool()).await;
-    let constraint = CommunityConstraint::new(5.0, 2).expect("valid constraint");
+    let constraint = CommunityConstraint::new(anchor, 5.0, 2).expect("valid constraint");
     let eligibility = report
         .check_eligibility(coercer, &constraint, db.pool())
         .await;
@@ -907,7 +907,7 @@ async fn sim_mercenary_bot() {
 
     // Pipeline: mercenary passes all constraints — indistinguishable
     report.materialize(db.pool()).await;
-    let constraint = CommunityConstraint::new(5.0, 2).expect("valid constraint");
+    let constraint = CommunityConstraint::new(anchor, 5.0, 2).expect("valid constraint");
     let eligibility = report
         .check_eligibility(mercenary, &constraint, db.pool())
         .await;
@@ -950,7 +950,7 @@ async fn sim_mechanism_comparison() {
         // Before
         let before = SimulationReport::run(&g, anchor).await;
         before.materialize(db.pool()).await;
-        let constraint = CommunityConstraint::new(5.0, 2).expect("valid");
+        let constraint = CommunityConstraint::new(anchor, 5.0, 2).expect("valid");
         let before_elig = before.check_eligibility(hub, &constraint, db.pool()).await;
 
         // Apply mechanism to hub
@@ -1007,7 +1007,7 @@ async fn sim_mechanism_comparison() {
 
         let before = SimulationReport::run(&g, anchor).await;
         before.materialize(db.pool()).await;
-        let constraint = CommunityConstraint::new(5.0, 2).expect("valid");
+        let constraint = CommunityConstraint::new(anchor, 5.0, 2).expect("valid");
         let before_elig = before
             .check_eligibility(mercenary, &constraint, db.pool())
             .await;
@@ -1104,7 +1104,7 @@ async fn sim_weaponization_resistance() {
         // Before: blue_target should be eligible
         let before = SimulationReport::run(&g, anchor).await;
         before.materialize(db.pool()).await;
-        let constraint = CommunityConstraint::new(5.0, 2).expect("valid");
+        let constraint = CommunityConstraint::new(anchor, 5.0, 2).expect("valid");
         let before_elig = before
             .check_eligibility(blue_target, &constraint, db.pool())
             .await;
