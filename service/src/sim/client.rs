@@ -124,6 +124,19 @@ struct VoteEntry {
     value: f32,
 }
 
+/// Evidence item for POST evidence endpoint.
+#[derive(Serialize)]
+pub struct EvidenceBody {
+    pub stance: String,
+    pub claim: String,
+    pub source: Option<String>,
+}
+
+#[derive(Serialize)]
+struct AddEvidenceBody<'a> {
+    evidence: &'a [EvidenceBody],
+}
+
 #[derive(Serialize)]
 struct EndorseBody<'a> {
     username: &'a str,
@@ -479,6 +492,75 @@ impl SimClient {
             return Err(anyhow!("POST {path} returned {status}: {body}"));
         }
         Ok(resp.json().await?)
+    }
+
+    /// Insert evidence items for a poll dimension.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the HTTP request fails or the response is not 2xx.
+    pub async fn add_evidence(
+        &self,
+        account: &SimAccount,
+        room_id: Uuid,
+        poll_id: Uuid,
+        dimension_id: Uuid,
+        evidence: &[EvidenceBody],
+    ) -> Result<()> {
+        let path = format!("/rooms/{room_id}/polls/{poll_id}/dimensions/{dimension_id}/evidence");
+        let body = serde_json::to_vec(&AddEvidenceBody { evidence })?;
+        let headers = account.sign_request("POST", &path, &body);
+
+        let mut req = self
+            .http
+            .post(format!("{}{path}", self.api_url))
+            .header("Content-Type", "application/json")
+            .body(body);
+
+        for (key, value) in headers {
+            req = req.header(key, value);
+        }
+
+        let resp = req.send().await?;
+        let status = resp.status();
+        if !status.is_success() {
+            let body = resp.text().await.unwrap_or_default();
+            return Err(anyhow!("POST {path} returned {status}: {body}"));
+        }
+        Ok(())
+    }
+
+    /// Delete all evidence for a poll (ring buffer reset).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the HTTP request fails or the response is not 2xx.
+    pub async fn delete_poll_evidence(
+        &self,
+        account: &SimAccount,
+        room_id: Uuid,
+        poll_id: Uuid,
+    ) -> Result<()> {
+        let path = format!("/rooms/{room_id}/polls/{poll_id}/evidence");
+        let body: &[u8] = b"";
+        let headers = account.sign_request("DELETE", &path, body);
+
+        let mut req = self
+            .http
+            .delete(format!("{}{path}", self.api_url))
+            .header("Content-Type", "application/json");
+
+        for (key, value) in headers {
+            req = req.header(key, value);
+        }
+
+        let resp = req.send().await?;
+        let status = resp.status();
+        if !status.is_success() {
+            let body = resp.text().await.unwrap_or_default();
+            return Err(anyhow!("DELETE {path} returned {status}: {body}"));
+        }
+        Ok(())
     }
 
     // -- Verifier-authenticated endpoint ----------------------------------

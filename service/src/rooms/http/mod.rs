@@ -7,7 +7,7 @@ use axum::{
     extract::{Extension, Path},
     http::StatusCode,
     response::IntoResponse,
-    routing::{get, post},
+    routing::{delete, get, post},
     Json, Router,
 };
 use serde::{Deserialize, Serialize};
@@ -172,6 +172,18 @@ pub struct PollStatusRequest {
     pub status: String,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct CreateEvidenceBody {
+    pub evidence: Vec<EvidenceItem>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct EvidenceItem {
+    pub stance: String,
+    pub claim: String,
+    pub source: Option<String>,
+}
+
 // ─── Router ────────────────────────────────────────────────────────────────
 
 pub fn router() -> Router {
@@ -186,6 +198,15 @@ pub fn router() -> Router {
         .route("/rooms/{room_id}/polls/{poll_id}", get(get_poll_detail))
         .route("/rooms/{room_id}/polls/{poll_id}/status", post(update_poll_status))
         .route("/rooms/{room_id}/polls/{poll_id}/dimensions", post(add_dimension))
+        // Evidence endpoints
+        .route(
+            "/rooms/{room_id}/polls/{poll_id}/dimensions/{dimension_id}/evidence",
+            post(create_evidence),
+        )
+        .route(
+            "/rooms/{room_id}/polls/{poll_id}/evidence",
+            delete(delete_evidence),
+        )
         // Vote + results
         .route("/rooms/{room_id}/polls/{poll_id}/vote", post(cast_vote))
         .route("/rooms/{room_id}/polls/{poll_id}/results", get(get_results))
@@ -421,6 +442,82 @@ async fn add_dimension(
     {
         Ok(dim) => (StatusCode::CREATED, Json(dim_to_response(dim))).into_response(),
         Err(e) => poll_error_response(e),
+    }
+}
+
+// ─── Evidence handlers ─────────────────────────────────────────────────────
+
+async fn create_evidence(
+    Extension(pool): Extension<PgPool>,
+    Path((_room_id, poll_id, dimension_id)): Path<(Uuid, Uuid, Uuid)>,
+    Json(body): Json<CreateEvidenceBody>,
+) -> impl IntoResponse {
+    // Validate dimension belongs to the poll
+    let belongs: Option<(Uuid,)> = match sqlx::query_as(
+        "SELECT id FROM rooms__poll_dimensions WHERE id = $1 AND poll_id = $2",
+    )
+    .bind(dimension_id)
+    .bind(poll_id)
+    .fetch_optional(&pool)
+    .await
+    {
+        Ok(r) => r,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({ "error": format!("DB error: {e}") })),
+            )
+                .into_response()
+        }
+    };
+
+    if belongs.is_none() {
+        return (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({ "error": "Dimension not found for this poll" })),
+        )
+            .into_response();
+    }
+
+    let new_evidence: Vec<evidence::NewEvidence<'_>> = body
+        .evidence
+        .iter()
+        .map(|item| evidence::NewEvidence {
+            stance: &item.stance,
+            claim: &item.claim,
+            source: item.source.as_deref(),
+        })
+        .collect();
+
+    match evidence::insert_evidence(&pool, dimension_id, &new_evidence).await {
+        Ok(count) => (
+            StatusCode::CREATED,
+            Json(serde_json::json!({ "count": count })),
+        )
+            .into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({ "error": format!("Failed to insert evidence: {e}") })),
+        )
+            .into_response(),
+    }
+}
+
+async fn delete_evidence(
+    Extension(pool): Extension<PgPool>,
+    Path((_room_id, poll_id)): Path<(Uuid, Uuid)>,
+) -> impl IntoResponse {
+    match evidence::delete_evidence_for_poll(&pool, poll_id).await {
+        Ok(deleted) => (
+            StatusCode::OK,
+            Json(serde_json::json!({ "deleted": deleted })),
+        )
+            .into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({ "error": format!("Failed to delete evidence: {e}") })),
+        )
+            .into_response(),
     }
 }
 
