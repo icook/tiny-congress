@@ -3459,6 +3459,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "tc-engine-polling"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "axum",
+ "chrono",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "tc-engine-api",
+ "tokio",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "tc-test-macros"
 version = "0.1.0"
 dependencies = [
@@ -3621,6 +3638,7 @@ dependencies = [
  "sqlx-postgres",
  "tc-crypto",
  "tc-engine-api",
+ "tc-engine-polling",
  "tc-test-macros",
  "testcontainers",
  "thiserror 2.0.17",
