@@ -2761,3 +2761,5 @@ async fn sim_denouncer_revocation_reduces_target_diversity() {
     assert!(
         after_distance.is_some(),
         "bob should still be reachable via carol after alice's edge is revoked"
+    );
+}
