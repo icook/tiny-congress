@@ -8,3 +8,10 @@ pub mod constraints;
 pub mod engine;
 pub mod error;
 pub mod trust;
+
+// Re-export key public types for ergonomic imports.
+pub use engine::{
+    EngineContext, EngineMetadata, EngineRegistry, PlatformState, RoomEngine, RoomLifecycle,
+    RoomRecord,
+};
+pub use error::EngineError;

@@ -9,9 +9,12 @@ description = "Plugin contract for TinyCongress room engines"
 anyhow = "1.0"
 async-trait = "0.1"
 axum = "0.8"
+chrono = { version = "0.4", features = ["serde"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "postgres"] }
 thiserror = "2.0"
+tokio = { version = "1", features = ["rt"] }
 uuid = { version = "1.16", features = ["v4", "serde"] }
 
 [dev-dependencies]
