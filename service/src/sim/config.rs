@@ -40,6 +40,12 @@ pub struct SimConfig {
     /// Number of companies to curate from the S&P 500 (used in `brand_ethics` mode)
     #[serde(default = "default_company_count")]
     pub company_count: usize,
+    /// Exa API key for evidence search (required for `brand_ethics` mode unless `mock_llm`)
+    #[serde(default)]
+    pub exa_api_key: String,
+    /// Model for evidence synthesis step (default: Haiku for cost efficiency)
+    #[serde(default = "default_evidence_model")]
+    pub evidence_model: String,
     /// Dry run: only run LLM generation and write output to JSON file, skip API calls
     #[serde(default)]
     pub dry_run: bool,
@@ -57,6 +63,10 @@ pub struct SimConfig {
 
 fn default_model() -> String {
     "anthropic/claude-sonnet-4-6".to_string()
+}
+
+fn default_evidence_model() -> String {
+    "deepseek/deepseek-v3.2".to_string()
 }
 
 const fn default_target_rooms() -> usize {

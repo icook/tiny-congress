@@ -276,6 +276,7 @@ struct BatteryOutput {
     company: String,
     ticker: String,
     runs: Vec<BatteryRun>,
+    total_cost_usd: Option<f64>,
 }
 
 #[derive(Serialize)]
@@ -283,6 +284,9 @@ struct BatteryRun {
     model: String,
     search: bool,
     token_usage: Usage,
+    cost_usd: Option<f64>,
+    duration_secs: f64,
+    generation_id: String,
     evidence: BatteryEvidence,
     raw_response: String,
 }
@@ -301,6 +305,7 @@ struct BatteryEvidence {
 /// # Errors
 ///
 /// Returns an error if any LLM call fails or the output file can't be written.
+#[allow(clippy::too_many_lines)]
 pub async fn battery(
     http: &reqwest::Client,
     api_key: &str,
@@ -320,6 +325,7 @@ pub async fn battery(
             "running battery..."
         );
 
+        let start = std::time::Instant::now();
         let result = llm::generate_company_evidence_with_overrides(
             http,
             api_key,
@@ -329,9 +335,23 @@ pub async fn battery(
             ticker,
         )
         .await;
+        let duration_secs = start.elapsed().as_secs_f64();
 
         match result {
-            Ok((evidence, usage, raw)) => {
+            Ok((evidence, usage, raw, generation_id)) => {
+                // Fetch cost from OpenRouter generation stats (async, best-effort)
+                let cost_usd = llm::get_generation_cost(http, api_key, &generation_id)
+                    .await
+                    .unwrap_or(None);
+
+                tracing::info!(
+                    model = %pair.model,
+                    cost_usd = ?cost_usd,
+                    duration_secs,
+                    generation_id = %generation_id,
+                    "battery run complete"
+                );
+
                 let dimensions: Vec<DryRunDimension> = DIMENSIONS
                     .iter()
                     .map(|(dim_name, min_label, max_label)| {
@@ -369,6 +389,9 @@ pub async fn battery(
                     model: pair.model.clone(),
                     search: pair.search,
                     token_usage: usage,
+                    cost_usd,
+                    duration_secs,
+                    generation_id,
                     evidence: BatteryEvidence {
                         relevance_hook: evidence.relevance_hook,
                         dimensions,
@@ -381,16 +404,27 @@ pub async fn battery(
                     model = %pair.model,
                     search = pair.search,
                     error = %e,
+                    duration_secs,
                     "battery run failed"
                 );
             }
         }
     }
 
+    let total_cost_usd: Option<f64> = {
+        let costs: Vec<f64> = runs.iter().filter_map(|r| r.cost_usd).collect();
+        if costs.is_empty() {
+            None
+        } else {
+            Some(costs.iter().sum())
+        }
+    };
+
     let output = BatteryOutput {
         company: company_name.to_string(),
         ticker: ticker.to_string(),
         runs,
+        total_cost_usd,
     };
 
     let json =

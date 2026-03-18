@@ -36,11 +36,13 @@ async fn main() -> Result<(), anyhow::Error> {
     tracing::info!(
         api_url = %config.api_url,
         model = %config.openrouter_model,
+        evidence_model = %config.evidence_model,
         target_rooms = config.target_rooms,
         votes_per_poll = config.votes_per_poll,
         voter_count = config.voter_count,
         poll_duration_secs = config.poll_duration_secs,
         api_key_len = config.openrouter_api_key.len(),
+        exa_key_len = config.exa_api_key.len(),
         dry_run = config.dry_run,
         "sim config loaded"
     );
