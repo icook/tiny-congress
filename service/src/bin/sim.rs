@@ -43,6 +43,8 @@ async fn main() -> Result<(), anyhow::Error> {
         poll_duration_secs = config.poll_duration_secs,
         api_key_len = config.openrouter_api_key.len(),
         exa_key_len = config.exa_api_key.len(),
+        llm_base_url = %config.llm_base_url,
+        exa_base_url = %config.exa_base_url,
         dry_run = config.dry_run,
         "sim config loaded"
     );
@@ -71,7 +73,15 @@ async fn main() -> Result<(), anyhow::Error> {
             serde_json::from_str(&pairs_json).context("failed to parse battery config")?;
 
         tracing::info!(pairs = pairs.len(), "loaded battery config");
-        brand::battery(&http, &config.openrouter_api_key, company, ticker, &pairs).await?;
+        brand::battery(
+            &http,
+            &config.openrouter_api_key,
+            &config.llm_base_url,
+            company,
+            ticker,
+            &pairs,
+        )
+        .await?;
         tracing::info!("tc-sim battery complete");
         return Ok(());
     }

@@ -301,7 +301,7 @@ pub async fn generate_content(
     };
 
     let response = client
-        .post("https://openrouter.ai/api/v1/chat/completions")
+        .post(format!("{}/chat/completions", config.llm_base_url))
         .header(
             "Authorization",
             format!("Bearer {}", config.openrouter_api_key),
@@ -569,7 +569,7 @@ pub async fn generate_company_curation(
     };
 
     let response = client
-        .post("https://openrouter.ai/api/v1/chat/completions")
+        .post(format!("{}/chat/completions", config.llm_base_url))
         .header(
             "Authorization",
             format!("Bearer {}", config.openrouter_api_key),
@@ -650,10 +650,11 @@ pub async fn generate_company_evidence(
     for dim in &dimensions {
         let client = client.clone();
         let api_key = config.exa_api_key.clone();
+        let base_url = config.exa_base_url.clone();
         let company = company_name.to_string();
         let dim_name = (*dim).to_string();
         join_set.spawn(async move {
-            let result = exa_search(&client, &api_key, &company, &dim_name).await;
+            let result = exa_search(&client, &api_key, &base_url, &company, &dim_name).await;
             (dim_name, result)
         });
     }
@@ -721,7 +722,7 @@ pub async fn generate_company_evidence(
     };
 
     let response = client
-        .post("https://openrouter.ai/api/v1/chat/completions")
+        .post(format!("{}/chat/completions", config.llm_base_url))
         .header(
             "Authorization",
             format!("Bearer {}", config.openrouter_api_key),
@@ -772,6 +773,7 @@ pub async fn generate_company_evidence(
 async fn exa_search(
     client: &reqwest::Client,
     api_key: &str,
+    exa_base_url: &str,
     company_name: &str,
     dimension: &str,
 ) -> Result<Vec<ExaResult>, anyhow::Error> {
@@ -787,7 +789,7 @@ async fn exa_search(
     };
 
     let response = client
-        .post("https://api.exa.ai/search")
+        .post(format!("{exa_base_url}/search"))
         .header("x-api-key", api_key)
         .json(&request)
         .send()
@@ -864,9 +866,10 @@ Respond with ONLY valid JSON matching this schema:
 pub async fn get_generation_cost(
     client: &reqwest::Client,
     api_key: &str,
+    llm_base_url: &str,
     generation_id: &str,
 ) -> Result<Option<f64>, anyhow::Error> {
-    let url = format!("https://openrouter.ai/api/v1/generation?id={generation_id}");
+    let url = format!("{llm_base_url}/generation?id={generation_id}");
 
     let resp = client
         .get(&url)
@@ -897,6 +900,7 @@ pub async fn get_generation_cost(
 pub async fn generate_company_evidence_with_overrides(
     client: &reqwest::Client,
     api_key: &str,
+    llm_base_url: &str,
     model: &str,
     search: bool,
     company_name: &str,
@@ -941,7 +945,7 @@ pub async fn generate_company_evidence_with_overrides(
     };
 
     let response = client
-        .post("https://openrouter.ai/api/v1/chat/completions")
+        .post(format!("{llm_base_url}/chat/completions"))
         .header("Authorization", format!("Bearer {api_key}"))
         .json(&request)
         .send()
@@ -1119,6 +1123,8 @@ mod tests {
             battery_ticker: None,
             exa_api_key: String::new(),
             evidence_model: "deepseek/deepseek-v3.2".to_string(),
+            llm_base_url: "https://openrouter.ai/api/v1".to_string(),
+            exa_base_url: "https://api.exa.ai".to_string(),
         };
 
         let client = reqwest::Client::new();
@@ -1149,6 +1155,8 @@ mod tests {
             battery_ticker: None,
             exa_api_key: String::new(),
             evidence_model: "deepseek/deepseek-v3.2".to_string(),
+            llm_base_url: "https://openrouter.ai/api/v1".to_string(),
+            exa_base_url: "https://api.exa.ai".to_string(),
         };
 
         let messages = build_messages(&config, 2);

@@ -46,6 +46,12 @@ pub struct SimConfig {
     /// Model for evidence synthesis step (default: Haiku for cost efficiency)
     #[serde(default = "default_evidence_model")]
     pub evidence_model: String,
+    /// Base URL for OpenAI-compatible LLM API (e.g., `LiteLLM` proxy)
+    #[serde(default = "default_llm_base_url")]
+    pub llm_base_url: String,
+    /// Base URL for Exa search API (e.g., nginx cache proxy)
+    #[serde(default = "default_exa_base_url")]
+    pub exa_base_url: String,
     /// Dry run: only run LLM generation and write output to JSON file, skip API calls
     #[serde(default)]
     pub dry_run: bool,
@@ -103,6 +109,14 @@ fn default_room_topic() -> String {
 
 const fn default_company_count() -> usize {
     25
+}
+
+fn default_llm_base_url() -> String {
+    "https://openrouter.ai/api/v1".to_string()
+}
+
+fn default_exa_base_url() -> String {
+    "https://api.exa.ai".to_string()
 }
 
 impl SimConfig {

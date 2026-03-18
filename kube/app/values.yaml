@@ -262,6 +262,8 @@ sim:
   evidenceModel: "deepseek/deepseek-v3.2"
   exaApiKey: ""
   roomTopic: "civic"
+  llmBaseUrl: "https://openrouter.ai/api/v1"
+  exaBaseUrl: "https://api.exa.ai"
   targetRooms: 5
   votesPerPoll: 15
   voterCount: 20
