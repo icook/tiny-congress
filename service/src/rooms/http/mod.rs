@@ -7,7 +7,7 @@ use axum::{
     extract::{Extension, Path},
     http::StatusCode,
     response::IntoResponse,
-    routing::{delete, get, post},
+    routing::{delete, get, patch, post},
     Json, Router,
 };
 use serde::{Deserialize, Serialize};
@@ -206,6 +206,11 @@ pub fn router() -> Router {
         .route(
             "/rooms/{room_id}/polls/{poll_id}/evidence",
             delete(delete_evidence),
+        )
+        // Sim-only: ring buffer reset
+        .route(
+            "/rooms/{room_id}/polls/{poll_id}/reset",
+            patch(reset_poll),
         )
         // Vote + results
         .route("/rooms/{room_id}/polls/{poll_id}/vote", post(cast_vote))
@@ -518,6 +523,29 @@ async fn delete_evidence(
             Json(serde_json::json!({ "error": format!("Failed to delete evidence: {e}") })),
         )
             .into_response(),
+    }
+}
+
+/// Sim-only: reset a poll back to draft status, clearing all timing fields.
+/// Used by the ring buffer refill logic to recycle polls for a new cycle.
+async fn reset_poll(
+    Extension(pool): Extension<PgPool>,
+    Path((room_id, poll_id)): Path<(Uuid, Uuid)>,
+) -> Result<impl IntoResponse, StatusCode> {
+    let result = sqlx::query(
+        "UPDATE rooms__polls \
+         SET status = 'draft', closes_at = NULL, activated_at = NULL, closed_at = NULL \
+         WHERE id = $1 AND room_id = $2",
+    )
+    .bind(poll_id)
+    .bind(room_id)
+    .execute(&pool)
+    .await;
+
+    match result {
+        Ok(r) if r.rows_affected() == 0 => Err(StatusCode::NOT_FOUND),
+        Ok(_) => Ok(StatusCode::OK),
+        Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
     }
 }
 

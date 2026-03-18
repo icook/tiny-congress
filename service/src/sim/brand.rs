@@ -146,3 +146,89 @@ pub async fn seed_brand_ethics(
     );
     Ok(usage)
 }
+
+/// Check if the Brand Ethics room needs refilling and do so if needed.
+///
+/// Returns `Ok(Usage::default())` immediately if the room is not in the
+/// capacity list (meaning it still has active or draft polls). If the room
+/// does appear, all polls are reset to draft and their evidence is
+/// regenerated via LLM.
+///
+/// # Errors
+///
+/// Returns an error if any API call or LLM request fails.
+pub async fn refill_if_needed(
+    http: &reqwest::Client,
+    client: &SimClient,
+    config: &SimConfig,
+    admin: &SimAccount,
+) -> Result<Usage, anyhow::Error> {
+    let mut usage = Usage::default();
+
+    // Capacity list only includes rooms with poll_duration_secs set and no
+    // active/draft polls — if Brand Ethics appears here, the cycle is done.
+    let capacity_rooms = client.get_capacity().await?;
+    let brand_room = capacity_rooms.iter().find(|r| r.name == ROOM_NAME);
+
+    let Some(brand_room) = brand_room else {
+        tracing::info!("Brand Ethics room has active content, no refill needed");
+        return Ok(usage);
+    };
+
+    tracing::info!(
+        room_id = %brand_room.id,
+        "Brand Ethics room needs refill — starting ring buffer reset"
+    );
+
+    // Get all polls in the room (all should be closed at this point)
+    let polls = client.list_polls(brand_room.id).await?;
+    tracing::info!(poll_count = polls.len(), "polls to reset");
+
+    for poll in &polls {
+        // Delete stale evidence before regenerating
+        client
+            .delete_poll_evidence(admin, brand_room.id, poll.id)
+            .await?;
+
+        // Reset poll status to draft so the lifecycle queue can reactivate it
+        client.reset_poll(admin, brand_room.id, poll.id).await?;
+
+        // question IS the company name (see seed_brand_ethics)
+        let (evidence, ev_usage) =
+            llm::generate_company_evidence(http, config, &poll.question, "").await?;
+        usage += ev_usage;
+
+        // Fetch dimensions so we can attach evidence per dimension
+        let detail = client.get_poll_detail(brand_room.id, poll.id).await?;
+
+        for dim in &detail.dimensions {
+            if let Some(dim_evidence) = evidence.dimensions.get(&dim.name) {
+                let mut cards: Vec<EvidenceBody> = Vec::new();
+                for claim in &dim_evidence.pro {
+                    cards.push(EvidenceBody {
+                        stance: "pro".to_string(),
+                        claim: claim.clone(),
+                        source: None,
+                    });
+                }
+                for claim in &dim_evidence.con {
+                    cards.push(EvidenceBody {
+                        stance: "con".to_string(),
+                        claim: claim.clone(),
+                        source: None,
+                    });
+                }
+                if !cards.is_empty() {
+                    client
+                        .add_evidence(admin, brand_room.id, poll.id, dim.id, &cards)
+                        .await?;
+                }
+            }
+        }
+
+        tracing::info!(company = %poll.question, "poll reset with fresh evidence");
+    }
+
+    tracing::info!("ring buffer reset complete — lifecycle will activate first poll");
+    Ok(usage)
+}

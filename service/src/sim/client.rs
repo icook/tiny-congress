@@ -563,6 +563,42 @@ impl SimClient {
         Ok(())
     }
 
+    /// Reset a poll to draft status (ring buffer reset).
+    ///
+    /// Clears `closes_at`, `activated_at`, and `closed_at` so the lifecycle
+    /// queue can reactivate it on the next cycle.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the HTTP request fails or the response is not 2xx.
+    pub async fn reset_poll(
+        &self,
+        account: &SimAccount,
+        room_id: Uuid,
+        poll_id: Uuid,
+    ) -> Result<()> {
+        let path = format!("/rooms/{room_id}/polls/{poll_id}/reset");
+        let body: &[u8] = b"";
+        let headers = account.sign_request("PATCH", &path, body);
+
+        let mut req = self
+            .http
+            .patch(format!("{}{path}", self.api_url))
+            .header("Content-Type", "application/json");
+
+        for (key, value) in headers {
+            req = req.header(key, value);
+        }
+
+        let resp = req.send().await?;
+        let status = resp.status();
+        if !status.is_success() {
+            let body = resp.text().await.unwrap_or_default();
+            return Err(anyhow!("PATCH {path} returned {status}: {body}"));
+        }
+        Ok(())
+    }
+
     // -- Verifier-authenticated endpoint ----------------------------------
 
     /// Log in an existing account to register a device key.

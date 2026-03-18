@@ -151,6 +151,10 @@ async fn main() -> Result<(), anyhow::Error> {
         let brand_usage =
             brand::seed_brand_ethics(&http, &client, &config, admin, verifier_account_id).await?;
         session_usage += brand_usage;
+
+        // Ring buffer: refill if all polls exhausted (room shows up in capacity)
+        let refill_usage = brand::refill_if_needed(&http, &client, &config, admin).await?;
+        session_usage += refill_usage;
     } else {
         // 8. Check total rooms and capacity via API
         let all_rooms = client.list_rooms().await?;
