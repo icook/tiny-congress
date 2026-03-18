@@ -5,7 +5,14 @@
 import { IconAlertTriangle, IconDoor } from '@tabler/icons-react';
 import { Link } from '@tanstack/react-router';
 import { Alert, Badge, Card, Group, Loader, Stack, Text, Title } from '@mantine/core';
-import { usePolls, useRooms, type Room } from '@/features/rooms';
+import {
+  PollCountdown,
+  usePollCountdown,
+  usePolls,
+  useRooms,
+  type Poll,
+  type Room,
+} from '@/features/rooms';
 
 const ROOM_STATUS_COLOR: Record<string, string> = {
   open: 'green',
@@ -46,6 +53,26 @@ export function RoomsPage() {
   );
 }
 
+function PollListItem({ roomId, poll }: { roomId: string; poll: Poll }) {
+  const { secondsLeft } = usePollCountdown(poll);
+
+  return (
+    <Card
+      component={Link}
+      to={`/rooms/${roomId}/polls/${poll.id}`}
+      padding="sm"
+      radius="sm"
+      withBorder
+      style={{ cursor: 'pointer', textDecoration: 'none' }}
+    >
+      <Group justify="space-between" wrap="nowrap">
+        <Text size="sm">{poll.question}</Text>
+        <PollCountdown secondsLeft={secondsLeft} />
+      </Group>
+    </Card>
+  );
+}
+
 function RoomCard({ room }: { room: Room }) {
   const pollsQuery = usePolls(room.id);
 
@@ -80,17 +107,7 @@ function RoomCard({ room }: { room: Room }) {
               Active polls ({String(activePolls.length)})
             </Text>
             {activePolls.map((poll) => (
-              <Card
-                key={poll.id}
-                component={Link}
-                to={`/rooms/${room.id}/polls/${poll.id}`}
-                padding="sm"
-                radius="sm"
-                withBorder
-                style={{ cursor: 'pointer', textDecoration: 'none' }}
-              >
-                <Text size="sm">{poll.question}</Text>
-              </Card>
+              <PollListItem key={poll.id} roomId={room.id} poll={poll} />
             ))}
           </Stack>
         ) : pollsQuery.data ? (

@@ -19,8 +19,13 @@ import {
   Title,
 } from '@mantine/core';
 import {
+  AgendaProgress,
+  PollCountdown,
+  UpcomingPollPreview,
+  useAgenda,
   useCastVote,
   useMyVotes,
+  usePollCountdown,
   usePollDetail,
   usePollDistribution,
   usePollResults,
@@ -52,6 +57,16 @@ export function PollPage({ roomId, pollId }: PollPageProps) {
   const isVerified = verificationQuery.data?.isVerified ?? false;
   const trustScoresQuery = useTrustScores(deviceKid, privateKey, crypto);
   const hasTrustScore = (trustScoresQuery.data?.length ?? 0) > 0;
+
+  const agendaQuery = useAgenda(roomId);
+  const { secondsLeft, isExpired } = usePollCountdown(detailQuery.data?.poll);
+
+  // Immediately refetch when countdown expires so the UI transitions without waiting for the next 20s interval
+  useEffect(() => {
+    if (isExpired) {
+      void detailQuery.refetch();
+    }
+  }, [isExpired]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const [votes, setVotes] = useState<Record<string, number>>({});
   const [hasInitialized, setHasInitialized] = useState(false);
@@ -115,6 +130,10 @@ export function PollPage({ roomId, pollId }: PollPageProps) {
 
   const { poll, dimensions } = detailQuery.data;
   const isActive = poll.status === 'active';
+
+  const agenda = agendaQuery.data ?? [];
+  const activePollIndex = agenda.findIndex((p) => p.id === poll.id);
+  const nextPoll = activePollIndex >= 0 ? agenda[activePollIndex + 1] : undefined;
   const isAuthenticated = Boolean(deviceKid);
   const canVote = isActive && isAuthenticated && isVerified;
   const roomName = roomQuery.data?.name;
@@ -168,6 +187,14 @@ export function PollPage({ roomId, pollId }: PollPageProps) {
           </Text>
         ) : null}
       </div>
+
+      {isActive ? (
+        <Group gap="md" mt="xs">
+          <PollCountdown secondsLeft={secondsLeft} />
+          <AgendaProgress polls={agenda} activePollId={poll.id} />
+        </Group>
+      ) : null}
+      {isActive ? <UpcomingPollPreview poll={nextPoll} /> : null}
 
       {/* Voting section */}
       {isActive ? (
