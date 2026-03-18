@@ -1,5 +1,6 @@
 //! LLM response types and `OpenRouter` client for generating sim content.
 
+use std::collections::HashMap;
 use std::ops::AddAssign;
 
 use serde::{Deserialize, Serialize};
@@ -281,6 +282,347 @@ pub async fn generate_content(
     let content: SimContent = serde_json::from_str(&first_choice.message.content)?;
 
     Ok((content, usage))
+}
+
+// ---------------------------------------------------------------------------
+// Brand ethics types
+// ---------------------------------------------------------------------------
+
+/// Response from Phase 1: company curation LLM call.
+#[derive(Debug, Deserialize)]
+pub struct CompanyCuration {
+    pub companies: Vec<CuratedCompany>,
+}
+
+/// A single company selected by the curation LLM.
+#[derive(Debug, Deserialize)]
+pub struct CuratedCompany {
+    pub ticker: String,
+    pub name: String,
+    pub relevance_hook: String,
+}
+
+/// Response from Phase 2: per-company evidence LLM call.
+#[derive(Debug, Deserialize)]
+pub struct CompanyEvidence {
+    pub relevance_hook: String,
+    pub dimensions: HashMap<String, DimensionEvidence>,
+}
+
+/// Pro/con evidence for a single ethical dimension.
+#[derive(Debug, Deserialize)]
+pub struct DimensionEvidence {
+    pub pro: Vec<String>,
+    pub con: Vec<String>,
+}
+
+// ---------------------------------------------------------------------------
+// Brand ethics prompts
+// ---------------------------------------------------------------------------
+
+const BRAND_CURATION_SYSTEM: &str = r#"You are a research analyst selecting companies for an ethical evaluation platform. Your job is to identify S&P 500 companies that deeply affect people's daily lives but have low brand awareness. Deprioritize household tech and retail names (Apple, Amazon, Google, Walmart) — everyone already has opinions on those. Prioritize companies where users would say "I had no idea they were involved in that.""#;
+
+const BRAND_EVIDENCE_SYSTEM: &str = r"You are a balanced research analyst providing factual context for ethical evaluation. For each dimension, provide 1-2 claims supporting the positive end and 1-2 claims supporting the negative end. Claims should be one sentence, factual in tone, and specific to the company. Include a source attribution if you can cite a specific report or organization; otherwise omit the source.";
+
+fn build_brand_curation_messages(count: usize) -> Vec<ChatMessage> {
+    let user_content = format!(
+        r#"Identify exactly {count} S&P 500 companies ranked by surprising personal relevance — \
+companies that deeply affect everyday life but that most people wouldn't recognize by name.
+
+Respond with ONLY valid JSON matching this schema:
+{{
+  "companies": [
+    {{
+      "ticker": "SYY",
+      "name": "Sysco Corporation",
+      "relevance_hook": "Supplies food ingredients to nearly every restaurant and hospital cafeteria in the US."
+    }}
+  ]
+}}"#
+    );
+
+    vec![
+        ChatMessage {
+            role: "system".to_string(),
+            content: BRAND_CURATION_SYSTEM.to_string(),
+        },
+        ChatMessage {
+            role: "user".to_string(),
+            content: user_content,
+        },
+    ]
+}
+
+fn build_brand_evidence_messages(company_name: &str, ticker: &str) -> Vec<ChatMessage> {
+    let user_content = format!(
+        r#"Provide ethical evidence for {company_name} ({ticker}) across these five dimensions:
+
+1. Labor Practices (Exploitative ↔ Exemplary)
+2. Environmental Impact (Destructive ↔ Regenerative)
+3. Consumer Trust (Deceptive ↔ Transparent)
+4. Community Impact (Extractive ↔ Invested)
+5. Corporate Governance (Self-Serving ↔ Accountable)
+
+Respond with ONLY valid JSON matching this schema:
+{{
+  "relevance_hook": "One sentence explaining how this company affects daily life.",
+  "dimensions": {{
+    "Labor Practices": {{
+      "pro": ["Positive claim about labor."],
+      "con": ["Negative claim about labor."]
+    }},
+    "Environmental Impact": {{
+      "pro": ["Positive environmental claim."],
+      "con": ["Negative environmental claim."]
+    }},
+    "Consumer Trust": {{
+      "pro": ["Positive consumer trust claim."],
+      "con": ["Negative consumer trust claim."]
+    }},
+    "Community Impact": {{
+      "pro": ["Positive community claim."],
+      "con": ["Negative community claim."]
+    }},
+    "Corporate Governance": {{
+      "pro": ["Positive governance claim."],
+      "con": ["Negative governance claim."]
+    }}
+  }}
+}}"#
+    );
+
+    vec![
+        ChatMessage {
+            role: "system".to_string(),
+            content: BRAND_EVIDENCE_SYSTEM.to_string(),
+        },
+        ChatMessage {
+            role: "user".to_string(),
+            content: user_content,
+        },
+    ]
+}
+
+// ---------------------------------------------------------------------------
+// Brand ethics mock data
+// ---------------------------------------------------------------------------
+
+const MOCK_COMPANIES: &[(&str, &str, &str)] = &[
+    (
+        "SYY",
+        "Sysco Corporation",
+        "Supplies food to schools and hospitals.",
+    ),
+    (
+        "CARR",
+        "Carrier Global",
+        "Makes most commercial HVAC systems.",
+    ),
+    (
+        "RSG",
+        "Republic Services",
+        "Handles trash and recycling for millions of households.",
+    ),
+    (
+        "MKC",
+        "McCormick & Company",
+        "Supplies spices and flavorings to nearly every grocery brand.",
+    ),
+    (
+        "CTAS",
+        "Cintas Corporation",
+        "Provides uniforms and safety gear to workplaces across the US.",
+    ),
+];
+
+const MOCK_DIMENSION_NAMES: &[&str] = &[
+    "Labor Practices",
+    "Environmental Impact",
+    "Consumer Trust",
+    "Community Impact",
+    "Corporate Governance",
+];
+
+fn mock_company_curation(count: usize) -> CompanyCuration {
+    let companies = MOCK_COMPANIES
+        .iter()
+        .cycle()
+        .take(count)
+        .map(|(ticker, name, hook)| CuratedCompany {
+            ticker: (*ticker).to_string(),
+            name: (*name).to_string(),
+            relevance_hook: (*hook).to_string(),
+        })
+        .collect();
+
+    CompanyCuration { companies }
+}
+
+fn mock_company_evidence(company_name: &str) -> CompanyEvidence {
+    let dimensions = MOCK_DIMENSION_NAMES
+        .iter()
+        .map(|dim| {
+            (
+                (*dim).to_string(),
+                DimensionEvidence {
+                    pro: vec!["Positive claim.".to_string()],
+                    con: vec!["Negative claim.".to_string()],
+                },
+            )
+        })
+        .collect();
+
+    CompanyEvidence {
+        relevance_hook: format!(
+            "{company_name} affects daily life in ways most people don't realize."
+        ),
+        dimensions,
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Brand ethics generation functions
+// ---------------------------------------------------------------------------
+
+/// Phase 1: Ask LLM to curate companies from S&P 500.
+///
+/// Returns the curated company list and token usage for this call.
+///
+/// # Errors
+///
+/// Returns an error if the HTTP request fails, the response cannot be parsed,
+/// or the LLM returns an empty choices array.
+pub async fn generate_company_curation(
+    client: &reqwest::Client,
+    config: &SimConfig,
+    count: usize,
+) -> Result<(CompanyCuration, Usage), anyhow::Error> {
+    if config.mock_llm {
+        tracing::info!(count, "using mock company curation (SIM_MOCK_LLM=true)");
+        return Ok((mock_company_curation(count), Usage::default()));
+    }
+
+    let messages = build_brand_curation_messages(count);
+
+    let request = ChatRequest {
+        model: config.openrouter_model.clone(),
+        messages,
+        response_format: ResponseFormat {
+            r#type: "json_object".to_string(),
+        },
+        temperature: 0.7,
+    };
+
+    let response = client
+        .post("https://openrouter.ai/api/v1/chat/completions")
+        .header(
+            "Authorization",
+            format!("Bearer {}", config.openrouter_api_key),
+        )
+        .json(&request)
+        .send()
+        .await?;
+
+    let status = response.status();
+    if !status.is_success() {
+        let body = response.text().await.unwrap_or_default();
+        return Err(anyhow::anyhow!("OpenRouter API returned {status}: {body}"));
+    }
+
+    let chat_response: ChatResponse = response.json().await?;
+
+    let usage = chat_response.usage.unwrap_or_default();
+    tracing::info!(
+        model = %config.openrouter_model,
+        prompt_tokens = usage.prompt_tokens,
+        completion_tokens = usage.completion_tokens,
+        total_tokens = usage.total_tokens,
+        "llm_call brand_curation"
+    );
+
+    let first_choice = chat_response
+        .choices
+        .into_iter()
+        .next()
+        .ok_or_else(|| anyhow::anyhow!("OpenRouter returned empty choices array"))?;
+
+    let curation: CompanyCuration = serde_json::from_str(&first_choice.message.content)?;
+
+    Ok((curation, usage))
+}
+
+/// Phase 2: Ask LLM to generate evidence for a single company.
+///
+/// Returns the company evidence and token usage for this call.
+///
+/// # Errors
+///
+/// Returns an error if the HTTP request fails, the response cannot be parsed,
+/// or the LLM returns an empty choices array.
+pub async fn generate_company_evidence(
+    client: &reqwest::Client,
+    config: &SimConfig,
+    company_name: &str,
+    ticker: &str,
+) -> Result<(CompanyEvidence, Usage), anyhow::Error> {
+    if config.mock_llm {
+        tracing::info!(
+            company_name,
+            ticker,
+            "using mock company evidence (SIM_MOCK_LLM=true)"
+        );
+        return Ok((mock_company_evidence(company_name), Usage::default()));
+    }
+
+    let messages = build_brand_evidence_messages(company_name, ticker);
+
+    let request = ChatRequest {
+        model: config.openrouter_model.clone(),
+        messages,
+        response_format: ResponseFormat {
+            r#type: "json_object".to_string(),
+        },
+        temperature: 0.7,
+    };
+
+    let response = client
+        .post("https://openrouter.ai/api/v1/chat/completions")
+        .header(
+            "Authorization",
+            format!("Bearer {}", config.openrouter_api_key),
+        )
+        .json(&request)
+        .send()
+        .await?;
+
+    let status = response.status();
+    if !status.is_success() {
+        let body = response.text().await.unwrap_or_default();
+        return Err(anyhow::anyhow!("OpenRouter API returned {status}: {body}"));
+    }
+
+    let chat_response: ChatResponse = response.json().await?;
+
+    let usage = chat_response.usage.unwrap_or_default();
+    tracing::info!(
+        model = %config.openrouter_model,
+        prompt_tokens = usage.prompt_tokens,
+        completion_tokens = usage.completion_tokens,
+        total_tokens = usage.total_tokens,
+        company_name,
+        ticker,
+        "llm_call brand_evidence"
+    );
+
+    let first_choice = chat_response
+        .choices
+        .into_iter()
+        .next()
+        .ok_or_else(|| anyhow::anyhow!("OpenRouter returned empty choices array"))?;
+
+    let evidence: CompanyEvidence = serde_json::from_str(&first_choice.message.content)?;
+
+    Ok((evidence, usage))
 }
 
 // ---------------------------------------------------------------------------
