@@ -3620,6 +3620,7 @@ dependencies = [
  "sqlx-core",
  "sqlx-postgres",
  "tc-crypto",
+ "tc-engine-api",
  "tc-test-macros",
  "testcontainers",
  "thiserror 2.0.17",

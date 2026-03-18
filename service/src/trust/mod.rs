@@ -1,5 +1,6 @@
 pub mod constraints;
 pub mod engine;
+pub mod graph_reader;
 pub mod http;
 pub mod max_flow;
 pub mod repo;
