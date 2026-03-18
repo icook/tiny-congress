@@ -59,7 +59,14 @@ export function PollPage({ roomId, pollId }: PollPageProps) {
   const hasTrustScore = (trustScoresQuery.data?.length ?? 0) > 0;
 
   const agendaQuery = useAgenda(roomId);
-  const { secondsLeft } = usePollCountdown(detailQuery.data?.poll);
+  const { secondsLeft, isExpired } = usePollCountdown(detailQuery.data?.poll);
+
+  // Immediately refetch when countdown expires so the UI transitions without waiting for the next 20s interval
+  useEffect(() => {
+    if (isExpired) {
+      void detailQuery.refetch();
+    }
+  }, [isExpired]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const [votes, setVotes] = useState<Record<string, number>>({});
   const [hasInitialized, setHasInitialized] = useState(false);

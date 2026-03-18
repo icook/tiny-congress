@@ -304,7 +304,7 @@ where
         SELECT id, room_id, question, description, status, created_at,
                activated_at, closed_at, closes_at, agenda_position
         FROM rooms__polls
-        WHERE room_id = $1 AND status = 'draft' AND agenda_position IS NOT NULL
+        WHERE room_id = $1 AND status IN ('draft', 'active') AND agenda_position IS NOT NULL
         ORDER BY agenda_position ASC
         ",
     )
