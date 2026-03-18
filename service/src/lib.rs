@@ -10,6 +10,7 @@
 pub mod build_info;
 pub mod config;
 pub mod db;
+pub mod engine_registry;
 pub mod graphql;
 pub mod http;
 pub mod identity;

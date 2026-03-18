@@ -20,10 +20,13 @@ use sqlx::PgPool;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
+use tc_engine_api::constraints::ConstraintRegistry;
+use tc_engine_api::engine::EngineRegistry;
 use tinycongress_api::{
     build_info::BuildInfo,
     config::Config,
     db::setup_database,
+    engine_registry,
     graphql::{graphql_handler, graphql_playground, MutationRoot, QueryRoot},
     http::{build_security_headers, security_headers_middleware},
     identity::{
@@ -45,6 +48,7 @@ use tinycongress_api::{
     trust::{
         self,
         engine::TrustEngine,
+        graph_reader::TrustRepoGraphReader,
         repo::{PgTrustRepo, TrustRepo},
         service::{DefaultTrustService, TrustService},
         worker::TrustWorker,
@@ -178,6 +182,11 @@ async fn build_app(
         reputation_repo_for_trust,
     ));
 
+    // Engine plugin infrastructure (empty registry — engines registered in later phases)
+    let _trust_graph_reader = Arc::new(TrustRepoGraphReader::new(trust_repo.clone()));
+    let _constraint_registry = Arc::new(ConstraintRegistry);
+    let engine_registry = Arc::new(EngineRegistry::new());
+
     // Rooms wiring
     let rooms_repo = Arc::new(PgRoomsRepo::new(pool.clone()));
     let rooms_service = Arc::new(DefaultRoomsService::new(
@@ -207,6 +216,7 @@ async fn build_app(
         .merge(reputation::http::router())
         .merge(rooms::http::router())
         .merge(trust::http::trust_router())
+        .merge(engine_registry::engines_router())
         .route("/health", get(health_check))
         .route("/ready", get(readiness_check))
         .route("/metrics", get(|| async move { metric_handle.render() }))
@@ -221,7 +231,8 @@ async fn build_app(
         .layer(Extension(trust_engine.clone()))
         .layer(Extension(synthetic_backup_key))
         .layer(Extension(build_info))
-        .layer(Extension(pool.clone()));
+        .layer(Extension(pool.clone()))
+        .layer(Extension(engine_registry));
 
     // Add ID.me config extension if configured
     let app = if let Some(ref idme_config) = config.idme {
