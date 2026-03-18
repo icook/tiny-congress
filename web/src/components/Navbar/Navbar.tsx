@@ -9,7 +9,8 @@ import {
   IconUserPlus,
 } from '@tabler/icons-react';
 import { Link, useRouterState } from '@tanstack/react-router';
-import { Box, NavLink, Stack, useComputedColorScheme, useMantineTheme } from '@mantine/core';
+import { Box, NavLink, Stack, Text, useComputedColorScheme, useMantineTheme } from '@mantine/core';
+import { PollCountdown, usePollCountdown, usePollDetail } from '@/features/rooms';
 import { useDevice } from '@/providers/DeviceProvider';
 import { UserAccordion } from './UserAccordion';
 
@@ -32,6 +33,9 @@ export function Navbar({ onNavigate }: NavbarProps) {
   const currentPath = useRouterState({
     select: (state) => state.location.pathname,
   });
+  const pollRouteMatch = /^\/rooms\/([^/]+)\/polls\/([^/]+)/.exec(currentPath);
+  const pollRouteRoomId = pollRouteMatch?.[1];
+  const pollRoutePollId = pollRouteMatch?.[2];
   const theme = useMantineTheme();
   const colorScheme = useComputedColorScheme();
   const isAuthenticated = Boolean(deviceKid);
@@ -119,6 +123,10 @@ export function Navbar({ onNavigate }: NavbarProps) {
         </NavLink>
       </Stack>
 
+      {pollRouteRoomId && pollRoutePollId ? (
+        <NavbarPollCountdown roomId={pollRouteRoomId} pollId={pollRoutePollId} />
+      ) : null}
+
       {!isAuthenticated ? (
         <Box pt="sm" style={{ borderTop: `1px solid ${borderColor}` }}>
           <Stack gap={4}>
@@ -142,5 +150,23 @@ export function Navbar({ onNavigate }: NavbarProps) {
         </Box>
       )}
     </Stack>
+  );
+}
+
+function NavbarPollCountdown({ roomId, pollId }: { roomId: string; pollId: string }) {
+  const detailQuery = usePollDetail(roomId, pollId);
+  const { secondsLeft } = usePollCountdown(detailQuery.data?.poll);
+
+  if (secondsLeft === null) {
+    return null;
+  }
+
+  return (
+    <Box px="sm" py="xs">
+      <Text size="xs" c="dimmed" mb={2}>
+        Active poll
+      </Text>
+      <PollCountdown secondsLeft={secondsLeft} />
+    </Box>
   );
 }
