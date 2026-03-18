@@ -10,6 +10,7 @@ export {
   useCastVote,
 } from './api/queries';
 export { usePollCountdown } from './hooks/usePollCountdown';
+export { PollCountdown } from './components/PollCountdown';
 export type { CountdownState } from './hooks/usePollCountdown';
 export type {
   Room,
