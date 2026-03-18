@@ -109,6 +109,44 @@ pub mod test_db {
         port: u16,
     }
 
+    /// RAII file lock using flock(2). Holds an exclusive lock on LOCK_FILE
+    /// for the duration of container init — prevents two binaries from
+    /// racing to start containers simultaneously.
+    struct FileLock {
+        file: std::fs::File,
+    }
+
+    impl FileLock {
+        fn acquire() -> Self {
+            let file = std::fs::OpenOptions::new()
+                .create(true)
+                .write(true)
+                .truncate(false)
+                .open(LOCK_FILE)
+                .expect("Failed to open lock file");
+
+            // SAFETY: flock on a valid fd is safe. LOCK_EX blocks until acquired.
+            unsafe {
+                if libc::flock(std::os::unix::io::AsRawFd::as_raw_fd(&file), libc::LOCK_EX) != 0 {
+                    panic!("flock failed: {}", std::io::Error::last_os_error());
+                }
+            }
+
+            Self { file }
+        }
+    }
+
+    impl Drop for FileLock {
+        fn drop(&mut self) {
+            unsafe {
+                libc::flock(
+                    std::os::unix::io::AsRawFd::as_raw_fd(&self.file),
+                    libc::LOCK_UN,
+                );
+            }
+        }
+    }
+
     /// Global Tokio runtime shared across all tests.
     /// This ensures async cleanup happens while the runtime is still alive.
     static TEST_RUNTIME: LazyLock<Runtime> = LazyLock::new(|| {
