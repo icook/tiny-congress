@@ -724,6 +724,8 @@ mod tests {
             log_level: "info".to_string(),
             mock_llm: true,
             poll_duration_secs: 86400,
+            room_topic: "civic".to_string(),
+            company_count: 25,
         };
 
         let client = reqwest::Client::new();
@@ -746,6 +748,8 @@ mod tests {
             log_level: "info".to_string(),
             mock_llm: false,
             poll_duration_secs: 86400,
+            room_topic: "civic".to_string(),
+            company_count: 25,
         };
 
         let messages = build_messages(&config, 2);
