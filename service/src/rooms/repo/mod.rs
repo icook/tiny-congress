@@ -1,10 +1,13 @@
 //! Repository layer for rooms persistence
 
-pub mod evidence;
-pub mod lifecycle_queue;
-pub mod polls;
 pub mod rooms;
-pub mod votes;
+
+// Poll/vote/evidence/lifecycle modules now live in tc-engine-polling.
+// Re-export them here for backward compatibility.
+pub use tc_engine_polling::repo::evidence;
+pub use tc_engine_polling::repo::lifecycle_queue;
+pub use tc_engine_polling::repo::polls;
+pub use tc_engine_polling::repo::votes;
 
 pub use lifecycle_queue::{
     enqueue_lifecycle_event, read_lifecycle_event, LifecycleMessage, LifecyclePayload,

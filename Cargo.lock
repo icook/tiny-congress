@@ -3470,6 +3470,7 @@ dependencies = [
  "serde_json",
  "sqlx",
  "tc-engine-api",
+ "thiserror 2.0.17",
  "tokio",
  "tracing",
  "uuid",
