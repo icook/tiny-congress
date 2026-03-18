@@ -34,6 +34,12 @@ pub struct SimConfig {
     /// Duration (in seconds) for polls created in sim rooms
     #[serde(default = "default_poll_duration_secs")]
     pub poll_duration_secs: i32,
+    /// Room topic mode (e.g., "civic" or "`brand_ethics`")
+    #[serde(default = "default_room_topic")]
+    pub room_topic: String,
+    /// Number of companies to curate from the S&P 500 (used in `brand_ethics` mode)
+    #[serde(default = "default_company_count")]
+    pub company_count: usize,
 }
 
 fn default_model() -> String {
@@ -66,6 +72,14 @@ fn default_log_level() -> String {
 
 const fn default_poll_duration_secs() -> i32 {
     86400 // 24 hours
+}
+
+fn default_room_topic() -> String {
+    "civic".to_string()
+}
+
+const fn default_company_count() -> usize {
+    25
 }
 
 impl SimConfig {
