@@ -64,18 +64,16 @@ export function GiveTab({ deviceKid, privateKey, crypto, slotsAvailable }: GiveT
       });
   };
 
-  if (slotsAvailable <= 0) {
-    return (
-      <Alert color="yellow" title="No slots available">
-        All endorsement slots used. Revoke an existing endorsement to endorse someone new.
-      </Alert>
-    );
-  }
-
   return (
     <Stack gap="md" py="md">
       {inviteUrl == null ? (
         <>
+          {slotsAvailable <= 0 && (
+            <Alert color="blue" title="Out-of-slot endorsement">
+              All trust graph slots are used. This endorsement will be stored but won&apos;t
+              contribute to trust scores. It can still grant room access.
+            </Alert>
+          )}
           <Select
             label="How are you connecting?"
             description="How you're exchanging this invite affects endorsement strength."

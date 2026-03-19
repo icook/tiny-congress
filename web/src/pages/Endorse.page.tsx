@@ -41,7 +41,11 @@ export function EndorsePage() {
       {budgetQuery.isLoading ? (
         <Loader size="sm" />
       ) : budgetQuery.data ? (
-        <SlotCounter used={budgetQuery.data.slots_used} total={budgetQuery.data.slots_total} />
+        <SlotCounter
+          used={budgetQuery.data.slots_used}
+          total={budgetQuery.data.slots_total}
+          outOfSlot={budgetQuery.data.out_of_slot_count}
+        />
       ) : null}
 
       <Card withBorder padding="md">
