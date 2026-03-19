@@ -17,7 +17,7 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use super::service::{IdentityService, RootPubkey, SignupError, SignupRequest};
+use super::service::{validate_username, IdentityService, RootPubkey, SignupError, SignupRequest};
 // Re-export shared error helpers so submodules and external callers can use them.
 pub use crate::http::{bad_request, internal_error, not_found, unauthorized, ErrorResponse};
 use crate::identity::http::auth::AuthenticatedDevice;
@@ -74,6 +74,9 @@ async fn account_lookup(
     let username = params.username.trim().to_string();
     if username.is_empty() {
         return bad_request("username is required");
+    }
+    if let Err(e) = validate_username(&username) {
+        return bad_request(&e.to_string());
     }
 
     match repo.get_account_by_username(&username).await {
