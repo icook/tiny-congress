@@ -205,10 +205,10 @@
     },
     "service/src/trust/": {
       "status": "active",
-      "total_prs": 18,
+      "total_prs": 19,
       "total_skips": 0,
       "consecutive_idle": 0,
-      "last_run": "2026-03-19T21:43:27Z",
+      "last_run": "2026-03-19T22:05:11Z",
       "graduated_at": "",
       "history": [
         {
@@ -318,6 +318,12 @@
           "type": "pattern_enforcement",
           "impact": "medium",
           "summary": "Added `too_many_requests` and `conflict` helper functions to `crate::http` and replaced five inline `(StatusCode, Json(ErrorResponse {...})).into_response()` constructions in `trust/http/mod.rs` with calls to the new helpers, enforcing the project's shared-helper pattern for error responses."
+        },
+        {
+          "pr": 810,
+          "type": "test_coverage",
+          "impact": "medium",
+          "summary": "Added `list_invites_returns_created_invite` HTTP integration test for `GET /trust/invites/mine`, the only trust endpoint with no HTTP-layer coverage at all."
         }
       ],
       "skipped": []
