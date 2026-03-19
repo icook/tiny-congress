@@ -1,5 +1,6 @@
 ---
 source: service/tests/schema_snapshot.rs
+assertion_line: 188
 expression: current_schema
 ---
 -- Schema Snapshot
@@ -103,7 +104,9 @@ CREATE TABLE rooms__rooms (
     closed_at TIMESTAMPTZ,
     constraint_type TEXT NOT NULL DEFAULT 'endorsed_by'::text,
     constraint_config JSONB NOT NULL DEFAULT '{}'::jsonb,
-    poll_duration_secs INT4);
+    poll_duration_secs INT4,
+    engine_type TEXT NOT NULL DEFAULT 'polling'::text,
+    engine_config JSONB NOT NULL DEFAULT '{}'::jsonb);
 
 CREATE TABLE rooms__votes (
     id UUID NOT NULL DEFAULT gen_random_uuid(),
@@ -398,6 +401,8 @@ CREATE UNIQUE INDEX trust__user_influence_pkey ON public.trust__user_influence U
 -- rooms__rooms: rooms__rooms_constraint_type_not_null (CHECK)
 -- rooms__rooms: rooms__rooms_created_at_not_null (CHECK)
 -- rooms__rooms: rooms__rooms_eligibility_topic_not_null (CHECK)
+-- rooms__rooms: rooms__rooms_engine_config_not_null (CHECK)
+-- rooms__rooms: rooms__rooms_engine_type_not_null (CHECK)
 -- rooms__rooms: rooms__rooms_id_not_null (CHECK)
 -- rooms__rooms: rooms__rooms_name_not_null (CHECK)
 -- rooms__rooms: rooms__rooms_pkey (PRIMARY KEY)
