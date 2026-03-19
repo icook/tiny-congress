@@ -215,13 +215,7 @@ pub async fn revoke_device(
             .into_response();
     }
 
-    // Verify the target device belongs to this account
-    match get_owned_device(&*repo, &kid, auth.account_id).await {
-        Ok(_) => {}
-        Err(resp) => return resp,
-    }
-
-    match repo.revoke_device_key(&kid).await {
+    match repo.revoke_device_key(&kid, auth.account_id).await {
         Ok(()) => StatusCode::NO_CONTENT.into_response(),
         Err(DeviceKeyRepoError::AlreadyRevoked) => (
             StatusCode::CONFLICT,
@@ -259,12 +253,10 @@ pub async fn rename_device(
         Err(e) => return super::bad_request(&e.to_string()),
     };
 
-    match get_owned_device(&*repo, &kid, auth.account_id).await {
-        Ok(_) => {}
-        Err(resp) => return resp,
-    }
-
-    match repo.rename_device_key(&kid, new_name.as_str()).await {
+    match repo
+        .rename_device_key(&kid, auth.account_id, new_name.as_str())
+        .await
+    {
         Ok(()) => StatusCode::NO_CONTENT.into_response(),
         Err(DeviceKeyRepoError::AlreadyRevoked) => (
             StatusCode::CONFLICT,
@@ -411,8 +403,6 @@ mod tests {
         assert_eq!(err.status(), StatusCode::BAD_REQUEST);
     }
 
-    // ── get_owned_device ────────────────────────────────────────────────────
-
     fn make_device_record(account_id: Uuid) -> DeviceKeyRecord {
         DeviceKeyRecord {
             id: Uuid::new_v4(),
@@ -425,63 +415,6 @@ mod tests {
             revoked_at: None,
             created_at: Utc::now(),
         }
-    }
-
-    #[tokio::test]
-    async fn test_get_owned_device_not_found() {
-        let repo = MockIdentityRepo::new(); // default: get_device_key_by_kid returns NotFound
-        let kid = Kid::derive(&[0u8; 32]);
-        let err = get_owned_device(&repo, &kid, Uuid::new_v4())
-            .await
-            .err()
-            .expect("expected error");
-        assert_eq!(err.status(), StatusCode::NOT_FOUND);
-    }
-
-    #[tokio::test]
-    async fn test_get_owned_device_wrong_account_returns_not_found() {
-        // Security: cross-account access must return 404, not 403 — no device enumeration.
-        let owner_id = Uuid::new_v4();
-        let caller_id = Uuid::new_v4();
-        let record = make_device_record(owner_id);
-        let kid = record.device_kid.clone();
-
-        let repo = MockIdentityRepo::new();
-        repo.set_get_device_key_by_kid_result(Ok(record));
-
-        let err = get_owned_device(&repo, &kid, caller_id)
-            .await
-            .err()
-            .expect("expected error");
-        assert_eq!(err.status(), StatusCode::NOT_FOUND);
-    }
-
-    #[tokio::test]
-    async fn test_get_owned_device_database_error_returns_internal() {
-        let repo = MockIdentityRepo::new();
-        repo.set_get_device_key_by_kid_result(Err(DeviceKeyRepoError::Database(
-            sqlx::Error::Protocol("db error".to_string()),
-        )));
-        let kid = Kid::derive(&[0u8; 32]);
-        let err = get_owned_device(&repo, &kid, Uuid::new_v4())
-            .await
-            .err()
-            .expect("expected error");
-        assert_eq!(err.status(), StatusCode::INTERNAL_SERVER_ERROR);
-    }
-
-    #[tokio::test]
-    async fn test_get_owned_device_matching_account_returns_record() {
-        let account_id = Uuid::new_v4();
-        let record = make_device_record(account_id);
-        let kid = record.device_kid.clone();
-
-        let repo = MockIdentityRepo::new();
-        repo.set_get_device_key_by_kid_result(Ok(record.clone()));
-
-        let result = get_owned_device(&repo, &kid, account_id).await;
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap().device_kid, kid);
     }
 
     #[tokio::test]
@@ -672,20 +605,14 @@ mod tests {
         );
     }
 
-    /// Build an `AuthenticatedDevice` and a repo where `get_owned_device` succeeds
-    /// (so we reach the `revoke_device_key` call), then inject an error there.
+    /// Build an `AuthenticatedDevice` and a repo for revoke handler tests.
     fn setup_revoke_preconditions(
         account_id: Uuid,
         target_kid: &Kid,
     ) -> (std::sync::Arc<MockIdentityRepo>, AuthenticatedDevice) {
         // auth device has a different KID so the "cannot revoke self" check passes
         let auth_kid = Kid::derive(&[0xAAu8; 32]);
-        let record = make_device_record(account_id);
-
         let repo = std::sync::Arc::new(MockIdentityRepo::new());
-        // `get_owned_device` calls `get_device_key_by_kid` — return a record owned by this account
-        repo.set_get_device_key_by_kid_result(Ok(record));
-
         let auth = AuthenticatedDevice::for_test(account_id, auth_kid, axum::body::Bytes::new());
         let _ = target_kid; // used by caller for the Path argument
         (repo, auth)
@@ -738,8 +665,8 @@ mod tests {
         assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
     }
 
-    /// TOCTOU race: device confirmed owned by `get_owned_device`, then deleted
-    /// before `revoke_device_key` executes — must return 404, not 500.
+    /// `revoke_device_key` returns `NotFound` when no matching active row exists
+    /// (device absent, already deleted, or belongs to a different account).
     #[tokio::test]
     async fn test_revoke_device_not_found_returns_404() {
         use axum::response::IntoResponse;
@@ -834,11 +761,7 @@ mod tests {
         target_kid: &Kid,
     ) -> (std::sync::Arc<MockIdentityRepo>, AuthenticatedDevice) {
         let auth_kid = Kid::derive(&[0xAAu8; 32]);
-        let record = make_device_record(account_id);
-
         let repo = std::sync::Arc::new(MockIdentityRepo::new());
-        repo.set_get_device_key_by_kid_result(Ok(record));
-
         let body = axum::body::Bytes::from(r#"{"name":"Renamed Device"}"#);
         let auth = AuthenticatedDevice::for_test(account_id, auth_kid, body);
         let _ = target_kid;
@@ -895,8 +818,8 @@ mod tests {
         assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
     }
 
-    /// TOCTOU race: device confirmed owned by `get_owned_device`, then deleted
-    /// before `rename_device_key` executes — must return 404, not 500.
+    /// `rename_device_key` returns `NotFound` when no matching active row exists
+    /// (device absent, already deleted, or belongs to a different account).
     #[tokio::test]
     async fn test_rename_device_not_found_returns_404() {
         use axum::response::IntoResponse;
@@ -971,29 +894,4 @@ mod tests {
 
         assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
     }
-}
-
-/// Verify a device exists and belongs to the given account.
-#[allow(clippy::result_large_err)]
-async fn get_owned_device(
-    repo: &dyn IdentityRepo,
-    kid: &Kid,
-    account_id: Uuid,
-) -> Result<DeviceKeyRecord, axum::response::Response> {
-    let device = match repo.get_device_key_by_kid(kid).await {
-        Ok(d) => d,
-        Err(DeviceKeyRepoError::NotFound) => {
-            return Err(super::not_found("Device not found"));
-        }
-        Err(e) => {
-            tracing::error!("Failed to look up device: {e}");
-            return Err(super::internal_error());
-        }
-    };
-
-    if device.account_id != account_id {
-        return Err(super::not_found("Device not found"));
-    }
-
-    Ok(device)
 }
