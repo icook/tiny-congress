@@ -12,7 +12,7 @@ use axum::{
             CONTENT_SECURITY_POLICY, REFERRER_POLICY, STRICT_TRANSPORT_SECURITY,
             X_CONTENT_TYPE_OPTIONS, X_FRAME_OPTIONS, X_XSS_PROTECTION,
         },
-        HeaderMap, HeaderValue,
+        HeaderMap, HeaderName, HeaderValue,
     },
     middleware::Next,
     response::Response,
@@ -48,6 +48,11 @@ pub fn build_security_headers(config: &SecurityHeadersConfig) -> Arc<HeaderMap> 
     // Referrer-Policy
     if let Ok(value) = HeaderValue::from_str(&config.referrer_policy) {
         headers.insert(REFERRER_POLICY, value);
+    }
+
+    // Permissions-Policy
+    if let Ok(value) = HeaderValue::from_str(&config.permissions_policy) {
+        headers.insert(HeaderName::from_static("permissions-policy"), value);
     }
 
     // HSTS (only if enabled - should only be used with HTTPS)
@@ -114,6 +119,12 @@ mod tests {
         assert!(headers.contains_key(X_XSS_PROTECTION));
         assert!(headers.contains_key(CONTENT_SECURITY_POLICY));
         assert!(headers.contains_key(REFERRER_POLICY));
+        assert!(headers.contains_key("permissions-policy"));
+
+        let pp = headers
+            .get("permissions-policy")
+            .map(|v| v.to_str().unwrap_or_default());
+        assert_eq!(pp, Some("camera=(), microphone=(), geolocation=()"));
     }
 
     #[test]
@@ -132,6 +143,19 @@ mod tests {
         assert!(hsts.is_some());
         assert!(hsts.unwrap().contains("max-age=31536000"));
         assert!(hsts.unwrap().contains("includeSubDomains"));
+    }
+
+    #[test]
+    fn test_build_security_headers_custom_permissions_policy() {
+        let mut config = SecurityHeadersConfig::default();
+        config.permissions_policy = "camera=(), microphone=()".to_string();
+
+        let headers = build_security_headers(&config);
+
+        let pp = headers
+            .get("permissions-policy")
+            .map(|v| v.to_str().unwrap_or_default());
+        assert_eq!(pp, Some("camera=(), microphone=()"));
     }
 
     #[test]

@@ -261,6 +261,10 @@ pub struct SecurityHeadersConfig {
     /// Referrer-Policy header value (default: "strict-origin-when-cross-origin").
     #[serde(default = "default_referrer_policy")]
     pub referrer_policy: String,
+
+    /// Permissions-Policy header value (default: restrict camera, microphone, geolocation).
+    #[serde(default = "default_permissions_policy")]
+    pub permissions_policy: String,
 }
 
 #[allow(clippy::missing_const_for_fn)]
@@ -285,6 +289,10 @@ fn default_referrer_policy() -> String {
     "strict-origin-when-cross-origin".to_string()
 }
 
+fn default_permissions_policy() -> String {
+    "camera=(), microphone=(), geolocation=()".to_string()
+}
+
 impl Default for SecurityHeadersConfig {
     fn default() -> Self {
         Self {
@@ -295,6 +303,7 @@ impl Default for SecurityHeadersConfig {
             frame_options: default_frame_options(),
             content_security_policy: default_csp(),
             referrer_policy: default_referrer_policy(),
+            permissions_policy: default_permissions_policy(),
         }
     }
 }
