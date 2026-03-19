@@ -38,6 +38,8 @@ function makeRoom(overrides: Partial<Room> = {}): Room {
     engine_config: {},
     status: 'active',
     created_at: '2026-01-01T00:00:00Z',
+    owner_id: null,
+    constraint_type: 'none',
     ...overrides,
   };
 }
