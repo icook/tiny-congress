@@ -146,23 +146,27 @@ pub async fn create_device_key_with_executor(
     .await
 }
 
-#[allow(clippy::expect_used, clippy::needless_pass_by_value)]
-fn map_device_key_row(row: sqlx::postgres::PgRow) -> DeviceKeyRecord {
-    DeviceKeyRecord {
+#[allow(clippy::needless_pass_by_value)]
+fn map_device_key_row(row: sqlx::postgres::PgRow) -> Result<DeviceKeyRecord, DeviceKeyRepoError> {
+    let raw_kid = row.get::<String, _>("device_kid");
+    let device_kid = raw_kid.parse().map_err(|_| {
+        tracing::error!(raw_kid = %raw_kid, "invalid KID in device_keys — data corruption");
+        DeviceKeyRepoError::Database(sqlx::Error::Decode(
+            "invalid KID value in device_keys".into(),
+        ))
+    })?;
+
+    Ok(DeviceKeyRecord {
         id: row.get("id"),
         account_id: row.get("account_id"),
-        // A malformed KID in the DB is a data corruption bug, not a user error
-        device_kid: row
-            .get::<String, _>("device_kid")
-            .parse()
-            .expect("invalid KID in database"),
+        device_kid,
         device_pubkey: row.get("device_pubkey"),
         device_name: row.get("device_name"),
         certificate: row.get("certificate"),
         last_used_at: row.get("last_used_at"),
         revoked_at: row.get("revoked_at"),
         created_at: row.get("created_at"),
-    }
+    })
 }
 
 /// List all device keys for an account (including revoked).
@@ -190,7 +194,7 @@ where
     .fetch_all(executor)
     .await?;
 
-    Ok(rows.into_iter().map(map_device_key_row).collect())
+    rows.into_iter().map(map_device_key_row).collect()
 }
 
 /// Get a device key by KID.
@@ -218,7 +222,7 @@ where
     .await?
     .ok_or(DeviceKeyRepoError::NotFound)?;
 
-    Ok(map_device_key_row(row))
+    map_device_key_row(row)
 }
 
 /// Check whether a device key exists but is revoked, or doesn't exist at all.

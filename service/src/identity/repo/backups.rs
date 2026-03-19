@@ -116,11 +116,7 @@ where
 /// # Errors
 ///
 /// Returns `BackupRepoError::NotFound` if no backup exists for this KID.
-///
-/// # Panics
-///
-/// Panics if a KID stored in the database fails to parse — this indicates data corruption.
-#[allow(clippy::expect_used)]
+/// Returns `BackupRepoError::Database` if the stored KID value fails to parse (data corruption).
 pub(crate) async fn get_backup_by_kid<'e, E>(
     executor: E,
     kid: &Kid,
@@ -140,14 +136,18 @@ where
     .await?
     .ok_or(BackupRepoError::NotFound)?;
 
+    let raw_kid = row.get::<String, _>("kid");
+    let parsed_kid = raw_kid.parse().map_err(|_| {
+        tracing::error!(raw_kid = %raw_kid, "invalid KID in account_backups — data corruption");
+        BackupRepoError::Database(sqlx::Error::Decode(
+            "invalid KID value in account_backups".into(),
+        ))
+    })?;
+
     Ok(BackupRecord {
         id: row.get("id"),
         account_id: row.get("account_id"),
-        // A malformed KID in the DB is a data corruption bug, not a user error
-        kid: row
-            .get::<String, _>("kid")
-            .parse()
-            .expect("invalid KID in database"),
+        kid: parsed_kid,
         encrypted_backup: row.get("encrypted_backup"),
         salt: row.get("salt"),
         version: row.get("version"),
