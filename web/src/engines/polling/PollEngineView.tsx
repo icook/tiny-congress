@@ -11,6 +11,15 @@ import { usePolls, type Poll } from './api';
 import { PollCountdown } from './components/PollCountdown';
 import { usePollCountdown } from './hooks/usePollCountdown';
 
+function queueLabel(index: number): string {
+  if (index === 0) {
+    return 'Up next';
+  }
+  const n = index + 1;
+  const suffix = n === 2 ? 'nd' : n === 3 ? 'rd' : 'th';
+  return `${String(n)}${suffix} in line`;
+}
+
 export function PollEngineView({ room, roomId }: EngineViewProps) {
   const { data: polls, isLoading } = usePolls(roomId);
 
@@ -58,9 +67,14 @@ export function PollEngineView({ room, roomId }: EngineViewProps) {
           <Title order={4} c="dimmed">
             Up next ({String(drafts.length)})
           </Title>
-          {drafts.map((poll) => (
+          {drafts.map((poll, index) => (
             <Card key={poll.id} padding="sm" radius="sm" withBorder>
-              <Text size="sm">{poll.question}</Text>
+              <Group justify="space-between" wrap="nowrap">
+                <Text size="sm">{poll.question}</Text>
+                <Badge color="blue" variant="light" size="sm">
+                  {queueLabel(index)}
+                </Badge>
+              </Group>
             </Card>
           ))}
         </Stack>
@@ -87,7 +101,12 @@ function ActivePollCard({ roomId, poll }: { roomId: string; poll: Poll }) {
     <Card shadow="sm" padding="lg" radius="md" withBorder>
       <Stack gap="sm">
         <Group justify="space-between" wrap="nowrap">
-          <Title order={3}>{poll.question}</Title>
+          <Group gap="xs" wrap="nowrap">
+            <Badge color="green" variant="filled" size="sm">
+              Active
+            </Badge>
+            <Title order={3}>{poll.question}</Title>
+          </Group>
           <PollCountdown secondsLeft={secondsLeft} />
         </Group>
         {poll.description ? (
@@ -121,7 +140,7 @@ function ClosedPollCard({ roomId, poll }: { roomId: string; poll: Poll }) {
     >
       <Group justify="space-between" wrap="nowrap">
         <Text size="sm">{poll.question}</Text>
-        <Badge color="gray" variant="light">
+        <Badge color="blue" variant="light">
           Results
         </Badge>
       </Group>

@@ -104,7 +104,7 @@ describe('PollEngineView', () => {
 
     render(<PollEngineView {...defaultProps} />);
 
-    expect(screen.getByText(/Up next/i)).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /Up next/i })).toBeInTheDocument();
     expect(screen.getByText('Draft question?')).toBeInTheDocument();
   });
 
