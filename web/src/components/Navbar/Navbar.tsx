@@ -1,5 +1,7 @@
+import { useState } from 'react';
 import {
   IconBook2,
+  IconChevronRight,
   IconCode,
   IconDoor,
   IconHome2,
@@ -10,14 +12,9 @@ import {
 } from '@tabler/icons-react';
 import { Link, useRouterState } from '@tanstack/react-router';
 import { Box, NavLink, Stack, Text, useComputedColorScheme, useMantineTheme } from '@mantine/core';
-import { PollCountdown, usePollCountdown, usePollDetail } from '@/features/rooms';
+import { PollCountdown, usePollCountdown, usePollDetail, useRooms } from '@/features/rooms';
 import { useDevice } from '@/providers/DeviceProvider';
 import { UserAccordion } from './UserAccordion';
-
-const topNavLinks = [
-  { icon: IconHome2, label: 'Home', path: '/' },
-  { icon: IconDoor, label: 'Rooms', path: '/rooms' },
-];
 
 const guestLinks = [
   { icon: IconLogin, label: 'Login', path: '/login' },
@@ -55,18 +52,17 @@ export function Navbar({ onNavigate }: NavbarProps) {
       style={{ borderRight: `1px solid ${borderColor}` }}
     >
       <Stack gap={4} style={{ flex: 1 }}>
-        {topNavLinks.map((link) => (
-          <NavLink
-            key={link.label}
-            component={Link}
-            to={link.path}
-            label={link.label}
-            leftSection={<link.icon size={18} stroke={1.5} />}
-            active={isActive(link.path)}
-            onClick={onNavigate}
-            fw={500}
-          />
-        ))}
+        <NavLink
+          component={Link}
+          to="/"
+          label="Home"
+          leftSection={<IconHome2 size={18} stroke={1.5} />}
+          active={isActive('/')}
+          onClick={onNavigate}
+          fw={500}
+        />
+
+        <RoomsAccordion isActive={isActive} onNavigate={onNavigate} />
 
         <NavLink
           component={Link}
@@ -168,5 +164,61 @@ function NavbarPollCountdown({ roomId, pollId }: { roomId: string; pollId: strin
       </Text>
       <PollCountdown secondsLeft={secondsLeft} />
     </Box>
+  );
+}
+
+function RoomsAccordion({
+  isActive,
+  onNavigate,
+}: {
+  isActive: (path: string) => boolean;
+  onNavigate?: () => void;
+}) {
+  const { data: rooms } = useRooms();
+  const currentPath = useRouterState({
+    select: (state) => state.location.pathname,
+  });
+  const [opened, setOpened] = useState(() => currentPath.startsWith('/rooms'));
+
+  return (
+    <>
+      <NavLink
+        component={Link}
+        to="/rooms"
+        label="Rooms"
+        leftSection={<IconDoor size={18} stroke={1.5} />}
+        rightSection={
+          <IconChevronRight
+            size={14}
+            stroke={1.5}
+            style={{
+              transform: opened ? 'rotate(90deg)' : undefined,
+              transition: 'transform 200ms ease',
+            }}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setOpened((o) => !o);
+            }}
+          />
+        }
+        active={isActive('/rooms')}
+        onClick={onNavigate}
+        fw={500}
+      />
+      {opened
+        ? rooms?.map((room) => (
+            <NavLink
+              key={room.id}
+              component={Link}
+              to={`/rooms/${room.id}`}
+              label={room.name}
+              active={isActive(`/rooms/${room.id}`)}
+              onClick={onNavigate}
+              pl="lg"
+            />
+          ))
+        : null}
+    </>
   );
 }
