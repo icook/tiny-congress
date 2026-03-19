@@ -67,6 +67,7 @@ pub async fn create_room(
             req.poll_duration_secs,
             &req.constraint_type,
             &req.constraint_config,
+            Some(auth.account_id),
         )
         .await
     {
@@ -116,6 +117,8 @@ fn room_to_response(r: RoomRecord) -> RoomResponse {
         created_at: r.created_at.to_rfc3339(),
         engine_type: r.engine_type,
         engine_config: r.engine_config,
+        owner_id: r.owner_id,
+        constraint_type: r.constraint_type,
     }
 }
 

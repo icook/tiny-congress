@@ -17,6 +17,7 @@ pub struct RoomRecord {
     pub constraint_config: serde_json::Value,
     pub engine_type: String,
     pub engine_config: serde_json::Value,
+    pub owner_id: Option<Uuid>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -43,6 +44,7 @@ struct RoomRow {
     constraint_config: serde_json::Value,
     engine_type: String,
     engine_config: serde_json::Value,
+    owner_id: Option<Uuid>,
 }
 
 fn row_to_record(row: RoomRow) -> RoomRecord {
@@ -59,12 +61,14 @@ fn row_to_record(row: RoomRow) -> RoomRecord {
         constraint_config: row.constraint_config,
         engine_type: row.engine_type,
         engine_config: row.engine_config,
+        owner_id: row.owner_id,
     }
 }
 
 /// # Errors
 ///
 /// Returns `DuplicateName` if a room with this name already exists.
+#[allow(clippy::too_many_arguments)]
 pub async fn create_room<'e, E>(
     executor: E,
     name: &str,
@@ -73,6 +77,7 @@ pub async fn create_room<'e, E>(
     poll_duration_secs: Option<i32>,
     constraint_type: &str,
     constraint_config: &serde_json::Value,
+    owner_id: Option<Uuid>,
 ) -> Result<RoomRecord, RoomRepoError>
 where
     E: sqlx::Executor<'e, Database = sqlx::Postgres>,
@@ -80,10 +85,10 @@ where
     let result = sqlx::query_as::<_, RoomRow>(
         r"
         INSERT INTO rooms__rooms
-            (name, description, eligibility_topic, poll_duration_secs, constraint_type, constraint_config)
-        VALUES ($1, $2, $3, $4, $5, $6)
+            (name, description, eligibility_topic, poll_duration_secs, constraint_type, constraint_config, owner_id)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
         RETURNING id, name, description, eligibility_topic, status, poll_duration_secs, created_at, closed_at,
-                  constraint_type, constraint_config, engine_type, engine_config
+                  constraint_type, constraint_config, engine_type, engine_config, owner_id
         ",
     )
     .bind(name)
@@ -92,6 +97,7 @@ where
     .bind(poll_duration_secs)
     .bind(constraint_type)
     .bind(constraint_config)
+    .bind(owner_id)
     .fetch_one(executor)
     .await;
 
@@ -123,7 +129,7 @@ where
             r"
             SELECT id, name, description, eligibility_topic, status, poll_duration_secs,
                    created_at, closed_at, constraint_type, constraint_config,
-                   engine_type, engine_config
+                   engine_type, engine_config, owner_id
             FROM rooms__rooms WHERE status = $1 ORDER BY created_at DESC
             ",
         )
@@ -135,7 +141,7 @@ where
             r"
             SELECT id, name, description, eligibility_topic, status, poll_duration_secs,
                    created_at, closed_at, constraint_type, constraint_config,
-                   engine_type, engine_config
+                   engine_type, engine_config, owner_id
             FROM rooms__rooms ORDER BY created_at DESC
             ",
         )
@@ -218,7 +224,7 @@ where
         SELECT r.id, r.name, r.description, r.eligibility_topic, r.status,
                r.poll_duration_secs, r.created_at, r.closed_at,
                r.constraint_type, r.constraint_config,
-               r.engine_type, r.engine_config
+               r.engine_type, r.engine_config, r.owner_id
         FROM rooms__rooms r
         WHERE r.status = 'open'
           AND r.poll_duration_secs IS NOT NULL

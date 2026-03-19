@@ -65,6 +65,8 @@ pub struct RoomResponse {
     pub created_at: String,
     pub engine_type: String,
     pub engine_config: serde_json::Value,
+    pub owner_id: Option<uuid::Uuid>,
+    pub constraint_type: String,
 }
 
 // ─── Router ────────────────────────────────────────────────────────────────
