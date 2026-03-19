@@ -9,6 +9,7 @@ use axum::{
     response::IntoResponse,
     Json,
 };
+use sqlx::PgPool;
 use tc_engine_api::engine::{EngineContext, EngineRegistry};
 use uuid::Uuid;
 
@@ -20,6 +21,8 @@ use super::{
 };
 use crate::http::ErrorResponse;
 use crate::identity::http::auth::AuthenticatedDevice;
+use crate::rooms::content_filter::{ContentFilter, FilterResult};
+use crate::rooms::repo::suggestions;
 use crate::rooms::repo::RoomRecord;
 use crate::rooms::service::{RoomError, RoomsService};
 use crate::trust::graph_reader::TrustRepoGraphReader;
@@ -295,6 +298,97 @@ fn room_to_response(r: RoomRecord) -> RoomResponse {
         engine_config: r.engine_config,
         owner_id: r.owner_id,
         constraint_type: r.constraint_type,
+    }
+}
+
+// ─── Suggestion handlers ─────────────────────────────────────────────────
+
+const DAILY_SUGGESTION_LIMIT: i64 = 3;
+
+pub async fn create_suggestion(
+    Extension(pool): Extension<PgPool>,
+    Extension(content_filter): Extension<Arc<dyn ContentFilter>>,
+    Path(room_id): Path<Uuid>,
+    auth: AuthenticatedDevice,
+) -> impl IntoResponse {
+    let req: super::CreateSuggestionRequest = match auth.json() {
+        Ok(r) => r,
+        Err(resp) => return resp,
+    };
+
+    let text = req.suggestion_text.trim().to_string();
+    if text.is_empty() || text.len() > 500 {
+        return bad_request("Suggestion must be 1-500 characters");
+    }
+
+    // Rate limit check
+    let daily_count =
+        match suggestions::count_user_suggestions_today(&pool, room_id, auth.account_id).await {
+            Ok(c) => c,
+            Err(e) => {
+                tracing::error!(room_id = %room_id, "suggestion count failed: {e}");
+                return internal_error();
+            }
+        };
+    if daily_count >= DAILY_SUGGESTION_LIMIT {
+        return bad_request("Daily suggestion limit reached (3)");
+    }
+
+    // Content filter
+    let filter_result = content_filter.check(&text).await;
+    let (status, filter_reason) = match filter_result {
+        FilterResult::Accept => ("queued", None),
+        FilterResult::Reject { reason } => ("rejected", Some(reason)),
+    };
+
+    match suggestions::create_suggestion(
+        &pool,
+        room_id,
+        auth.account_id,
+        &text,
+        status,
+        filter_reason.as_deref(),
+    )
+    .await
+    {
+        Ok(s) => (StatusCode::CREATED, Json(suggestion_to_response(s))).into_response(),
+        Err(e) => {
+            tracing::error!(room_id = %room_id, "suggestion creation failed: {e}");
+            internal_error()
+        }
+    }
+}
+
+pub async fn list_suggestions(
+    Extension(pool): Extension<PgPool>,
+    Path(room_id): Path<Uuid>,
+) -> impl IntoResponse {
+    match suggestions::list_suggestions(&pool, room_id).await {
+        Ok(suggestion_list) => {
+            let resp: Vec<_> = suggestion_list
+                .into_iter()
+                .map(suggestion_to_response)
+                .collect();
+            (StatusCode::OK, Json(resp)).into_response()
+        }
+        Err(e) => {
+            tracing::error!(room_id = %room_id, "list suggestions failed: {e}");
+            internal_error()
+        }
+    }
+}
+
+fn suggestion_to_response(s: suggestions::SuggestionRecord) -> super::SuggestionResponse {
+    super::SuggestionResponse {
+        id: s.id,
+        room_id: s.room_id,
+        account_id: s.account_id,
+        suggestion_text: s.suggestion_text,
+        status: s.status,
+        filter_reason: s.filter_reason,
+        evidence_ids: s.evidence_ids,
+        created_at: s.created_at.to_rfc3339(),
+        processed_at: s.processed_at.map(|t| t.to_rfc3339()),
     }
 }
 
