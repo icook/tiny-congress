@@ -63,6 +63,7 @@ use tinycongress_api::{
     rest::{self, ApiDoc},
     rooms::{
         self,
+        content_filter::{ContentFilter, NoopFilter},
         repo::{PgRoomsRepo, RoomsRepo},
         service::{DefaultRoomsService, RoomsService},
     },
@@ -160,6 +161,8 @@ pub struct TestAppBuilder {
     engine_registry: Option<Arc<EngineRegistry>>,
     /// Engine context for room engine hooks
     engine_ctx: Option<EngineContext>,
+    /// Content filter for suggestion endpoints (None means no filter extension added)
+    content_filter: Option<Arc<dyn ContentFilter>>,
     /// CORS allowed origins (None means no CORS layer)
     cors_origins: Option<Vec<String>>,
     /// Security headers config (None means disabled)
@@ -197,6 +200,7 @@ impl TestAppBuilder {
             trust_repo: None,
             engine_registry: None,
             engine_ctx: None,
+            content_filter: None,
             cors_origins: None,
             security_headers: None,
         }
@@ -342,6 +346,10 @@ impl TestAppBuilder {
         self.engine_ctx = Some(engine_ctx);
 
         self.pool = Some(pool);
+
+        // Suggestion endpoints require a ContentFilter extension; use NoopFilter in tests
+        self.content_filter = Some(Arc::new(NoopFilter) as Arc<dyn ContentFilter>);
+
         self
     }
 
@@ -543,6 +551,10 @@ impl TestAppBuilder {
 
         if let Some(ctx) = self.engine_ctx {
             app = app.layer(Extension(ctx));
+        }
+
+        if let Some(filter) = self.content_filter {
+            app = app.layer(Extension(filter));
         }
 
         // Always provide a synthetic backup HMAC key when identity routes are active
