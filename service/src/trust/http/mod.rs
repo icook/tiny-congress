@@ -223,6 +223,16 @@ async fn denounce_handler(
         Err(e) => return e,
     };
 
+    if body.reason.is_empty() || body.reason.len() > 500 {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: "reason must be between 1 and 500 characters".to_string(),
+            }),
+        )
+            .into_response();
+    }
+
     match trust_service
         .denounce(auth.account_id, body.target_id, &body.reason)
         .await
