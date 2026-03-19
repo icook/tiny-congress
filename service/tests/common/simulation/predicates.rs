@@ -295,3 +295,683 @@ pub fn isolated_cluster_diversity_bounded(
         PredicateResult::fail(name, violations.join("; "))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use uuid::Uuid;
+
+    use super::super::report::{NodeScore, SimulationReport};
+    use super::super::{GraphSpec, Team};
+    use super::*;
+
+    // ---------------------------------------------------------------------------
+    // Helpers
+    // ---------------------------------------------------------------------------
+
+    fn make_report(anchor_id: Uuid, scores: Vec<NodeScore>) -> SimulationReport {
+        SimulationReport { anchor_id, scores }
+    }
+
+    fn make_score(id: Uuid, team: Team, distance: Option<f32>, diversity: i32) -> NodeScore {
+        NodeScore {
+            id,
+            name: format!("{team}-{}", &id.to_string()[..8]),
+            team,
+            distance,
+            diversity,
+        }
+    }
+
+    fn make_spec_with_nodes(nodes: &[(Uuid, &str, Team)]) -> GraphSpec {
+        let mut spec = GraphSpec::new();
+        for &(id, name, team) in nodes {
+            spec.add_node(name, team, id);
+        }
+        spec
+    }
+
+    // ---------------------------------------------------------------------------
+    // single_attachment_implies_low_diversity
+    // ---------------------------------------------------------------------------
+
+    #[test]
+    fn single_attachment_low_diversity_passes_when_endorser_one_and_diversity_one() {
+        let anchor = Uuid::new_v4();
+        let target = Uuid::new_v4();
+
+        let mut spec = GraphSpec::new();
+        spec.add_node("anchor", Team::Blue, anchor);
+        spec.add_node("target", Team::Blue, target);
+        spec.add_edge(anchor, target, 1.0);
+
+        let report = make_report(
+            anchor,
+            vec![
+                make_score(anchor, Team::Blue, Some(0.0), 1),
+                make_score(target, Team::Blue, Some(1.0), 1),
+            ],
+        );
+
+        let result = single_attachment_implies_low_diversity(&spec, &report);
+        assert!(result.holds, "should pass: single endorser, diversity=1");
+    }
+
+    #[test]
+    fn single_attachment_low_diversity_fails_when_diversity_above_one() {
+        let anchor = Uuid::new_v4();
+        let target = Uuid::new_v4();
+
+        let mut spec = GraphSpec::new();
+        spec.add_node("anchor", Team::Blue, anchor);
+        spec.add_node("target", Team::Blue, target);
+        spec.add_edge(anchor, target, 1.0); // only one endorser
+
+        let report = make_report(
+            anchor,
+            vec![
+                make_score(anchor, Team::Blue, Some(0.0), 1),
+                // diversity=3 contradicts single-endorser structure
+                make_score(target, Team::Blue, Some(1.0), 3),
+            ],
+        );
+
+        let result = single_attachment_implies_low_diversity(&spec, &report);
+        assert!(!result.holds, "should fail: 1 endorser but diversity=3");
+        assert!(result.explanation.contains("target"));
+    }
+
+    #[test]
+    fn single_attachment_low_diversity_ignores_multi_endorser_nodes() {
+        let a = Uuid::new_v4();
+        let b = Uuid::new_v4();
+        let target = Uuid::new_v4();
+
+        let mut spec = GraphSpec::new();
+        spec.add_node("a", Team::Blue, a);
+        spec.add_node("b", Team::Blue, b);
+        spec.add_node("target", Team::Blue, target);
+        spec.add_edge(a, target, 1.0);
+        spec.add_edge(b, target, 1.0); // two endorsers — diversity=2 is fine
+
+        let report = make_report(
+            a,
+            vec![
+                make_score(a, Team::Blue, Some(0.0), 1),
+                make_score(b, Team::Blue, Some(0.0), 1),
+                make_score(target, Team::Blue, Some(1.0), 2),
+            ],
+        );
+
+        let result = single_attachment_implies_low_diversity(&spec, &report);
+        assert!(
+            result.holds,
+            "should pass: node has 2 endorsers so high diversity is allowed"
+        );
+    }
+
+    #[test]
+    fn single_attachment_low_diversity_passes_on_empty_graph() {
+        let anchor = Uuid::new_v4();
+        let spec = GraphSpec::new();
+        let report = make_report(anchor, vec![]);
+        let result = single_attachment_implies_low_diversity(&spec, &report);
+        assert!(result.holds, "empty graph should trivially pass");
+    }
+
+    // ---------------------------------------------------------------------------
+    // red_nodes_blocked
+    // ---------------------------------------------------------------------------
+
+    #[test]
+    fn red_nodes_blocked_passes_when_red_has_no_distance() {
+        let anchor = Uuid::new_v4();
+        let red = Uuid::new_v4();
+
+        let mut spec = GraphSpec::new();
+        spec.add_node("anchor", Team::Blue, anchor);
+        spec.add_node("red", Team::Red, red);
+
+        let report = make_report(
+            anchor,
+            vec![
+                make_score(anchor, Team::Blue, Some(0.0), 1),
+                make_score(red, Team::Red, None, 0), // unreachable
+            ],
+        );
+
+        let result = red_nodes_blocked(&spec, &report, 3.0, 2);
+        assert!(result.holds, "unreachable red node should be blocked");
+    }
+
+    #[test]
+    fn red_nodes_blocked_passes_when_red_distance_exceeds_threshold() {
+        let anchor = Uuid::new_v4();
+        let red = Uuid::new_v4();
+
+        let mut spec = GraphSpec::new();
+        spec.add_node("anchor", Team::Blue, anchor);
+        spec.add_node("red", Team::Red, red);
+
+        let report = make_report(
+            anchor,
+            vec![
+                make_score(anchor, Team::Blue, Some(0.0), 1),
+                make_score(red, Team::Red, Some(5.0), 3), // distance > max_distance
+            ],
+        );
+
+        let result = red_nodes_blocked(&spec, &report, 3.0, 2);
+        assert!(
+            result.holds,
+            "red beyond distance threshold should be blocked"
+        );
+    }
+
+    #[test]
+    fn red_nodes_blocked_passes_when_red_diversity_below_min() {
+        let anchor = Uuid::new_v4();
+        let red = Uuid::new_v4();
+
+        let mut spec = GraphSpec::new();
+        spec.add_node("anchor", Team::Blue, anchor);
+        spec.add_node("red", Team::Red, red);
+
+        let report = make_report(
+            anchor,
+            vec![
+                make_score(anchor, Team::Blue, Some(0.0), 1),
+                make_score(red, Team::Red, Some(1.0), 1), // diversity < min_diversity=2
+            ],
+        );
+
+        let result = red_nodes_blocked(&spec, &report, 3.0, 2);
+        assert!(
+            result.holds,
+            "red with low diversity should be blocked even if close"
+        );
+    }
+
+    #[test]
+    fn red_nodes_blocked_fails_when_red_passes_both_thresholds() {
+        let anchor = Uuid::new_v4();
+        let red = Uuid::new_v4();
+
+        let mut spec = GraphSpec::new();
+        spec.add_node("anchor", Team::Blue, anchor);
+        spec.add_node("red", Team::Red, red);
+
+        let report = make_report(
+            anchor,
+            vec![
+                make_score(anchor, Team::Blue, Some(0.0), 1),
+                make_score(red, Team::Red, Some(1.0), 3), // within distance AND above diversity
+            ],
+        );
+
+        let result = red_nodes_blocked(&spec, &report, 3.0, 2);
+        assert!(!result.holds, "red passing both thresholds is a violation");
+        assert!(result.explanation.contains("red"));
+    }
+
+    #[test]
+    fn red_nodes_blocked_passes_with_no_red_nodes() {
+        let anchor = Uuid::new_v4();
+        let mut spec = GraphSpec::new();
+        spec.add_node("anchor", Team::Blue, anchor);
+        let report = make_report(anchor, vec![make_score(anchor, Team::Blue, Some(0.0), 1)]);
+        let result = red_nodes_blocked(&spec, &report, 3.0, 2);
+        assert!(result.holds, "no red nodes means no violations");
+    }
+
+    // ---------------------------------------------------------------------------
+    // blue_nodes_reachable
+    // ---------------------------------------------------------------------------
+
+    #[test]
+    fn blue_nodes_reachable_passes_when_all_blue_have_distance() {
+        let anchor = Uuid::new_v4();
+        let blue = Uuid::new_v4();
+
+        let mut spec = GraphSpec::new();
+        spec.add_node("anchor", Team::Blue, anchor);
+        spec.add_node("blue", Team::Blue, blue);
+        spec.add_edge(anchor, blue, 1.0);
+
+        let report = make_report(
+            anchor,
+            vec![
+                make_score(anchor, Team::Blue, Some(0.0), 1),
+                make_score(blue, Team::Blue, Some(1.0), 1),
+            ],
+        );
+
+        let result = blue_nodes_reachable(&spec, &report);
+        assert!(result.holds, "reachable blue node should pass");
+    }
+
+    #[test]
+    fn blue_nodes_reachable_fails_when_a_blue_is_unreachable() {
+        let anchor = Uuid::new_v4();
+        let blue = Uuid::new_v4();
+
+        let mut spec = GraphSpec::new();
+        spec.add_node("anchor", Team::Blue, anchor);
+        spec.add_node("blue", Team::Blue, blue);
+
+        let report = make_report(
+            anchor,
+            vec![
+                make_score(anchor, Team::Blue, Some(0.0), 1),
+                make_score(blue, Team::Blue, None, 0), // unreachable
+            ],
+        );
+
+        let result = blue_nodes_reachable(&spec, &report);
+        assert!(!result.holds, "unreachable blue is a violation");
+        assert!(result.explanation.contains("blue"));
+    }
+
+    #[test]
+    fn blue_nodes_reachable_ignores_red_unreachable_nodes() {
+        let anchor = Uuid::new_v4();
+        let red = Uuid::new_v4();
+
+        let mut spec = GraphSpec::new();
+        spec.add_node("anchor", Team::Blue, anchor);
+        spec.add_node("red", Team::Red, red);
+
+        let report = make_report(
+            anchor,
+            vec![
+                make_score(anchor, Team::Blue, Some(0.0), 1),
+                make_score(red, Team::Red, None, 0), // red unreachable — fine
+            ],
+        );
+
+        let result = blue_nodes_reachable(&spec, &report);
+        assert!(result.holds, "unreachable red nodes are not violations");
+    }
+
+    // ---------------------------------------------------------------------------
+    // no_single_denounce_changes_blue_eligibility
+    // ---------------------------------------------------------------------------
+
+    #[test]
+    fn no_single_denounce_passes_when_blue_stays_eligible() {
+        let anchor = Uuid::new_v4();
+        let blue = Uuid::new_v4();
+
+        let mut spec = GraphSpec::new();
+        spec.add_node("anchor", Team::Blue, anchor);
+        spec.add_node("blue", Team::Blue, blue);
+
+        let before = make_report(
+            anchor,
+            vec![
+                make_score(anchor, Team::Blue, Some(0.0), 2),
+                make_score(blue, Team::Blue, Some(1.0), 2),
+            ],
+        );
+        let after = make_report(
+            anchor,
+            vec![
+                make_score(anchor, Team::Blue, Some(0.0), 2),
+                make_score(blue, Team::Blue, Some(1.0), 2), // unchanged
+            ],
+        );
+
+        let result = no_single_denounce_changes_blue_eligibility(&spec, &before, &after, 3.0, 2);
+        assert!(result.holds, "blue stays eligible — no violation");
+    }
+
+    #[test]
+    fn no_single_denounce_fails_when_eligible_blue_loses_eligibility() {
+        let anchor = Uuid::new_v4();
+        let blue = Uuid::new_v4();
+
+        let mut spec = GraphSpec::new();
+        spec.add_node("anchor", Team::Blue, anchor);
+        spec.add_node("blue", Team::Blue, blue);
+
+        let before = make_report(
+            anchor,
+            vec![
+                make_score(anchor, Team::Blue, Some(0.0), 2),
+                make_score(blue, Team::Blue, Some(1.0), 2), // eligible
+            ],
+        );
+        let after = make_report(
+            anchor,
+            vec![
+                make_score(anchor, Team::Blue, Some(0.0), 2),
+                make_score(blue, Team::Blue, Some(5.0), 1), // now ineligible
+            ],
+        );
+
+        let result = no_single_denounce_changes_blue_eligibility(&spec, &before, &after, 3.0, 2);
+        assert!(
+            !result.holds,
+            "eligible blue losing eligibility is a violation"
+        );
+        assert!(result.explanation.contains("blue"));
+    }
+
+    #[test]
+    fn no_single_denounce_passes_when_blue_was_ineligible_before() {
+        // If blue was already ineligible before the denouncement, losing eligibility
+        // is not a violation of this predicate.
+        let anchor = Uuid::new_v4();
+        let blue = Uuid::new_v4();
+
+        let mut spec = GraphSpec::new();
+        spec.add_node("anchor", Team::Blue, anchor);
+        spec.add_node("blue", Team::Blue, blue);
+
+        let before = make_report(
+            anchor,
+            vec![
+                make_score(anchor, Team::Blue, Some(0.0), 2),
+                make_score(blue, Team::Blue, Some(5.0), 1), // already ineligible
+            ],
+        );
+        let after = make_report(
+            anchor,
+            vec![
+                make_score(anchor, Team::Blue, Some(0.0), 2),
+                make_score(blue, Team::Blue, None, 0), // still ineligible
+            ],
+        );
+
+        let result = no_single_denounce_changes_blue_eligibility(&spec, &before, &after, 3.0, 2);
+        assert!(
+            result.holds,
+            "already-ineligible blue losing more eligibility is not a new violation"
+        );
+    }
+
+    #[test]
+    fn no_single_denounce_ignores_red_nodes() {
+        let anchor = Uuid::new_v4();
+        let red = Uuid::new_v4();
+
+        let mut spec = GraphSpec::new();
+        spec.add_node("anchor", Team::Blue, anchor);
+        spec.add_node("red", Team::Red, red);
+
+        let before = make_report(
+            anchor,
+            vec![
+                make_score(anchor, Team::Blue, Some(0.0), 2),
+                make_score(red, Team::Red, Some(1.0), 3),
+            ],
+        );
+        let after = make_report(
+            anchor,
+            vec![
+                make_score(anchor, Team::Blue, Some(0.0), 2),
+                make_score(red, Team::Red, None, 0), // red lost eligibility — not relevant
+            ],
+        );
+
+        let result = no_single_denounce_changes_blue_eligibility(&spec, &before, &after, 3.0, 2);
+        assert!(result.holds, "red node eligibility changes are ignored");
+    }
+
+    // ---------------------------------------------------------------------------
+    // ring_diversity_bounded
+    // ---------------------------------------------------------------------------
+
+    #[test]
+    fn ring_diversity_bounded_passes_when_all_within_max() {
+        let anchor = Uuid::new_v4();
+        let a = Uuid::new_v4();
+        let b = Uuid::new_v4();
+        let c = Uuid::new_v4();
+
+        let mut spec = GraphSpec::new();
+        spec.add_node("anchor", Team::Blue, anchor);
+        spec.add_node("a", Team::Red, a);
+        spec.add_node("b", Team::Red, b);
+        spec.add_node("c", Team::Red, c);
+
+        let report = make_report(
+            anchor,
+            vec![
+                make_score(anchor, Team::Blue, Some(0.0), 1),
+                make_score(a, Team::Red, Some(1.0), 1),
+                make_score(b, Team::Red, Some(1.0), 1),
+                make_score(c, Team::Red, Some(1.0), 1),
+            ],
+        );
+
+        let result = ring_diversity_bounded(&spec, &report, &[a, b, c], 1);
+        assert!(result.holds, "all ring members at diversity=1 within max=1");
+    }
+
+    #[test]
+    fn ring_diversity_bounded_fails_when_member_exceeds_max() {
+        let anchor = Uuid::new_v4();
+        let a = Uuid::new_v4();
+        let b = Uuid::new_v4();
+
+        let mut spec = GraphSpec::new();
+        spec.add_node("anchor", Team::Blue, anchor);
+        spec.add_node("a", Team::Red, a);
+        spec.add_node("b", Team::Red, b);
+
+        let report = make_report(
+            anchor,
+            vec![
+                make_score(anchor, Team::Blue, Some(0.0), 1),
+                make_score(a, Team::Red, Some(1.0), 3), // diversity=3 > max=1
+                make_score(b, Team::Red, Some(1.0), 1),
+            ],
+        );
+
+        let result = ring_diversity_bounded(&spec, &report, &[a, b], 1);
+        assert!(
+            !result.holds,
+            "ring member exceeds max diversity — violation"
+        );
+    }
+
+    #[test]
+    fn ring_diversity_bounded_passes_for_empty_ring() {
+        let anchor = Uuid::new_v4();
+        let spec = GraphSpec::new();
+        let report = make_report(anchor, vec![]);
+        let result = ring_diversity_bounded(&spec, &report, &[], 1);
+        assert!(result.holds, "empty ring trivially passes");
+    }
+
+    // ---------------------------------------------------------------------------
+    // unreachable_nodes_have_no_distance
+    // ---------------------------------------------------------------------------
+
+    #[test]
+    fn unreachable_nodes_have_no_distance_passes_when_reachable_has_distance() {
+        let anchor = Uuid::new_v4();
+        let blue = Uuid::new_v4();
+
+        let mut spec = GraphSpec::new();
+        spec.add_node("anchor", Team::Blue, anchor);
+        spec.add_node("blue", Team::Blue, blue);
+        spec.add_edge(anchor, blue, 1.0);
+
+        let report = make_report(
+            anchor,
+            vec![
+                make_score(anchor, Team::Blue, Some(0.0), 1),
+                make_score(blue, Team::Blue, Some(1.0), 1),
+            ],
+        );
+
+        let result = unreachable_nodes_have_no_distance(&spec, &report);
+        assert!(result.holds, "reachable node has distance — correct");
+    }
+
+    #[test]
+    fn unreachable_nodes_have_no_distance_passes_when_unreachable_has_no_distance() {
+        let anchor = Uuid::new_v4();
+        let isolated = Uuid::new_v4();
+
+        let mut spec = GraphSpec::new();
+        spec.add_node("anchor", Team::Blue, anchor);
+        spec.add_node("isolated", Team::Blue, isolated);
+        // No edge — isolated is unreachable
+
+        let report = make_report(
+            anchor,
+            vec![
+                make_score(anchor, Team::Blue, Some(0.0), 1),
+                make_score(isolated, Team::Blue, None, 0), // correctly has no distance
+            ],
+        );
+
+        let result = unreachable_nodes_have_no_distance(&spec, &report);
+        assert!(result.holds, "unreachable node correctly has no distance");
+    }
+
+    #[test]
+    fn unreachable_nodes_have_no_distance_fails_when_phantom_distance_reported() {
+        let anchor = Uuid::new_v4();
+        let phantom = Uuid::new_v4();
+
+        let mut spec = GraphSpec::new();
+        spec.add_node("anchor", Team::Blue, anchor);
+        spec.add_node("phantom", Team::Blue, phantom);
+        // No edge — phantom is not reachable from anchor
+
+        let report = make_report(
+            anchor,
+            vec![
+                make_score(anchor, Team::Blue, Some(0.0), 1),
+                // Engine bug: reports a distance even though there's no active path
+                make_score(phantom, Team::Blue, Some(1.0), 1),
+            ],
+        );
+
+        let result = unreachable_nodes_have_no_distance(&spec, &report);
+        assert!(!result.holds, "phantom distance is a violation");
+        assert!(result.explanation.contains("phantom"));
+    }
+
+    #[test]
+    fn unreachable_nodes_have_no_distance_ignores_revoked_edges() {
+        let anchor = Uuid::new_v4();
+        let target = Uuid::new_v4();
+
+        let mut spec = GraphSpec::new();
+        spec.add_node("anchor", Team::Blue, anchor);
+        spec.add_node("target", Team::Blue, target);
+        spec.add_edge_revoked(anchor, target, 1.0); // revoked — not a real path
+
+        let report = make_report(
+            anchor,
+            vec![
+                make_score(anchor, Team::Blue, Some(0.0), 1),
+                // Engine correctly reports no distance (revoked edge is not a path)
+                make_score(target, Team::Blue, None, 0),
+            ],
+        );
+
+        let result = unreachable_nodes_have_no_distance(&spec, &report);
+        assert!(
+            result.holds,
+            "revoked edge should not count as an active path"
+        );
+    }
+
+    // ---------------------------------------------------------------------------
+    // isolated_cluster_diversity_bounded
+    // ---------------------------------------------------------------------------
+
+    #[test]
+    fn isolated_cluster_diversity_bounded_passes_single_external_endorser() {
+        let anchor = Uuid::new_v4();
+        let a = Uuid::new_v4();
+        let b = Uuid::new_v4();
+
+        let mut spec = GraphSpec::new();
+        spec.add_node("anchor", Team::Blue, anchor);
+        spec.add_node("a", Team::Red, a);
+        spec.add_node("b", Team::Red, b);
+        // Only the anchor endorses a (1 external endorser for the cluster)
+        spec.add_edge(anchor, a, 1.0);
+        // b is internal to the cluster — endorsed only by a
+        spec.add_edge(a, b, 1.0);
+
+        let report = make_report(
+            anchor,
+            vec![
+                make_score(anchor, Team::Blue, Some(0.0), 1),
+                make_score(a, Team::Red, Some(1.0), 1), // 1 external endorser → max=1
+                make_score(b, Team::Red, Some(2.0), 1), // 0 external endorsers → max=1
+            ],
+        );
+
+        let result = isolated_cluster_diversity_bounded(&spec, &report, &[a, b]);
+        assert!(
+            result.holds,
+            "cluster members within external endorser bound"
+        );
+    }
+
+    #[test]
+    fn isolated_cluster_diversity_bounded_fails_when_diversity_exceeds_external_count() {
+        let anchor = Uuid::new_v4();
+        let a = Uuid::new_v4();
+        let b = Uuid::new_v4();
+
+        let mut spec = GraphSpec::new();
+        spec.add_node("anchor", Team::Blue, anchor);
+        spec.add_node("a", Team::Red, a);
+        spec.add_node("b", Team::Red, b);
+        spec.add_edge(anchor, a, 1.0); // 1 external endorser for a
+        spec.add_edge(a, b, 1.0);
+
+        let report = make_report(
+            anchor,
+            vec![
+                make_score(anchor, Team::Blue, Some(0.0), 1),
+                make_score(a, Team::Red, Some(1.0), 3), // diversity=3 > max=1
+                make_score(b, Team::Red, Some(2.0), 1),
+            ],
+        );
+
+        let result = isolated_cluster_diversity_bounded(&spec, &report, &[a, b]);
+        assert!(!result.holds, "inflated cluster diversity is a violation");
+    }
+
+    #[test]
+    fn isolated_cluster_diversity_bounded_min_is_one_when_no_external_endorsers() {
+        // Even with 0 external endorsers, max_expected = max(0, 1) = 1.
+        // A node with diversity=1 should still pass.
+        let anchor = Uuid::new_v4();
+        let a = Uuid::new_v4();
+        let b = Uuid::new_v4();
+
+        let mut spec = GraphSpec::new();
+        spec.add_node("anchor", Team::Blue, anchor);
+        spec.add_node("a", Team::Red, a);
+        spec.add_node("b", Team::Red, b);
+        // b is endorsed only by a (internal) — 0 external endorsers
+        spec.add_edge(anchor, a, 1.0);
+        spec.add_edge(a, b, 1.0);
+
+        let report = make_report(
+            anchor,
+            vec![
+                make_score(anchor, Team::Blue, Some(0.0), 1),
+                make_score(a, Team::Red, Some(1.0), 1),
+                make_score(b, Team::Red, Some(2.0), 1), // diversity=1 = floor of 1
+            ],
+        );
+
+        let result = isolated_cluster_diversity_bounded(&spec, &report, &[b]);
+        assert!(
+            result.holds,
+            "diversity=1 with 0 external endorsers is the minimum allowed"
+        );
+    }
+}
