@@ -51,6 +51,7 @@ function makePoll(overrides: Partial<Poll> = {}): Poll {
     status: 'active',
     created_at: '2026-01-01T00:00:00Z',
     closes_at: null,
+    activated_at: null,
     ...overrides,
   };
 }

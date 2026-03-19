@@ -12,6 +12,7 @@ function makePoll(closesAt: string | null): Poll {
     status: 'active',
     created_at: new Date().toISOString(),
     closes_at: closesAt,
+    activated_at: null,
   };
 }
 

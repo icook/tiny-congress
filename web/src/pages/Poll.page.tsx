@@ -19,9 +19,8 @@ import {
   Title,
 } from '@mantine/core';
 import {
-  AgendaProgress,
   EvidenceCards,
-  formatTime,
+  PollDeadline,
   UpcomingPollPreview,
   useAgenda,
   useCastVote,
@@ -181,17 +180,13 @@ export function PollPage({ roomId, pollId }: PollPageProps) {
       <div>
         <Group justify="space-between" align="flex-start">
           <Title order={2}>{poll.question}</Title>
-          <Badge
-            color={isActive ? 'blue' : poll.status === 'closed' ? 'gray' : 'yellow'}
-            variant="light"
-            size="lg"
-          >
-            {isActive && secondsLeft !== null
-              ? secondsLeft <= 0
-                ? 'Closing...'
-                : `Closes in ${formatTime(secondsLeft)}`
-              : poll.status}
-          </Badge>
+          {isActive ? (
+            <PollDeadline poll={poll} secondsLeft={secondsLeft} />
+          ) : (
+            <Badge color={poll.status === 'closed' ? 'gray' : 'yellow'} variant="light" size="lg">
+              {poll.status}
+            </Badge>
+          )}
         </Group>
         {poll.description ? (
           <Text c="dimmed" size="sm" mt="xs">
@@ -200,9 +195,6 @@ export function PollPage({ roomId, pollId }: PollPageProps) {
         ) : null}
       </div>
 
-      {isActive && agenda.length > 1 ? (
-        <AgendaProgress polls={agenda} activePollId={poll.id} />
-      ) : null}
       {isActive ? <UpcomingPollPreview poll={nextPoll} roomId={roomId} /> : null}
 
       {/* Voting section */}
