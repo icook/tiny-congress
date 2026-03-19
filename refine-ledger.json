@@ -205,10 +205,10 @@
     },
     "service/src/trust/": {
       "status": "active",
-      "total_prs": 10,
+      "total_prs": 11,
       "total_skips": 0,
       "consecutive_idle": 0,
-      "last_run": "2026-03-19T19:21:10Z",
+      "last_run": "2026-03-19T19:35:08Z",
       "graduated_at": "",
       "history": [
         {
@@ -270,6 +270,12 @@
           "type": "unknown",
           "impact": "medium",
           "summary": "refine: propagate error from verifier check in endorse"
+        },
+        {
+          "pr": 0,
+          "type": "test_coverage",
+          "impact": "medium",
+          "summary": "Added `endorse_rejects_self_endorsement` HTTP integration test covering the previously untested `SelfAction` error path, which returns 400 BAD_REQUEST when a user attempts to endorse themselves."
         }
       ],
       "skipped": []
