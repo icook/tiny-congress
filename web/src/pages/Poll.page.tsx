@@ -165,8 +165,8 @@ export function PollPage({ roomId, pollId }: PollPageProps) {
           {isActive ? (
             <PollDeadline poll={poll} secondsLeft={secondsLeft} />
           ) : (
-            <Badge color={poll.status === 'closed' ? 'gray' : 'yellow'} variant="light" size="lg">
-              {poll.status}
+            <Badge color={poll.status === 'closed' ? 'gray' : 'blue'} variant="light" size="lg">
+              {poll.status === 'closed' ? 'Closed' : 'Upcoming'}
             </Badge>
           )}
         </Group>
