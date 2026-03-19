@@ -52,7 +52,7 @@ impl SimulationReport {
 
         let distance_map: HashMap<Uuid, Option<f32>> = distances
             .iter()
-            .map(|s| (s.user_id, s.trust_distance))
+            .map(|s| (s.account_id, s.trust_distance))
             .collect();
 
         let scores = g

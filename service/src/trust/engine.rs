@@ -11,7 +11,7 @@ use crate::trust::repo::TrustRepo;
 /// A computed trust score for a single user, relative to an anchor.
 #[derive(Debug, Clone)]
 pub struct ComputedScore {
-    pub user_id: Uuid,
+    pub account_id: Uuid,
     /// Minimum weighted hop-count distance from the anchor. `None` if unreachable.
     pub trust_distance: Option<f32>,
     /// Vertex connectivity (maximum number of internally node-disjoint paths) from the anchor.
@@ -21,7 +21,7 @@ pub struct ComputedScore {
 /// Intermediate row type for sqlx deserialization of the distance CTE.
 #[derive(sqlx::FromRow)]
 struct DistanceRow {
-    user_id: Uuid,
+    account_id: Uuid,
     trust_distance: f32,
 }
 
@@ -62,7 +62,7 @@ impl TrustEngine {
 WITH RECURSIVE trust_graph AS (
     -- Base: direct endorsements from the anchor
     SELECT
-        e.subject_id                        AS user_id,
+        e.subject_id                        AS account_id,
         (1.0 / e.weight)::real              AS distance,
         ARRAY[e.endorser_id, e.subject_id]  AS path
     FROM reputation__endorsements e
@@ -80,7 +80,7 @@ WITH RECURSIVE trust_graph AS (
         (tg.distance + 1.0 / e.weight)::real,
         tg.path || e.subject_id
     FROM reputation__endorsements e
-    JOIN trust_graph tg ON e.endorser_id = tg.user_id
+    JOIN trust_graph tg ON e.endorser_id = tg.account_id
     WHERE tg.distance < 10.0
       AND NOT (e.subject_id = ANY(tg.path))
       AND e.revoked_at IS NULL
@@ -88,9 +88,9 @@ WITH RECURSIVE trust_graph AS (
       AND e.topic = 'trust'
       AND e.in_slot = true
 )
-SELECT user_id, MIN(distance) AS trust_distance
+SELECT account_id, MIN(distance) AS trust_distance
 FROM trust_graph
-GROUP BY user_id
+GROUP BY account_id
             ",
         )
         .bind(anchor_id)
@@ -100,7 +100,7 @@ GROUP BY user_id
         let mut scores: Vec<ComputedScore> = rows
             .into_iter()
             .map(|r| ComputedScore {
-                user_id: r.user_id,
+                account_id: r.account_id,
                 trust_distance: Some(r.trust_distance),
                 path_diversity: 0,
             })
@@ -112,7 +112,7 @@ GROUP BY user_id
         scores.insert(
             0,
             ComputedScore {
-                user_id: anchor_id,
+                account_id: anchor_id,
                 trust_distance: Some(0.0),
                 path_diversity: 0,
             },
@@ -138,7 +138,7 @@ GROUP BY user_id
     ) -> Result<Vec<(Uuid, i32)>, sqlx::Error> {
         // Step 1: collect all reachable user IDs (the anchor is included in the distance results).
         let distances = self.compute_distances_from(anchor_id).await?;
-        let reachable: Vec<Uuid> = distances.iter().map(|s| s.user_id).collect();
+        let reachable: Vec<Uuid> = distances.iter().map(|s| s.account_id).collect();
 
         // Step 2: build a stable index map Uuid → usize for the reachable set.
         let index_map: HashMap<Uuid, usize> = reachable
@@ -185,9 +185,9 @@ WHERE revoked_at IS NULL
             .iter()
             .enumerate()
             .filter(|(_, &id)| id != anchor_id)
-            .map(|(node_index, &user_id)| {
+            .map(|(node_index, &account_id)| {
                 let connectivity = graph.vertex_connectivity(anchor_index, node_index);
-                (user_id, connectivity)
+                (account_id, connectivity)
             })
             .collect();
 
@@ -218,14 +218,14 @@ WHERE revoked_at IS NULL
             // The anchor is the root of trust — its diversity is not meaningful
             // in the endorser-count sense, so we pin it high to avoid it being
             // flagged as low-diversity.
-            let diversity = if score.user_id == anchor_id {
+            let diversity = if score.account_id == anchor_id {
                 i32::MAX
             } else {
-                diversities.get(&score.user_id).copied().unwrap_or(0)
+                diversities.get(&score.account_id).copied().unwrap_or(0)
             };
             trust_repo
                 .upsert_score(
-                    score.user_id,
+                    score.account_id,
                     Some(anchor_id),
                     score.trust_distance,
                     Some(diversity),

@@ -212,11 +212,11 @@ async fn test_revocation_removes_user_from_graph() {
         .expect("compute_distances_from before");
 
     assert!(
-        scores_before.iter().any(|s| s.user_id == alice.id),
+        scores_before.iter().any(|s| s.account_id == alice.id),
         "Alice should be reachable before revocation"
     );
     assert!(
-        scores_before.iter().any(|s| s.user_id == bob.id),
+        scores_before.iter().any(|s| s.account_id == bob.id),
         "Bob should be reachable before revocation"
     );
 
@@ -229,11 +229,11 @@ async fn test_revocation_removes_user_from_graph() {
         .expect("compute_distances_from after");
 
     assert!(
-        scores_after.iter().all(|s| s.user_id != alice.id),
+        scores_after.iter().all(|s| s.account_id != alice.id),
         "Alice should not be reachable after Anchor→Alice is revoked"
     );
     assert!(
-        scores_after.iter().all(|s| s.user_id != bob.id),
+        scores_after.iter().all(|s| s.account_id != bob.id),
         "Bob should not be reachable after Anchor→Alice is revoked"
     );
 }
@@ -407,7 +407,7 @@ async fn test_isolated_user_not_reachable() {
         .expect("compute_distances_from");
 
     assert!(
-        distances.iter().all(|s| s.user_id != bob.id),
+        distances.iter().all(|s| s.account_id != bob.id),
         "Bob (isolated) should not appear in distance results"
     );
 
