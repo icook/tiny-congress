@@ -300,9 +300,15 @@ export function PollPage({ roomId, pollId }: PollPageProps) {
         </Card>
       ) : (
         <Card shadow="sm" padding="lg" radius="md" withBorder>
-          <Alert icon={<IconLock size={16} />} color="gray" title="Poll closed">
-            This poll is no longer accepting votes.
-          </Alert>
+          {poll.status === 'draft' ? (
+            <Alert icon={<IconLock size={16} />} color="blue" title="Voting not open yet">
+              This poll hasn&apos;t opened yet. Check back when it&apos;s active.
+            </Alert>
+          ) : (
+            <Alert icon={<IconLock size={16} />} color="gray" title="Poll closed">
+              This poll is no longer accepting votes.
+            </Alert>
+          )}
         </Card>
       )}
 
