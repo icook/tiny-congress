@@ -354,6 +354,7 @@ jobs:
       chart: ${{ steps.filter.outputs.chart }}
       dashboards: ${{ steps.filter.outputs.dashboards }}
       ci: ${{ inputs.force_all == true && 'true' || steps.filter.outputs.ci }}
+      deployable: ${{ inputs.force_all == true && 'true' || steps.filter.outputs.deployable }}
       # Runner tier outputs — set all at once, each job picks the right size.
       # Toggle: gh variable set USE_ARC_RUNNERS --body "false" --repo icook/tiny-congress
       runner-small: ${{ steps.runner.outputs.small }}
@@ -438,6 +439,21 @@ jobs:
               - 'kube/dashboards/**'
               - 'kube/app/files/dashboards/**'
             ci:
+              - '.github/workflows/**'
+              - '!.github/workflows/build-arc-runner.yml'
+              - 'skaffold.yaml'
+              - 'justfile'
+            # Union of all paths that should trigger a deploy. Used by
+            # deploy-gitops to skip docs/ledger-only pushes. Keep this
+            # in sync when adding new deployable path categories above.
+            deployable:
+              - 'service/**'
+              - 'crates/**'
+              - 'Cargo.toml'
+              - 'Cargo.lock'
+              - 'web/**'
+              - 'dockerfiles/**'
+              - 'kube/**'
               - '.github/workflows/**'
               - '!.github/workflows/build-arc-runner.yml'
               - 'skaffold.yaml'
@@ -1334,9 +1350,11 @@ jobs:
   # ── Update gitops image digests (master only) ────────────
   deploy-gitops:
     name: Update gitops image digests
+    # Skip deploy for docs/ledger-only pushes (no deployable paths changed).
     if: >-
       always() && github.event_name == 'push' && github.ref == 'refs/heads/master' &&
-      needs.ci-gate.result == 'success'
+      needs.ci-gate.result == 'success' &&
+      needs.detect-changes.outputs.deployable == 'true'
     needs: [ci-gate, detect-changes]
     runs-on: ${{ needs.detect-changes.outputs.runner-small }}
     permissions:
