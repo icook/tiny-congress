@@ -2,6 +2,7 @@
 
 use std::sync::Arc;
 
+use crate::http::{bad_request, internal_error, not_found};
 use axum::{
     extract::{Extension, Path},
     http::StatusCode,
@@ -12,8 +13,8 @@ use tc_engine_api::engine::{EngineContext, EngineRegistry};
 use uuid::Uuid;
 
 use super::{CreateRoomRequest, RoomResponse};
+use crate::http::ErrorResponse;
 use crate::identity::http::auth::AuthenticatedDevice;
-use crate::identity::http::ErrorResponse;
 use crate::rooms::repo::RoomRecord;
 use crate::rooms::service::{RoomError, RoomsService};
 
@@ -52,22 +53,10 @@ pub async fn create_room(
 
     // Validate engine type and configuration before persisting the room.
     let Some(engine) = engine_registry.get(&req.engine_type) else {
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(ErrorResponse {
-                error: format!("Unknown engine type: {}", req.engine_type),
-            }),
-        )
-            .into_response();
+        return bad_request(&format!("Unknown engine type: {}", req.engine_type));
     };
     if let Err(e) = engine.validate_config(&req.engine_config) {
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(ErrorResponse {
-                error: e.to_string(),
-            }),
-        )
-            .into_response();
+        return bad_request(&e.to_string());
     }
 
     let room = match service
@@ -96,13 +85,7 @@ pub async fn create_room(
             error = %e,
             "on_room_created hook failed"
         );
-        return (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ErrorResponse {
-                error: "Room created but engine initialisation failed".to_string(),
-            }),
-        )
-            .into_response();
+        return internal_error();
     }
 
     (StatusCode::CREATED, Json(room_to_response(room))).into_response()
@@ -143,13 +126,7 @@ fn room_error_response(e: RoomError) -> axum::response::Response {
         RoomError::Validation(msg) => {
             (StatusCode::BAD_REQUEST, Json(ErrorResponse { error: msg })).into_response()
         }
-        RoomError::RoomNotFound => (
-            StatusCode::NOT_FOUND,
-            Json(ErrorResponse {
-                error: "Room not found".to_string(),
-            }),
-        )
-            .into_response(),
+        RoomError::RoomNotFound => not_found("Room not found"),
         RoomError::DuplicateRoomName => (
             StatusCode::CONFLICT,
             Json(ErrorResponse {
@@ -157,12 +134,6 @@ fn room_error_response(e: RoomError) -> axum::response::Response {
             }),
         )
             .into_response(),
-        RoomError::Internal(_) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ErrorResponse {
-                error: "Internal server error".to_string(),
-            }),
-        )
-            .into_response(),
+        RoomError::Internal(_) => internal_error(),
     }
 }

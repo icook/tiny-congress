@@ -17,8 +17,8 @@ use utoipa::ToSchema;
 use uuid::Uuid;
 
 use super::service::{EndorsementError, EndorsementService};
+use crate::http::ErrorResponse;
 use crate::identity::http::auth::AuthenticatedDevice;
-use crate::identity::http::ErrorResponse;
 
 // ─── Response types ────────────────────────────────────────────────────────
 
@@ -117,23 +117,11 @@ async fn check_endorsement(
     Query(query): Query<EndorsementQuery>,
 ) -> impl IntoResponse {
     let Some(subject_id) = query.subject_id else {
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(ErrorResponse {
-                error: "subject_id query parameter is required".to_string(),
-            }),
-        )
-            .into_response();
+        return crate::http::bad_request("subject_id query parameter is required");
     };
 
     let Some(ref topic) = query.topic else {
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(ErrorResponse {
-                error: "topic query parameter is required".to_string(),
-            }),
-        )
-            .into_response();
+        return crate::http::bad_request("topic query parameter is required");
     };
 
     match service.has_endorsement(subject_id, topic).await {
@@ -192,7 +180,7 @@ async fn create_endorsement_as_verifier(
     if !is_verifier {
         return (
             StatusCode::FORBIDDEN,
-            Json(ErrorResponse {
+            Json(crate::http::ErrorResponse {
                 error: "Account is not an authorized verifier".to_string(),
             }),
         )
@@ -204,23 +192,11 @@ async fn create_endorsement_as_verifier(
     {
         Ok(account) => account,
         Err(crate::identity::repo::AccountRepoError::NotFound) => {
-            return (
-                StatusCode::NOT_FOUND,
-                Json(ErrorResponse {
-                    error: "User not found".to_string(),
-                }),
-            )
-                .into_response();
+            return crate::http::not_found("User not found");
         }
         Err(e) => {
             tracing::error!("Account lookup failed: {e}");
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorResponse {
-                    error: "Internal server error".to_string(),
-                }),
-            )
-                .into_response();
+            return crate::http::internal_error();
         }
     };
 
@@ -258,13 +234,7 @@ fn endorsement_error_response(e: EndorsementError) -> axum::response::Response {
         }
         EndorsementError::Internal(ref msg) => {
             tracing::error!("Endorsement error: {msg}");
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorResponse {
-                    error: "Internal server error".to_string(),
-                }),
-            )
-                .into_response()
+            crate::http::internal_error()
         }
     }
 }

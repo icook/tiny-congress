@@ -126,13 +126,7 @@ pub async fn authorize(
         Ok(s) => s,
         Err(e) => {
             tracing::error!("Failed to sign OAuth state: {e}");
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(crate::identity::http::ErrorResponse {
-                    error: "Internal server error".to_string(),
-                }),
-            )
-                .into_response();
+            return crate::http::internal_error();
         }
     };
 
