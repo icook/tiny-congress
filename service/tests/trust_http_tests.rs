@@ -957,3 +957,104 @@ async fn endorse_after_denounce_returns_409() {
     let response = app.oneshot(request).await.expect("response");
     assert_eq!(response.status(), StatusCode::CONFLICT);
 }
+
+// ─── Accept invite — auto-endorse silent failure ──────────────────────────────
+
+/// When the endorser's slots are full at the moment an invite is accepted,
+/// accept_invite returns 200 OK (the invite IS accepted) but no endorsement
+/// action is queued.  This documents the current fire-and-forget behaviour of
+/// the auto-endorse step so that any future change to propagate the error is
+/// caught by a test failure.
+#[shared_runtime_test]
+async fn accept_invite_succeeds_even_when_endorser_slots_exhausted() {
+    use common::factories::{insert_endorsement, AccountFactory};
+    use tinycongress_api::trust::repo::{PgTrustRepo, TrustRepo};
+
+    let db = isolated_db().await;
+    let pool = db.pool().clone();
+    let (app, endorser_keys, endorser_id) =
+        signup_and_get_account("exhaustedendorser", db.pool()).await;
+
+    // Fill the endorser's k=3 slots directly in the DB.
+    for seed in 50u8..53 {
+        let subject = AccountFactory::new()
+            .with_seed(seed)
+            .create(&pool)
+            .await
+            .expect("create dummy subject");
+        insert_endorsement(&pool, endorser_id, subject.id, 1.0).await;
+    }
+
+    // Sign up the acceptor.
+    let (json2, acceptor_keys) = valid_signup_with_keys("exhaustedacceptor");
+    let resp2 = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/auth/signup")
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(json2))
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+    assert_eq!(resp2.status(), StatusCode::CREATED);
+
+    // Endorser creates an invite.
+    let envelope_b64 = tc_crypto::encode_base64url(b"signed-invite-envelope");
+    let invite_body = serde_json::json!({
+        "envelope": envelope_b64,
+        "delivery_method": "qr",
+        "attestation": { "note": "slots exhausted test" }
+    })
+    .to_string();
+    let create_req = build_authed_request(
+        Method::POST,
+        "/trust/invites",
+        &invite_body,
+        &endorser_keys.device_signing_key,
+        &endorser_keys.device_kid,
+    );
+    let create_resp = app
+        .clone()
+        .oneshot(create_req)
+        .await
+        .expect("create response");
+    assert_eq!(create_resp.status(), StatusCode::CREATED);
+
+    let invite_id = json_body(create_resp).await;
+    let invite_id = invite_id["id"].as_str().expect("invite id");
+
+    // Acceptor accepts the invite — 200 OK even though auto-endorse will fail.
+    let accept_uri = format!("/trust/invites/{invite_id}/accept");
+    let accept_req = build_authed_request(
+        Method::POST,
+        &accept_uri,
+        "",
+        &acceptor_keys.device_signing_key,
+        &acceptor_keys.device_kid,
+    );
+    let accept_resp = app
+        .clone()
+        .oneshot(accept_req)
+        .await
+        .expect("accept response");
+    assert_eq!(accept_resp.status(), StatusCode::OK);
+
+    // No endorsement action should have been queued (slots were exhausted).
+    let trust_repo = PgTrustRepo::new(pool);
+    let pending = trust_repo
+        .claim_pending_actions(10)
+        .await
+        .expect("claim_pending_actions");
+    let endorse_action = pending
+        .iter()
+        .find(|a| a.actor_id == endorser_id && a.action_type == "endorse");
+    assert!(
+        endorse_action.is_none(),
+        "expected no pending endorse action when slots exhausted, found: {pending:?}"
+    );
+
+    let _ = (endorser_keys, acceptor_keys);
+}
