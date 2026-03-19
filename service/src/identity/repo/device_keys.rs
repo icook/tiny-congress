@@ -253,18 +253,26 @@ async fn ensure_active_device_updated(
 
 /// Revoke a device key (sets `revoked_at`).
 ///
+/// The `account_id` is included in the WHERE clause so ownership check and
+/// mutation happen atomically in a single query, eliminating the TOCTOU race
+/// that existed when a separate preflight lookup confirmed ownership.
+///
 /// # Errors
 ///
-/// Returns `DeviceKeyRepoError::NotFound` if no device key matches the given KID.
+/// Returns `DeviceKeyRepoError::NotFound` if no device key matches the given KID
+/// (including if the device exists but belongs to a different account).
 /// Returns `DeviceKeyRepoError::AlreadyRevoked` if the device key was already revoked.
 pub(crate) async fn revoke_device_key(
     pool: &PgPool,
     device_kid: &Kid,
+    account_id: Uuid,
 ) -> Result<(), DeviceKeyRepoError> {
     let result = sqlx::query(
-        "UPDATE device_keys SET revoked_at = now() WHERE device_kid = $1 AND revoked_at IS NULL",
+        "UPDATE device_keys SET revoked_at = now() \
+         WHERE device_kid = $1 AND account_id = $2 AND revoked_at IS NULL",
     )
     .bind(device_kid.as_str())
+    .bind(account_id)
     .execute(pool)
     .await?;
 
@@ -273,20 +281,28 @@ pub(crate) async fn revoke_device_key(
 
 /// Rename a device.
 ///
+/// The `account_id` is included in the WHERE clause so ownership check and
+/// mutation happen atomically in a single query, eliminating the TOCTOU race
+/// that existed when a separate preflight lookup confirmed ownership.
+///
 /// # Errors
 ///
-/// Returns `DeviceKeyRepoError::NotFound` if no device key matches the given KID.
+/// Returns `DeviceKeyRepoError::NotFound` if no device key matches the given KID
+/// (including if the device exists but belongs to a different account).
 /// Returns `DeviceKeyRepoError::AlreadyRevoked` if the device key has been revoked.
 pub(crate) async fn rename_device_key(
     pool: &PgPool,
     device_kid: &Kid,
+    account_id: Uuid,
     new_name: &str,
 ) -> Result<(), DeviceKeyRepoError> {
     let result = sqlx::query(
-        "UPDATE device_keys SET device_name = $1 WHERE device_kid = $2 AND revoked_at IS NULL",
+        "UPDATE device_keys SET device_name = $1 \
+         WHERE device_kid = $2 AND account_id = $3 AND revoked_at IS NULL",
     )
     .bind(new_name)
     .bind(device_kid.as_str())
+    .bind(account_id)
     .execute(pool)
     .await?;
 

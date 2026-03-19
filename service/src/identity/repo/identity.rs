@@ -157,11 +157,16 @@ pub trait IdentityRepo: Send + Sync {
         device_kid: &Kid,
     ) -> Result<DeviceKeyRecord, DeviceKeyRepoError>;
 
-    async fn revoke_device_key(&self, device_kid: &Kid) -> Result<(), DeviceKeyRepoError>;
+    async fn revoke_device_key(
+        &self,
+        device_kid: &Kid,
+        account_id: Uuid,
+    ) -> Result<(), DeviceKeyRepoError>;
 
     async fn rename_device_key(
         &self,
         device_kid: &Kid,
+        account_id: Uuid,
         new_name: &str,
     ) -> Result<(), DeviceKeyRepoError>;
 
@@ -277,16 +282,21 @@ impl IdentityRepo for PgIdentityRepo {
         get_device_key_by_kid(&self.pool, device_kid).await
     }
 
-    async fn revoke_device_key(&self, device_kid: &Kid) -> Result<(), DeviceKeyRepoError> {
-        revoke_device_key(&self.pool, device_kid).await
+    async fn revoke_device_key(
+        &self,
+        device_kid: &Kid,
+        account_id: Uuid,
+    ) -> Result<(), DeviceKeyRepoError> {
+        revoke_device_key(&self.pool, device_kid, account_id).await
     }
 
     async fn rename_device_key(
         &self,
         device_kid: &Kid,
+        account_id: Uuid,
         new_name: &str,
     ) -> Result<(), DeviceKeyRepoError> {
-        rename_device_key(&self.pool, device_kid, new_name).await
+        rename_device_key(&self.pool, device_kid, account_id, new_name).await
     }
 
     async fn touch_device_key(&self, device_kid: &Kid) -> Result<(), DeviceKeyRepoError> {
@@ -621,7 +631,11 @@ pub mod mock {
                 .unwrap_or(Err(DeviceKeyRepoError::NotFound))
         }
 
-        async fn revoke_device_key(&self, _device_kid: &Kid) -> Result<(), DeviceKeyRepoError> {
+        async fn revoke_device_key(
+            &self,
+            _device_kid: &Kid,
+            _account_id: Uuid,
+        ) -> Result<(), DeviceKeyRepoError> {
             self.revoke_device_key_result
                 .lock()
                 .expect("lock poisoned")
@@ -632,6 +646,7 @@ pub mod mock {
         async fn rename_device_key(
             &self,
             _device_kid: &Kid,
+            _account_id: Uuid,
             _new_name: &str,
         ) -> Result<(), DeviceKeyRepoError> {
             self.rename_device_key_result
