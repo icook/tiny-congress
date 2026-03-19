@@ -49,6 +49,7 @@ where
         r"
         INSERT INTO accounts (id, username, root_pubkey, root_kid)
         VALUES ($1, $2, $3, $4)
+        ON CONFLICT (username) DO NOTHING
         ",
     )
     .bind(id)
@@ -59,17 +60,20 @@ where
     .await;
 
     match result {
-        Ok(_) => Ok(CreatedAccount {
-            id,
-            root_kid: root_kid.clone(),
-        }),
+        Ok(r) => {
+            if r.rows_affected() == 0 {
+                return Err(AccountRepoError::DuplicateUsername);
+            }
+            Ok(CreatedAccount {
+                id,
+                root_kid: root_kid.clone(),
+            })
+        }
         Err(e) => {
             if let sqlx::Error::Database(db_err) = &e {
                 if let Some(constraint) = db_err.constraint() {
-                    match constraint {
-                        "accounts_username_key" => return Err(AccountRepoError::DuplicateUsername),
-                        "accounts_root_kid_key" => return Err(AccountRepoError::DuplicateKey),
-                        _ => {}
+                    if constraint == "accounts_root_kid_key" {
+                        return Err(AccountRepoError::DuplicateKey);
                     }
                 }
             }
