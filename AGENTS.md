@@ -90,6 +90,7 @@ When writing HTTP handlers, use the shared helpers. Do NOT construct `(StatusCod
 | Error responses (`bad_request`, `not_found`, `unauthorized`, `internal_error`) | `crate::http` | Inline `(StatusCode::BAD_REQUEST, Json(ErrorResponse {...}))` |
 | `ErrorResponse` struct | `crate::http::ErrorResponse` | `serde_json::json!({"error": ...})` |
 | Auth extractor | `crate::identity::http::auth::AuthenticatedDevice` | — |
+| Database access in handlers | `Extension<Arc<dyn *Repo>>` or `Extension<Arc<dyn *Service>>` | `Extension<PgPool>` in HTTP handlers |
 
 When adding a new shared utility, add it to this table so it stays discoverable. A helper that exists but isn't listed here will be reinvented.
 
