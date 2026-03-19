@@ -205,10 +205,10 @@
     },
     "service/src/trust/": {
       "status": "active",
-      "total_prs": 23,
+      "total_prs": 24,
       "total_skips": 0,
       "consecutive_idle": 0,
-      "last_run": "2026-03-19T23:27:51Z",
+      "last_run": "2026-03-19T23:47:14Z",
       "graduated_at": "",
       "history": [
         {
@@ -348,6 +348,12 @@
           "type": "unknown",
           "impact": "medium",
           "summary": "refine: fail closed on count_all_active_trust_endorsements_by error in budget handler"
+        },
+        {
+          "pr": 0,
+          "type": "security_hardening",
+          "impact": "medium",
+          "summary": "Added fail-closed reason length validation (1–500 chars) in the denounce branch of the trust worker, mirroring the existing HTTP handler guard and the prior weight validation on endorse payloads; added a test verifying empty-reason actions are marked failed."
         }
       ],
       "skipped": []
