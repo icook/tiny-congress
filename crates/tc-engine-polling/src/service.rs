@@ -147,8 +147,7 @@ impl DefaultPollingService {
 /// lifecycle cadence).
 async fn get_room_record(pool: &sqlx::PgPool, room_id: Uuid) -> Result<RoomRecord, PollError> {
     let row: Option<RoomRecord> = sqlx::query_as(
-        r"SELECT id, name, description, eligibility_topic, status, poll_duration_secs,
-                 constraint_type, constraint_config, created_at
+        r"SELECT poll_duration_secs, constraint_type, constraint_config
           FROM rooms__rooms WHERE id = $1",
     )
     .bind(room_id)
@@ -165,21 +164,9 @@ async fn get_room_record(pool: &sqlx::PgPool, room_id: Uuid) -> Result<RoomRecor
 /// Lightweight row type for the room lookup needed by polling service.
 #[derive(Debug, Clone, sqlx::FromRow)]
 struct RoomRecord {
-    #[allow(dead_code)]
-    id: Uuid,
-    #[allow(dead_code)]
-    name: String,
-    #[allow(dead_code)]
-    description: Option<String>,
-    #[allow(dead_code)]
-    eligibility_topic: String,
-    #[allow(dead_code)]
-    status: String,
     poll_duration_secs: Option<i32>,
     constraint_type: String,
     constraint_config: serde_json::Value,
-    #[allow(dead_code)]
-    created_at: chrono::DateTime<chrono::Utc>,
 }
 
 #[async_trait]
