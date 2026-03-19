@@ -14,7 +14,7 @@ These are the things where, if missing, someone gets stuck or confused and close
 
 - [x] **Landing page that explains what this is in one sentence.** Handled by separate landing page — not part of the app flow.
 - [x] **Signup flow completes without errors.** E2E tests cover happy path including mobile Safari via smoke test. *(PR #503)*
-- [x] **Verification flow has clear instructions.** Demo verifier at `tc-verify-demo.ibcook.com` with method selection UI (Government ID, Phone, Email). Users are redirected to a separate site that explains the step. *(PR #456)*
+- [x] **Verification flow has clear instructions.** Demo verifier at `demo-verify.tinycongress.com` with method selection UI (Government ID, Phone, Email). Users are redirected to a separate site that explains the step. *(PR #456)*
 - [x] **Verification success is obvious.** Callback page shows green confirmation, navbar shows green "Verified" badge, settings page shows verification status and method. *(PR #456)*
 - [x] **Error states don't dead-end.** Signup/login show error messages with a way forward. *(PR #503)*
 - [x] **Login flow works end-to-end on mobile Safari.** Covered by smoke test `mobile-safari` Playwright project running against live demo URL. *(PR #527)*
@@ -42,7 +42,7 @@ These are the things where, if missing, someone gets stuck or confused and close
 ### Infrastructure
 
 - [x] **Demo environment is stable and publicly accessible.** Smoke test runs on every master merge to verify. *(PR #527)*
-- [x] **Demo verifier deployed and accessible.** Preflight health check validates `tc-verify-demo.ibcook.com` on every smoke run. *(PR #527)*
+- [x] **Demo verifier deployed and accessible.** Preflight health check validates `demo-verify.tinycongress.com` on every smoke run. *(PR #527)*
 - [x] **HTTPS works.** Preflight curls all three domains over HTTPS; failures block the smoke run. *(PR #527)*
 - [ ] **Page load is under 5 seconds.** Not explicitly measured — validate manually on a real device before Mar 20.
 

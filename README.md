@@ -4,7 +4,7 @@ A community governance platform where verified people vote on issues that matter
 
 Users generate Ed25519 key pairs client-side; the server never sees private keys. Multi-dimensional polls let communities express the *shape* of their opinion, not just a binary position.
 
-**Demo**: [tiny-congress-demo.ibcook.com](https://tiny-congress-demo.ibcook.com) | **Website**: [tinycongress.com](https://tinycongress.com)
+**Demo**: [demo.tinycongress.com](https://demo.tinycongress.com) | **Website**: [tinycongress.com](https://tinycongress.com)
 
 ## How It Works
 
