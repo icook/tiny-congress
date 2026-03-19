@@ -44,6 +44,7 @@ After you are done, your final text output MUST be valid JSON matching this sche
 ```json
 {
   "action": "change" | "ticket" | "clean" | "skip",
+  "type": "security_hardening" | "pattern_enforcement" | "test_coverage" | "code_cleanup",
   "impact": "high" | "medium" | "low",
   "summary": "one-sentence description of what you did or found"
   // Only if action is "skip":
@@ -59,4 +60,4 @@ After you are done, your final text output MUST be valid JSON matching this sche
 - `"skip"`: You found an improvement but it's below the impact threshold. Do NOT make changes. Describe what you found.
 - `"clean"`: Nothing worth improving in the focus area. No changes made.
 
-`impact` is REQUIRED on all actions (including `clean` — rate what was found, even if nothing was worth doing).
+`type` and `impact` are REQUIRED on all actions (including `clean` — categorize and rate what was found, even if nothing was worth doing).

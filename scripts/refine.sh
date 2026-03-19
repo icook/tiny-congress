@@ -28,7 +28,6 @@ require_config() {
     echo "$value"
 }
 
-FOCUS_PATH="$(require_config '.focus.path')"
 GUIDANCE_FILE="$(require_config '.prompts.guidance')"
 COOLDOWN="$(require_config '.behavior.cooldown')"
 MAX_PRS="$(require_config '.behavior.max_prs')"
@@ -59,7 +58,7 @@ mkdir -p "$LOG_DIR"
 log() {
     local msg
     msg="[$(date '+%Y-%m-%d %H:%M:%S')] $*"
-    echo "$msg"
+    echo "$msg" >&2
     echo "$msg" >> "$LOG_FILE"
 }
 
@@ -75,7 +74,10 @@ impact_to_num() {
 
 IMPACT_THRESHOLD="$(impact_to_num "$MIN_IMPACT")"
 
-log "Config loaded: focus=$FOCUS_PATH types=${ENABLED_TYPES[*]} idle_limit=$IDLE_LIMIT"
+# FOCUS_PATH is set dynamically per-target in main()
+FOCUS_PATH=""
+
+log "Config loaded: types=${ENABLED_TYPES[*]} idle_limit=$IDLE_LIMIT"
 
 # ── Prompt templating ───────────────────────────────────────────────
 
@@ -334,6 +336,10 @@ graduate_area() {
 }
 
 # Commit and push ledger changes to master if there are any.
+# NOTE: This pushes directly to master. The ledger is operational metadata
+# (run history, graduation status), not application code — it doesn't go
+# through PRs. Branch protection rules should exempt refine-ledger.json
+# or the bot's commit signature if needed.
 commit_ledger() {
     if [[ ! -f "$LEDGER" ]]; then
         return 0
@@ -386,16 +392,19 @@ get_pending_pr_summary() {
 }
 
 if $DRY_RUN; then
-    # Check graduated status even in dry-run
-    if [[ -f "$LEDGER" ]]; then
-        local_status="$(jq -r --arg key "$FOCUS_PATH" '.areas[$key].status // "null"' "$LEDGER" 2>/dev/null || echo "null")"
-        if [[ "$local_status" == "graduated" ]]; then
-            log "Focus area $FOCUS_PATH is graduated. Set status to 'active' in refine-ledger.json to re-run."
-            exit 0
+    target_count="$(yq -p toml -oy '.targets | length' "$CONFIG")"
+    for ((t = 0; t < target_count; t++)); do
+        FOCUS_PATH="$(yq -p toml -oy ".targets[$t].path" "$CONFIG")"
+        log "=== DRY RUN: Target $((t+1))/$target_count — $FOCUS_PATH ==="
+        if [[ -f "$LEDGER" ]]; then
+            local_status="$(jq -r --arg key "$FOCUS_PATH" '.areas[$key].status // "null"' "$LEDGER" 2>/dev/null || echo "null")"
+            if [[ "$local_status" == "graduated" ]]; then
+                log "  (graduated — would skip)"
+                continue
+            fi
         fi
-    fi
-    log "=== DRY RUN: Generated prompt ==="
-    build_prompt "$(get_pending_pr_summary)" "$(read_ledger_context)"
+        build_prompt "$(get_pending_pr_summary)" "$(read_ledger_context)"
+    done
     exit 0
 fi
 
@@ -803,6 +812,8 @@ for i, c in enumerate(text):
 
     local impact
     impact="$(echo "$json_block" | jq -r '.impact // "medium"' 2>/dev/null || echo "medium")"
+    local finding_type
+    finding_type="$(echo "$json_block" | jq -r '.type // ""' 2>/dev/null || echo "")"
     local skip_reason
     skip_reason="$(echo "$json_block" | jq -r '.skip_reason // ""' 2>/dev/null || echo "")"
 
@@ -824,22 +835,22 @@ for i, c in enumerate(text):
             handle_change "$wt_path" "$branch" "$summary"
             local pr_num
             pr_num="$(gh pr list --head "$branch" --json number --jq '.[0].number' 2>/dev/null || echo "0")"
-            update_ledger "change" "$impact" "$summary" "$pr_num" "" ""
+            update_ledger "change" "$impact" "$summary" "$pr_num" "" "$finding_type"
             ;;
         skip)
             log "Skipped: $summary ($skip_reason)"
             cleanup_worktree "$wt_path" "$branch"
-            update_ledger "skip" "$impact" "$summary" "" "$skip_reason" ""
+            update_ledger "skip" "$impact" "$summary" "" "$skip_reason" "$finding_type"
             ;;
         ticket)
             handle_ticket "$json_block" "$summary"
             cleanup_worktree "$wt_path" "$branch"
-            update_ledger "ticket" "$impact" "$summary"
+            update_ledger "ticket" "$impact" "$summary" "" "" "$finding_type"
             ;;
         clean)
             log "Focus area clean: $summary"
             cleanup_worktree "$wt_path" "$branch"
-            update_ledger "clean" "$impact" "$summary"
+            update_ledger "clean" "$impact" "$summary" "" "" "$finding_type"
             ;;
         *)
             log "WARNING: Unknown action '$action', treating as error"
@@ -854,21 +865,18 @@ for i, c in enumerate(text):
     echo "$action"
 }
 
-# ── Main loop ───────────────────────────────────────────────────────
+# ── Per-target refinement loop ────────────────────────────────────────
 
-main() {
-    log "=== Refinement loop starting ==="
-    log "Focus: $FOCUS_PATH"
-    log "Types: ${ENABLED_TYPES[*]}"
-    log "Idle limit: $IDLE_LIMIT"
+run_target() {
+    log "=== Refining: $FOCUS_PATH ==="
 
-    # Check if focus area is graduated
+    # Skip graduated targets
     if [[ -f "$LEDGER" ]]; then
         local area_status
         area_status="$(jq -r --arg key "$FOCUS_PATH" '.areas[$key].status // "null"' "$LEDGER" 2>/dev/null || echo "null")"
         if [[ "$area_status" == "graduated" ]]; then
-            log "Focus area $FOCUS_PATH is graduated. Set status to 'active' in refine-ledger.json to re-run."
-            exit 0
+            log "Skipping graduated target: $FOCUS_PATH"
+            return 0
         fi
     fi
 
@@ -897,7 +905,7 @@ main() {
                 pr_count=$((pr_count + 1))
                 log "PRs opened so far: $pr_count"
                 if [[ "$MAX_PRS" -gt 0 && "$pr_count" -ge "$MAX_PRS" ]]; then
-                    log "Reached max_prs=$MAX_PRS, stopping"
+                    log "Reached max_prs=$MAX_PRS for target, advancing"
                     break
                 fi
                 ;;
@@ -908,7 +916,7 @@ main() {
                 idle_count=$((idle_count + 1))
                 log "Idle count: $idle_count / $IDLE_LIMIT"
                 if [[ "$idle_count" -ge "$IDLE_LIMIT" ]]; then
-                    log "Reached idle_limit=$IDLE_LIMIT, focus area graduated"
+                    log "Reached idle_limit=$IDLE_LIMIT, graduating $FOCUS_PATH"
                     graduate_area
                     commit_ledger
                     break
@@ -922,8 +930,42 @@ main() {
         fi
     done
 
+    log "=== Target finished: $FOCUS_PATH ($pr_count PRs, $idle_count idle) ==="
+}
+
+# ── Main loop ───────────────────────────────────────────────────────
+
+main() {
+    log "=== Refinement loop starting ==="
+    log "Types: ${ENABLED_TYPES[*]}"
+
+    local target_count
+    target_count="$(yq -p toml -oy '.targets | length' "$CONFIG")"
+
+    if [[ "$target_count" -eq 0 ]]; then
+        log "ERROR: No targets configured in $CONFIG"
+        exit 1
+    fi
+
+    log "Targets: $target_count configured"
+
+    local targets_remaining=0
+    for ((t = 0; t < target_count; t++)); do
+        FOCUS_PATH="$(yq -p toml -oy ".targets[$t].path" "$CONFIG")"
+        run_target
+        # Check if we just graduated or it was already graduated
+        local status_after
+        status_after="$(jq -r --arg key "$FOCUS_PATH" '.areas[$key].status // "active"' "$LEDGER" 2>/dev/null || echo "active")"
+        if [[ "$status_after" != "graduated" ]]; then
+            targets_remaining=$((targets_remaining + 1))
+        fi
+    done
+
+    if [[ "$targets_remaining" -eq 0 ]]; then
+        log "All targets graduated. Add new targets to refine.toml or reset ledger entries to re-run."
+    fi
+
     log "=== Refinement loop finished ==="
-    log "Summary: $pr_count PRs opened, $idle_count consecutive idle results"
 }
 
 main

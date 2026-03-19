@@ -1,9 +1,27 @@
 # Automated refinement configuration
-# Edit [focus] to point at the directory you want refined.
+# Targets are processed in priority order. The loop picks the first
+# non-graduated target each run. After idle_limit consecutive "nothing
+# to improve" results, a target graduates and the loop advances.
 # Run: ./scripts/refine.sh
 
-[focus]
-path = "service/src/identity/"
+# ── Targets (priority order) ─────────────────────────────────────
+
+[[targets]]
+path = "service/src/trust/"
+
+[[targets]]
+path = "crates/tc-engine-api/"
+
+[[targets]]
+path = "service/src/rooms/"
+
+[[targets]]
+path = "service/src/sim/"
+
+[[targets]]
+path = "crates/tc-engine-polling/"
+
+# ── Global settings ──────────────────────────────────────────────
 
 [types]
 pattern_enforcement = true
@@ -14,9 +32,9 @@ security_hardening = true
 [behavior]
 # Seconds to wait between iterations (0 = as fast as possible)
 cooldown = 0
-# Stop after N PRs (0 = unlimited)
+# Stop after N PRs per target (0 = unlimited)
 max_prs = 0
-# Stop after N consecutive "nothing to improve" results
+# Graduate a target after N consecutive "nothing to improve" results
 idle_limit = 3
 # Minimum impact to create a PR: "low" = everything, "medium" = skip cleanup, "high" = only significant
 min_impact = "medium"
