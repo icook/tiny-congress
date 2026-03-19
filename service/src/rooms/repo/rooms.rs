@@ -163,7 +163,7 @@ where
         r"
         SELECT id, name, description, eligibility_topic, status, poll_duration_secs,
                created_at, closed_at, constraint_type, constraint_config,
-               engine_type, engine_config
+               engine_type, engine_config, owner_id
         FROM rooms__rooms WHERE id = $1
         ",
     )
