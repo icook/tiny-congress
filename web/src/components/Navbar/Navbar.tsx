@@ -182,7 +182,7 @@ function RoomsAccordion({
     <NavLink
       label="Rooms"
       leftSection={<IconDoor size={18} stroke={1.5} />}
-      active={isActive('/rooms')}
+      active={false}
       defaultOpened={currentPath.startsWith('/rooms')}
       fw={500}
     >
