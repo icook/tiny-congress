@@ -4,7 +4,7 @@ interface Props {
   secondsLeft: number | null;
 }
 
-function formatTime(seconds: number): string {
+export function formatTime(seconds: number): string {
   if (seconds >= 86400) {
     const d = Math.floor(seconds / 86400);
     const h = Math.floor((seconds % 86400) / 3600);

@@ -21,7 +21,7 @@ import {
 import {
   AgendaProgress,
   EvidenceCards,
-  PollCountdown,
+  formatTime,
   UpcomingPollPreview,
   useAgenda,
   useCastVote,
@@ -141,7 +141,7 @@ export function PollPage({ roomId, pollId }: PollPageProps) {
 
   return (
     <Stack gap="md" maw={800} mx="auto" mt="xl" px="md">
-      <Group>
+      <Group gap={6}>
         <Text component={Link} to="/rooms" size="sm" c="dimmed" style={{ textDecoration: 'none' }}>
           Rooms
         </Text>
@@ -150,7 +150,13 @@ export function PollPage({ roomId, pollId }: PollPageProps) {
         </Text>
         {roomName ? (
           <>
-            <Text size="sm" c="dimmed">
+            <Text
+              component={Link}
+              to={`/rooms/${roomId}`}
+              size="sm"
+              c="dimmed"
+              style={{ textDecoration: 'none' }}
+            >
               {roomName}
             </Text>
             <Text size="sm" c="dimmed">
@@ -178,8 +184,13 @@ export function PollPage({ roomId, pollId }: PollPageProps) {
           <Badge
             color={isActive ? 'blue' : poll.status === 'closed' ? 'gray' : 'yellow'}
             variant="light"
+            size="lg"
           >
-            {poll.status}
+            {isActive && secondsLeft !== null
+              ? secondsLeft <= 0
+                ? 'Closing...'
+                : `Closes in ${formatTime(secondsLeft)}`
+              : poll.status}
           </Badge>
         </Group>
         {poll.description ? (
@@ -189,13 +200,10 @@ export function PollPage({ roomId, pollId }: PollPageProps) {
         ) : null}
       </div>
 
-      {isActive ? (
-        <Group gap="md" mt="xs">
-          <PollCountdown secondsLeft={secondsLeft} />
-          <AgendaProgress polls={agenda} activePollId={poll.id} />
-        </Group>
+      {isActive && agenda.length > 1 ? (
+        <AgendaProgress polls={agenda} activePollId={poll.id} />
       ) : null}
-      {isActive ? <UpcomingPollPreview poll={nextPoll} /> : null}
+      {isActive ? <UpcomingPollPreview poll={nextPoll} roomId={roomId} /> : null}
 
       {/* Voting section */}
       {isActive ? (

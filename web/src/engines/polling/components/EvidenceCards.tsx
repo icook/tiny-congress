@@ -1,7 +1,8 @@
 /**
- * EvidenceCards — collapsible list of pro/con evidence items for a dimension
+ * EvidenceCards — pro/con evidence items for a dimension, shown by default
  */
 
+import { IconFlask } from '@tabler/icons-react';
 import { Collapse, Group, Stack, Text, UnstyledButton } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import type { Evidence } from '../api';
@@ -11,7 +12,7 @@ interface EvidenceCardsProps {
 }
 
 export function EvidenceCards({ evidence }: EvidenceCardsProps) {
-  const [opened, { toggle }] = useDisclosure(false);
+  const [opened, { toggle }] = useDisclosure(true);
 
   if (evidence.length === 0) {
     return null;
@@ -20,10 +21,12 @@ export function EvidenceCards({ evidence }: EvidenceCardsProps) {
   return (
     <div>
       <UnstyledButton onClick={toggle}>
-        <Text size="xs" c="dimmed" style={{ cursor: 'pointer' }}>
-          {String(evidence.length)} evidence card{evidence.length !== 1 ? 's' : ''}{' '}
-          {opened ? '▲' : '▼'}
-        </Text>
+        <Group gap={4}>
+          <IconFlask size={14} color="var(--mantine-color-blue-6)" />
+          <Text size="xs" c="blue" fw={500} style={{ cursor: 'pointer' }}>
+            Research ({String(evidence.length)}) {opened ? '▲' : '▼'}
+          </Text>
+        </Group>
       </UnstyledButton>
       <Collapse in={opened}>
         <Stack gap="xs" mt="xs">
