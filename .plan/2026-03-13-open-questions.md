@@ -269,3 +269,5 @@ All tickets on the "Demo: Friends & Family (Mar 20)" milestone. Grouped by depen
 - [ ] Identity verification vs trust endorsement (Q30) — needed before adding external identity providers
 - [ ] Room types: container/module separation (Q31) — design brief at `.plan/2026-03-17-room-types-architecture.md`
 - [ ] Trust engine: on-demand computation + PPR evaluation (Q32) — needs simulation spike
+- [ ] Room capability tiers: progressive authorization DAG (Q33-Q36) — design brief at `.plan/2026-03-19-room-capability-tiers.md`
+- [ ] Endorsement split: in-slot (trust graph) vs out-of-slot (attestation only) — resolves Q30 slot budget, enables invite-as-endorsement

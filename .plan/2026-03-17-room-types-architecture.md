@@ -79,6 +79,16 @@ RoomModule {
 | **Ranking** | Many | Pairwise comparison picks | Async | Aggregate ranked list | Mentioned in domain model |
 | **Report synthesis** | Many → 1 (AI) | Structured input per batch window | Batch windows | Published artifact | Vision doc, not built |
 | **Deliberation** | Many | Threaded discussion + reactions | Async | Structured summary | Conceptual |
+| **Live research** | Many + LLM agent | Audience steers search topics; LLM auto-researches hourly over 24h | Async, hourly batch | Evolving research summary | Brainstorm (2026-03-19) |
+| **Pairwise ranking** | Many | Head-to-head comparisons (e.g., brand ethics) | Async | Aggregate ranked list (Bradley-Terry) | Brainstorm (2026-03-19) |
+
+### New room type notes (2026-03-19)
+
+**Live research room.** "Things to search next" — audience submits search suggestions, LLM seeds reasonable defaults. An LLM agent automatically searches and summarizes a key phrase once per hour over 24 hours. The output is an evolving research artifact that the audience collectively steered. `reduce()` = the accumulated research summary, transparent about which searches were run and what each returned.
+
+**Pairwise ranking room.** Instead of rating items on an absolute scale, participants make head-to-head picks. The ranking is recomputed using the authoritative voter set (per room eligibility), but multiple "sets" of rankings can be shown — e.g., "peanut gallery" (all visitors) vs "verified participants." Output: a stack ranking of items (companies, policies, priorities). This is a distinct module from polling because the interaction model (binary choice between two items) and reduction algorithm (Bradley-Terry or similar) are fundamentally different from multi-dimensional sliders.
+
+**Selective disclosure (cross-cutting).** Each response can be: (a) public, (b) sent to a private group, or (c) both. Private group speech is more impactful — the relationship with the author means it's more likely to be read and to influence. This is a cross-cutting feature, not a room type — it applies to any room module that collects individual responses. Design question: is this a room-level config ("this room has public and private channels") or a per-response user choice? The `reduce()` function must handle mixed visibility — public reduction only includes public responses; private reduction includes private ones visible to the group.
 
 ---
 
@@ -121,6 +131,28 @@ The `rooms__lifecycle_queue` (migration 17) manages poll rotation — but this i
 ### Poll tables are module-specific
 
 `rooms__polls`, `rooms__poll_dimensions`, `rooms__votes` are all polling-module tables. In the module model, each module owns its data schema. The slow exchange module would have different tables (messages, retention policies, exchange status).
+
+---
+
+## Sim → Room Operations (architecture note, 2026-03-19)
+
+The simulation harness is starting to do "house operations rules" for specific rooms (e.g., Brand Ethics seeding, evidence generation, poll rotation decisions). This is module-level operational logic, not global simulation. The current architecture is wrong for this — sim runs as an external process against the API, but room operations should be a per-room concern.
+
+**The implication:** each room module needs an **operations layer** — automated behaviors that run on behalf of the room (LLM calls, content seeding, lifecycle decisions). This is distinct from the `reduce()` function (which is pure aggregation) and from the container lifecycle (open/closed/archived). It's the "house bot" — an agent that acts within the room according to the module's rules.
+
+This means the module interface needs something like:
+
+```
+RoomModule {
+    // ... existing interface ...
+
+    // Operations — automated room behaviors
+    operations_schedule() → Vec<CronSpec>     // when does the bot run?
+    on_tick(state, context) → Vec<Action>     // what does it do each run?
+}
+```
+
+The sim harness remains valuable for adversarial testing and trust graph validation. But the operational behaviors it's currently accumulating should migrate to per-room module operations as the module interface solidifies.
 
 ---
 
