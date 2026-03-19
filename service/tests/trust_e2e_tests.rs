@@ -11,6 +11,7 @@ use tc_test_macros::shared_runtime_test;
 use tinycongress_api::reputation::repo::{PgReputationRepo, ReputationRepo};
 use tinycongress_api::trust::constraints::{EndorsedByConstraint, RoomConstraint};
 use tinycongress_api::trust::engine::TrustEngine;
+use tinycongress_api::trust::graph_reader::TrustRepoGraphReader;
 use tinycongress_api::trust::repo::{PgTrustRepo, TrustRepo};
 use tinycongress_api::trust::service::{DefaultTrustService, TrustService};
 use tinycongress_api::trust::worker::TrustWorker;
@@ -121,14 +122,15 @@ async fn test_demo_day_flow() {
     // Step 6: Verify room constraint — Bob can enter, Dave cannot
     let endorsed_by = EndorsedByConstraint::new(alice.id);
 
+    let reader = TrustRepoGraphReader::new(trust_repo.clone());
     let bob_eligibility = endorsed_by
-        .check(bob.id, trust_repo.as_ref())
+        .check(bob.id, &reader)
         .await
         .expect("check bob eligibility");
     assert!(bob_eligibility.is_eligible, "Bob should be eligible");
 
     let dave_eligibility = endorsed_by
-        .check(dave.id, trust_repo.as_ref())
+        .check(dave.id, &reader)
         .await
         .expect("check dave eligibility");
     assert!(!dave_eligibility.is_eligible, "Dave should not be eligible");

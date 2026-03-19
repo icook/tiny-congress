@@ -80,7 +80,15 @@ function RoomCard({ room }: { room: Room }) {
   const statusColor = ROOM_STATUS_COLOR[room.status] ?? 'yellow';
 
   return (
-    <Card shadow="sm" padding="lg" radius="md" withBorder>
+    <Card
+      component={Link}
+      to={`/rooms/${room.id}`}
+      shadow="sm"
+      padding="lg"
+      radius="md"
+      withBorder
+      style={{ cursor: 'pointer', textDecoration: 'none', color: 'inherit' }}
+    >
       <Stack gap="sm">
         <Group justify="space-between">
           <Title order={4}>{room.name}</Title>

@@ -9,6 +9,8 @@ import {
   useParams,
 } from '@tanstack/react-router';
 import { Button, Center, Group, Loader, Stack, Text, Title } from '@mantine/core';
+import { EngineRouter } from '@/engines';
+import { useRoom } from '@/engines/api';
 import { AuthRequiredOutlet } from './components/AuthRequiredOutlet';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { AboutPage } from './pages/About.page';
@@ -159,6 +161,12 @@ const roomsRoute = createRoute({
   component: RoomsPage,
 });
 
+const roomDetailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: 'rooms/$roomId',
+  component: RoomDetailPageWrapper,
+});
+
 const pollRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: 'rooms/$roomId/polls/$pollId',
@@ -176,6 +184,7 @@ const routeTree = rootRoute.addChildren([
   guestOnlyLayout.addChildren([signupRoute, loginRoute]),
   authRequiredLayout.addChildren([settingsRoute, trustRoute, endorseRoute, verifyCallbackRoute]),
   roomsRoute,
+  roomDetailRoute,
   pollRoute,
 ]);
 
@@ -225,6 +234,35 @@ export function Router() {
       <RouterProvider router={router} context={{ auth: { deviceKid } }} />
     </ErrorBoundary>
   );
+}
+
+function RoomDetailPageWrapper() {
+  const { roomId } = useParams({ from: '/rooms/$roomId' });
+  const { data: room, isLoading, isError, error } = useRoom(roomId);
+
+  if (isLoading) {
+    return (
+      <Center style={{ height: '100vh' }}>
+        <Loader size="sm" />
+      </Center>
+    );
+  }
+
+  if (isError || !room) {
+    return (
+      <Stack gap="md" maw={600} mx="auto" mt={100} ta="center">
+        <Title order={2}>Room not found</Title>
+        <Text c="dimmed">{isError ? error.message : 'This room does not exist.'}</Text>
+        <Group justify="center">
+          <Button component={Link} to="/rooms">
+            Browse Rooms
+          </Button>
+        </Group>
+      </Stack>
+    );
+  }
+
+  return <EngineRouter room={room} roomId={roomId} eligibility={{ isEligible: true }} />;
 }
 
 function PollPageWrapper() {

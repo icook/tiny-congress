@@ -15,6 +15,8 @@ pub struct RoomRecord {
     pub closed_at: Option<DateTime<Utc>>,
     pub constraint_type: String,
     pub constraint_config: serde_json::Value,
+    pub engine_type: String,
+    pub engine_config: serde_json::Value,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -39,6 +41,8 @@ struct RoomRow {
     closed_at: Option<DateTime<Utc>>,
     constraint_type: String,
     constraint_config: serde_json::Value,
+    engine_type: String,
+    engine_config: serde_json::Value,
 }
 
 fn row_to_record(row: RoomRow) -> RoomRecord {
@@ -53,6 +57,8 @@ fn row_to_record(row: RoomRow) -> RoomRecord {
         closed_at: row.closed_at,
         constraint_type: row.constraint_type,
         constraint_config: row.constraint_config,
+        engine_type: row.engine_type,
+        engine_config: row.engine_config,
     }
 }
 
@@ -77,7 +83,7 @@ where
             (name, description, eligibility_topic, poll_duration_secs, constraint_type, constraint_config)
         VALUES ($1, $2, $3, $4, $5, $6)
         RETURNING id, name, description, eligibility_topic, status, poll_duration_secs, created_at, closed_at,
-                  constraint_type, constraint_config
+                  constraint_type, constraint_config, engine_type, engine_config
         ",
     )
     .bind(name)
@@ -116,7 +122,8 @@ where
         sqlx::query_as::<_, RoomRow>(
             r"
             SELECT id, name, description, eligibility_topic, status, poll_duration_secs,
-                   created_at, closed_at, constraint_type, constraint_config
+                   created_at, closed_at, constraint_type, constraint_config,
+                   engine_type, engine_config
             FROM rooms__rooms WHERE status = $1 ORDER BY created_at DESC
             ",
         )
@@ -127,7 +134,8 @@ where
         sqlx::query_as::<_, RoomRow>(
             r"
             SELECT id, name, description, eligibility_topic, status, poll_duration_secs,
-                   created_at, closed_at, constraint_type, constraint_config
+                   created_at, closed_at, constraint_type, constraint_config,
+                   engine_type, engine_config
             FROM rooms__rooms ORDER BY created_at DESC
             ",
         )
@@ -148,7 +156,8 @@ where
     sqlx::query_as::<_, RoomRow>(
         r"
         SELECT id, name, description, eligibility_topic, status, poll_duration_secs,
-               created_at, closed_at, constraint_type, constraint_config
+               created_at, closed_at, constraint_type, constraint_config,
+               engine_type, engine_config
         FROM rooms__rooms WHERE id = $1
         ",
     )
@@ -201,11 +210,15 @@ pub async fn rooms_needing_content<'e, E>(executor: E) -> Result<Vec<RoomRecord>
 where
     E: sqlx::Executor<'e, Database = sqlx::Postgres>,
 {
+    // COUPLING: This query references rooms__polls, a polling-engine-owned table.
+    // TODO: Replace with per-engine callback or capability flag in rooms table
+    // once a second engine is added. Acceptable for single-engine stage.
     let rows = sqlx::query_as::<_, RoomRow>(
         r"
         SELECT r.id, r.name, r.description, r.eligibility_topic, r.status,
                r.poll_duration_secs, r.created_at, r.closed_at,
-               r.constraint_type, r.constraint_config
+               r.constraint_type, r.constraint_config,
+               r.engine_type, r.engine_config
         FROM rooms__rooms r
         WHERE r.status = 'open'
           AND r.poll_duration_secs IS NOT NULL

@@ -14,6 +14,8 @@ export interface Room {
   name: string;
   description: string | null;
   eligibility_topic: string;
+  engine_type: string;
+  engine_config: Record<string, unknown>;
   status: string;
   created_at: string;
 }

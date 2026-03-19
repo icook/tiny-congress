@@ -20,10 +20,15 @@ use sqlx::PgPool;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
+use tc_engine_api::constraints::ConstraintRegistry;
+use tc_engine_api::engine::{EngineContext, EngineRegistry};
+use tc_engine_polling::engine::PollingEngine;
+use tc_engine_polling::service::{DefaultPollingService, PollingService};
 use tinycongress_api::{
     build_info::BuildInfo,
     config::Config,
     db::setup_database,
+    engine_registry,
     graphql::{graphql_handler, graphql_playground, MutationRoot, QueryRoot},
     http::{build_security_headers, security_headers_middleware},
     identity::{
@@ -45,6 +50,7 @@ use tinycongress_api::{
     trust::{
         self,
         engine::TrustEngine,
+        graph_reader::TrustRepoGraphReader,
         repo::{PgTrustRepo, TrustRepo},
         service::{DefaultTrustService, TrustService},
         worker::TrustWorker,
@@ -53,6 +59,30 @@ use tinycongress_api::{
 use tower_http::cors::{AllowOrigin, Any, CorsLayer};
 use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
+
+// ---------------------------------------------------------------------------
+// Stub RoomLifecycle — satisfies EngineContext until full room-engine
+// dispatch is wired. The polling engine's start() doesn't call these methods.
+// ---------------------------------------------------------------------------
+
+// TODO: Replace StubRoomLifecycle with real implementation that delegates to
+// RoomsRepo before adding any engine that calls get_room/close_room.
+// Currently safe because PollingEngine::start() does not use room_lifecycle.
+struct StubRoomLifecycle;
+
+#[async_trait::async_trait]
+impl tc_engine_api::engine::RoomLifecycle for StubRoomLifecycle {
+    async fn get_room(
+        &self,
+        _room_id: uuid::Uuid,
+    ) -> Result<tc_engine_api::engine::RoomRecord, anyhow::Error> {
+        anyhow::bail!("StubRoomLifecycle::get_room not yet implemented")
+    }
+
+    async fn close_room(&self, _room_id: uuid::Uuid) -> Result<(), anyhow::Error> {
+        anyhow::bail!("StubRoomLifecycle::close_room not yet implemented")
+    }
+}
 
 /// Liveness check — confirms the process is alive.
 ///
@@ -128,7 +158,7 @@ async fn build_app(
     build_info: BuildInfo,
     schema: Schema<QueryRoot, MutationRoot, EmptySubscription>,
     allow_origin: AllowOrigin,
-) -> Result<(Router, PgPool, Arc<dyn RoomsService>), anyhow::Error> {
+) -> Result<(Router, PgPool), anyhow::Error> {
     let rest_v1 = Router::new().route("/build-info", get(rest::get_build_info));
 
     // Identity wiring
@@ -178,14 +208,58 @@ async fn build_app(
         reputation_repo_for_trust,
     ));
 
-    // Rooms wiring
+    // Engine plugin infrastructure
+    let trust_graph_reader = Arc::new(TrustRepoGraphReader::new(trust_repo.clone()))
+        as Arc<dyn tc_engine_api::trust::TrustGraphReader>;
+
+    let engine_ctx = EngineContext {
+        pool: pool.clone(),
+        trust_reader: trust_graph_reader.clone(),
+        constraints: Arc::new(ConstraintRegistry),
+        room_lifecycle: Arc::new(StubRoomLifecycle),
+    };
+
+    // Register room engine plugins
+    let mut engine_registry = EngineRegistry::new();
+    engine_registry.register(PollingEngine::new());
+
+    // Start background tasks for all registered engines
+    // TODO: Store engine handles in app state and join them during graceful shutdown.
+    // Currently tasks continue running but are killed on process exit.
+    // Not a regression — pre-refactor lifecycle consumer had the same behavior.
+    let _engine_handles: Vec<tokio::task::JoinHandle<()>> = engine_registry
+        .all()
+        .iter()
+        .flat_map(|engine| {
+            tracing::info!(
+                engine_type = engine.engine_type(),
+                "starting engine background tasks"
+            );
+            match engine.start(engine_ctx.clone()) {
+                Ok(handles) => handles,
+                Err(e) => {
+                    tracing::error!(
+                        engine_type = engine.engine_type(),
+                        error = %e,
+                        "engine start failed"
+                    );
+                    vec![]
+                }
+            }
+        })
+        .collect();
+
+    let engine_registry = Arc::new(engine_registry);
+
+    // Rooms wiring (room CRUD only)
     let rooms_repo = Arc::new(PgRoomsRepo::new(pool.clone()));
-    let rooms_service = Arc::new(DefaultRoomsService::new(
-        rooms_repo as Arc<dyn RoomsRepo>,
-        trust_repo,
-        pool.clone(),
-    )) as Arc<dyn RoomsService>;
-    let rooms_service_bg = rooms_service.clone();
+    let rooms_service = Arc::new(DefaultRoomsService::new(rooms_repo as Arc<dyn RoomsRepo>))
+        as Arc<dyn RoomsService>;
+
+    // Polling wiring (polls, votes, dimensions, lifecycle, results)
+    // HTTP handlers still use Extension<Arc<dyn PollingService>> for request handling
+    let polling_service = Arc::new(DefaultPollingService::new(pool.clone(), trust_graph_reader))
+        as Arc<dyn PollingService>;
 
     let (prometheus_layer, metric_handle) = PrometheusMetricLayer::pair();
 
@@ -207,6 +281,7 @@ async fn build_app(
         .merge(reputation::http::router())
         .merge(rooms::http::router())
         .merge(trust::http::trust_router())
+        .nest("/api/v1", engine_registry::engines_router())
         .route("/health", get(health_check))
         .route("/ready", get(readiness_check))
         .route("/metrics", get(|| async move { metric_handle.render() }))
@@ -216,12 +291,15 @@ async fn build_app(
         .layer(Extension(endorsement_service))
         .layer(Extension(reputation_repo_ext))
         .layer(Extension(rooms_service))
+        .layer(Extension(polling_service))
         .layer(Extension(trust_service))
         .layer(Extension(trust_repo_for_http))
         .layer(Extension(trust_engine.clone()))
         .layer(Extension(synthetic_backup_key))
         .layer(Extension(build_info))
-        .layer(Extension(pool.clone()));
+        .layer(Extension(pool.clone()))
+        .layer(Extension(engine_registry))
+        .layer(Extension(engine_ctx));
 
     // Add ID.me config extension if configured
     let app = if let Some(ref idme_config) = config.idme {
@@ -264,7 +342,7 @@ async fn build_app(
     ));
     tokio::spawn(async move { trust_worker.run().await });
 
-    Ok((app, pool, rooms_service_bg))
+    Ok((app, pool))
 }
 
 #[tokio::main]
@@ -316,18 +394,13 @@ async fn main() -> Result<(), anyhow::Error> {
         None
     };
 
-    // Service wiring
-    let (app, pool_for_cleanup, rooms_service) =
+    // Service wiring (engine background tasks — including the lifecycle
+    // consumer — are started inside build_app via PollingEngine::start())
+    let (app, pool_for_cleanup) =
         build_app(&config, pool.clone(), build_info, schema, allow_origin).await?;
     let mut app = app;
 
-    spawn_nonce_cleanup(pool_for_cleanup.clone());
-
-    rooms::lifecycle::spawn_lifecycle_consumer(
-        pool_for_cleanup,
-        rooms_service,
-        Duration::from_secs(5),
-    );
+    spawn_nonce_cleanup(pool_for_cleanup);
 
     // Add security headers middleware if enabled
     if let Some(headers) = security_headers {

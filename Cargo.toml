@@ -1,6 +1,6 @@
 [workspace]
 # Keep members on single line - web/Dockerfile sed pattern depends on this format
-members = ["service", "crates/tc-crypto", "crates/test-macros"]
+members = ["service", "crates/tc-crypto", "crates/tc-engine-api", "crates/tc-engine-polling", "crates/test-macros"]
 resolver = "2"
 
 [workspace.package]
