@@ -6,9 +6,12 @@ use std::fmt::Write as _;
 use std::io;
 use std::path::Path;
 
+use std::sync::Arc;
+
 use sqlx::PgPool;
 use tinycongress_api::trust::constraints::{Eligibility, RoomConstraint};
 use tinycongress_api::trust::engine::TrustEngine;
+use tinycongress_api::trust::graph_reader::TrustRepoGraphReader;
 use tinycongress_api::trust::repo::{PgTrustRepo, TrustRepo};
 use uuid::Uuid;
 
@@ -90,8 +93,9 @@ impl SimulationReport {
         pool: &PgPool,
     ) -> Eligibility {
         let repo = PgTrustRepo::new(pool.clone());
+        let reader = TrustRepoGraphReader::new(Arc::new(repo));
         constraint
-            .check(node_id, &repo)
+            .check(node_id, &reader)
             .await
             .expect("constraint check failed")
     }

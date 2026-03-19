@@ -5,11 +5,13 @@ mod common;
 use common::factories::AccountFactory;
 use common::test_db::isolated_db;
 use serde_json::json;
+use std::sync::Arc;
 use tc_test_macros::shared_runtime_test;
 use tinycongress_api::trust::constraints::{
     build_constraint, CommunityConstraint, CongressConstraint, EndorsedByConstraint,
     IdentityVerifiedConstraint, RoomConstraint,
 };
+use tinycongress_api::trust::graph_reader::TrustRepoGraphReader;
 use tinycongress_api::trust::repo::{PgTrustRepo, TrustRepo};
 
 // ---------------------------------------------------------------------------
@@ -114,9 +116,10 @@ async fn test_identity_verified_eligible() {
     .unwrap();
 
     let repo = PgTrustRepo::new(pool.clone());
+    let reader = TrustRepoGraphReader::new(Arc::new(repo));
     let constraint = IdentityVerifiedConstraint::new(vec![verifier.id], "identity_verified");
     let result = constraint
-        .check(user.id, &repo)
+        .check(user.id, &reader)
         .await
         .expect("check should not error");
 
@@ -145,9 +148,10 @@ async fn test_identity_verified_ineligible() {
 
     // No endorsement
     let repo = PgTrustRepo::new(pool.clone());
+    let reader = TrustRepoGraphReader::new(Arc::new(repo));
     let constraint = IdentityVerifiedConstraint::new(vec![verifier.id], "identity_verified");
     let result = constraint
-        .check(user.id, &repo)
+        .check(user.id, &reader)
         .await
         .expect("check should not error");
 
@@ -195,9 +199,10 @@ async fn test_endorsed_by_eligible() {
         .await
         .expect("upsert_score");
 
+    let reader = TrustRepoGraphReader::new(Arc::new(repo));
     let constraint = EndorsedByConstraint::new(anchor.id);
     let result = constraint
-        .check(user.id, &repo)
+        .check(user.id, &reader)
         .await
         .expect("check should not error");
 
@@ -229,9 +234,10 @@ async fn test_endorsed_by_ineligible() {
 
     // No score inserted — user is unreachable
     let repo = PgTrustRepo::new(pool.clone());
+    let reader = TrustRepoGraphReader::new(Arc::new(repo));
     let constraint = EndorsedByConstraint::new(anchor.id);
     let result = constraint
-        .check(user.id, &repo)
+        .check(user.id, &reader)
         .await
         .expect("check should not error");
 
@@ -270,9 +276,10 @@ async fn test_community_eligible() {
         .await
         .expect("upsert_score");
 
+    let reader = TrustRepoGraphReader::new(Arc::new(repo));
     let constraint = CommunityConstraint::new(anchor.id, 5.0, 2).unwrap();
     let result = constraint
-        .check(user.id, &repo)
+        .check(user.id, &reader)
         .await
         .expect("check should not error");
 
@@ -306,9 +313,10 @@ async fn test_community_ineligible_distance() {
         .await
         .expect("upsert_score");
 
+    let reader = TrustRepoGraphReader::new(Arc::new(repo));
     let constraint = CommunityConstraint::new(anchor.id, 5.0, 2).unwrap();
     let result = constraint
-        .check(user.id, &repo)
+        .check(user.id, &reader)
         .await
         .expect("check should not error");
 
@@ -347,9 +355,10 @@ async fn test_community_ineligible_diversity() {
         .await
         .expect("upsert_score");
 
+    let reader = TrustRepoGraphReader::new(Arc::new(repo));
     let constraint = CommunityConstraint::new(anchor.id, 5.0, 2).unwrap();
     let result = constraint
-        .check(user.id, &repo)
+        .check(user.id, &reader)
         .await
         .expect("check should not error");
 
@@ -454,9 +463,10 @@ async fn test_community_both_fail() {
         .await
         .expect("upsert_score");
 
+    let reader = TrustRepoGraphReader::new(Arc::new(repo));
     let constraint = CommunityConstraint::new(anchor.id, 5.0, 2).unwrap();
     let result = constraint
-        .check(user.id, &repo)
+        .check(user.id, &reader)
         .await
         .expect("check should not error");
 
@@ -499,9 +509,10 @@ async fn test_congress_eligible() {
         .await
         .expect("upsert_score");
 
+    let reader = TrustRepoGraphReader::new(Arc::new(repo));
     let constraint = CongressConstraint::new(anchor.id, 3).unwrap();
     let result = constraint
-        .check(user.id, &repo)
+        .check(user.id, &reader)
         .await
         .expect("check should not error");
 
@@ -533,9 +544,10 @@ async fn test_congress_ineligible() {
 
     // No score inserted — no snapshot for this user
     let repo = PgTrustRepo::new(pool.clone());
+    let reader = TrustRepoGraphReader::new(Arc::new(repo));
     let constraint = CongressConstraint::new(anchor.id, 3).unwrap();
     let result = constraint
-        .check(user.id, &repo)
+        .check(user.id, &reader)
         .await
         .expect("check should not error");
 
