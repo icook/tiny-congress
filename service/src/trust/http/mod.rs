@@ -17,7 +17,7 @@ use uuid::Uuid;
 use super::repo::{TrustRepo, TrustRepoError};
 use super::service::{TrustService, TrustServiceError};
 use super::weight::compute_endorsement_weight;
-use crate::http::{bad_request, internal_error, not_found, ErrorResponse};
+use crate::http::{bad_request, conflict, internal_error, not_found, too_many_requests};
 use crate::identity::http::auth::AuthenticatedDevice;
 use crate::reputation::repo::ReputationRepo;
 
@@ -482,34 +482,16 @@ async fn accept_invite_handler(
 fn trust_service_error_response(e: &TrustServiceError) -> axum::response::Response {
     match e {
         TrustServiceError::SelfAction => bad_request("Cannot target yourself"),
-        TrustServiceError::QuotaExceeded => (
-            StatusCode::TOO_MANY_REQUESTS,
-            Json(ErrorResponse {
-                error: "Daily action quota exceeded".to_string(),
-            }),
-        )
-            .into_response(),
-        TrustServiceError::EndorsementSlotsExhausted { max } => (
-            StatusCode::TOO_MANY_REQUESTS,
-            Json(ErrorResponse {
-                error: format!("Endorsement slots exhausted (max {max})"),
-            }),
-        )
-            .into_response(),
-        TrustServiceError::DenouncementSlotsExhausted { max } => (
-            StatusCode::TOO_MANY_REQUESTS,
-            Json(ErrorResponse {
-                error: format!("Denouncement slots exhausted (max {max})"),
-            }),
-        )
-            .into_response(),
-        TrustServiceError::DenouncementConflict => (
-            StatusCode::CONFLICT,
-            Json(ErrorResponse {
-                error: "Cannot endorse a user you have denounced".to_string(),
-            }),
-        )
-            .into_response(),
+        TrustServiceError::QuotaExceeded => too_many_requests("Daily action quota exceeded"),
+        TrustServiceError::EndorsementSlotsExhausted { max } => {
+            too_many_requests(&format!("Endorsement slots exhausted (max {max})"))
+        }
+        TrustServiceError::DenouncementSlotsExhausted { max } => {
+            too_many_requests(&format!("Denouncement slots exhausted (max {max})"))
+        }
+        TrustServiceError::DenouncementConflict => {
+            conflict("Cannot endorse a user you have denounced")
+        }
         TrustServiceError::Repo(ref inner) => {
             tracing::error!("Trust service repo error: {inner}");
             internal_error()
@@ -524,13 +506,7 @@ fn trust_service_error_response(e: &TrustServiceError) -> axum::response::Respon
 fn trust_repo_error_response(e: &TrustRepoError) -> axum::response::Response {
     match e {
         TrustRepoError::NotFound => not_found("Not found"),
-        TrustRepoError::Duplicate => (
-            StatusCode::CONFLICT,
-            Json(ErrorResponse {
-                error: "Duplicate entry".to_string(),
-            }),
-        )
-            .into_response(),
+        TrustRepoError::Duplicate => conflict("Duplicate entry"),
         TrustRepoError::Database(ref inner) => {
             tracing::error!("Trust repo database error: {inner}");
             internal_error()
