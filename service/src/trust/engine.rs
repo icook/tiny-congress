@@ -236,16 +236,4 @@ WHERE revoked_at IS NULL
         }
         Ok(count)
     }
-
-    /// Compute global eigenvector centrality across the entire graph.
-    ///
-    /// Stubbed for post-demo implementation — global eigenvector centrality
-    /// requires iterative power-method convergence and is not needed at demo scale.
-    ///
-    /// # Errors
-    ///
-    /// Always returns `Ok(0)` in the current stub implementation.
-    pub fn recompute_global(&self, _trust_repo: &dyn TrustRepo) -> Result<usize, anyhow::Error> {
-        Ok(0)
-    }
 }
