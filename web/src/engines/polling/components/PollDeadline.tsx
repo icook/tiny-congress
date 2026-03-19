@@ -80,24 +80,22 @@ export function PollDeadline({ poll, secondsLeft }: Props) {
   return (
     <Group
       gap="sm"
-      style={{
-        border: '1px solid var(--mantine-color-default-border)',
-        borderRadius: 'var(--mantine-radius-md)',
-        padding: '6px 12px',
-      }}
+      bd={`1px solid ${isUrgent ? 'orange.4' : 'blue.4'}`}
+      p="6px 12px"
+      style={{ borderRadius: 'var(--mantine-radius-md)' }}
     >
       {progress !== null ? (
         <RingProgress
           size={28}
           thickness={3}
           roundCaps
-          sections={[{ value: progress, color: isUrgent ? 'red' : 'blue' }]}
+          sections={[{ value: progress, color: isUrgent ? 'orange' : 'blue' }]}
         />
       ) : (
         <IconClock size={18} color="var(--mantine-color-blue-6)" />
       )}
-      <div>
-        <Text size="sm" fw={isUrgent ? 600 : 500} c={isUrgent ? 'red' : undefined}>
+      <div style={{ minWidth: 200 }}>
+        <Text size="sm" fw={isUrgent ? 600 : 500} c={isUrgent ? 'orange' : undefined}>
           {countdownText}
         </Text>
         <UnstyledButton onClick={toggleTimezone}>
