@@ -10,13 +10,13 @@ use axum::{
     Json,
 };
 use serde::{Deserialize, Serialize};
-use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::http::{internal_error, not_found, ErrorResponse};
 use crate::identity::http::auth::AuthenticatedDevice;
-use crate::rooms::repo::evidence;
-use crate::rooms::service::{CastVoteRequest, PollError, PollingService, VoteError};
+use crate::rooms::service::{
+    CastVoteRequest, CreateEvidenceItem, PollError, PollingService, VoteError,
+};
 
 // ─── Response types ────────────────────────────────────────────────────────
 
@@ -189,7 +189,6 @@ pub async fn list_polls(
 
 pub async fn get_poll_detail(
     Extension(polling): Extension<Arc<dyn PollingService>>,
-    Extension(pool): Extension<PgPool>,
     Path((_room_id, poll_id)): Path<(Uuid, Uuid)>,
 ) -> impl IntoResponse {
     let poll = match polling.get_poll(poll_id).await {
@@ -202,13 +201,9 @@ pub async fn get_poll_detail(
     };
 
     let dimension_ids: Vec<Uuid> = dimensions.iter().map(|d| d.id).collect();
-    let evidence_records = match evidence::get_evidence_for_dimensions(&pool, &dimension_ids).await
-    {
+    let evidence_records = match polling.get_evidence_for_dimensions(&dimension_ids).await {
         Ok(ev) => ev,
-        Err(e) => {
-            tracing::error!("Failed to fetch evidence: {e}");
-            return internal_error();
-        }
+        Err(e) => return poll_error_response(e),
     };
 
     let mut evidence_by_dim: HashMap<Uuid, Vec<EvidenceResponse>> = HashMap::new();
@@ -320,90 +315,55 @@ pub async fn add_dimension(
 // ─── Evidence handlers ─────────────────────────────────────────────────────
 
 pub async fn create_evidence(
-    Extension(pool): Extension<PgPool>,
+    Extension(polling): Extension<Arc<dyn PollingService>>,
     Path((_room_id, poll_id, dimension_id)): Path<(Uuid, Uuid, Uuid)>,
     Json(body): Json<CreateEvidenceBody>,
 ) -> impl IntoResponse {
-    // Validate dimension belongs to the poll
-    let belongs: Option<(Uuid,)> = match sqlx::query_as(
-        "SELECT id FROM rooms__poll_dimensions WHERE id = $1 AND poll_id = $2",
-    )
-    .bind(dimension_id)
-    .bind(poll_id)
-    .fetch_optional(&pool)
-    .await
-    {
-        Ok(r) => r,
-        Err(e) => {
-            tracing::error!("DB error checking dimension ownership: {e}");
-            return internal_error();
-        }
-    };
-
-    if belongs.is_none() {
-        return not_found("Dimension not found for this poll");
-    }
-
-    let new_evidence: Vec<evidence::NewEvidence<'_>> = body
+    let items: Vec<CreateEvidenceItem> = body
         .evidence
-        .iter()
-        .map(|item| evidence::NewEvidence {
-            stance: &item.stance,
-            claim: &item.claim,
-            source: item.source.as_deref(),
+        .into_iter()
+        .map(|item| CreateEvidenceItem {
+            stance: item.stance,
+            claim: item.claim,
+            source: item.source,
         })
         .collect();
 
-    match evidence::insert_evidence(&pool, dimension_id, &new_evidence).await {
+    match polling.create_evidence(poll_id, dimension_id, items).await {
         Ok(count) => (
             StatusCode::CREATED,
             Json(serde_json::json!({ "count": count })),
         )
             .into_response(),
-        Err(e) => {
-            tracing::error!("Failed to insert evidence: {e}");
-            internal_error()
-        }
+        Err(PollError::Validation(msg)) => not_found(&msg),
+        Err(e) => poll_error_response(e),
     }
 }
 
 pub async fn delete_evidence(
-    Extension(pool): Extension<PgPool>,
+    Extension(polling): Extension<Arc<dyn PollingService>>,
     Path((_room_id, poll_id)): Path<(Uuid, Uuid)>,
 ) -> impl IntoResponse {
-    match evidence::delete_evidence_for_poll(&pool, poll_id).await {
+    match polling.delete_evidence_for_poll(poll_id).await {
         Ok(deleted) => (
             StatusCode::OK,
             Json(serde_json::json!({ "deleted": deleted })),
         )
             .into_response(),
-        Err(e) => {
-            tracing::error!("Failed to delete evidence: {e}");
-            internal_error()
-        }
+        Err(e) => poll_error_response(e),
     }
 }
 
 /// Sim-only: reset a poll back to draft status, clearing all timing fields.
 /// Used by the ring buffer refill logic to recycle polls for a new cycle.
 pub async fn reset_poll(
-    Extension(pool): Extension<PgPool>,
+    Extension(polling): Extension<Arc<dyn PollingService>>,
     Path((room_id, poll_id)): Path<(Uuid, Uuid)>,
-) -> Result<impl IntoResponse, StatusCode> {
-    let result = sqlx::query(
-        "UPDATE rooms__polls \
-         SET status = 'draft', closes_at = NULL, activated_at = NULL, closed_at = NULL \
-         WHERE id = $1 AND room_id = $2",
-    )
-    .bind(poll_id)
-    .bind(room_id)
-    .execute(&pool)
-    .await;
-
-    match result {
-        Ok(r) if r.rows_affected() == 0 => Err(StatusCode::NOT_FOUND),
-        Ok(_) => Ok(StatusCode::OK),
-        Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
+) -> impl IntoResponse {
+    match polling.reset_poll(room_id, poll_id).await {
+        Ok(()) => StatusCode::OK.into_response(),
+        Err(PollError::PollNotFound) => not_found("Poll not found"),
+        Err(e) => poll_error_response(e),
     }
 }
 

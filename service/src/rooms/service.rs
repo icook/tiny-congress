@@ -12,8 +12,8 @@ use super::repo::{RoomRecord, RoomRepoError, RoomsRepo};
 
 // Re-export polling types for backward compatibility (used by HTTP handlers & tests)
 pub use tc_engine_polling::service::{
-    CastVoteRequest, DimensionVote, PollDistribution, PollError, PollResults, PollingService,
-    VoteError,
+    CastVoteRequest, CreateEvidenceItem, DimensionVote, PollDistribution, PollError, PollResults,
+    PollingService, VoteError,
 };
 
 // ─── Error types ───────────────────────────────────────────────────────────
