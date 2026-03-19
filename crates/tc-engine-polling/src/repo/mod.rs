@@ -5,6 +5,7 @@
 
 pub mod evidence;
 pub mod lifecycle_queue;
+pub mod pgmq;
 pub mod polls;
 pub mod votes;
 

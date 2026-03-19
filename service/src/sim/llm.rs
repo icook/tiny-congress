@@ -45,12 +45,25 @@ pub struct SimDimension {
     pub max_label: Option<String>,
 }
 
+/// Breakdown of prompt tokens, including cache hits.
+#[derive(Debug, Default, Clone, Copy, Serialize, Deserialize)]
+pub struct PromptTokenDetails {
+    #[serde(default)]
+    pub cached_tokens: u32,
+}
+
 /// Token usage from a single `OpenRouter` API call.
 #[derive(Debug, Default, Clone, Copy, Deserialize, Serialize)]
 pub struct Usage {
     pub prompt_tokens: u32,
     pub completion_tokens: u32,
     pub total_tokens: u32,
+    /// Cost in USD for this API call, if returned inline by `OpenRouter`.
+    #[serde(default)]
+    pub cost: Option<f64>,
+    /// Prompt token breakdown, including cache hit counts.
+    #[serde(default)]
+    pub prompt_tokens_details: Option<PromptTokenDetails>,
 }
 
 impl AddAssign for Usage {
@@ -58,6 +71,11 @@ impl AddAssign for Usage {
         self.prompt_tokens += rhs.prompt_tokens;
         self.completion_tokens += rhs.completion_tokens;
         self.total_tokens += rhs.total_tokens;
+        match (self.cost, rhs.cost) {
+            (Some(a), Some(b)) => self.cost = Some(a + b),
+            (None, Some(b)) => self.cost = Some(b),
+            _ => {}
+        }
     }
 }
 
