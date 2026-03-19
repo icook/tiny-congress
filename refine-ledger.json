@@ -205,10 +205,10 @@
     },
     "service/src/trust/": {
       "status": "active",
-      "total_prs": 1,
+      "total_prs": 2,
       "total_skips": 0,
       "consecutive_idle": 0,
-      "last_run": "2026-03-19T16:51:45Z",
+      "last_run": "2026-03-19T17:06:52Z",
       "graduated_at": "",
       "history": [
         {
@@ -216,6 +216,12 @@
           "type": "pattern_enforcement",
           "impact": "medium",
           "summary": "Replaced manual Display/Error/From impls on TrustRepoError with thiserror derive macros, matching the project convention used by TrustServiceError and all other error types in the codebase."
+        },
+        {
+          "pr": 0,
+          "type": "unknown",
+          "impact": "medium",
+          "summary": "refine: validate delivery_method and relationship_depth at HTTP boundary"
         }
       ],
       "skipped": []
