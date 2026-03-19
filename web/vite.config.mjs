@@ -58,7 +58,7 @@ export default defineConfig({
       // The WASM artifact is not committed; redirect to a no-op stub in tests.
       {
         find: /^.*\/wasm\/tc-crypto\/tc_crypto\.js$/,
-        replacement: new URL('./src/__mocks__/tc_crypto_stub.js', import.meta.url).pathname,
+        replacement: new URL('./src/__mocks__/tc_crypto_stub.ts', import.meta.url).pathname,
       },
     ],
     include: [
