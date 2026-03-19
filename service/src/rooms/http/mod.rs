@@ -49,7 +49,7 @@ fn default_eligibility_topic() -> String {
 }
 
 fn default_constraint_type() -> String {
-    "identity_verified".to_string()
+    "endorsed_by_user".to_string()
 }
 
 // ─── Response types (platform-level) ──────────────────────────────────────

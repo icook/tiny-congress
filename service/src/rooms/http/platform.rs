@@ -51,6 +51,16 @@ pub async fn create_room(
         Err(resp) => return resp,
     };
 
+    // Auto-configure endorsed_by_user constraint with creator as endorser
+    // when no explicit endorser_id is provided.
+    let constraint_config = if req.constraint_type == "endorsed_by_user"
+        && req.constraint_config.get("endorser_id").is_none()
+    {
+        serde_json::json!({ "endorser_id": auth.account_id.to_string() })
+    } else {
+        req.constraint_config.clone()
+    };
+
     // Validate engine type and configuration before persisting the room.
     let Some(engine) = engine_registry.get(&req.engine_type) else {
         return bad_request(&format!("Unknown engine type: {}", req.engine_type));
@@ -66,7 +76,7 @@ pub async fn create_room(
             &req.eligibility_topic,
             req.poll_duration_secs,
             &req.constraint_type,
-            &req.constraint_config,
+            &constraint_config,
             Some(auth.account_id),
         )
         .await
