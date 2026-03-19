@@ -11,29 +11,14 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 /// Error type for trust repository operations.
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum TrustRepoError {
+    #[error("not found")]
     NotFound,
+    #[error("duplicate")]
     Duplicate,
-    Database(sqlx::Error),
-}
-
-impl std::fmt::Display for TrustRepoError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::NotFound => write!(f, "not found"),
-            Self::Duplicate => write!(f, "duplicate"),
-            Self::Database(e) => write!(f, "database error: {e}"),
-        }
-    }
-}
-
-impl std::error::Error for TrustRepoError {}
-
-impl From<sqlx::Error> for TrustRepoError {
-    fn from(e: sqlx::Error) -> Self {
-        Self::Database(e)
-    }
+    #[error("database error: {0}")]
+    Database(#[from] sqlx::Error),
 }
 
 /// Influence balance for a user.
