@@ -248,6 +248,58 @@ impl RoomConstraint for CongressConstraint {
 }
 
 // ---------------------------------------------------------------------------
+// EndorsedByUserConstraint
+// ---------------------------------------------------------------------------
+
+/// User must have a trust endorsement from a specific account (the room owner).
+/// Includes out-of-slot endorsements. The endorser (owner) always passes.
+pub struct EndorsedByUserConstraint {
+    endorser_id: Uuid,
+}
+
+impl EndorsedByUserConstraint {
+    /// Create a new constraint requiring a direct endorsement from `endorser_id`.
+    #[must_use]
+    pub const fn new(endorser_id: Uuid) -> Self {
+        Self { endorser_id }
+    }
+}
+
+#[async_trait]
+impl RoomConstraint for EndorsedByUserConstraint {
+    async fn check(
+        &self,
+        user_id: Uuid,
+        trust_reader: &dyn TrustGraphReader,
+    ) -> Result<Eligibility, anyhow::Error> {
+        if user_id == self.endorser_id {
+            return Ok(Eligibility {
+                is_eligible: true,
+                reason: None,
+            });
+        }
+        let has = trust_reader
+            .has_endorsement(user_id, "trust", &[self.endorser_id])
+            .await
+            .map_err(|e| anyhow::anyhow!("trust reader error: {e}"))?;
+        if has {
+            Ok(Eligibility {
+                is_eligible: true,
+                reason: None,
+            })
+        } else {
+            Ok(Eligibility {
+                is_eligible: false,
+                reason: Some(format!(
+                    "requires endorsement from room owner {}",
+                    self.endorser_id
+                )),
+            })
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // IdentityVerifiedConstraint (Layer 1)
 // ---------------------------------------------------------------------------
 
@@ -360,6 +412,10 @@ pub fn build_constraint(
         "endorsed_by" => {
             let anchor_id = parse_uuid_from_config(config, "anchor_id")?;
             Ok(Box::new(EndorsedByConstraint::new(anchor_id)))
+        }
+        "endorsed_by_user" => {
+            let endorser_id = parse_uuid_from_config(config, "endorser_id")?;
+            Ok(Box::new(EndorsedByUserConstraint::new(endorser_id)))
         }
         "community" => {
             let anchor_id = parse_uuid_from_config(config, "anchor_id")?;
@@ -726,6 +782,46 @@ mod tests {
         let constraint = IdentityVerifiedConstraint::new(vec![verifier], "identity_verified");
         let result = constraint.check(user, &reader).await.unwrap();
         assert!(!result.is_eligible);
+    }
+
+    // ── EndorsedByUserConstraint ──────────────────────────────────────
+
+    #[tokio::test]
+    async fn endorsed_by_user_eligible_when_endorsement_exists() {
+        let user = Uuid::new_v4();
+        let owner = Uuid::new_v4();
+        let reader = MockTrustReader::new().with_endorsement(user, "trust", owner);
+
+        let constraint = EndorsedByUserConstraint::new(owner);
+        let result = constraint.check(user, &reader).await.unwrap();
+        assert!(result.is_eligible);
+        assert!(result.reason.is_none());
+    }
+
+    #[tokio::test]
+    async fn endorsed_by_user_ineligible_without_endorsement() {
+        let user = Uuid::new_v4();
+        let owner = Uuid::new_v4();
+        let reader = MockTrustReader::new();
+
+        let constraint = EndorsedByUserConstraint::new(owner);
+        let result = constraint.check(user, &reader).await.unwrap();
+        assert!(!result.is_eligible);
+        let reason = result.reason.unwrap();
+        assert!(reason.contains("requires endorsement from room owner"));
+        assert!(reason.contains(&owner.to_string()));
+    }
+
+    #[tokio::test]
+    async fn endorsed_by_user_owner_is_always_eligible() {
+        let owner = Uuid::new_v4();
+        // No endorsements configured — owner passes regardless.
+        let reader = MockTrustReader::new();
+
+        let constraint = EndorsedByUserConstraint::new(owner);
+        let result = constraint.check(owner, &reader).await.unwrap();
+        assert!(result.is_eligible);
+        assert!(result.reason.is_none());
     }
 
     // ── build_constraint factory ──────────────────────────────────────
