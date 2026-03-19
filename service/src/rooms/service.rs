@@ -32,6 +32,7 @@ pub enum RoomError {
 
 // ─── Service trait ─────────────────────────────────────────────────────────
 
+#[allow(clippy::too_many_arguments)]
 #[async_trait]
 pub trait RoomsService: Send + Sync {
     // Room operations
@@ -43,6 +44,7 @@ pub trait RoomsService: Send + Sync {
         poll_duration_secs: Option<i32>,
         constraint_type: &str,
         constraint_config: &serde_json::Value,
+        owner_id: Option<Uuid>,
     ) -> Result<RoomRecord, RoomError>;
     async fn rooms_needing_content(&self) -> Result<Vec<RoomRecord>, RoomError>;
     async fn list_rooms(&self, status: Option<&str>) -> Result<Vec<RoomRecord>, RoomError>;
@@ -72,6 +74,7 @@ impl RoomsService for DefaultRoomsService {
         poll_duration_secs: Option<i32>,
         constraint_type: &str,
         constraint_config: &serde_json::Value,
+        owner_id: Option<Uuid>,
     ) -> Result<RoomRecord, RoomError> {
         if name.trim().is_empty() {
             return Err(RoomError::Validation(
@@ -86,6 +89,7 @@ impl RoomsService for DefaultRoomsService {
                 poll_duration_secs,
                 constraint_type,
                 constraint_config,
+                owner_id,
             )
             .await
             .map_err(|e| match e {

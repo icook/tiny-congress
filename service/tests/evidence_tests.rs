@@ -26,6 +26,7 @@ async fn setup_poll_with_dimension(
         None,
         "open",
         &serde_json::json!({}),
+        None,
     )
     .await
     .expect("create room");

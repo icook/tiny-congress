@@ -94,6 +94,14 @@ CREATE TABLE rooms__polls (
     closes_at TIMESTAMPTZ,
     agenda_position INT4);
 
+CREATE TABLE rooms__role_assignments (
+    id UUID NOT NULL DEFAULT gen_random_uuid(),
+    room_id UUID NOT NULL,
+    account_id UUID NOT NULL,
+    role TEXT NOT NULL,
+    assigned_by UUID NOT NULL,
+    assigned_at TIMESTAMPTZ NOT NULL DEFAULT now());
+
 CREATE TABLE rooms__rooms (
     id UUID NOT NULL DEFAULT gen_random_uuid(),
     name TEXT NOT NULL,
@@ -106,7 +114,8 @@ CREATE TABLE rooms__rooms (
     constraint_config JSONB NOT NULL DEFAULT '{}'::jsonb,
     poll_duration_secs INT4,
     engine_type TEXT NOT NULL DEFAULT 'polling'::text,
-    engine_config JSONB NOT NULL DEFAULT '{}'::jsonb);
+    engine_config JSONB NOT NULL DEFAULT '{}'::jsonb,
+    owner_id UUID);
 
 CREATE TABLE rooms__votes (
     id UUID NOT NULL DEFAULT gen_random_uuid(),
@@ -254,6 +263,12 @@ CREATE INDEX idx_polls_room ON public.rooms__polls USING btree (room_id)
 -- rooms__polls.rooms__polls_pkey
 CREATE UNIQUE INDEX rooms__polls_pkey ON public.rooms__polls USING btree (id)
 
+-- rooms__role_assignments.rooms__role_assignments_pkey
+CREATE UNIQUE INDEX rooms__role_assignments_pkey ON public.rooms__role_assignments USING btree (id)
+
+-- rooms__role_assignments.rooms__role_assignments_room_id_account_id_key
+CREATE UNIQUE INDEX rooms__role_assignments_room_id_account_id_key ON public.rooms__role_assignments USING btree (room_id, account_id)
+
 -- rooms__rooms.rooms__rooms_pkey
 CREATE UNIQUE INDEX rooms__rooms_pkey ON public.rooms__rooms USING btree (id)
 
@@ -314,6 +329,10 @@ CREATE UNIQUE INDEX trust__user_influence_pkey ON public.trust__user_influence U
 -- rooms__poll_dimensions.poll_id -> rooms__polls.id (ON UPDATE NO ACTION, ON DELETE CASCADE)
 -- rooms__poll_evidence.dimension_id -> rooms__poll_dimensions.id (ON UPDATE NO ACTION, ON DELETE CASCADE)
 -- rooms__polls.room_id -> rooms__rooms.id (ON UPDATE NO ACTION, ON DELETE CASCADE)
+-- rooms__role_assignments.account_id -> accounts.id (ON UPDATE NO ACTION, ON DELETE NO ACTION)
+-- rooms__role_assignments.assigned_by -> accounts.id (ON UPDATE NO ACTION, ON DELETE NO ACTION)
+-- rooms__role_assignments.room_id -> rooms__rooms.id (ON UPDATE NO ACTION, ON DELETE NO ACTION)
+-- rooms__rooms.owner_id -> accounts.id (ON UPDATE NO ACTION, ON DELETE NO ACTION)
 -- rooms__votes.dimension_id -> rooms__poll_dimensions.id (ON UPDATE NO ACTION, ON DELETE CASCADE)
 -- rooms__votes.poll_id -> rooms__polls.id (ON UPDATE NO ACTION, ON DELETE CASCADE)
 -- rooms__votes.user_id -> accounts.id (ON UPDATE NO ACTION, ON DELETE CASCADE)
@@ -401,6 +420,14 @@ CREATE UNIQUE INDEX trust__user_influence_pkey ON public.trust__user_influence U
 -- rooms__polls: rooms__polls_room_id_not_null (CHECK)
 -- rooms__polls: rooms__polls_status_check (CHECK)
 -- rooms__polls: rooms__polls_status_not_null (CHECK)
+-- rooms__role_assignments: rooms__role_assignments_account_id_not_null (CHECK)
+-- rooms__role_assignments: rooms__role_assignments_assigned_at_not_null (CHECK)
+-- rooms__role_assignments: rooms__role_assignments_assigned_by_not_null (CHECK)
+-- rooms__role_assignments: rooms__role_assignments_id_not_null (CHECK)
+-- rooms__role_assignments: rooms__role_assignments_pkey (PRIMARY KEY)
+-- rooms__role_assignments: rooms__role_assignments_role_not_null (CHECK)
+-- rooms__role_assignments: rooms__role_assignments_room_id_account_id_key (UNIQUE)
+-- rooms__role_assignments: rooms__role_assignments_room_id_not_null (CHECK)
 -- rooms__rooms: rooms__rooms_constraint_config_not_null (CHECK)
 -- rooms__rooms: rooms__rooms_constraint_type_not_null (CHECK)
 -- rooms__rooms: rooms__rooms_created_at_not_null (CHECK)

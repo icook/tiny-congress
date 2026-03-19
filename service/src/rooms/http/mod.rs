@@ -49,7 +49,7 @@ fn default_eligibility_topic() -> String {
 }
 
 fn default_constraint_type() -> String {
-    "identity_verified".to_string()
+    "endorsed_by_user".to_string()
 }
 
 // ─── Response types (platform-level) ──────────────────────────────────────
@@ -65,6 +65,34 @@ pub struct RoomResponse {
     pub created_at: String,
     pub engine_type: String,
     pub engine_config: serde_json::Value,
+    pub owner_id: Option<uuid::Uuid>,
+    pub constraint_type: String,
+}
+
+// ─── Capabilities response ────────────────────────────────────────────────
+
+#[derive(Debug, serde::Serialize)]
+pub struct MyCapabilitiesResponse {
+    pub role: String,
+    pub can_vote: bool,
+    pub can_configure: bool,
+    pub reason: Option<String>,
+    pub next_step: Option<String>,
+}
+
+// ─── Role assignment types ────────────────────────────────────────────────
+
+#[derive(Debug, Deserialize)]
+pub struct AssignRoleRequest {
+    pub account_id: uuid::Uuid,
+    pub role: String,
+}
+
+#[derive(Debug, serde::Serialize)]
+pub struct AssignRoleResponse {
+    pub room_id: uuid::Uuid,
+    pub account_id: uuid::Uuid,
+    pub role: String,
 }
 
 // ─── Router ────────────────────────────────────────────────────────────────
@@ -78,6 +106,11 @@ pub fn router() -> Router {
         )
         .route("/rooms/capacity", get(platform::get_capacity))
         .route("/rooms/{room_id}", get(platform::get_room))
+        .route(
+            "/rooms/{room_id}/my-capabilities",
+            get(platform::my_capabilities),
+        )
+        .route("/rooms/{room_id}/roles", post(platform::assign_role))
         // Polling: agenda
         .route("/rooms/{room_id}/agenda", get(polling::get_agenda))
         // Polling: poll endpoints

@@ -26,6 +26,7 @@ use uuid::Uuid;
 /// removed from this trait — they are now accessed directly through
 /// `tc_engine_polling::repo` by `DefaultPollingService`. No callers use poll/vote
 /// methods via `dyn RoomsRepo`; confirmed by grep across `service/src/`.
+#[allow(clippy::too_many_arguments)]
 #[async_trait]
 pub trait RoomsRepo: Send + Sync {
     async fn create_room(
@@ -36,6 +37,7 @@ pub trait RoomsRepo: Send + Sync {
         poll_duration_secs: Option<i32>,
         constraint_type: &str,
         constraint_config: &serde_json::Value,
+        owner_id: Option<Uuid>,
     ) -> Result<RoomRecord, RoomRepoError>;
     async fn list_rooms(&self, status: Option<&str>) -> Result<Vec<RoomRecord>, RoomRepoError>;
     async fn get_room(&self, room_id: Uuid) -> Result<RoomRecord, RoomRepoError>;
@@ -65,6 +67,7 @@ impl RoomsRepo for PgRoomsRepo {
         poll_duration_secs: Option<i32>,
         constraint_type: &str,
         constraint_config: &serde_json::Value,
+        owner_id: Option<Uuid>,
     ) -> Result<RoomRecord, RoomRepoError> {
         rooms::create_room(
             &self.pool,
@@ -74,6 +77,7 @@ impl RoomsRepo for PgRoomsRepo {
             poll_duration_secs,
             constraint_type,
             constraint_config,
+            owner_id,
         )
         .await
     }
