@@ -32,14 +32,22 @@ impl TrustGraphReader for TrustRepoGraphReader {
             .await
             .map_err(|e| anyhow::anyhow!("{e}"))?;
 
-        Ok(snapshot.map(|s| TrustScoreSnapshot {
-            trust_distance: f64::from(s.trust_distance.unwrap_or(0.0)),
-            path_diversity: u32::try_from(s.path_diversity.unwrap_or(0)).unwrap_or_else(|_| {
-                tracing::warn!(subject = %subject, raw_path_diversity = s.path_diversity, "negative path_diversity in database, clamping to 0");
-                0
-            }),
-            eigenvector_centrality: f64::from(s.eigenvector_centrality.unwrap_or(0.0)),
-        }))
+        let mapped = snapshot
+            .map(|s| -> Result<TrustScoreSnapshot, anyhow::Error> {
+                let raw = s.path_diversity.unwrap_or(0);
+                let path_diversity = u32::try_from(raw).map_err(|_| {
+                    anyhow::anyhow!(
+                        "negative path_diversity ({raw}) for subject {subject} — possible data corruption"
+                    )
+                })?;
+                Ok(TrustScoreSnapshot {
+                    trust_distance: f64::from(s.trust_distance.unwrap_or(0.0)),
+                    path_diversity,
+                    eigenvector_centrality: f64::from(s.eigenvector_centrality.unwrap_or(0.0)),
+                })
+            })
+            .transpose()?;
+        Ok(mapped)
     }
 
     async fn has_endorsement(
