@@ -9,6 +9,7 @@ import { BarChart } from '@mantine/charts';
 import {
   Alert,
   Badge,
+  Box,
   Button,
   Card,
   Group,
@@ -141,7 +142,7 @@ export function PollPage({ roomId, pollId }: PollPageProps) {
   return (
     <Stack gap="md" maw={800} mx="auto" mt="xl" px="md">
       <Group gap={6}>
-        <Text component={Link} to="/rooms" size="sm" c="dimmed" style={{ textDecoration: 'none' }}>
+        <Text component={Link} to="/rooms" size="sm" c="dimmed" td="none">
           Rooms
         </Text>
         <Text size="sm" c="dimmed">
@@ -149,13 +150,7 @@ export function PollPage({ roomId, pollId }: PollPageProps) {
         </Text>
         {roomName ? (
           <>
-            <Text
-              component={Link}
-              to={`/rooms/${roomId}`}
-              size="sm"
-              c="dimmed"
-              style={{ textDecoration: 'none' }}
-            >
+            <Text component={Link} to={`/rooms/${roomId}`} size="sm" c="dimmed" td="none">
               {roomName}
             </Text>
             <Text size="sm" c="dimmed">
@@ -163,16 +158,7 @@ export function PollPage({ roomId, pollId }: PollPageProps) {
             </Text>
           </>
         ) : null}
-        <Text
-          size="sm"
-          c="dimmed"
-          style={{
-            maxWidth: 200,
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-          }}
-        >
+        <Text size="sm" c="dimmed" truncate maw={200}>
           {poll.question}
         </Text>
       </Group>
@@ -384,7 +370,7 @@ function VoteSlider({
         </Text>
       ) : null}
       <EvidenceCards evidence={dimension.evidence} />
-      <div style={{ paddingBottom: 8, paddingLeft: 8, paddingRight: 8 }}>
+      <Box pb={8} px={8}>
         <Slider
           value={value}
           onChange={onChange}
@@ -410,7 +396,7 @@ function VoteSlider({
             },
           }}
         />
-      </div>
+      </Box>
     </div>
   );
 }

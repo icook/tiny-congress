@@ -223,7 +223,7 @@ export function Router() {
 
   if (isLoading) {
     return (
-      <Center style={{ height: '100vh' }}>
+      <Center h="100vh">
         <Loader size="sm" />
       </Center>
     );
@@ -242,7 +242,7 @@ function RoomDetailPageWrapper() {
 
   if (isLoading) {
     return (
-      <Center style={{ height: '100vh' }}>
+      <Center h="100vh">
         <Loader size="sm" />
       </Center>
     );

@@ -94,7 +94,7 @@ export function DeviceList({
                           cancelEditing();
                         }
                       }}
-                      style={{ width: 150 }}
+                      w={150}
                     />
                     <ActionIcon
                       size="sm"

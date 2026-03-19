@@ -27,9 +27,9 @@ export function UpcomingPollPreview({ poll, roomId }: Props) {
       withBorder
       padding="sm"
       radius="md"
+      td="none"
       style={{
         borderStyle: 'dashed',
-        textDecoration: 'none',
         cursor: 'pointer',
       }}
     >

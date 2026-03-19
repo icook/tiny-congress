@@ -88,7 +88,7 @@ export function CryptoProvider({ children }: CryptoProviderProps) {
   // This ensures crypto is always available when useCryptoRequired is called
   if (state.isLoading) {
     return (
-      <Center style={{ height: '100vh' }}>
+      <Center h="100vh">
         <Loader size="sm" />
       </Center>
     );
