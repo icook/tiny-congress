@@ -103,7 +103,9 @@ impl TrustWorker {
                     serde_json::Value::Null => None,
                     v => Some(v.clone()),
                 };
-                let in_slot = action.payload["in_slot"].as_bool().unwrap_or(true);
+                let in_slot = action.payload["in_slot"].as_bool().ok_or_else(|| {
+                    anyhow::anyhow!("endorse payload missing or invalid 'in_slot'")
+                })?;
 
                 self.reputation_repo
                     .create_endorsement(
