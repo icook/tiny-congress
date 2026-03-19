@@ -4,9 +4,9 @@ pub mod endorsements;
 pub mod external_identities;
 
 pub use endorsements::{
-    count_active_trust_endorsements_by, create_endorsement, has_endorsement,
-    list_endorsements_by_subject, revoke_endorsement, CreatedEndorsement, EndorsementRecord,
-    EndorsementRepoError,
+    count_active_trust_endorsements_by, count_all_active_trust_endorsements_by, create_endorsement,
+    has_endorsement, list_endorsements_by_subject, revoke_endorsement, CreatedEndorsement,
+    EndorsementRecord, EndorsementRepoError,
 };
 pub use external_identities::{
     get_external_identity_by_provider, link_external_identity, ExternalIdentityRecord,
@@ -22,6 +22,7 @@ use uuid::Uuid;
 pub trait ReputationRepo: Send + Sync {
     // Endorsement operations
 
+    #[allow(clippy::too_many_arguments)]
     async fn create_endorsement(
         &self,
         subject_id: Uuid,
@@ -30,7 +31,13 @@ pub trait ReputationRepo: Send + Sync {
         evidence: Option<&serde_json::Value>,
         weight: f32,
         attestation: Option<&serde_json::Value>,
+        in_slot: bool,
     ) -> Result<CreatedEndorsement, EndorsementRepoError>;
+
+    async fn count_all_active_trust_endorsements_by(
+        &self,
+        endorser_id: Uuid,
+    ) -> Result<i64, EndorsementRepoError>;
 
     async fn has_endorsement(
         &self,
@@ -85,6 +92,7 @@ impl PgReputationRepo {
 
 #[async_trait]
 impl ReputationRepo for PgReputationRepo {
+    #[allow(clippy::too_many_arguments)]
     async fn create_endorsement(
         &self,
         subject_id: Uuid,
@@ -93,6 +101,7 @@ impl ReputationRepo for PgReputationRepo {
         evidence: Option<&serde_json::Value>,
         weight: f32,
         attestation: Option<&serde_json::Value>,
+        in_slot: bool,
     ) -> Result<CreatedEndorsement, EndorsementRepoError> {
         endorsements::create_endorsement(
             &self.pool,
@@ -102,8 +111,16 @@ impl ReputationRepo for PgReputationRepo {
             evidence,
             weight,
             attestation,
+            in_slot,
         )
         .await
+    }
+
+    async fn count_all_active_trust_endorsements_by(
+        &self,
+        endorser_id: Uuid,
+    ) -> Result<i64, EndorsementRepoError> {
+        endorsements::count_all_active_trust_endorsements_by(&self.pool, endorser_id).await
     }
 
     async fn has_endorsement(
