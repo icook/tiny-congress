@@ -63,7 +63,7 @@ CREATE TABLE rooms__bot_traces (
     task TEXT NOT NULL,
     run_mode TEXT NOT NULL,
     steps JSONB NOT NULL DEFAULT '[]'::jsonb,
-    total_cost_usd NUMERIC(10,6) NOT NULL DEFAULT 0,
+    total_cost_usd NUMERIC NOT NULL DEFAULT 0,
     status TEXT NOT NULL DEFAULT 'running'::text,
     error TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
