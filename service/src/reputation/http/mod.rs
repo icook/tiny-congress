@@ -12,13 +12,13 @@ use axum::{
     Json, Router,
 };
 use serde::{Deserialize, Serialize};
-use sqlx::PgPool;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
 use super::service::{EndorsementError, EndorsementService};
 use crate::http::ErrorResponse;
 use crate::identity::http::auth::AuthenticatedDevice;
+use crate::identity::repo::{AccountRepoError, IdentityRepo};
 
 // ─── Response types ────────────────────────────────────────────────────────
 
@@ -161,7 +161,7 @@ async fn check_endorsement(
 )]
 async fn create_endorsement_as_verifier(
     Extension(endorsement_service): Extension<Arc<dyn EndorsementService>>,
-    Extension(pool): Extension<PgPool>,
+    Extension(identity_repo): Extension<Arc<dyn IdentityRepo>>,
     auth: AuthenticatedDevice,
 ) -> impl IntoResponse {
     // Parse body from AuthenticatedDevice (which already consumed it for signing)
@@ -188,10 +188,9 @@ async fn create_endorsement_as_verifier(
     }
 
     // 2. Resolve username → account_id
-    let subject = match crate::identity::repo::get_account_by_username(&pool, &body.username).await
-    {
+    let subject = match identity_repo.get_account_by_username(&body.username).await {
         Ok(account) => account,
-        Err(crate::identity::repo::AccountRepoError::NotFound) => {
+        Err(AccountRepoError::NotFound) => {
             return crate::http::not_found("User not found");
         }
         Err(e) => {
