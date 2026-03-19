@@ -748,6 +748,82 @@ async fn denounce_rejects_reason_too_long() {
     assert!(json["error"].as_str().unwrap_or("").contains("reason"));
 }
 
+// ─── List denouncements ───────────────────────────────────────────────────────
+
+#[shared_runtime_test]
+async fn list_my_denouncements_returns_denouncement_with_username() {
+    let db = isolated_db().await;
+    let pool = db.pool().clone();
+    let (app, keys, account_id) = signup_and_get_account("denouncerlister", db.pool()).await;
+
+    // Sign up a target so the JOIN on accounts succeeds and returns a username
+    let (json2, _) = valid_signup_with_keys("denounceelisted");
+    let resp2 = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/auth/signup")
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(json2))
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+    let body2 = axum::body::to_bytes(resp2.into_body(), 1024 * 1024)
+        .await
+        .expect("body2");
+    let j2: Value = serde_json::from_slice(&body2).expect("json2");
+    let target_id: uuid::Uuid = j2["account_id"]
+        .as_str()
+        .expect("account_id")
+        .parse()
+        .expect("uuid");
+
+    // Seed a denouncement row directly so it shows up immediately in the list
+    sqlx::query(
+        "INSERT INTO trust__denouncements (accuser_id, target_id, reason) VALUES ($1, $2, $3)",
+    )
+    .bind(account_id)
+    .bind(target_id)
+    .bind("spam behavior")
+    .execute(&pool)
+    .await
+    .expect("seed denouncement");
+
+    let request = build_authed_request(
+        Method::GET,
+        "/trust/denouncements/mine",
+        "",
+        &keys.device_signing_key,
+        &keys.device_kid,
+    );
+
+    let response = app.oneshot(request).await.expect("response");
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let json = json_body(response).await;
+    let denouncements = json.as_array().expect("denouncements array");
+    assert_eq!(denouncements.len(), 1);
+    assert_eq!(
+        denouncements[0]["target_id"].as_str().unwrap(),
+        target_id.to_string()
+    );
+    assert_eq!(
+        denouncements[0]["reason"].as_str().unwrap(),
+        "spam behavior"
+    );
+    // Verify the JOIN on accounts returned the target's username
+    assert!(
+        denouncements[0]["target_username"].is_string(),
+        "target_username should be present from JOIN on accounts"
+    );
+    assert_eq!(
+        denouncements[0]["target_username"].as_str().unwrap(),
+        "denounceelisted"
+    );
+}
+
 // ─── Accept invite — error paths ─────────────────────────────────────────────
 
 #[shared_runtime_test]
