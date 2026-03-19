@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { expect, test } from './fixtures';
+import { signupUser } from './helpers';
 
 const SCREENSHOTS_DIR = path.join(process.cwd(), 'screenshots');
 const DESKTOP = { width: 1280, height: 720 };
@@ -70,5 +71,43 @@ test.describe.serial('screenshot gallery @screenshots', () => {
     await page.goto('/this-page-does-not-exist');
     await expect(page.getByRole('main')).toBeVisible();
     await capture(page, '404-desktop-dark', { viewport: DESKTOP, colorScheme: 'dark' });
+  });
+
+  // --- Authenticated pages ---
+
+  test('signup success', async ({ page }) => {
+    await signupUser(page);
+    await capture(page, 'signup-success-desktop-dark', { viewport: DESKTOP, colorScheme: 'dark' });
+  });
+
+  test('rooms list', async ({ page }) => {
+    await signupUser(page);
+    await page.goto('/rooms');
+    await page.waitForLoadState('load');
+    await capture(page, 'rooms-desktop-dark', { viewport: DESKTOP, colorScheme: 'dark' });
+    await capture(page, 'rooms-mobile-dark', { viewport: MOBILE, colorScheme: 'dark' });
+  });
+
+  test('poll page', async ({ page }) => {
+    await signupUser(page);
+    await page.goto('/rooms');
+
+    const pollLink = page.locator('a[href*="/polls/"]').first();
+    const pollExists = await pollLink.isVisible({ timeout: 5_000 }).catch(() => false);
+    // eslint-disable-next-line playwright/no-skipped-test -- runtime skip if no seeded polls
+    test.skip(!pollExists, 'No polls seeded in this environment');
+
+    await pollLink.click();
+    await page.waitForLoadState('load');
+    await capture(page, 'poll-desktop-dark', { viewport: DESKTOP, colorScheme: 'dark' });
+    await capture(page, 'poll-mobile-dark', { viewport: MOBILE, colorScheme: 'dark' });
+  });
+
+  test('settings page', async ({ page }) => {
+    await signupUser(page);
+    await page.goto('/settings');
+    await expect(page.getByRole('heading', { name: /devices/i })).toBeVisible({ timeout: 10_000 });
+    await capture(page, 'settings-desktop-dark', { viewport: DESKTOP, colorScheme: 'dark' });
+    await capture(page, 'settings-mobile-dark', { viewport: MOBILE, colorScheme: 'dark' });
   });
 });
