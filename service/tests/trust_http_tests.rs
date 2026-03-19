@@ -1174,3 +1174,68 @@ async fn accept_invite_succeeds_even_when_endorser_slots_exhausted() {
 
     let _ = (endorser_keys, acceptor_keys);
 }
+
+// ─── Endorse slot exhaustion ──────────────────────────────────────────────────
+
+/// When a non-verifier user has used all k=3 endorsement slots, a direct
+/// endorse request must return 429 Too Many Requests with a slot-related error.
+#[shared_runtime_test]
+async fn endorse_returns_429_when_endorsement_slots_exhausted() {
+    use common::factories::{insert_endorsement, AccountFactory};
+
+    let db = isolated_db().await;
+    let pool = db.pool().clone();
+    let (app, keys, endorser_id) = signup_and_get_account("slotexhausted", db.pool()).await;
+
+    // Fill the endorser's k=3 slots directly in the DB (bypasses daily quota).
+    for seed in 50u8..53 {
+        let subject = AccountFactory::new()
+            .with_seed(seed)
+            .create(&pool)
+            .await
+            .expect("create dummy subject");
+        insert_endorsement(&pool, endorser_id, subject.id, 1.0).await;
+    }
+
+    // Sign up a 4th target and attempt to endorse — slots are exhausted.
+    let (json4, _) = valid_signup_with_keys("slotexhaustedsubject4");
+    let resp4 = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/auth/signup")
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(json4))
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+    let body4 = axum::body::to_bytes(resp4.into_body(), 1024 * 1024)
+        .await
+        .expect("body4");
+    let j4: Value = serde_json::from_slice(&body4).expect("json4");
+    let subject4_id = j4["account_id"].as_str().expect("account_id");
+
+    let body = serde_json::json!({ "subject_id": subject4_id }).to_string();
+    let request = build_authed_request(
+        Method::POST,
+        "/trust/endorse",
+        &body,
+        &keys.device_signing_key,
+        &keys.device_kid,
+    );
+
+    let response = app.oneshot(request).await.expect("response");
+    assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
+    let json = json_body(response).await;
+    assert!(
+        json["error"]
+            .as_str()
+            .unwrap_or("")
+            .to_lowercase()
+            .contains("slot"),
+        "expected slot exhaustion message, got: {}",
+        json["error"]
+    );
+}
