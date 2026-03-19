@@ -45,6 +45,16 @@ pub struct ActionRecord {
     pub processed_at: Option<chrono::DateTime<chrono::Utc>>,
 }
 
+/// A denouncement filed by one user against another, joined with the target's username.
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct DenouncementWithUsername {
+    pub id: Uuid,
+    pub target_id: Uuid,
+    pub target_username: String,
+    pub reason: String,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+}
+
 /// A denouncement filed by one user against another.
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct DenouncementRecord {
@@ -131,6 +141,11 @@ pub trait TrustRepo: Send + Sync {
         &self,
         accuser_id: Uuid,
     ) -> Result<Vec<DenouncementRecord>, TrustRepoError>;
+
+    async fn list_denouncements_by_with_username(
+        &self,
+        accuser_id: Uuid,
+    ) -> Result<Vec<DenouncementWithUsername>, TrustRepoError>;
 
     async fn count_active_denouncements_by(&self, accuser_id: Uuid) -> Result<i64, TrustRepoError>;
 
@@ -267,6 +282,13 @@ impl TrustRepo for PgTrustRepo {
         accuser_id: Uuid,
     ) -> Result<Vec<DenouncementRecord>, TrustRepoError> {
         denouncements::list_denouncements_by(&self.pool, accuser_id).await
+    }
+
+    async fn list_denouncements_by_with_username(
+        &self,
+        accuser_id: Uuid,
+    ) -> Result<Vec<DenouncementWithUsername>, TrustRepoError> {
+        denouncements::list_denouncements_by_with_username(&self.pool, accuser_id).await
     }
 
     async fn count_active_denouncements_by(&self, accuser_id: Uuid) -> Result<i64, TrustRepoError> {

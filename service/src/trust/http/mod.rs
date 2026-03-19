@@ -9,9 +9,8 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
-use chrono::{DateTime, Duration, Utc};
+use chrono::{Duration, Utc};
 use serde::{Deserialize, Serialize};
-use sqlx::PgPool;
 use uuid::Uuid;
 
 use super::repo::{TrustRepo, TrustRepoError};
@@ -122,16 +121,6 @@ pub struct DenouncementResponse {
     pub created_at: String,
 }
 
-/// Row returned by the denouncements join query.
-#[derive(sqlx::FromRow)]
-struct DenouncementWithUsername {
-    pub id: Uuid,
-    pub target_id: Uuid,
-    pub target_username: String,
-    pub reason: String,
-    pub created_at: DateTime<Utc>,
-}
-
 // ─── Router ────────────────────────────────────────────────────────────────
 
 pub fn trust_router() -> Router {
@@ -238,21 +227,13 @@ async fn denounce_handler(
 }
 
 async fn list_my_denouncements_handler(
-    Extension(pool): Extension<PgPool>,
+    Extension(trust_repo): Extension<Arc<dyn TrustRepo>>,
     auth: AuthenticatedDevice,
 ) -> impl IntoResponse {
-    let result = sqlx::query_as::<_, DenouncementWithUsername>(
-        "SELECT d.id, d.target_id, a.username AS target_username, d.reason, d.created_at \
-         FROM trust__denouncements d \
-         JOIN accounts a ON a.id = d.target_id \
-         WHERE d.accuser_id = $1 \
-         ORDER BY d.created_at DESC",
-    )
-    .bind(auth.account_id)
-    .fetch_all(&pool)
-    .await;
-
-    match result {
+    match trust_repo
+        .list_denouncements_by_with_username(auth.account_id)
+        .await
+    {
         Ok(rows) => {
             let denouncements = rows
                 .into_iter()
@@ -266,10 +247,7 @@ async fn list_my_denouncements_handler(
                 .collect::<Vec<_>>();
             (StatusCode::OK, Json(denouncements)).into_response()
         }
-        Err(e) => {
-            tracing::error!("list_my_denouncements failed: {e}");
-            internal_error()
-        }
+        Err(ref e) => trust_repo_error_response(e),
     }
 }
 
