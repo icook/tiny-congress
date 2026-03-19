@@ -77,6 +77,10 @@ export default defineConfig({
         'src/wasm.d.ts',
         'src/providers/CryptoProvider.tsx',
         'src/features/identity/keys/__tests__/**',
+        // Thin fetch/query wrappers — tested via E2E, not unit tests
+        'src/**/api/client.ts',
+        'src/**/api/queries.ts',
+        'src/**/api/index.ts',
       ],
       thresholds: {
         statements: 70,
