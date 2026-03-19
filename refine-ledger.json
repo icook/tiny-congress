@@ -205,10 +205,10 @@
     },
     "service/src/trust/": {
       "status": "active",
-      "total_prs": 15,
+      "total_prs": 16,
       "total_skips": 0,
       "consecutive_idle": 0,
-      "last_run": "2026-03-19T20:50:27Z",
+      "last_run": "2026-03-19T21:06:45Z",
       "graduated_at": "",
       "history": [
         {
@@ -300,6 +300,12 @@
           "type": "test_coverage",
           "impact": "medium",
           "summary": "Added `endorse_returns_429_when_endorsement_slots_exhausted` HTTP integration test covering the previously untested `EndorsementSlotsExhausted` error path, which returns 429 when a non-verifier user's k=3 endorsement slots are full on a direct endorse call."
+        },
+        {
+          "pr": 0,
+          "type": "test_coverage",
+          "impact": "medium",
+          "summary": "Added `test_process_batch_endorse_invalid_weight_fails` integration test covering the untested error path in `worker.rs:97-101` where an endorse payload with weight outside (0.0, 1.0] causes the action to be marked failed."
         }
       ],
       "skipped": []
