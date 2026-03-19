@@ -10,10 +10,12 @@ name: Refinement Loop
 #                              Run: ./scripts/refine-setup.sh
 
 on:
+  schedule:
+    - cron: '0 */2 * * *'
   workflow_dispatch:
     inputs:
       max_prs:
-        description: 'Max PRs to create (0 = use refine.toml default)'
+        description: 'Max PRs per target (0 = use refine.toml default)'
         required: false
         default: '0'
         type: string
@@ -35,7 +37,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
           # Use PAT so pushed branches trigger CI workflows
@@ -117,7 +119,7 @@ jobs:
 
       - name: Upload logs
         if: always()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v4
         with:
           name: refine-logs-${{ github.run_id }}
           path: .claude/refine.log
