@@ -150,7 +150,7 @@ async fn endorse_handler(
         Err(e) => return e,
     };
 
-    if body.weight <= 0.0 || body.weight > 1.0 {
+    if !body.weight.is_finite() || body.weight <= 0.0 || body.weight > 1.0 {
         return bad_request("weight must be in range (0.0, 1.0]");
     }
 
@@ -357,7 +357,7 @@ async fn create_invite_handler(
     let weight = body.weight.unwrap_or_else(|| {
         compute_endorsement_weight(&body.delivery_method, body.relationship_depth.as_deref())
     });
-    if weight <= 0.0 || weight > 1.0 {
+    if !weight.is_finite() || weight <= 0.0 || weight > 1.0 {
         return bad_request("weight must be in range (0.0, 1.0]");
     }
 
