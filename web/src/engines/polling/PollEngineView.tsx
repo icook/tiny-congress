@@ -104,7 +104,8 @@ function ClosedPollCard({ roomId, poll }: { roomId: string; poll: Poll }) {
       padding="sm"
       radius="sm"
       withBorder
-      style={{ cursor: 'pointer', textDecoration: 'none', color: 'inherit' }}
+      td="none"
+      style={{ cursor: 'pointer', color: 'inherit' }}
     >
       <Group justify="space-between" wrap="nowrap">
         <Text size="sm">{poll.question}</Text>

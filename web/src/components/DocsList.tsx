@@ -25,7 +25,8 @@ export function DocsList({ docs }: DocsListProps) {
           padding="md"
           radius="md"
           withBorder
-          style={{ textDecoration: 'none', cursor: 'pointer' }}
+          td="none"
+          style={{ cursor: 'pointer' }}
         >
           <Group gap="xs" wrap="nowrap">
             <IconBook2 size={16} style={{ flexShrink: 0 }} />

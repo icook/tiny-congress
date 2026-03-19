@@ -63,7 +63,8 @@ function PollListItem({ roomId, poll }: { roomId: string; poll: Poll }) {
       padding="sm"
       radius="sm"
       withBorder
-      style={{ cursor: 'pointer', textDecoration: 'none' }}
+      td="none"
+      style={{ cursor: 'pointer' }}
     >
       <Group justify="space-between" wrap="nowrap">
         <Text size="sm">{poll.question}</Text>
@@ -87,7 +88,8 @@ function RoomCard({ room }: { room: Room }) {
       padding="lg"
       radius="md"
       withBorder
-      style={{ cursor: 'pointer', textDecoration: 'none', color: 'inherit' }}
+      td="none"
+      style={{ cursor: 'pointer', color: 'inherit' }}
     >
       <Stack gap="sm">
         <Group justify="space-between">
