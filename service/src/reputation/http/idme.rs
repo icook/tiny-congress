@@ -63,13 +63,13 @@ fn verify_state(state_str: &str, secret: &[u8]) -> Result<OAuthState, &'static s
         tc_crypto::decode_base64url(parts[0]).map_err(|_| "invalid state encoding")?;
     let payload_str = std::str::from_utf8(&payload_bytes).map_err(|_| "invalid state encoding")?;
 
+    let provided_sig =
+        tc_crypto::decode_base64url(parts[1]).map_err(|_| "invalid state encoding")?;
+
     let mut mac = HmacSha256::new_from_slice(secret).map_err(|_| "invalid secret")?;
     mac.update(payload_str.as_bytes());
-    let expected_sig = tc_crypto::encode_base64url(&mac.finalize().into_bytes());
-
-    if expected_sig != parts[1] {
-        return Err("invalid state signature");
-    }
+    mac.verify_slice(&provided_sig)
+        .map_err(|_| "invalid state signature")?;
 
     let state: OAuthState =
         serde_json::from_str(payload_str).map_err(|_| "invalid state payload")?;
