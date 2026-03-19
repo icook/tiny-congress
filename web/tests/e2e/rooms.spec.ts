@@ -23,9 +23,14 @@ test('rooms page is accessible from navbar', async ({ page }) => {
     /* burger not present on desktop — expected */
   });
 
-  const roomsLink = page.getByRole('link', { name: /^Rooms$/i });
-  await expect(roomsLink).toBeVisible({ timeout: 5_000 });
-  await roomsLink.click();
+  // "Rooms" is an accordion NavLink — click to expand, then click "All Rooms" to navigate
+  const roomsAccordion = page.locator('.mantine-NavLink-root', { hasText: /^Rooms$/ });
+  await expect(roomsAccordion).toBeVisible({ timeout: 5_000 });
+  await roomsAccordion.click();
+
+  const allRoomsLink = page.getByRole('link', { name: /All Rooms/i });
+  await expect(allRoomsLink).toBeVisible({ timeout: 5_000 });
+  await allRoomsLink.click();
 
   // Should navigate to rooms page
   await expect(page).toHaveURL(/\/rooms/);

@@ -1,12 +1,11 @@
-import { useState } from 'react';
 import {
   IconBook2,
-  IconChevronRight,
   IconCode,
   IconDoor,
   IconHome2,
   IconInfoCircle,
   IconKey,
+  IconList,
   IconLogin,
   IconUserPlus,
 } from '@tabler/icons-react';
@@ -178,47 +177,33 @@ function RoomsAccordion({
   const currentPath = useRouterState({
     select: (state) => state.location.pathname,
   });
-  const [opened, setOpened] = useState(() => currentPath.startsWith('/rooms'));
 
   return (
-    <>
+    <NavLink
+      label="Rooms"
+      leftSection={<IconDoor size={18} stroke={1.5} />}
+      active={isActive('/rooms')}
+      defaultOpened={currentPath.startsWith('/rooms')}
+      fw={500}
+    >
       <NavLink
         component={Link}
         to="/rooms"
-        label="Rooms"
-        leftSection={<IconDoor size={18} stroke={1.5} />}
-        rightSection={
-          <IconChevronRight
-            size={14}
-            stroke={1.5}
-            style={{
-              transform: opened ? 'rotate(90deg)' : undefined,
-              transition: 'transform 200ms ease',
-            }}
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              setOpened((o) => !o);
-            }}
-          />
-        }
-        active={isActive('/rooms')}
+        label="All Rooms"
+        leftSection={<IconList size={16} stroke={1.5} />}
+        active={currentPath === '/rooms'}
         onClick={onNavigate}
-        fw={500}
       />
-      {opened
-        ? rooms?.map((room) => (
-            <NavLink
-              key={room.id}
-              component={Link}
-              to={`/rooms/${room.id}`}
-              label={room.name}
-              active={isActive(`/rooms/${room.id}`)}
-              onClick={onNavigate}
-              pl="lg"
-            />
-          ))
-        : null}
-    </>
+      {rooms?.map((room) => (
+        <NavLink
+          key={room.id}
+          component={Link}
+          to={`/rooms/${room.id}`}
+          label={room.name}
+          active={isActive(`/rooms/${room.id}`)}
+          onClick={onNavigate}
+        />
+      ))}
+    </NavLink>
   );
 }
