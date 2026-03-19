@@ -79,6 +79,23 @@ pub(super) async fn list_denouncements_by(
     Ok(records)
 }
 
+pub(super) async fn list_denouncements_by_with_username(
+    pool: &PgPool,
+    accuser_id: Uuid,
+) -> Result<Vec<super::DenouncementWithUsername>, TrustRepoError> {
+    let records = sqlx::query_as::<_, super::DenouncementWithUsername>(
+        "SELECT d.id, d.target_id, a.username AS target_username, d.reason, d.created_at \
+         FROM trust__denouncements d \
+         JOIN accounts a ON a.id = d.target_id \
+         WHERE d.accuser_id = $1 \
+         ORDER BY d.created_at DESC",
+    )
+    .bind(accuser_id)
+    .fetch_all(pool)
+    .await?;
+    Ok(records)
+}
+
 /// Count total denouncements filed by `accuser_id` (permanent budget — no refunds).
 pub(super) async fn count_active_denouncements_by(
     pool: &PgPool,
