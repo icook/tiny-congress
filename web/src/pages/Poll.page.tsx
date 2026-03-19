@@ -25,6 +25,7 @@ import {
   UpcomingPollPreview,
   useAgenda,
   useCastVote,
+  useMyCapabilities,
   useMyVotes,
   usePollCountdown,
   usePollDetail,
@@ -34,8 +35,6 @@ import {
   type Dimension,
   type DimensionVote,
 } from '@/features/rooms';
-import { useTrustScores } from '@/features/trust';
-import { buildVerifierUrl, useVerificationStatus } from '@/features/verification';
 import { useCrypto } from '@/providers/CryptoProvider';
 import { useDevice } from '@/providers/DeviceProvider';
 
@@ -45,7 +44,7 @@ interface PollPageProps {
 }
 
 export function PollPage({ roomId, pollId }: PollPageProps) {
-  const { deviceKid, privateKey, username, isLoading: deviceLoading } = useDevice();
+  const { deviceKid, privateKey, isLoading: deviceLoading } = useDevice();
   const { crypto } = useCrypto();
 
   const roomQuery = useRoom(roomId);
@@ -54,10 +53,7 @@ export function PollPage({ roomId, pollId }: PollPageProps) {
   const distributionQuery = usePollDistribution(roomId, pollId);
   const myVotesQuery = useMyVotes(roomId, pollId, deviceKid, privateKey, crypto);
   const voteMutation = useCastVote(roomId, pollId, deviceKid, privateKey, crypto);
-  const verificationQuery = useVerificationStatus(deviceKid, privateKey, crypto);
-  const isVerified = verificationQuery.data?.isVerified ?? false;
-  const trustScoresQuery = useTrustScores(deviceKid, privateKey, crypto);
-  const hasTrustScore = (trustScoresQuery.data?.length ?? 0) > 0;
+  const capabilitiesQuery = useMyCapabilities(roomId, deviceKid, privateKey, crypto);
 
   const agendaQuery = useAgenda(roomId);
   const { secondsLeft, isExpired } = usePollCountdown(detailQuery.data?.poll);
@@ -136,7 +132,7 @@ export function PollPage({ roomId, pollId }: PollPageProps) {
   const activePollIndex = agenda.findIndex((p) => p.id === poll.id);
   const nextPoll = activePollIndex >= 0 ? agenda[activePollIndex + 1] : undefined;
   const isAuthenticated = Boolean(deviceKid);
-  const canVote = isActive && isAuthenticated && isVerified;
+  const canVote = isActive && isAuthenticated && (capabilitiesQuery.data?.can_vote ?? false);
   const roomName = roomQuery.data?.name;
 
   return (
@@ -227,27 +223,14 @@ export function PollPage({ roomId, pollId }: PollPageProps) {
               </Alert>
             ) : null}
 
-            {isAuthenticated && !isVerified ? (
-              <Alert icon={<IconShieldOff size={16} />} color="yellow">
-                You need to verify your identity to vote in this room.
-                {(() => {
-                  const url = buildVerifierUrl(username ?? '');
-                  if (url) {
-                    return (
-                      <Button component="a" href={url} size="xs" variant="light" mt="xs">
-                        Verify Now
-                      </Button>
-                    );
-                  }
-                  return null;
-                })()}
-              </Alert>
-            ) : null}
-
-            {isAuthenticated && isVerified && !hasTrustScore ? (
-              <Alert icon={<IconShieldOff size={16} />} color="yellow">
-                You&apos;re verified, but you need endorsements from trusted members to vote in this
-                room. Visit the Trust page to see your status.
+            {isAuthenticated && capabilitiesQuery.data?.role === 'none' ? (
+              <Alert icon={<IconShieldOff size={16} />} color="yellow" title="Not eligible to vote">
+                {capabilitiesQuery.data.reason}
+                {capabilitiesQuery.data.next_step ? (
+                  <Text size="sm" mt="xs">
+                    {capabilitiesQuery.data.next_step}
+                  </Text>
+                ) : null}
               </Alert>
             ) : null}
 

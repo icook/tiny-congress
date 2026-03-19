@@ -18,6 +18,16 @@ export interface Room {
   engine_config: Record<string, unknown>;
   status: string;
   created_at: string;
+  owner_id: string | null;
+  constraint_type: string;
+}
+
+export interface MyCapabilitiesResponse {
+  role: string;
+  can_vote: boolean;
+  can_configure: boolean;
+  reason: string | null;
+  next_step: string | null;
 }
 
 export interface Poll {
@@ -132,6 +142,21 @@ export async function getPollDistribution(
 }
 
 // === Authenticated endpoints ===
+
+export async function fetchMyCapabilities(
+  roomId: string,
+  deviceKid: string,
+  privateKey: CryptoKey,
+  wasmCrypto: CryptoModule
+): Promise<MyCapabilitiesResponse> {
+  return signedFetchJson(
+    `/rooms/${roomId}/my-capabilities`,
+    'GET',
+    deviceKid,
+    privateKey,
+    wasmCrypto
+  );
+}
 
 export async function castVote(
   roomId: string,

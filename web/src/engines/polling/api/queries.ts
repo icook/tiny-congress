@@ -6,6 +6,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { CryptoModule } from '@/providers/CryptoProvider';
 import {
   castVote,
+  fetchMyCapabilities,
   getAgenda,
   getMyVotes,
   getPollDetail,
@@ -15,6 +16,7 @@ import {
   listPolls,
   listRooms,
   type DimensionVote,
+  type MyCapabilitiesResponse,
   type Poll,
   type PollDetail,
   type PollDistribution,
@@ -98,6 +100,24 @@ export function useMyVotes(
       return getMyVotes(roomId, pollId, deviceKid, privateKey, wasmCrypto);
     },
     enabled: Boolean(roomId && pollId && deviceKid && privateKey && wasmCrypto),
+  });
+}
+
+export function useMyCapabilities(
+  roomId: string | undefined,
+  deviceKid: string | null,
+  privateKey: CryptoKey | null,
+  wasmCrypto: CryptoModule | null
+) {
+  return useQuery<MyCapabilitiesResponse>({
+    queryKey: ['rooms', roomId, 'my-capabilities'],
+    queryFn: () => {
+      if (!roomId || !deviceKid || !privateKey || !wasmCrypto) {
+        throw new Error('Not authenticated');
+      }
+      return fetchMyCapabilities(roomId, deviceKid, privateKey, wasmCrypto);
+    },
+    enabled: Boolean(roomId && deviceKid && privateKey && wasmCrypto),
   });
 }
 
