@@ -298,10 +298,16 @@ async fn budget_handler(
         }
     };
 
-    let all_endorsements = reputation_repo
+    let all_endorsements = match reputation_repo
         .count_all_active_trust_endorsements_by(auth.account_id)
         .await
-        .unwrap_or(0);
+    {
+        Ok(n) => n,
+        Err(ref e) => {
+            tracing::error!("Budget handler all-endorsement count error: {e}");
+            return internal_error();
+        }
+    };
     let out_of_slot_count = all_endorsements - endorsements_used;
 
     let denouncements_used = match trust_repo
