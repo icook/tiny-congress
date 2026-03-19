@@ -66,6 +66,7 @@ async fn test_verifier_can_create_endorsement() {
         None,
         1.0,
         None,
+        true,
     )
     .await
     .expect("bootstrap");
@@ -141,6 +142,7 @@ async fn test_endorsement_unknown_user_returns_404() {
         None,
         1.0,
         None,
+        true,
     )
     .await
     .expect("bootstrap");
@@ -181,6 +183,7 @@ async fn test_duplicate_endorsement_is_idempotent() {
         None,
         1.0,
         None,
+        true,
     )
     .await
     .expect("bootstrap");

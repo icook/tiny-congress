@@ -71,6 +71,7 @@ fn row_to_record(row: EndorsementRow) -> EndorsementRecord {
 /// returning an error. This idempotency applies only to non-genesis endorsements
 /// (`endorser_id IS NOT NULL`). Genesis endorsements (`endorser_id = None`) use a
 /// separate partial index and do not participate in this upsert path.
+#[allow(clippy::too_many_arguments)]
 pub async fn create_endorsement<'e, E>(
     executor: E,
     subject_id: Uuid,
@@ -79,6 +80,7 @@ pub async fn create_endorsement<'e, E>(
     evidence: Option<&serde_json::Value>,
     weight: f32,
     attestation: Option<&serde_json::Value>,
+    in_slot: bool,
 ) -> Result<CreatedEndorsement, EndorsementRepoError>
 where
     E: sqlx::Executor<'e, Database = sqlx::Postgres>,
@@ -88,10 +90,11 @@ where
     let row: (Uuid,) = sqlx::query_as(
         r"
         INSERT INTO reputation__endorsements
-            (id, subject_id, topic, endorser_id, evidence, weight, attestation)
-        VALUES ($1, $2, $3, $4, $5, $6, $7)
+            (id, subject_id, topic, endorser_id, evidence, weight, attestation, in_slot)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
         ON CONFLICT (subject_id, topic, endorser_id)
-            DO UPDATE SET weight = EXCLUDED.weight, attestation = EXCLUDED.attestation
+            DO UPDATE SET weight = EXCLUDED.weight, attestation = EXCLUDED.attestation,
+                          in_slot = EXCLUDED.in_slot
         RETURNING id
         ",
     )
@@ -102,6 +105,7 @@ where
     .bind(evidence)
     .bind(weight)
     .bind(attestation)
+    .bind(in_slot)
     .fetch_one(executor)
     .await
     .map_err(EndorsementRepoError::Database)?;
@@ -202,6 +206,31 @@ where
 ///
 /// Returns `Database` on connection or query failure.
 pub async fn count_active_trust_endorsements_by<'e, E>(
+    executor: E,
+    endorser_id: Uuid,
+) -> Result<i64, EndorsementRepoError>
+where
+    E: sqlx::Executor<'e, Database = sqlx::Postgres>,
+{
+    let count: i64 = sqlx::query_scalar(
+        r"
+        SELECT COUNT(*) FROM reputation__endorsements
+        WHERE endorser_id = $1 AND topic = 'trust' AND revoked_at IS NULL AND in_slot = true
+        ",
+    )
+    .bind(endorser_id)
+    .fetch_one(executor)
+    .await?;
+
+    Ok(count)
+}
+
+/// Count ALL active trust endorsements (including out-of-slot).
+///
+/// # Errors
+///
+/// Returns `Database` on connection or query failure.
+pub async fn count_all_active_trust_endorsements_by<'e, E>(
     executor: E,
     endorser_id: Uuid,
 ) -> Result<i64, EndorsementRepoError>

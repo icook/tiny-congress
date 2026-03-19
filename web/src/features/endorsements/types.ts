@@ -15,6 +15,7 @@ export interface BudgetResponse {
   slots_total: number;
   slots_used: number;
   slots_available: number;
+  out_of_slot_count: number;
   denouncements_total: number;
   denouncements_used: number;
   denouncements_available: number;

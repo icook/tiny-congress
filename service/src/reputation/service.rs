@@ -79,7 +79,7 @@ impl EndorsementService for DefaultEndorsementService {
         }
 
         self.repo
-            .create_endorsement(subject_id, topic, endorser_id, evidence, 1.0, None)
+            .create_endorsement(subject_id, topic, endorser_id, evidence, 1.0, None, true)
             .await
             .map_err(|e| match e {
                 EndorsementRepoError::NotFound => {

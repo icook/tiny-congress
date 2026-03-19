@@ -1,6 +1,5 @@
 ---
 source: service/tests/schema_snapshot.rs
-assertion_line: 188
 expression: current_schema
 ---
 -- Schema Snapshot
@@ -43,7 +42,8 @@ CREATE TABLE reputation__endorsements (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     revoked_at TIMESTAMPTZ,
     weight FLOAT4 NOT NULL DEFAULT 1.0,
-    attestation JSONB);
+    attestation JSONB,
+    in_slot BOOL NOT NULL DEFAULT true);
 
 CREATE TABLE reputation__external_identities (
     id UUID NOT NULL DEFAULT gen_random_uuid(),
@@ -193,6 +193,9 @@ CREATE INDEX idx_device_keys_account ON public.device_keys USING btree (account_
 
 -- device_keys.uq_device_keys_kid
 CREATE UNIQUE INDEX uq_device_keys_kid ON public.device_keys USING btree (device_kid)
+
+-- reputation__endorsements.idx_endorsements_in_slot_budget
+CREATE INDEX idx_endorsements_in_slot_budget ON public.reputation__endorsements USING btree (endorser_id) WHERE ((topic = 'trust'::text) AND (revoked_at IS NULL) AND (in_slot = true))
 
 -- reputation__endorsements.idx_endorsements_subject
 CREATE INDEX idx_endorsements_subject ON public.reputation__endorsements USING btree (subject_id)
@@ -353,6 +356,7 @@ CREATE UNIQUE INDEX trust__user_influence_pkey ON public.trust__user_influence U
 -- device_keys: uq_device_keys_kid (UNIQUE)
 -- reputation__endorsements: reputation__endorsements_created_at_not_null (CHECK)
 -- reputation__endorsements: reputation__endorsements_id_not_null (CHECK)
+-- reputation__endorsements: reputation__endorsements_in_slot_not_null (CHECK)
 -- reputation__endorsements: reputation__endorsements_pkey (PRIMARY KEY)
 -- reputation__endorsements: reputation__endorsements_subject_id_not_null (CHECK)
 -- reputation__endorsements: reputation__endorsements_topic_not_null (CHECK)

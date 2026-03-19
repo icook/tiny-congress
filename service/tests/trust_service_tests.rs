@@ -271,17 +271,11 @@ async fn test_endorsement_slots_exhausted() {
     let repo = Arc::new(PgTrustRepo::new(pool));
     let service = DefaultTrustService::new(repo, rep_repo);
 
-    let result = service
+    // 4th endorsement should succeed (no longer errors) — stored as out-of-slot
+    service
         .endorse(endorser.id, extra_subject.id, 1.0, None)
-        .await;
-
-    assert!(
-        matches!(
-            result,
-            Err(TrustServiceError::EndorsementSlotsExhausted { max: 3 })
-        ),
-        "expected EndorsementSlotsExhausted, got: {result:?}"
-    );
+        .await
+        .expect("4th endorsement should succeed as out-of-slot");
 }
 
 #[shared_runtime_test]
@@ -344,6 +338,98 @@ async fn test_revoke_frees_endorsement_slot() {
         .endorse(endorser.id, new_subject.id, 1.0, None)
         .await
         .expect("endorse should succeed after revocation frees a slot");
+}
+
+#[shared_runtime_test]
+async fn test_endorse_beyond_slot_limit_succeeds() {
+    let db = isolated_db().await;
+    let pool = db.pool().clone();
+
+    let endorser = AccountFactory::new()
+        .with_seed(250)
+        .create(&pool)
+        .await
+        .expect("create endorser");
+
+    // Create 3 subjects and fill all k=3 slots
+    let mut subjects = Vec::new();
+    for seed in 251..254 {
+        let s = AccountFactory::new()
+            .with_seed(seed)
+            .create(&pool)
+            .await
+            .expect("create subject");
+        subjects.push(s);
+    }
+
+    for subject in &subjects {
+        sqlx::query(
+            "INSERT INTO reputation__endorsements (endorser_id, subject_id, topic, weight, in_slot) \
+             VALUES ($1, $2, 'trust', 1.0, true)",
+        )
+        .bind(endorser.id)
+        .bind(subject.id)
+        .execute(&pool)
+        .await
+        .expect("seed endorsement");
+    }
+
+    // 4th endorsement should succeed (not error) but be out-of-slot
+    let extra_subject = AccountFactory::new()
+        .with_seed(254)
+        .create(&pool)
+        .await
+        .expect("create extra subject");
+
+    let rep_repo = Arc::new(PgReputationRepo::new(pool.clone())) as Arc<dyn ReputationRepo>;
+    let repo = Arc::new(PgTrustRepo::new(pool.clone()));
+    let service = DefaultTrustService::new(repo, rep_repo);
+
+    service
+        .endorse(endorser.id, extra_subject.id, 1.0, None)
+        .await
+        .expect("4th endorsement should succeed as out-of-slot");
+}
+
+#[shared_runtime_test]
+async fn test_out_of_slot_endorsement_not_counted_in_budget() {
+    let db = isolated_db().await;
+    let pool = db.pool().clone();
+
+    let endorser = AccountFactory::new()
+        .with_seed(240)
+        .create(&pool)
+        .await
+        .expect("create endorser");
+
+    let subject = AccountFactory::new()
+        .with_seed(241)
+        .create(&pool)
+        .await
+        .expect("create subject");
+
+    // Insert an out-of-slot endorsement directly
+    sqlx::query(
+        "INSERT INTO reputation__endorsements (endorser_id, subject_id, topic, weight, in_slot) \
+         VALUES ($1, $2, 'trust', 1.0, false)",
+    )
+    .bind(endorser.id)
+    .bind(subject.id)
+    .execute(&pool)
+    .await
+    .expect("seed out-of-slot endorsement");
+
+    let rep_repo = PgReputationRepo::new(pool.clone());
+    let count = rep_repo
+        .count_active_trust_endorsements_by(endorser.id)
+        .await
+        .expect("count");
+
+    // Out-of-slot endorsement should NOT be counted
+    assert_eq!(
+        count, 0,
+        "out-of-slot endorsement should not count toward budget"
+    );
 }
 
 #[shared_runtime_test]

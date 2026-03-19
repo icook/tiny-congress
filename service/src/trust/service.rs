@@ -122,22 +122,21 @@ impl TrustService for DefaultTrustService {
             .has_endorsement(endorser_id, "authorized_verifier")
             .await?;
 
-        if !is_verifier {
+        let in_slot = if is_verifier {
+            true
+        } else {
             let active_count = self
                 .reputation_repo
                 .count_active_trust_endorsements_by(endorser_id)
                 .await?;
-            if active_count >= i64::from(self.endorsement_slots) {
-                return Err(TrustServiceError::EndorsementSlotsExhausted {
-                    max: self.endorsement_slots,
-                });
-            }
-        }
+            active_count < i64::from(self.endorsement_slots)
+        };
 
         let payload = json!({
             "subject_id": subject_id,
             "weight": weight,
             "attestation": attestation,
+            "in_slot": in_slot,
         });
         self.trust_repo
             .enqueue_action(endorser_id, "endorse", &payload)

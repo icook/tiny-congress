@@ -1158,7 +1158,7 @@ async fn accept_invite_succeeds_even_when_endorser_slots_exhausted() {
         .expect("accept response");
     assert_eq!(accept_resp.status(), StatusCode::OK);
 
-    // No endorsement action should have been queued (slots were exhausted).
+    // An out-of-slot endorsement action should have been queued.
     let trust_repo = PgTrustRepo::new(pool);
     let pending = trust_repo
         .claim_pending_actions(10)
@@ -1168,19 +1168,28 @@ async fn accept_invite_succeeds_even_when_endorser_slots_exhausted() {
         .iter()
         .find(|a| a.actor_id == endorser_id && a.action_type == "endorse");
     assert!(
-        endorse_action.is_none(),
-        "expected no pending endorse action when slots exhausted, found: {pending:?}"
+        endorse_action.is_some(),
+        "expected an out-of-slot endorse action to be queued, found none"
+    );
+    let in_slot = endorse_action
+        .and_then(|a| a.payload["in_slot"].as_bool())
+        .unwrap_or(true);
+    assert!(
+        !in_slot,
+        "expected in_slot=false for out-of-slot endorsement"
     );
 
     let _ = (endorser_keys, acceptor_keys);
 }
 
-// ─── Endorse slot exhaustion ──────────────────────────────────────────────────
+// ─── Endorse beyond slot limit ────────────────────────────────────────────────
 
 /// When a non-verifier user has used all k=3 endorsement slots, a direct
-/// endorse request must return 429 Too Many Requests with a slot-related error.
+/// endorse request succeeds with 201 (endorsement is stored as out-of-slot).
+/// This was changed in #754 — endorsements beyond the slot limit are allowed
+/// but don't contribute to trust graph computation.
 #[shared_runtime_test]
-async fn endorse_returns_429_when_endorsement_slots_exhausted() {
+async fn endorse_succeeds_as_out_of_slot_when_slots_full() {
     use common::factories::{insert_endorsement, AccountFactory};
 
     let db = isolated_db().await;
@@ -1197,7 +1206,7 @@ async fn endorse_returns_429_when_endorsement_slots_exhausted() {
         insert_endorsement(&pool, endorser_id, subject.id, 1.0).await;
     }
 
-    // Sign up a 4th target and attempt to endorse — slots are exhausted.
+    // Sign up a 4th target and attempt to endorse — should succeed as out-of-slot.
     let (json4, _) = valid_signup_with_keys("slotexhaustedsubject4");
     let resp4 = app
         .clone()
@@ -1227,15 +1236,9 @@ async fn endorse_returns_429_when_endorsement_slots_exhausted() {
     );
 
     let response = app.oneshot(request).await.expect("response");
-    assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
-    let json = json_body(response).await;
-    assert!(
-        json["error"]
-            .as_str()
-            .unwrap_or("")
-            .to_lowercase()
-            .contains("slot"),
-        "expected slot exhaustion message, got: {}",
-        json["error"]
+    assert_eq!(
+        response.status(),
+        StatusCode::ACCEPTED,
+        "4th endorsement should succeed as out-of-slot"
     );
 }
