@@ -958,6 +958,122 @@ async fn endorse_after_denounce_returns_409() {
     assert_eq!(response.status(), StatusCode::CONFLICT);
 }
 
+// ─── Denounce budget exhaustion ──────────────────────────────────────────────
+
+/// When a user has used all denouncement slots (d=2), a third denounce attempt
+/// must return 429 Too Many Requests.
+#[shared_runtime_test]
+async fn denounce_returns_429_when_budget_exhausted() {
+    let db = isolated_db().await;
+    let pool = db.pool().clone();
+    let (app, keys, account_id) = signup_and_get_account("denouncebudget", db.pool()).await;
+
+    // Sign up two targets so we have valid UUIDs to reference.
+    let (json_t1, _) = valid_signup_with_keys("budgettarget1");
+    let resp_t1 = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/auth/signup")
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(json_t1))
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+    let body_t1 = axum::body::to_bytes(resp_t1.into_body(), 1024 * 1024)
+        .await
+        .expect("body_t1");
+    let j_t1: Value = serde_json::from_slice(&body_t1).expect("json_t1");
+    let target1_id: uuid::Uuid = j_t1["account_id"]
+        .as_str()
+        .expect("account_id")
+        .parse()
+        .expect("uuid");
+
+    let (json_t2, _) = valid_signup_with_keys("budgettarget2");
+    let resp_t2 = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/auth/signup")
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(json_t2))
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+    let body_t2 = axum::body::to_bytes(resp_t2.into_body(), 1024 * 1024)
+        .await
+        .expect("body_t2");
+    let j_t2: Value = serde_json::from_slice(&body_t2).expect("json_t2");
+    let target2_id: uuid::Uuid = j_t2["account_id"]
+        .as_str()
+        .expect("account_id")
+        .parse()
+        .expect("uuid");
+
+    // Seed 2 denouncements directly to exhaust the d=2 budget without consuming
+    // daily quota (which would trigger QuotaExceeded instead).
+    sqlx::query(
+        "INSERT INTO trust__denouncements (accuser_id, target_id, reason) VALUES ($1, $2, $3)",
+    )
+    .bind(account_id)
+    .bind(target1_id)
+    .bind("first")
+    .execute(&pool)
+    .await
+    .expect("seed denouncement 1");
+
+    sqlx::query(
+        "INSERT INTO trust__denouncements (accuser_id, target_id, reason) VALUES ($1, $2, $3)",
+    )
+    .bind(account_id)
+    .bind(target2_id)
+    .bind("second")
+    .execute(&pool)
+    .await
+    .expect("seed denouncement 2");
+
+    // Sign up a third target and attempt to denounce — budget is exhausted.
+    let (json_t3, _) = valid_signup_with_keys("budgettarget3");
+    let resp_t3 = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/auth/signup")
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(json_t3))
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+    let body_t3 = axum::body::to_bytes(resp_t3.into_body(), 1024 * 1024)
+        .await
+        .expect("body_t3");
+    let j_t3: Value = serde_json::from_slice(&body_t3).expect("json_t3");
+    let target3_id = j_t3["account_id"].as_str().expect("account_id");
+
+    let body = serde_json::json!({
+        "target_id": target3_id,
+        "reason": "third denouncement"
+    })
+    .to_string();
+    let request = build_authed_request(
+        Method::POST,
+        "/trust/denounce",
+        &body,
+        &keys.device_signing_key,
+        &keys.device_kid,
+    );
+
+    let response = app.oneshot(request).await.expect("response");
+    assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
+}
+
 // ─── Accept invite — auto-endorse silent failure ──────────────────────────────
 
 /// When the endorser's slots are full at the moment an invite is accepted,
