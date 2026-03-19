@@ -316,6 +316,10 @@ async fn scores_me_handler(
 const ENDORSEMENT_SLOTS: u32 = 3;
 /// Permanent denouncement budget per user (d=2, ADR-020).
 const DENOUNCEMENT_SLOTS: u32 = 2;
+/// Valid delivery methods for invites (must match migration 18 CHECK constraint).
+const VALID_DELIVERY_METHODS: &[&str] = &["qr", "email", "video", "text", "messaging"];
+/// Valid relationship depths for invites (must match migration 18 CHECK constraint).
+const VALID_RELATIONSHIP_DEPTHS: &[&str] = &["years", "months", "acquaintance"];
 
 async fn budget_handler(
     Extension(reputation_repo): Extension<Arc<dyn ReputationRepo>>,
@@ -388,6 +392,30 @@ async fn create_invite_handler(
         )
             .into_response();
     };
+
+    if !VALID_DELIVERY_METHODS.contains(&body.delivery_method.as_str()) {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: "delivery_method must be one of: qr, email, video, text, messaging"
+                    .to_string(),
+            }),
+        )
+            .into_response();
+    }
+
+    if let Some(ref depth) = body.relationship_depth {
+        if !VALID_RELATIONSHIP_DEPTHS.contains(&depth.as_str()) {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(ErrorResponse {
+                    error: "relationship_depth must be one of: years, months, acquaintance"
+                        .to_string(),
+                }),
+            )
+                .into_response();
+        }
+    }
 
     // Use the client-supplied weight if present; otherwise compute from method + depth.
     let weight = body.weight.unwrap_or_else(|| {
