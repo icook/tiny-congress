@@ -4,6 +4,7 @@
 //! stored in `rooms__rooms.engine_config.bot`.
 
 pub mod config;
+pub mod tasks;
 pub mod worker;
 
 pub use config::{BotConfig, Quality, RunMode};

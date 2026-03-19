@@ -20,6 +20,18 @@ const VISIBILITY_TIMEOUT_SECS: i32 = 300; // 5 minutes
 /// How long to sleep when the queue is empty before polling again.
 const POLL_INTERVAL: Duration = Duration::from_secs(5);
 
+// ─── Config ──────────────────────────────────────────────────────────────────
+
+/// Configuration for the bot worker, loaded from environment variables.
+#[derive(Debug, Clone)]
+pub struct BotWorkerConfig {
+    pub llm_api_key: String,
+    pub llm_base_url: String,
+    pub exa_api_key: String,
+    pub exa_base_url: String,
+    pub default_model: String,
+}
+
 // ─── Public entry point ──────────────────────────────────────────────────────
 
 /// Spawn the bot worker as a background tokio task.
@@ -27,8 +39,9 @@ const POLL_INTERVAL: Duration = Duration::from_secs(5);
 /// Returns the [`tokio::task::JoinHandle`] so the caller can track or
 /// abort the task on shutdown.
 #[must_use]
-pub fn spawn_bot_worker(pool: PgPool) -> tokio::task::JoinHandle<()> {
+pub fn spawn_bot_worker(pool: PgPool, config: BotWorkerConfig) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
+        let http = reqwest::Client::new();
         tracing::info!("bot worker started");
         loop {
             match pgmq::read_task(&pool, VISIBILITY_TIMEOUT_SECS).await {
@@ -61,7 +74,7 @@ pub fn spawn_bot_worker(pool: PgPool) -> tokio::task::JoinHandle<()> {
                         }
                     };
 
-                    match execute_task(&pool, &task).await {
+                    match execute_task(&pool, &http, &config, &task).await {
                         Ok(()) => {
                             if let Err(e) = pgmq::archive_task(&pool, msg.msg_id).await {
                                 tracing::warn!(
@@ -98,34 +111,43 @@ pub fn spawn_bot_worker(pool: PgPool) -> tokio::task::JoinHandle<()> {
 // ─── Task dispatch ───────────────────────────────────────────────────────────
 
 /// Execute a single bot task, wrapping it in a trace record.
-async fn execute_task(pool: &PgPool, task: &pgmq::BotTask) -> anyhow::Result<()> {
+async fn execute_task(
+    pool: &PgPool,
+    http: &reqwest::Client,
+    config: &BotWorkerConfig,
+    task: &pgmq::BotTask,
+) -> anyhow::Result<()> {
     let trace_id: Uuid =
         bot_traces::create_trace(pool, task.room_id, &task.task, "iterate").await?;
 
-    let result = dispatch_task(pool, task);
+    let result = dispatch_task(pool, http, config, task, trace_id).await;
 
     match &result {
-        Ok(()) => {
-            bot_traces::complete_trace(pool, trace_id, None).await?;
+        Ok(poll_id) => {
+            bot_traces::complete_trace(pool, trace_id, *poll_id).await?;
         }
         Err(e) => {
             bot_traces::fail_trace(pool, trace_id, &e.to_string()).await?;
         }
     }
 
-    result
+    result.map(|_| ())
 }
 
 /// Dispatch to the concrete handler for each task variant.
-fn dispatch_task(_pool: &PgPool, task: &pgmq::BotTask) -> anyhow::Result<()> {
+async fn dispatch_task(
+    pool: &PgPool,
+    http: &reqwest::Client,
+    config: &BotWorkerConfig,
+    task: &pgmq::BotTask,
+    trace_id: Uuid,
+) -> anyhow::Result<Option<Uuid>> {
     match task.task.as_str() {
         "research_company" => {
-            tracing::info!(room_id = %task.room_id, "stub: research_company");
-            Ok(())
+            super::tasks::research_company(pool, http, config, task, trace_id).await
         }
         "generate_evidence" => {
-            tracing::info!(room_id = %task.room_id, "stub: generate_evidence");
-            Ok(())
+            super::tasks::generate_evidence(pool, http, config, task, trace_id).await
         }
         other => {
             anyhow::bail!("unknown bot task type: {other:?}")

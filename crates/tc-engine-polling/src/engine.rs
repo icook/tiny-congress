@@ -83,7 +83,28 @@ impl RoomEngine for PollingEngine {
             Duration::from_secs(LIFECYCLE_POLL_INTERVAL_SECS),
         );
 
-        let bot_handle = crate::bot::worker::spawn_bot_worker(ctx.pool);
+        let llm_api_key = std::env::var("BOT_LLM_API_KEY").unwrap_or_default();
+        let exa_api_key = std::env::var("BOT_EXA_API_KEY").unwrap_or_default();
+        if llm_api_key.is_empty() || exa_api_key.is_empty() {
+            tracing::warn!(
+                llm_key_set = !llm_api_key.is_empty(),
+                exa_key_set = !exa_api_key.is_empty(),
+                "bot worker starting with missing API keys — tasks will fail until configured"
+            );
+        }
+
+        let bot_config = crate::bot::worker::BotWorkerConfig {
+            llm_api_key,
+            llm_base_url: std::env::var("BOT_LLM_BASE_URL")
+                .unwrap_or_else(|_| "http://localhost:4001".to_string()),
+            exa_api_key,
+            exa_base_url: std::env::var("BOT_EXA_BASE_URL")
+                .unwrap_or_else(|_| "http://localhost:4002".to_string()),
+            default_model: std::env::var("BOT_DEFAULT_MODEL")
+                .unwrap_or_else(|_| "deepseek/deepseek-chat-v3-0324".to_string()),
+        };
+
+        let bot_handle = crate::bot::worker::spawn_bot_worker(ctx.pool, bot_config);
 
         Ok(vec![lifecycle_handle, bot_handle])
     }

@@ -91,7 +91,13 @@ impl BotConfig {
     #[must_use]
     pub fn from_engine_config(config: &serde_json::Value) -> Option<Self> {
         let bot_value = config.get("bot")?;
-        let bot: Self = serde_json::from_value(bot_value.clone()).ok()?;
+        let bot: Self = match serde_json::from_value(bot_value.clone()) {
+            Ok(b) => b,
+            Err(e) => {
+                tracing::warn!(error = %e, "failed to parse bot config from engine_config");
+                return None;
+            }
+        };
         if bot.enabled {
             Some(bot)
         } else {
