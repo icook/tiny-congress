@@ -35,8 +35,7 @@ impl Default for PollingEngine {
 
 #[async_trait::async_trait]
 impl RoomEngine for PollingEngine {
-    #[allow(clippy::unnecessary_literal_bound)]
-    fn engine_type(&self) -> &str {
+    fn engine_type(&self) -> &'static str {
         "polling"
     }
 

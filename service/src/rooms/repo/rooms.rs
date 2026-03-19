@@ -210,6 +210,9 @@ pub async fn rooms_needing_content<'e, E>(executor: E) -> Result<Vec<RoomRecord>
 where
     E: sqlx::Executor<'e, Database = sqlx::Postgres>,
 {
+    // COUPLING: This query references rooms__polls, a polling-engine-owned table.
+    // TODO: Replace with per-engine callback or capability flag in rooms table
+    // once a second engine is added. Acceptable for single-engine stage.
     let rows = sqlx::query_as::<_, RoomRow>(
         r"
         SELECT r.id, r.name, r.description, r.eligibility_topic, r.status,

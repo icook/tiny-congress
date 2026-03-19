@@ -128,7 +128,7 @@ pub struct PlatformState {
 #[async_trait::async_trait]
 pub trait RoomEngine: Send + Sync {
     /// Unique identifier for this engine type (e.g. `"poll"`).
-    fn engine_type(&self) -> &str;
+    fn engine_type(&self) -> &'static str;
 
     /// Human-readable metadata for API discovery endpoints.
     fn metadata(&self) -> EngineMetadata;

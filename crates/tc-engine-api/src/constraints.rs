@@ -423,6 +423,10 @@ impl ConstraintRegistry {
     /// This is a convenience method that combines [`build_constraint`] and
     /// [`RoomConstraint::check`] into a single call.
     ///
+    /// Note: `trust_reader` is passed per-call rather than stored in the registry,
+    /// allowing the registry to be constructed without a reader and shared across
+    /// contexts with different trust graph views.
+    ///
     /// # Errors
     ///
     /// Returns an error if constraint construction fails or the trust reader

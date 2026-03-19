@@ -34,6 +34,14 @@ pub struct CreateRoomRequest {
     pub constraint_type: String,
     #[serde(default)]
     pub constraint_config: serde_json::Value,
+    #[serde(default = "default_engine_type")]
+    pub engine_type: String,
+    #[serde(default)]
+    pub engine_config: serde_json::Value,
+}
+
+fn default_engine_type() -> String {
+    "polling".to_string()
 }
 
 fn default_eligibility_topic() -> String {
@@ -55,6 +63,8 @@ pub struct RoomResponse {
     pub status: String,
     pub poll_duration_secs: Option<i32>,
     pub created_at: String,
+    pub engine_type: String,
+    pub engine_config: serde_json::Value,
 }
 
 // ─── Router ────────────────────────────────────────────────────────────────

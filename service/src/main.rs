@@ -65,6 +65,9 @@ use utoipa_swagger_ui::SwaggerUi;
 // dispatch is wired. The polling engine's start() doesn't call these methods.
 // ---------------------------------------------------------------------------
 
+// TODO: Replace StubRoomLifecycle with real implementation that delegates to
+// RoomsRepo before adding any engine that calls get_room/close_room.
+// Currently safe because PollingEngine::start() does not use room_lifecycle.
 struct StubRoomLifecycle;
 
 #[async_trait::async_trait]
@@ -221,6 +224,9 @@ async fn build_app(
     engine_registry.register(PollingEngine::new());
 
     // Start background tasks for all registered engines
+    // TODO: Store engine handles in app state and join them during graceful shutdown.
+    // Currently tasks continue running but are killed on process exit.
+    // Not a regression — pre-refactor lifecycle consumer had the same behavior.
     let _engine_handles: Vec<tokio::task::JoinHandle<()>> = engine_registry
         .all()
         .iter()
@@ -275,7 +281,7 @@ async fn build_app(
         .merge(reputation::http::router())
         .merge(rooms::http::router())
         .merge(trust::http::trust_router())
-        .merge(engine_registry::engines_router())
+        .nest("/api/v1", engine_registry::engines_router())
         .route("/health", get(health_check))
         .route("/ready", get(readiness_check))
         .route("/metrics", get(|| async move { metric_handle.render() }))
@@ -292,7 +298,8 @@ async fn build_app(
         .layer(Extension(synthetic_backup_key))
         .layer(Extension(build_info))
         .layer(Extension(pool.clone()))
-        .layer(Extension(engine_registry));
+        .layer(Extension(engine_registry))
+        .layer(Extension(engine_ctx));
 
     // Add ID.me config extension if configured
     let app = if let Some(ref idme_config) = config.idme {

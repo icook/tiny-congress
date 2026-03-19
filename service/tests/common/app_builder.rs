@@ -38,6 +38,11 @@ use axum::{
     Extension, Router,
 };
 use sqlx::PgPool;
+use tc_engine_api::{
+    constraints::ConstraintRegistry,
+    engine::{EngineContext, EngineRegistry},
+};
+use tc_engine_polling::engine::PollingEngine;
 use tc_engine_polling::service::{DefaultPollingService, PollingService};
 use tinycongress_api::{
     build_info::BuildInfo,
@@ -71,6 +76,23 @@ use tinycongress_api::{
 use tower_http::cors::{AllowOrigin, Any, CorsLayer};
 use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
+
+/// Minimal [`RoomLifecycle`] stub for test wiring — does not hit the database.
+struct StubRoomLifecycle;
+
+#[async_trait::async_trait]
+impl tc_engine_api::engine::RoomLifecycle for StubRoomLifecycle {
+    async fn get_room(
+        &self,
+        _room_id: uuid::Uuid,
+    ) -> Result<tc_engine_api::engine::RoomRecord, anyhow::Error> {
+        anyhow::bail!("StubRoomLifecycle::get_room not implemented in tests")
+    }
+
+    async fn close_room(&self, _room_id: uuid::Uuid) -> Result<(), anyhow::Error> {
+        anyhow::bail!("StubRoomLifecycle::close_room not implemented in tests")
+    }
+}
 
 /// Liveness check handler (mirrors main.rs). Always returns 200.
 async fn health_check() -> impl IntoResponse {
@@ -134,6 +156,10 @@ pub struct TestAppBuilder {
     trust_service: Option<Arc<dyn TrustService>>,
     /// Trust repo for trust routes
     trust_repo: Option<Arc<dyn TrustRepo>>,
+    /// Engine registry for room engine dispatch
+    engine_registry: Option<Arc<EngineRegistry>>,
+    /// Engine context for room engine hooks
+    engine_ctx: Option<EngineContext>,
     /// CORS allowed origins (None means no CORS layer)
     cors_origins: Option<Vec<String>>,
     /// Security headers config (None means disabled)
@@ -169,6 +195,8 @@ impl TestAppBuilder {
             polling_service: None,
             trust_service: None,
             trust_repo: None,
+            engine_registry: None,
+            engine_ctx: None,
             cors_origins: None,
             security_headers: None,
         }
@@ -298,8 +326,20 @@ impl TestAppBuilder {
         // Polling wiring (polls, votes, dimensions, lifecycle, results)
         self.polling_service = Some(Arc::new(DefaultPollingService::new(
             pool.clone(),
-            trust_graph_reader,
+            trust_graph_reader.clone(),
         )) as Arc<dyn PollingService>);
+
+        // Engine registry + context (needed for create_room validate_config / on_room_created)
+        let engine_ctx = EngineContext {
+            pool: pool.clone(),
+            trust_reader: trust_graph_reader,
+            constraints: Arc::new(ConstraintRegistry),
+            room_lifecycle: Arc::new(StubRoomLifecycle),
+        };
+        let mut engine_registry = EngineRegistry::new();
+        engine_registry.register(PollingEngine::new());
+        self.engine_registry = Some(Arc::new(engine_registry));
+        self.engine_ctx = Some(engine_ctx);
 
         self.pool = Some(pool);
         self
@@ -495,6 +535,14 @@ impl TestAppBuilder {
 
         if let Some(repo) = self.trust_repo {
             app = app.layer(Extension(repo));
+        }
+
+        if let Some(registry) = self.engine_registry {
+            app = app.layer(Extension(registry));
+        }
+
+        if let Some(ctx) = self.engine_ctx {
+            app = app.layer(Extension(ctx));
         }
 
         // Always provide a synthetic backup HMAC key when identity routes are active
