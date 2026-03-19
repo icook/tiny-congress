@@ -58,3 +58,25 @@ pub fn internal_error() -> axum::response::Response {
     )
         .into_response()
 }
+
+#[must_use]
+pub fn too_many_requests(msg: &str) -> axum::response::Response {
+    (
+        StatusCode::TOO_MANY_REQUESTS,
+        Json(ErrorResponse {
+            error: msg.to_string(),
+        }),
+    )
+        .into_response()
+}
+
+#[must_use]
+pub fn conflict(msg: &str) -> axum::response::Response {
+    (
+        StatusCode::CONFLICT,
+        Json(ErrorResponse {
+            error: msg.to_string(),
+        }),
+    )
+        .into_response()
+}
