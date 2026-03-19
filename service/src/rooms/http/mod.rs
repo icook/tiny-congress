@@ -161,4 +161,8 @@ pub fn router() -> Router {
             "/rooms/{room_id}/polls/{poll_id}/my-votes",
             get(polling::my_votes),
         )
+        .route(
+            "/rooms/{room_id}/polls/{poll_id}/traces",
+            get(polling::get_poll_traces),
+        )
 }

@@ -12,6 +12,8 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use tc_engine_polling::repo::bot_traces;
+
 use crate::http::{internal_error, not_found, ErrorResponse};
 use crate::identity::http::auth::AuthenticatedDevice;
 use crate::rooms::service::{
@@ -107,6 +109,19 @@ pub struct VoteResponse {
     pub dimension_id: Uuid,
     pub value: f32,
     pub updated_at: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct BotTraceResponse {
+    pub id: String,
+    pub task: String,
+    pub run_mode: String,
+    pub steps: Vec<serde_json::Value>,
+    pub total_cost_usd: f64,
+    pub status: String,
+    pub error: Option<String>,
+    pub created_at: String,
+    pub completed_at: Option<String>,
 }
 
 // ─── Request types ─────────────────────────────────────────────────────────
@@ -481,6 +496,43 @@ pub async fn my_votes(
             (StatusCode::OK, Json(votes)).into_response()
         }
         Err(e) => poll_error_response(e),
+    }
+}
+
+// ─── Bot trace handlers ────────────────────────────────────────────────────
+
+pub async fn get_poll_traces(
+    Extension(pool): Extension<PgPool>,
+    Path((_room_id, poll_id)): Path<(Uuid, Uuid)>,
+) -> impl IntoResponse {
+    match bot_traces::get_traces_for_poll(&pool, poll_id).await {
+        Ok(traces) => {
+            let response: Vec<BotTraceResponse> = traces
+                .into_iter()
+                .map(|t| {
+                    let steps = match t.steps {
+                        serde_json::Value::Array(arr) => arr,
+                        other => vec![other],
+                    };
+                    BotTraceResponse {
+                        id: t.id.to_string(),
+                        task: t.task,
+                        run_mode: t.run_mode,
+                        steps,
+                        total_cost_usd: t.total_cost_usd,
+                        status: t.status,
+                        error: t.error,
+                        created_at: t.created_at.to_rfc3339(),
+                        completed_at: t.completed_at.map(|dt| dt.to_rfc3339()),
+                    }
+                })
+                .collect();
+            (StatusCode::OK, Json(response)).into_response()
+        }
+        Err(e) => {
+            tracing::error!("Failed to fetch bot traces: {e}");
+            internal_error()
+        }
     }
 }
 
