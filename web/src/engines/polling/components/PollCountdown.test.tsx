@@ -24,6 +24,16 @@ describe('PollCountdown', () => {
     expect(screen.getByText('Closes in 00:45')).toBeInTheDocument();
   });
 
+  it('displays hours and minutes for durations >= 1 hour', () => {
+    wrap(<PollCountdown secondsLeft={3661} />);
+    expect(screen.getByText('Closes in 1h 1m')).toBeInTheDocument();
+  });
+
+  it('displays days and hours for durations >= 24 hours', () => {
+    wrap(<PollCountdown secondsLeft={90000} />);
+    expect(screen.getByText('Closes in 1d 1h')).toBeInTheDocument();
+  });
+
   it('displays closing message when secondsLeft is 0', () => {
     wrap(<PollCountdown secondsLeft={0} />);
     expect(screen.getByText('Closing...')).toBeInTheDocument();
