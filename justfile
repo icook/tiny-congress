@@ -585,6 +585,34 @@ sqlx-check:
     @echo "✓ SQLx snapshots are up to date"
 
 # =============================================================================
+# Bot Development
+# =============================================================================
+
+# Port-forward LiteLLM and Exa cache proxies from the cluster
+pf-bot:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    kubectl port-forward -n tiny-congress-demo svc/litellm 4001:4001 &
+    kubectl port-forward -n tiny-congress-demo svc/exa-cache 4002:4002 &
+    echo "LiteLLM: localhost:4001, Exa cache: localhost:4002"
+    echo "Press Ctrl-C to stop"
+    wait
+
+# Enqueue a bot research task and show recent traces
+bot-run company="Apple Inc." room_id="a1111111-1111-1111-1111-111111111111":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    echo "Enqueuing research_company task..."
+    kubectl exec -n tiny-congress-demo deploy/tc-demo-postgres -- \
+        psql -U postgres -d tiny_congress \
+        -c "SELECT pgmq.send('rooms__bot_tasks', '{\"room_id\": \"{{room_id}}\", \"task\": \"research_company\", \"params\": {\"company\": \"{{company}}\"}}'::jsonb);"
+    echo ""
+    echo "Watching traces..."
+    kubectl exec -n tiny-congress-demo deploy/tc-demo-postgres -- \
+        psql -U postgres -d tiny_congress \
+        -c "SELECT id, task, status, total_cost_usd, steps->0->>'output_summary' as first_step FROM rooms__bot_traces WHERE room_id = '{{room_id}}' ORDER BY created_at DESC LIMIT 5;"
+
+# =============================================================================
 # Info / Versions
 # =============================================================================
 
