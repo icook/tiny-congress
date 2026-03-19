@@ -3,6 +3,20 @@
 .claude/
 .worktrees/
 
+# Scratch and temp files
+.scratch/
+.playwright-mcp/
+
+# Python bytecache
+__pycache__/
+
+# Sim output artifacts
+*.dry_run.json
+battery*.json
+
+# Do not use docs/plans/ — use .plan/ instead
+docs/plans/
+
 # Rust build output
 target/
 
