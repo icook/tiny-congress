@@ -70,6 +70,7 @@ WITH RECURSIVE trust_graph AS (
       AND e.revoked_at IS NULL
       AND e.endorser_id IS NOT NULL
       AND e.topic = 'trust'
+      AND e.in_slot = true
 
     UNION ALL
 
@@ -85,6 +86,7 @@ WITH RECURSIVE trust_graph AS (
       AND e.revoked_at IS NULL
       AND e.endorser_id IS NOT NULL
       AND e.topic = 'trust'
+      AND e.in_slot = true
 )
 SELECT user_id, MIN(distance) AS trust_distance
 FROM trust_graph
@@ -154,6 +156,7 @@ FROM reputation__endorsements
 WHERE revoked_at IS NULL
   AND endorser_id IS NOT NULL
   AND topic = 'trust'
+  AND in_slot = true
   AND endorser_id = ANY($1)
   AND subject_id = ANY($1)
             ",
