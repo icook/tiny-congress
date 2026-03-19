@@ -108,6 +108,18 @@ export interface DimensionVote {
   value: number;
 }
 
+export interface Suggestion {
+  id: string;
+  room_id: string;
+  account_id: string;
+  suggestion_text: string;
+  status: string;
+  filter_reason: string | null;
+  evidence_ids: string[];
+  created_at: string;
+  processed_at: string | null;
+}
+
 // === Public endpoints (no auth) ===
 
 export async function listRooms(): Promise<Room[]> {
@@ -217,5 +229,28 @@ export async function getMyVotes(
     deviceKid,
     privateKey,
     wasmCrypto
+  );
+}
+
+// === Suggestion endpoints ===
+
+export async function listSuggestions(roomId: string): Promise<Suggestion[]> {
+  return fetchJson(`/rooms/${roomId}/suggestions`);
+}
+
+export async function createSuggestion(
+  roomId: string,
+  suggestionText: string,
+  deviceKid: string,
+  privateKey: CryptoKey,
+  wasmCrypto: CryptoModule
+): Promise<Suggestion> {
+  return signedFetchJson(
+    `/rooms/${roomId}/suggestions`,
+    'POST',
+    deviceKid,
+    privateKey,
+    wasmCrypto,
+    { suggestion_text: suggestionText }
   );
 }
