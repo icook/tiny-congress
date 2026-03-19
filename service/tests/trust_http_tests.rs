@@ -901,6 +901,85 @@ async fn accept_invite_returns_404_for_nonexistent_invite() {
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
 }
 
+/// Accepting an already-accepted invite must return 404 — the SQL UPDATE's
+/// `accepted_by IS NULL` guard rejects it the same way as a missing invite.
+#[shared_runtime_test]
+async fn accept_invite_returns_404_when_already_accepted() {
+    let db = isolated_db().await;
+
+    // Sign up endorser and acceptor.
+    let (app, endorser_keys, _endorser_id) =
+        signup_and_get_account("alreadyacceptedendorser", db.pool()).await;
+
+    let (json2, acceptor_keys) = valid_signup_with_keys("alreadyacceptedacceptor");
+    let resp2 = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/auth/signup")
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(json2))
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+    assert_eq!(resp2.status(), StatusCode::CREATED);
+
+    // Endorser creates an invite.
+    let envelope_b64 = tc_crypto::encode_base64url(b"signed-invite-envelope");
+    let invite_body = serde_json::json!({
+        "envelope": envelope_b64,
+        "delivery_method": "qr",
+        "attestation": { "note": "double-accept test" }
+    })
+    .to_string();
+    let create_req = build_authed_request(
+        Method::POST,
+        "/trust/invites",
+        &invite_body,
+        &endorser_keys.device_signing_key,
+        &endorser_keys.device_kid,
+    );
+    let create_resp = app
+        .clone()
+        .oneshot(create_req)
+        .await
+        .expect("create response");
+    assert_eq!(create_resp.status(), StatusCode::CREATED);
+    let invite_id = json_body(create_resp).await;
+    let invite_id = invite_id["id"].as_str().expect("invite id");
+
+    // First accept — must succeed.
+    let accept_uri = format!("/trust/invites/{invite_id}/accept");
+    let first_req = build_authed_request(
+        Method::POST,
+        &accept_uri,
+        "",
+        &acceptor_keys.device_signing_key,
+        &acceptor_keys.device_kid,
+    );
+    let first_resp = app.clone().oneshot(first_req).await.expect("first accept");
+    assert_eq!(first_resp.status(), StatusCode::OK);
+
+    // Second accept — must return 404 because `accepted_by IS NULL` no longer matches.
+    let second_req = build_authed_request(
+        Method::POST,
+        &accept_uri,
+        "",
+        &acceptor_keys.device_signing_key,
+        &acceptor_keys.device_kid,
+    );
+    let second_resp = app
+        .clone()
+        .oneshot(second_req)
+        .await
+        .expect("second accept");
+    assert_eq!(second_resp.status(), StatusCode::NOT_FOUND);
+
+    let _ = (endorser_keys, acceptor_keys);
+}
+
 // ─── Endorse after denounce ───────────────────────────────────────────────────
 
 #[shared_runtime_test]
