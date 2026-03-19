@@ -132,6 +132,20 @@ pub trait TrustRepo: Send + Sync {
         reason: &str,
     ) -> Result<DenouncementRecord, TrustRepoError>;
 
+    /// Atomically insert a denouncement and revoke any active trust endorsement
+    /// from `accuser_id` to `target_id` in a single transaction.
+    ///
+    /// Use this instead of calling `create_denouncement` and
+    /// `ReputationRepo::revoke_endorsement` separately to prevent a partial-write
+    /// failure where the denouncement is persisted but the endorsement is not
+    /// revoked (which would cause a unique-constraint error on retry).
+    async fn create_denouncement_and_revoke_endorsement(
+        &self,
+        accuser_id: Uuid,
+        target_id: Uuid,
+        reason: &str,
+    ) -> Result<DenouncementRecord, TrustRepoError>;
+
     async fn list_denouncements_against(
         &self,
         target_id: Uuid,
@@ -268,6 +282,18 @@ impl TrustRepo for PgTrustRepo {
         reason: &str,
     ) -> Result<DenouncementRecord, TrustRepoError> {
         denouncements::create_denouncement(&self.pool, accuser_id, target_id, reason).await
+    }
+
+    async fn create_denouncement_and_revoke_endorsement(
+        &self,
+        accuser_id: Uuid,
+        target_id: Uuid,
+        reason: &str,
+    ) -> Result<DenouncementRecord, TrustRepoError> {
+        denouncements::create_denouncement_and_revoke_endorsement(
+            &self.pool, accuser_id, target_id, reason,
+        )
+        .await
     }
 
     async fn list_denouncements_against(
