@@ -205,10 +205,10 @@
     },
     "service/src/trust/": {
       "status": "active",
-      "total_prs": 20,
+      "total_prs": 21,
       "total_skips": 0,
       "consecutive_idle": 0,
-      "last_run": "2026-03-19T22:23:57Z",
+      "last_run": "2026-03-19T22:53:56Z",
       "graduated_at": "",
       "history": [
         {
@@ -330,6 +330,12 @@
           "type": "test_coverage",
           "impact": "medium",
           "summary": "Added `revoke_returns_429_when_quota_exceeded` HTTP integration test covering the untested QuotaExceeded error path for `POST /trust/revoke`, which maps to 429 Too Many Requests when the daily action limit is exhausted — the endorse path had this test but revoke did not."
+        },
+        {
+          "pr": 0,
+          "type": "test_coverage",
+          "impact": "medium",
+          "summary": "Added `create_invite_rejects_invalid_base64url_envelope` HTTP integration test covering the previously untested error path where an invalid base64url string for the `envelope` field in POST /trust/invites returns 400 BAD_REQUEST."
         }
       ],
       "skipped": []
