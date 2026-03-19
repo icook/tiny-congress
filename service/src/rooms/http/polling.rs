@@ -136,8 +136,15 @@ const fn default_max_value() -> f32 {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum PollStatusTransition {
+    Active,
+    Closed,
+}
+
+#[derive(Debug, Deserialize)]
 pub struct PollStatusRequest {
-    pub status: String,
+    pub status: PollStatusTransition,
 }
 
 #[derive(Debug, Deserialize)]
@@ -273,12 +280,9 @@ pub async fn update_poll_status(
         Ok(r) => r,
         Err(resp) => return resp,
     };
-    let result = match req.status.as_str() {
-        "active" => polling.activate_poll(poll_id).await,
-        "closed" => polling.close_poll(poll_id).await,
-        _ => {
-            return crate::http::bad_request("Status must be 'active' or 'closed'");
-        }
+    let result = match req.status {
+        PollStatusTransition::Active => polling.activate_poll(poll_id).await,
+        PollStatusTransition::Closed => polling.close_poll(poll_id).await,
     };
     match result {
         Ok(()) => StatusCode::NO_CONTENT.into_response(),
