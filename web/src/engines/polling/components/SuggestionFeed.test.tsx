@@ -4,7 +4,7 @@ import { SuggestionFeed } from './SuggestionFeed';
 
 // Stub out the WASM module — it doesn't exist in the test environment.
 vi.mock('@/wasm/tc-crypto/tc_crypto.js', () => ({
-  default: vi.fn().mockResolvedValue(),
+  default: vi.fn(() => Promise.resolve()),
   derive_kid: vi.fn(() => 'kid-test'),
   encode_base64url: vi.fn(() => 'encoded'),
   decode_base64url: vi.fn(() => new Uint8Array(0)),
