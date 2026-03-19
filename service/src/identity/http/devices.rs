@@ -11,7 +11,6 @@ use axum::{
     response::IntoResponse,
     Json,
 };
-use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -26,9 +25,9 @@ use tc_crypto::{verify_ed25519, Kid};
 pub struct DeviceInfo {
     pub device_kid: Kid,
     pub device_name: String,
-    pub created_at: DateTime<Utc>,
-    pub last_used_at: Option<DateTime<Utc>>,
-    pub revoked_at: Option<DateTime<Utc>>,
+    pub created_at: String,
+    pub last_used_at: Option<String>,
+    pub revoked_at: Option<String>,
 }
 
 impl From<DeviceKeyRecord> for DeviceInfo {
@@ -36,9 +35,9 @@ impl From<DeviceKeyRecord> for DeviceInfo {
         Self {
             device_kid: record.device_kid,
             device_name: record.device_name,
-            created_at: record.created_at,
-            last_used_at: record.last_used_at,
-            revoked_at: record.revoked_at,
+            created_at: record.created_at.to_rfc3339(),
+            last_used_at: record.last_used_at.map(|t| t.to_rfc3339()),
+            revoked_at: record.revoked_at.map(|t| t.to_rfc3339()),
         }
     }
 }
@@ -58,7 +57,7 @@ pub struct AddDeviceRequest {
 #[derive(Debug, Serialize)]
 pub struct AddDeviceResponse {
     pub device_kid: Kid,
-    pub created_at: DateTime<Utc>,
+    pub created_at: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -112,7 +111,7 @@ pub async fn add_device(
             StatusCode::CREATED,
             Json(AddDeviceResponse {
                 device_kid: created.device_kid,
-                created_at: created.created_at,
+                created_at: created.created_at.to_rfc3339(),
             }),
         )
             .into_response(),
@@ -288,6 +287,7 @@ mod tests {
     use crate::identity::repo::mock::MockIdentityRepo;
     use crate::identity::repo::AccountRecord;
     use axum::http::StatusCode;
+    use chrono::Utc;
     use ed25519_dalek::{Signer, SigningKey};
     use rand::rngs::OsRng;
     use tc_crypto::{encode_base64url, Kid};
