@@ -52,7 +52,7 @@ export function useMyInvites(
   crypto: CryptoModule | undefined
 ) {
   return useQuery({
-    queryKey: ['my-invites', deviceKid],
+    queryKey: ['trust-invites', deviceKid],
     queryFn: async () => {
       if (!deviceKid || !privateKey || !crypto) {
         throw new Error('Not authenticated');
@@ -70,7 +70,7 @@ export function useCreateInvite(deviceKid: string, privateKey: CryptoKey, crypto
     mutationFn: (payload: CreateInvitePayload) =>
       createInvite(deviceKid, privateKey, crypto, payload),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['my-invites'] });
+      void queryClient.invalidateQueries({ queryKey: ['trust-invites'] });
     },
   });
 }
@@ -81,7 +81,7 @@ export function useAcceptInvite(deviceKid: string, privateKey: CryptoKey, crypto
     mutationFn: (inviteId: string) => acceptInvite(deviceKid, privateKey, crypto, inviteId),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['my-endorsements'] });
-      void queryClient.invalidateQueries({ queryKey: ['my-invites'] });
+      void queryClient.invalidateQueries({ queryKey: ['trust-invites'] });
       void queryClient.invalidateQueries({ queryKey: ['trust-budget'] });
       void queryClient.invalidateQueries({ queryKey: ['verification-status'] });
     },
