@@ -205,10 +205,10 @@
     },
     "service/src/trust/": {
       "status": "active",
-      "total_prs": 12,
+      "total_prs": 13,
       "total_skips": 0,
       "consecutive_idle": 0,
-      "last_run": "2026-03-19T19:50:15Z",
+      "last_run": "2026-03-19T20:06:05Z",
       "graduated_at": "",
       "history": [
         {
@@ -282,6 +282,12 @@
           "type": "test_coverage",
           "impact": "medium",
           "summary": "Added `denounce_rejects_self_denouncement` HTTP integration test covering the previously untested SelfAction error path in the denounce handler (400 BAD_REQUEST when a user attempts to denounce themselves), mirroring the existing `endorse_rejects_self_endorsement` test pattern."
+        },
+        {
+          "pr": 0,
+          "type": "test_coverage",
+          "impact": "medium",
+          "summary": "Added HTTP integration test `accept_invite_succeeds_even_when_endorser_slots_exhausted` documenting that accept_invite returns 200 OK and queues no endorsement when the endorser's slots are full at acceptance time."
         }
       ],
       "skipped": []
