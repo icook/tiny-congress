@@ -647,6 +647,9 @@ $summary
             log "WARNING: Exhausted $CI_MAX_FIX_ATTEMPTS CI fix attempts for $pr_url"
         fi
     fi
+
+    # Output PR number to stdout for the caller to capture
+    echo "${pr_url##*/}"
 }
 
 handle_ticket() {
@@ -843,9 +846,8 @@ for i, c in enumerate(text):
 
     case "$action" in
         change)
-            handle_change "$wt_path" "$branch" "$summary"
             local pr_num
-            pr_num="$(gh pr list --head "$branch" --json number --jq '.[0].number' 2>/dev/null || echo "0")"
+            pr_num="$(handle_change "$wt_path" "$branch" "$summary")"
             update_ledger "change" "$impact" "$summary" "$pr_num" "" "$finding_type"
             ;;
         skip)
@@ -869,9 +871,6 @@ for i, c in enumerate(text):
             return 1
             ;;
     esac
-
-    # Commit ledger after each iteration
-    commit_ledger
 
     echo "$action"
 }
@@ -929,7 +928,6 @@ run_target() {
                 if [[ "$idle_count" -ge "$IDLE_LIMIT" ]]; then
                     log "Reached idle_limit=$IDLE_LIMIT, graduating $FOCUS_PATH"
                     graduate_area
-                    commit_ledger
                     break
                 fi
                 ;;
@@ -940,6 +938,9 @@ run_target() {
             sleep "$COOLDOWN"
         fi
     done
+
+    # Commit ledger once per target (batches all iteration updates)
+    commit_ledger
 
     log "=== Target finished: $FOCUS_PATH ($pr_count PRs, $idle_count idle) ==="
 }
