@@ -205,10 +205,10 @@
     },
     "service/src/trust/": {
       "status": "active",
-      "total_prs": 3,
+      "total_prs": 4,
       "total_skips": 0,
       "consecutive_idle": 0,
-      "last_run": "2026-03-19T17:22:36Z",
+      "last_run": "2026-03-19T17:35:32Z",
       "graduated_at": "",
       "history": [
         {
@@ -228,6 +228,12 @@
           "type": "test_coverage",
           "impact": "medium",
           "summary": "Added two HTTP integration tests for invite boundary validation: `create_invite_rejects_invalid_delivery_method` and `create_invite_rejects_invalid_relationship_depth`, covering error paths for the validation added in the previous refinement PR."
+        },
+        {
+          "pr": 0,
+          "type": "test_coverage",
+          "impact": "medium",
+          "summary": "Added two HTTP integration tests covering the untested error paths for denounce reason validation: empty reason and reason exceeding 500 characters."
         }
       ],
       "skipped": []
