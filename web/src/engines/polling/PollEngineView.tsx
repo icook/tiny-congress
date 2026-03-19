@@ -19,7 +19,19 @@ export function PollEngineView({ room, roomId }: EngineViewProps) {
   const closed = polls?.filter((p) => p.status === 'closed') ?? [];
 
   return (
-    <Stack gap="lg" maw={800} mx="auto" mt="xl">
+    <Stack gap="lg" maw={800} mx="auto" mt="xl" px="md">
+      <Group gap={6}>
+        <Text component={Link} to="/rooms" size="sm" c="dimmed" td="none">
+          Rooms
+        </Text>
+        <Text size="sm" c="dimmed">
+          /
+        </Text>
+        <Text size="sm" c="dimmed">
+          {room.name}
+        </Text>
+      </Group>
+
       <div>
         <Title order={2}>{room.name}</Title>
         {room.description ? (
