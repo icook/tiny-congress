@@ -427,7 +427,30 @@ async fn main() -> Result<(), anyhow::Error> {
     );
 
     let listener = tokio::net::TcpListener::bind(addr).await?;
-    axum::serve(listener, app).await?;
+    tracing::info!("Graceful shutdown enabled — listening for SIGTERM/SIGINT");
+    axum::serve(listener, app)
+        .with_graceful_shutdown(shutdown_signal())
+        .await?;
 
+    tracing::info!("Server shut down cleanly");
     Ok(())
+}
+
+/// Wait for SIGTERM or SIGINT and log when a signal is received.
+async fn shutdown_signal() {
+    use tokio::signal::unix::{signal, SignalKind};
+
+    let Ok(mut sigterm) = signal(SignalKind::terminate()) else {
+        tracing::error!("failed to install SIGTERM handler");
+        return;
+    };
+    let Ok(mut sigint) = signal(SignalKind::interrupt()) else {
+        tracing::error!("failed to install SIGINT handler");
+        return;
+    };
+
+    tokio::select! {
+        _ = sigterm.recv() => tracing::info!("received SIGTERM, shutting down"),
+        _ = sigint.recv()  => tracing::info!("received SIGINT, shutting down"),
+    }
 }
