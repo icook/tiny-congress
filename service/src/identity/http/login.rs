@@ -191,9 +191,12 @@ pub async fn login(
             .into_response(),
         Err(e) => {
             tracing::error!("Login device creation failed: {e}");
+            // lint-patterns:allow-inline-error — this 500 is recoverable by the
+            // client (generate a new device cert and retry), so we include
+            // actionable guidance rather than the generic "Internal server error".
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorResponse {
+                Json(crate::http::ErrorResponse {
                     error: "Internal error — please retry with a new certificate".to_string(),
                 }),
             )

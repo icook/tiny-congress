@@ -18,6 +18,8 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use super::service::{IdentityService, RootPubkey, SignupError, SignupRequest};
+// Re-export shared error helpers so submodules and external callers can use them.
+pub use crate::http::{bad_request, internal_error, not_found, unauthorized, ErrorResponse};
 use crate::identity::http::auth::AuthenticatedDevice;
 use crate::identity::repo::{AccountRecord, AccountRepoError, IdentityRepo};
 use tc_crypto::Kid;
@@ -28,12 +30,6 @@ pub struct SignupResponse {
     pub account_id: Uuid,
     pub root_kid: Kid,
     pub device_kid: Kid,
-}
-
-/// Error response
-#[derive(Debug, Serialize, Deserialize)]
-pub struct ErrorResponse {
-    pub error: String,
 }
 
 /// Account lookup response — returns only what the UI needs to target a user.
@@ -107,48 +103,6 @@ pub(crate) const fn timestamp_is_stale(now: i64, timestamp: i64) -> bool {
     now.abs_diff(timestamp) > auth::MAX_TIMESTAMP_SKEW as u64
 }
 
-// ── Shared error response helpers ───────────────────────────────────────────
-
-pub(crate) fn bad_request(msg: &str) -> axum::response::Response {
-    (
-        StatusCode::BAD_REQUEST,
-        Json(ErrorResponse {
-            error: msg.to_string(),
-        }),
-    )
-        .into_response()
-}
-
-pub(crate) fn not_found(msg: &str) -> axum::response::Response {
-    (
-        StatusCode::NOT_FOUND,
-        Json(ErrorResponse {
-            error: msg.to_string(),
-        }),
-    )
-        .into_response()
-}
-
-pub(crate) fn unauthorized(msg: &str) -> axum::response::Response {
-    (
-        StatusCode::UNAUTHORIZED,
-        Json(ErrorResponse {
-            error: msg.to_string(),
-        }),
-    )
-        .into_response()
-}
-
-pub(crate) fn internal_error() -> axum::response::Response {
-    (
-        StatusCode::INTERNAL_SERVER_ERROR,
-        Json(ErrorResponse {
-            error: "Internal server error".to_string(),
-        }),
-    )
-        .into_response()
-}
-
 /// Decode the stored base64url root public key from an account record into raw bytes.
 ///
 /// Both the login and add-device flows look up the root pubkey from the account record
@@ -187,9 +141,7 @@ async fn signup(
 
 fn signup_error_response(e: SignupError) -> axum::response::Response {
     match e {
-        SignupError::Validation(msg) => {
-            (StatusCode::BAD_REQUEST, Json(ErrorResponse { error: msg })).into_response()
-        }
+        SignupError::Validation(msg) => bad_request(&msg),
         SignupError::DuplicateUsername => (
             StatusCode::CONFLICT,
             Json(ErrorResponse {
@@ -213,13 +165,7 @@ fn signup_error_response(e: SignupError) -> axum::response::Response {
             .into_response(),
         SignupError::Internal(ref msg) => {
             tracing::error!("Signup returned internal error: {msg}");
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorResponse {
-                    error: "Internal server error".to_string(),
-                }),
-            )
-                .into_response()
+            internal_error()
         }
     }
 }

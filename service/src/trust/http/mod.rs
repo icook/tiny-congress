@@ -17,8 +17,8 @@ use uuid::Uuid;
 use super::repo::{TrustRepo, TrustRepoError};
 use super::service::{TrustService, TrustServiceError};
 use super::weight::compute_endorsement_weight;
+use crate::http::{bad_request, internal_error, not_found, ErrorResponse};
 use crate::identity::http::auth::AuthenticatedDevice;
-use crate::identity::http::ErrorResponse;
 use crate::reputation::repo::ReputationRepo;
 
 // ─── Request types ─────────────────────────────────────────────────────────
@@ -161,13 +161,7 @@ async fn endorse_handler(
     };
 
     if body.weight <= 0.0 || body.weight > 1.0 {
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(ErrorResponse {
-                error: "weight must be in range (0.0, 1.0]".to_string(),
-            }),
-        )
-            .into_response();
+        return bad_request("weight must be in range (0.0, 1.0]");
     }
 
     match trust_service
@@ -224,13 +218,7 @@ async fn denounce_handler(
     };
 
     if body.reason.is_empty() || body.reason.len() > 500 {
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(ErrorResponse {
-                error: "reason must be between 1 and 500 characters".to_string(),
-            }),
-        )
-            .into_response();
+        return bad_request("reason must be between 1 and 500 characters");
     }
 
     match trust_service
@@ -279,13 +267,7 @@ async fn list_my_denouncements_handler(
         }
         Err(e) => {
             tracing::error!("list_my_denouncements failed: {e}");
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorResponse {
-                    error: "Internal server error".to_string(),
-                }),
-            )
-                .into_response()
+            internal_error()
         }
     }
 }
@@ -333,13 +315,7 @@ async fn budget_handler(
         Ok(n) => n,
         Err(ref e) => {
             tracing::error!("Budget handler endorsement count error: {e}");
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorResponse {
-                    error: "Internal server error".to_string(),
-                }),
-            )
-                .into_response();
+            return internal_error();
         }
     };
 
@@ -350,13 +326,7 @@ async fn budget_handler(
         Ok(n) => n,
         Err(ref e) => {
             tracing::error!("Budget handler denouncement count error: {e}");
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorResponse {
-                    error: "Internal server error".to_string(),
-                }),
-            )
-                .into_response();
+            return internal_error();
         }
     };
 
@@ -384,36 +354,16 @@ async fn create_invite_handler(
     };
 
     let Ok(envelope_bytes) = tc_crypto::decode_base64url(&body.envelope) else {
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(ErrorResponse {
-                error: "Invalid base64url encoding for envelope".to_string(),
-            }),
-        )
-            .into_response();
+        return bad_request("Invalid base64url encoding for envelope");
     };
 
     if !VALID_DELIVERY_METHODS.contains(&body.delivery_method.as_str()) {
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(ErrorResponse {
-                error: "delivery_method must be one of: qr, email, video, text, messaging"
-                    .to_string(),
-            }),
-        )
-            .into_response();
+        return bad_request("delivery_method must be one of: qr, email, video, text, messaging");
     }
 
     if let Some(ref depth) = body.relationship_depth {
         if !VALID_RELATIONSHIP_DEPTHS.contains(&depth.as_str()) {
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(ErrorResponse {
-                    error: "relationship_depth must be one of: years, months, acquaintance"
-                        .to_string(),
-                }),
-            )
-                .into_response();
+            return bad_request("relationship_depth must be one of: years, months, acquaintance");
         }
     }
 
@@ -422,13 +372,7 @@ async fn create_invite_handler(
         compute_endorsement_weight(&body.delivery_method, body.relationship_depth.as_deref())
     });
     if weight <= 0.0 || weight > 1.0 {
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(ErrorResponse {
-                error: "weight must be in range (0.0, 1.0]".to_string(),
-            }),
-        )
-            .into_response();
+        return bad_request("weight must be in range (0.0, 1.0]");
     }
 
     let expires_at = Utc::now() + Duration::days(7);
@@ -490,13 +434,7 @@ async fn accept_invite_handler(
             let accepted_at = match invite.accepted_at {
                 Some(t) => t.to_rfc3339(),
                 None => {
-                    return (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        Json(serde_json::json!({
-                            "error": "invite accepted_at not set after acceptance"
-                        })),
-                    )
-                        .into_response()
+                    return internal_error();
                 }
             };
 
@@ -526,13 +464,7 @@ async fn accept_invite_handler(
             )
                 .into_response()
         }
-        Err(TrustRepoError::NotFound) => (
-            StatusCode::NOT_FOUND,
-            Json(ErrorResponse {
-                error: "Invite not found".to_string(),
-            }),
-        )
-            .into_response(),
+        Err(TrustRepoError::NotFound) => not_found("Invite not found"),
         Err(ref e) => trust_repo_error_response(e),
     }
 }
@@ -541,13 +473,7 @@ async fn accept_invite_handler(
 
 fn trust_service_error_response(e: &TrustServiceError) -> axum::response::Response {
     match e {
-        TrustServiceError::SelfAction => (
-            StatusCode::BAD_REQUEST,
-            Json(ErrorResponse {
-                error: "Cannot target yourself".to_string(),
-            }),
-        )
-            .into_response(),
+        TrustServiceError::SelfAction => bad_request("Cannot target yourself"),
         TrustServiceError::QuotaExceeded => (
             StatusCode::TOO_MANY_REQUESTS,
             Json(ErrorResponse {
@@ -578,36 +504,18 @@ fn trust_service_error_response(e: &TrustServiceError) -> axum::response::Respon
             .into_response(),
         TrustServiceError::Repo(ref inner) => {
             tracing::error!("Trust service repo error: {inner}");
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorResponse {
-                    error: "Internal server error".to_string(),
-                }),
-            )
-                .into_response()
+            internal_error()
         }
         TrustServiceError::EndorsementRepo(ref inner) => {
             tracing::error!("Trust service endorsement repo error: {inner}");
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorResponse {
-                    error: "Internal server error".to_string(),
-                }),
-            )
-                .into_response()
+            internal_error()
         }
     }
 }
 
 fn trust_repo_error_response(e: &TrustRepoError) -> axum::response::Response {
     match e {
-        TrustRepoError::NotFound => (
-            StatusCode::NOT_FOUND,
-            Json(ErrorResponse {
-                error: "Not found".to_string(),
-            }),
-        )
-            .into_response(),
+        TrustRepoError::NotFound => not_found("Not found"),
         TrustRepoError::Duplicate => (
             StatusCode::CONFLICT,
             Json(ErrorResponse {
@@ -617,13 +525,7 @@ fn trust_repo_error_response(e: &TrustRepoError) -> axum::response::Response {
             .into_response(),
         TrustRepoError::Database(ref inner) => {
             tracing::error!("Trust repo database error: {inner}");
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorResponse {
-                    error: "Internal server error".to_string(),
-                }),
-            )
-                .into_response()
+            internal_error()
         }
     }
 }

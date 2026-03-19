@@ -13,8 +13,8 @@ use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use uuid::Uuid;
 
+use crate::http::{internal_error, not_found, ErrorResponse};
 use crate::identity::http::auth::AuthenticatedDevice;
-use crate::identity::http::ErrorResponse;
 use crate::rooms::repo::evidence;
 use crate::rooms::service::{CastVoteRequest, PollError, PollingService, VoteError};
 
@@ -199,13 +199,8 @@ pub async fn get_poll_detail(
     {
         Ok(ev) => ev,
         Err(e) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(crate::identity::http::ErrorResponse {
-                    error: format!("Failed to fetch evidence: {e}"),
-                }),
-            )
-                .into_response()
+            tracing::error!("Failed to fetch evidence: {e}");
+            return internal_error();
         }
     };
 
@@ -282,13 +277,7 @@ pub async fn update_poll_status(
         "active" => polling.activate_poll(poll_id).await,
         "closed" => polling.close_poll(poll_id).await,
         _ => {
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(ErrorResponse {
-                    error: "Status must be 'active' or 'closed'".to_string(),
-                }),
-            )
-                .into_response()
+            return crate::http::bad_request("Status must be 'active' or 'closed'");
         }
     };
     match result {
@@ -342,20 +331,13 @@ pub async fn create_evidence(
     {
         Ok(r) => r,
         Err(e) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({ "error": format!("DB error: {e}") })),
-            )
-                .into_response()
+            tracing::error!("DB error checking dimension ownership: {e}");
+            return internal_error();
         }
     };
 
     if belongs.is_none() {
-        return (
-            StatusCode::NOT_FOUND,
-            Json(serde_json::json!({ "error": "Dimension not found for this poll" })),
-        )
-            .into_response();
+        return not_found("Dimension not found for this poll");
     }
 
     let new_evidence: Vec<evidence::NewEvidence<'_>> = body
@@ -374,11 +356,10 @@ pub async fn create_evidence(
             Json(serde_json::json!({ "count": count })),
         )
             .into_response(),
-        Err(e) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(serde_json::json!({ "error": format!("Failed to insert evidence: {e}") })),
-        )
-            .into_response(),
+        Err(e) => {
+            tracing::error!("Failed to insert evidence: {e}");
+            internal_error()
+        }
     }
 }
 
@@ -392,11 +373,10 @@ pub async fn delete_evidence(
             Json(serde_json::json!({ "deleted": deleted })),
         )
             .into_response(),
-        Err(e) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(serde_json::json!({ "error": format!("Failed to delete evidence: {e}") })),
-        )
-            .into_response(),
+        Err(e) => {
+            tracing::error!("Failed to delete evidence: {e}");
+            internal_error()
+        }
     }
 }
 
@@ -575,20 +555,8 @@ fn poll_error_response(e: PollError) -> axum::response::Response {
         PollError::Validation(msg) => {
             (StatusCode::BAD_REQUEST, Json(ErrorResponse { error: msg })).into_response()
         }
-        PollError::PollNotFound => (
-            StatusCode::NOT_FOUND,
-            Json(ErrorResponse {
-                error: "Poll not found".to_string(),
-            }),
-        )
-            .into_response(),
-        PollError::Internal(_) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ErrorResponse {
-                error: "Internal server error".to_string(),
-            }),
-        )
-            .into_response(),
+        PollError::PollNotFound => not_found("Poll not found"),
+        PollError::Internal(_) => internal_error(),
     }
 }
 
@@ -600,13 +568,7 @@ fn vote_error_response(e: VoteError) -> axum::response::Response {
         VoteError::NotEligible(msg) => {
             (StatusCode::FORBIDDEN, Json(ErrorResponse { error: msg })).into_response()
         }
-        VoteError::PollNotFound => (
-            StatusCode::NOT_FOUND,
-            Json(ErrorResponse {
-                error: "Poll not found".to_string(),
-            }),
-        )
-            .into_response(),
+        VoteError::PollNotFound => not_found("Poll not found"),
         VoteError::PollNotActive => (
             StatusCode::CONFLICT,
             Json(ErrorResponse {
@@ -614,12 +576,6 @@ fn vote_error_response(e: VoteError) -> axum::response::Response {
             }),
         )
             .into_response(),
-        VoteError::Internal(_) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ErrorResponse {
-                error: "Internal server error".to_string(),
-            }),
-        )
-            .into_response(),
+        VoteError::Internal(_) => internal_error(),
     }
 }
