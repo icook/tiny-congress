@@ -65,8 +65,9 @@
 - [ ] Room directory / discovery (beyond sidebar accordion)
 - [ ] Per-room operations bot (sim → room-level plugin, the architecture fix noted in design workspace)
 - [ ] At least 3 rooms with distinct topics demonstrating different interaction models
+- [ ] **Start LLC registration** (#765) — 2-6 week lead time before it's needed in Milestone 5
 
-**Done when:** A new user sees a directory of rooms, each with a different interaction model, and can participate in whichever interests them. Room owners can create new rooms from templates without code changes.
+**Done when:** A new user sees a directory of rooms, each with a different interaction model, and can participate in whichever interests them. Room owners can create new rooms from templates without code changes. LLC paperwork is filed.
 
 **Scope:** Large. Estimated: 3-5 weeks. Requires extracting the module interface from polling code (design exists in `.plan/2026-03-17-room-types-architecture.md`).
 
@@ -99,16 +100,17 @@
 **Theme:** A stranger can find this, sign up, and have a good experience.
 
 **Requirements:**
-- [ ] Real identity verification (ID.me or equivalent third-party service)
+- [ ] #765 — LLC registration complete (entity, EIN, bank account)
+- [ ] Real identity verification (ID.me or equivalent — requires LLC for provider contract)
 - [ ] Landing page that explains the product in one sentence
 - [ ] Onboarding flow that doesn't require any explanation
 - [ ] Cost tracking visible in UI (OpenRouter spend transparency)
-- [ ] Donation mechanism (drives sustainability)
+- [ ] Donation mechanism (drives sustainability — requires LLC for payment processing)
+- [ ] Terms of Service and Privacy Policy (requires LLC)
 - [ ] Moderation tools (content flagging, at minimum)
 - [ ] Mobile Safari fully tested and reliable
 - [ ] Performance: <3s initial load, <1s interactions
 - [ ] Basic abuse detection / rate limiting beyond current levels
-- [ ] Privacy policy / terms of service
 - [ ] 25+ active users with meaningful engagement
 
 **Done when:** I can post the link publicly (HN, civic tech communities, friends of friends) and people can use it without any personal onboarding from me.
@@ -132,6 +134,20 @@
 **Total estimated: 12-21 weeks to public beta** (solo dev pace, including the unexpected).
 
 Milestones 1-2 are the critical path — they determine whether anyone besides the founder finds value in the platform. Milestone 3 is where the "composable rooms" vision becomes real. Milestone 4 is when the trust system proves itself with real social dynamics. Milestone 5 is the launch gate.
+
+---
+
+## GitHub Milestone Reconciliation
+
+The old milestones were workstream-oriented (horizontal concerns). The new milestones are product-stage-oriented (vertical gates). Each ticket belongs to the product milestone it gates.
+
+| Old Milestone | Disposition |
+|---|---|
+| Demo: Friends & Family (Mar 20) | **Closed.** Open items rolled into M1: Invite-Capable |
+| Growth: Scale Hardening | **Merged into M4.** Tickets moved to M4: Trust at Scale |
+| 1-5 (Foundation, DX, Test, CI, Architecture) | **Open but dormant.** Remaining items can be reassigned to product milestones as they become relevant. Labels (`area/backend`, `type/feature`, etc.) capture the workstream dimension. |
+
+**LLC timeline:** Registration starts in M3, completes before M5. Three M5 requirements depend on it: identity verification provider contract, donation processing, and legal documents (ToS/PP).
 
 ---
 
