@@ -477,11 +477,20 @@ impl TestAppBuilder {
         }
 
         if self.include_identity {
-            app = app.merge(identity::http::router());
+            // Rate limiting disabled in tests — explicit opt-out per secure-defaults policy.
+            let rl = tinycongress_api::config::RateLimitConfig {
+                enabled: false,
+                ..Default::default()
+            };
+            app = app.merge(identity::http::router(&rl));
         }
 
         if self.include_reputation {
-            app = app.merge(reputation::http::router());
+            let rl = tinycongress_api::config::RateLimitConfig {
+                enabled: false,
+                ..Default::default()
+            };
+            app = app.merge(reputation::http::router(&rl));
         }
 
         if self.include_rooms {

@@ -16,6 +16,8 @@ use utoipa::ToSchema;
 use uuid::Uuid;
 
 use super::service::{EndorsementError, EndorsementService};
+use crate::config::RateLimitConfig;
+use crate::http::rate_limit::make_governor_layer;
 use crate::http::ErrorResponse;
 use crate::identity::http::auth::AuthenticatedDevice;
 use crate::identity::repo::{AccountRepoError, IdentityRepo};
@@ -71,7 +73,22 @@ pub struct EndorsementQuery {
 
 // ─── Router ────────────────────────────────────────────────────────────────
 
-pub fn router() -> Router {
+pub fn router(rate_limit_config: &RateLimitConfig) -> Router {
+    // ID.me OAuth endpoints are unauthenticated — apply the same limit as
+    // other auth flows (backup_per_minute reused as the "generic auth" limit).
+    let idme_router = {
+        let r = Router::new()
+            .route("/auth/idme/authorize", get(idme::authorize))
+            .route("/auth/idme/callback", get(idme::callback));
+        if let Some(layer) =
+            make_governor_layer(rate_limit_config.backup_per_minute, rate_limit_config)
+        {
+            r.layer(layer)
+        } else {
+            r
+        }
+    };
+
     Router::new()
         .route("/me/endorsements", get(my_endorsements))
         .route("/endorsements/check", get(check_endorsement))
@@ -79,8 +96,7 @@ pub fn router() -> Router {
             "/verifiers/endorsements",
             post(create_endorsement_as_verifier),
         )
-        .route("/auth/idme/authorize", get(idme::authorize))
-        .route("/auth/idme/callback", get(idme::callback))
+        .merge(idme_router)
 }
 
 // ─── Handlers ──────────────────────────────────────────────────────────────

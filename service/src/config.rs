@@ -50,6 +50,9 @@ pub struct Config {
     /// Trust background worker configuration.
     #[serde(default)]
     pub trust: TrustConfig,
+    /// Rate limiting for unauthenticated auth endpoints.
+    #[serde(default)]
+    pub rate_limit: RateLimitConfig,
 }
 
 /// Configuration for a platform-bootstrapped verifier account.
@@ -367,6 +370,57 @@ pub struct SwaggerConfig {
     pub enabled: bool,
 }
 
+/// Rate limiting configuration for unauthenticated auth endpoints.
+///
+/// Set via `TC_RATE_LIMIT__*` environment variables or `rate_limit.*` in config.yaml.
+///
+/// Rate limiting is **enabled by default** with conservative limits.
+/// Set `TC_RATE_LIMIT__ENABLED=false` to disable (for tests or local dev).
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct RateLimitConfig {
+    /// Max signup requests per minute per IP (default: 5).
+    #[serde(default = "default_signup_per_minute")]
+    pub signup_per_minute: u32,
+
+    /// Max login requests per minute per IP (default: 10).
+    #[serde(default = "default_login_per_minute")]
+    pub login_per_minute: u32,
+
+    /// Max backup retrieval requests per minute per IP (default: 10).
+    #[serde(default = "default_backup_per_minute")]
+    pub backup_per_minute: u32,
+
+    /// Enable rate limiting (default: true). Set to false in tests.
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+}
+
+#[allow(clippy::missing_const_for_fn)]
+fn default_signup_per_minute() -> u32 {
+    5
+}
+
+#[allow(clippy::missing_const_for_fn)]
+fn default_login_per_minute() -> u32 {
+    10
+}
+
+#[allow(clippy::missing_const_for_fn)]
+fn default_backup_per_minute() -> u32 {
+    10
+}
+
+impl Default for RateLimitConfig {
+    fn default() -> Self {
+        Self {
+            signup_per_minute: default_signup_per_minute(),
+            login_per_minute: default_login_per_minute(),
+            backup_per_minute: default_backup_per_minute(),
+            enabled: default_true(),
+        }
+    }
+}
+
 /// Configuration for the trust background worker.
 ///
 /// Set via `TC_TRUST__*` environment variables.
@@ -427,6 +481,7 @@ impl Default for Config {
             idme: None,
             verifiers: Vec::new(),
             trust: TrustConfig::default(),
+            rate_limit: RateLimitConfig::default(),
         }
     }
 }
@@ -597,6 +652,10 @@ mod tests {
         assert!(config.database.password.is_empty());
         assert_eq!(config.trust.batch_interval_secs, 30);
         assert_eq!(config.trust.batch_size, 50);
+        assert_eq!(config.rate_limit.signup_per_minute, 5);
+        assert_eq!(config.rate_limit.login_per_minute, 10);
+        assert_eq!(config.rate_limit.backup_per_minute, 10);
+        assert!(config.rate_limit.enabled);
     }
 
     #[test]

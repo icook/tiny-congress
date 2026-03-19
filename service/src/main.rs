@@ -277,8 +277,8 @@ async fn build_app(
             }
         })
         .nest("/api/v1", rest_v1)
-        .merge(identity::http::router())
-        .merge(reputation::http::router())
+        .merge(identity::http::router(&config.rate_limit))
+        .merge(reputation::http::router(&config.rate_limit))
         .merge(rooms::http::router())
         .merge(trust::http::trust_router())
         .nest("/api/v1", engine_registry::engines_router())
