@@ -205,10 +205,10 @@
     },
     "service/src/trust/": {
       "status": "active",
-      "total_prs": 17,
+      "total_prs": 18,
       "total_skips": 0,
       "consecutive_idle": 0,
-      "last_run": "2026-03-19T21:26:13Z",
+      "last_run": "2026-03-19T21:43:27Z",
       "graduated_at": "",
       "history": [
         {
@@ -312,6 +312,12 @@
           "type": "test_coverage",
           "impact": "medium",
           "summary": "Added `accept_invite_returns_404_when_already_accepted` HTTP integration test covering the untested path where a second POST to /trust/invites/{id}/accept returns 404 because the SQL UPDATE's `accepted_by IS NULL` guard rejects it — the repo-level double-accept case was tested but the HTTP layer had no coverage for this user-facing scenario."
+        },
+        {
+          "pr": 0,
+          "type": "pattern_enforcement",
+          "impact": "medium",
+          "summary": "Added `too_many_requests` and `conflict` helper functions to `crate::http` and replaced five inline `(StatusCode, Json(ErrorResponse {...})).into_response()` constructions in `trust/http/mod.rs` with calls to the new helpers, enforcing the project's shared-helper pattern for error responses."
         }
       ],
       "skipped": []
