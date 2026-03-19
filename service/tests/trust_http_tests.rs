@@ -601,3 +601,91 @@ async fn create_invite_rejects_invalid_relationship_depth() {
         .unwrap_or("")
         .contains("relationship_depth"));
 }
+
+// ─── Denounce validation ──────────────────────────────────────────────────────
+
+#[shared_runtime_test]
+async fn denounce_rejects_empty_reason() {
+    let db = isolated_db().await;
+    let (app, keys, _account_id) = signup_and_get_account("denouncereason1", db.pool()).await;
+
+    let (json2, _) = valid_signup_with_keys("denounceetarget1");
+    let resp2 = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/auth/signup")
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(json2))
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+    let body2 = axum::body::to_bytes(resp2.into_body(), 1024 * 1024)
+        .await
+        .expect("body2");
+    let j2: Value = serde_json::from_slice(&body2).expect("json2");
+    let target_id = j2["account_id"].as_str().expect("account_id");
+
+    let body = serde_json::json!({
+        "target_id": target_id,
+        "reason": ""
+    })
+    .to_string();
+    let request = build_authed_request(
+        Method::POST,
+        "/trust/denounce",
+        &body,
+        &keys.device_signing_key,
+        &keys.device_kid,
+    );
+
+    let response = app.oneshot(request).await.expect("response");
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let json = json_body(response).await;
+    assert!(json["error"].as_str().unwrap_or("").contains("reason"));
+}
+
+#[shared_runtime_test]
+async fn denounce_rejects_reason_too_long() {
+    let db = isolated_db().await;
+    let (app, keys, _account_id) = signup_and_get_account("denouncereason2", db.pool()).await;
+
+    let (json2, _) = valid_signup_with_keys("denounceetarget2");
+    let resp2 = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/auth/signup")
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(json2))
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+    let body2 = axum::body::to_bytes(resp2.into_body(), 1024 * 1024)
+        .await
+        .expect("body2");
+    let j2: Value = serde_json::from_slice(&body2).expect("json2");
+    let target_id = j2["account_id"].as_str().expect("account_id");
+
+    let body = serde_json::json!({
+        "target_id": target_id,
+        "reason": "a".repeat(501)
+    })
+    .to_string();
+    let request = build_authed_request(
+        Method::POST,
+        "/trust/denounce",
+        &body,
+        &keys.device_signing_key,
+        &keys.device_kid,
+    );
+
+    let response = app.oneshot(request).await.expect("response");
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let json = json_body(response).await;
+    assert!(json["error"].as_str().unwrap_or("").contains("reason"));
+}
