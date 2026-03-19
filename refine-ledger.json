@@ -205,10 +205,10 @@
     },
     "service/src/trust/": {
       "status": "active",
-      "total_prs": 19,
+      "total_prs": 20,
       "total_skips": 0,
       "consecutive_idle": 0,
-      "last_run": "2026-03-19T22:05:11Z",
+      "last_run": "2026-03-19T22:23:57Z",
       "graduated_at": "",
       "history": [
         {
@@ -324,6 +324,12 @@
           "type": "test_coverage",
           "impact": "medium",
           "summary": "Added `list_invites_returns_created_invite` HTTP integration test for `GET /trust/invites/mine`, the only trust endpoint with no HTTP-layer coverage at all."
+        },
+        {
+          "pr": 0,
+          "type": "test_coverage",
+          "impact": "medium",
+          "summary": "Added `revoke_returns_429_when_quota_exceeded` HTTP integration test covering the untested QuotaExceeded error path for `POST /trust/revoke`, which maps to 429 Too Many Requests when the daily action limit is exhausted — the endorse path had this test but revoke did not."
         }
       ],
       "skipped": []
