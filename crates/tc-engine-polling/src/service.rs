@@ -10,8 +10,8 @@ use serde::Deserialize;
 use uuid::Uuid;
 
 use crate::repo::{
-    lifecycle_queue, polls, votes, DimensionDistribution, DimensionRecord, DimensionStats,
-    PollRecord, PollRepoError, VoteRecord,
+    evidence, lifecycle_queue, polls, votes, DimensionDistribution, DimensionRecord,
+    DimensionStats, EvidenceRecord, PollRecord, PollRepoError, VoteRecord,
 };
 use tc_engine_api::constraints::build_constraint;
 use tc_engine_api::trust::TrustGraphReader;
@@ -27,6 +27,14 @@ pub struct CastVoteRequest {
 pub struct DimensionVote {
     pub dimension_id: Uuid,
     pub value: f32,
+}
+
+/// Owned evidence item used when creating evidence through the service layer.
+#[derive(Debug)]
+pub struct CreateEvidenceItem {
+    pub stance: String,
+    pub claim: String,
+    pub source: Option<String>,
 }
 
 // ─── Error types ───────────────────────────────────────────────────────────
@@ -126,6 +134,22 @@ pub trait PollingService: Send + Sync {
         poll_id: Uuid,
         user_id: Uuid,
     ) -> Result<Vec<VoteRecord>, PollError>;
+
+    // Evidence operations
+    async fn get_evidence_for_dimensions(
+        &self,
+        dimension_ids: &[Uuid],
+    ) -> Result<Vec<EvidenceRecord>, PollError>;
+    async fn create_evidence(
+        &self,
+        poll_id: Uuid,
+        dimension_id: Uuid,
+        items: Vec<CreateEvidenceItem>,
+    ) -> Result<u64, PollError>;
+    async fn delete_evidence_for_poll(&self, poll_id: Uuid) -> Result<u64, PollError>;
+
+    /// Sim-only: reset a poll back to draft status, clearing all timing fields.
+    async fn reset_poll(&self, room_id: Uuid, poll_id: Uuid) -> Result<(), PollError>;
 }
 
 // ─── Implementation ────────────────────────────────────────────────────────
@@ -610,6 +634,76 @@ impl PollingService for DefaultPollingService {
             .map_err(|e| {
                 tracing::error!("User votes lookup failed: {e}");
                 PollError::Internal("Internal server error".to_string())
+            })
+    }
+
+    async fn get_evidence_for_dimensions(
+        &self,
+        dimension_ids: &[Uuid],
+    ) -> Result<Vec<EvidenceRecord>, PollError> {
+        evidence::get_evidence_for_dimensions(&self.pool, dimension_ids)
+            .await
+            .map_err(|e| {
+                tracing::error!("Evidence fetch failed: {e}");
+                PollError::Internal("Internal server error".to_string())
+            })
+    }
+
+    async fn create_evidence(
+        &self,
+        poll_id: Uuid,
+        dimension_id: Uuid,
+        items: Vec<CreateEvidenceItem>,
+    ) -> Result<u64, PollError> {
+        let belongs = polls::dimension_belongs_to_poll(&self.pool, dimension_id, poll_id)
+            .await
+            .map_err(|e| {
+                tracing::error!("Dimension ownership check failed: {e}");
+                PollError::Internal("Internal server error".to_string())
+            })?;
+
+        if !belongs {
+            return Err(PollError::Validation(
+                "Dimension not found for this poll".to_string(),
+            ));
+        }
+
+        let new_evidence: Vec<evidence::NewEvidence<'_>> = items
+            .iter()
+            .map(|item| evidence::NewEvidence {
+                stance: &item.stance,
+                claim: &item.claim,
+                source: item.source.as_deref(),
+            })
+            .collect();
+
+        evidence::insert_evidence(&self.pool, dimension_id, &new_evidence)
+            .await
+            .map_err(|e| {
+                tracing::error!("Evidence insert failed: {e}");
+                PollError::Internal("Internal server error".to_string())
+            })
+    }
+
+    async fn delete_evidence_for_poll(&self, poll_id: Uuid) -> Result<u64, PollError> {
+        evidence::delete_evidence_for_poll(&self.pool, poll_id)
+            .await
+            .map_err(|e| {
+                tracing::error!("Evidence delete failed: {e}");
+                PollError::Internal("Internal server error".to_string())
+            })
+    }
+
+    async fn reset_poll(&self, room_id: Uuid, poll_id: Uuid) -> Result<(), PollError> {
+        polls::reset_poll(&self.pool, room_id, poll_id)
+            .await
+            .map_err(|e| {
+                if matches!(e, PollRepoError::NotFound) {
+                    PollError::PollNotFound
+                } else {
+                    tracing::error!("Poll reset failed: {e}");
+                    PollError::Internal("Internal server error".to_string())
+                }
             })
     }
 }

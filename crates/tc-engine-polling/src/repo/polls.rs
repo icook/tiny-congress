@@ -415,3 +415,55 @@ where
 
     Ok(row.map(poll_row_to_record))
 }
+
+/// Check whether a dimension belongs to the given poll.
+///
+/// # Errors
+///
+/// Returns `Database` on connection failure.
+pub async fn dimension_belongs_to_poll<'e, E>(
+    executor: E,
+    dimension_id: Uuid,
+    poll_id: Uuid,
+) -> Result<bool, PollRepoError>
+where
+    E: sqlx::Executor<'e, Database = sqlx::Postgres>,
+{
+    let row: Option<(Uuid,)> =
+        sqlx::query_as("SELECT id FROM rooms__poll_dimensions WHERE id = $1 AND poll_id = $2")
+            .bind(dimension_id)
+            .bind(poll_id)
+            .fetch_optional(executor)
+            .await?;
+    Ok(row.is_some())
+}
+
+/// Reset a poll back to draft status, clearing all timing fields.
+/// Used by the ring buffer refill logic to recycle polls for a new cycle.
+///
+/// # Errors
+///
+/// Returns `NotFound` if no poll with the given ID exists in the given room.
+pub async fn reset_poll<'e, E>(
+    executor: E,
+    room_id: Uuid,
+    poll_id: Uuid,
+) -> Result<(), PollRepoError>
+where
+    E: sqlx::Executor<'e, Database = sqlx::Postgres>,
+{
+    let result = sqlx::query(
+        "UPDATE rooms__polls \
+         SET status = 'draft', closes_at = NULL, activated_at = NULL, closed_at = NULL \
+         WHERE id = $1 AND room_id = $2",
+    )
+    .bind(poll_id)
+    .bind(room_id)
+    .execute(executor)
+    .await?;
+
+    if result.rows_affected() == 0 {
+        return Err(PollRepoError::NotFound);
+    }
+    Ok(())
+}
