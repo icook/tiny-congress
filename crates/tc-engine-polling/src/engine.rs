@@ -77,12 +77,14 @@ impl RoomEngine for PollingEngine {
             ctx.trust_reader.clone(),
         ));
 
-        let handle = spawn_lifecycle_consumer(
-            ctx.pool,
+        let lifecycle_handle = spawn_lifecycle_consumer(
+            ctx.pool.clone(),
             polling_service,
             Duration::from_secs(LIFECYCLE_POLL_INTERVAL_SECS),
         );
 
-        Ok(vec![handle])
+        let bot_handle = crate::bot::worker::spawn_bot_worker(ctx.pool);
+
+        Ok(vec![lifecycle_handle, bot_handle])
     }
 }
