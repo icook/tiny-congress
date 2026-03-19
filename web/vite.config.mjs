@@ -54,6 +54,13 @@ export default defineConfig({
     globals: true,
     environment: 'jsdom',
     setupFiles: './vitest.setup.mjs',
+    alias: [
+      // The WASM artifact is not committed; redirect to a no-op stub in tests.
+      {
+        find: /^.*\/wasm\/tc-crypto\/tc_crypto\.js$/,
+        replacement: new URL('./src/__mocks__/tc_crypto_stub.js', import.meta.url).pathname,
+      },
+    ],
     include: [
       '**/*.test.ts',
       '**/*.test.tsx',
