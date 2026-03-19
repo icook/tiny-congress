@@ -6,7 +6,7 @@ on:
       url:
         description: "Target URL to test against"
         required: false
-        default: "https://tiny-congress-demo.ibcook.com"
+        default: "https://demo.tinycongress.com"
   workflow_run:
     workflows: ["CI"]
     types: [completed]
@@ -34,14 +34,14 @@ jobs:
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             BASE="${{ github.event.inputs.url }}"
           else
-            BASE="https://tiny-congress-demo.ibcook.com"
+            BASE="https://demo.tinycongress.com"
           fi
-          if [[ "$BASE" != *"tiny-congress-demo."* ]]; then
-            echo "Non-default URLs must follow the tiny-congress-demo.* pattern for API/verifier derivation"
+          if [[ "$BASE" != *"demo.tinycongress.com"* ]]; then
+            echo "Non-default URLs must follow the demo.tinycongress.com pattern for API/verifier derivation"
             exit 1
           fi
-          API="${BASE/https:\/\/tiny-congress-demo./https://tc-api-demo.}"
-          VERIFIER="${BASE/https:\/\/tiny-congress-demo./https://tc-verify-demo.}"
+          API="${BASE/demo.tinycongress.com/demo-api.tinycongress.com}"
+          VERIFIER="${BASE/demo.tinycongress.com/demo-verify.tinycongress.com}"
           {
             echo "frontend=$BASE"
             echo "api=$API"
