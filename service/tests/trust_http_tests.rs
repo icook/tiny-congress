@@ -747,3 +747,60 @@ async fn denounce_rejects_reason_too_long() {
     let json = json_body(response).await;
     assert!(json["error"].as_str().unwrap_or("").contains("reason"));
 }
+
+// ─── Endorse after denounce ───────────────────────────────────────────────────
+
+#[shared_runtime_test]
+async fn endorse_after_denounce_returns_409() {
+    let db = isolated_db().await;
+    let pool = db.pool().clone();
+    let (app, keys, account_id) = signup_and_get_account("conflictendorser", db.pool()).await;
+
+    // Sign up a target user
+    let (json2, _) = valid_signup_with_keys("conflicttarget");
+    let resp2 = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/auth/signup")
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(json2))
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+    let body2 = axum::body::to_bytes(resp2.into_body(), 1024 * 1024)
+        .await
+        .expect("body2");
+    let j2: Value = serde_json::from_slice(&body2).expect("json2");
+    let target_id: uuid::Uuid = j2["account_id"]
+        .as_str()
+        .expect("account_id")
+        .parse()
+        .expect("uuid");
+
+    // Seed a denouncement row directly so has_active_denouncement returns true
+    sqlx::query(
+        "INSERT INTO trust__denouncements (accuser_id, target_id, reason) VALUES ($1, $2, $3)",
+    )
+    .bind(account_id)
+    .bind(target_id)
+    .bind("prior misbehavior")
+    .execute(&pool)
+    .await
+    .expect("seed denouncement");
+
+    // Attempt to endorse the denounced user — should be rejected with 409
+    let body = serde_json::json!({ "subject_id": target_id }).to_string();
+    let request = build_authed_request(
+        Method::POST,
+        "/trust/endorse",
+        &body,
+        &keys.device_signing_key,
+        &keys.device_kid,
+    );
+
+    let response = app.oneshot(request).await.expect("response");
+    assert_eq!(response.status(), StatusCode::CONFLICT);
+}
