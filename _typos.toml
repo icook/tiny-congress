@@ -10,6 +10,6 @@ extend-ignore-re = [
 [files]
 extend-exclude = ["*.lock", "*.snap", ".sqlx/", "web/src/wasm/", "web/src/api/generated/"]
 
-# Known false positives can be added here:
-# [default.extend-words]
-# ot = "ot"
+# Known false positives
+[default.extend-words]
+nd = "nd"  # ordinal suffix (2nd)
