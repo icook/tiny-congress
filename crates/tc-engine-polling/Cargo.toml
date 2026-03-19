@@ -7,6 +7,7 @@ description = "Polling engine implementation for TinyCongress rooms"
 
 [dependencies]
 tc-engine-api = { path = "../tc-engine-api", version = "0.1.0" }
+tc-llm = { path = "../tc-llm", version = "0.1.0" }
 anyhow = "1.0"
 async-trait = "0.1"
 axum = "0.8"
