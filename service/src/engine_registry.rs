@@ -2,7 +2,7 @@
 //!
 //! This module provides:
 //! - An `engines_router()` function that builds the HTTP routes for engine discovery
-//! - A `GET /engines` endpoint listing all registered engines and their metadata
+//! - A `GET /api/v1/engines` endpoint listing all registered engines and their metadata
 //!
 //! The actual per-room delegation (looking up a room's `engine_type` from the DB
 //! and routing to the matching engine) will be added when the polling engine is
@@ -16,7 +16,7 @@ use axum::{
 use serde::Serialize;
 use tc_engine_api::engine::EngineRegistry;
 
-/// Response type for the `GET /engines` endpoint.
+/// Response type for the `GET /api/v1/engines` endpoint.
 #[derive(Debug, Serialize)]
 pub struct EngineListResponse {
     pub engines: Vec<EngineInfo>,
@@ -33,7 +33,7 @@ pub struct EngineInfo {
 /// Build the Axum router for engine discovery endpoints.
 ///
 /// Currently provides:
-/// - `GET /engines` — list all registered engines
+/// - `GET /api/v1/engines` — list all registered engines
 pub fn engines_router() -> Router {
     Router::new().route("/engines", get(list_engines))
 }
