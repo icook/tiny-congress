@@ -3466,14 +3466,26 @@ dependencies = [
  "async-trait",
  "axum",
  "chrono",
+ "reqwest",
  "serde",
  "serde_json",
  "sqlx",
  "tc-engine-api",
+ "tc-llm",
  "thiserror 2.0.17",
  "tokio",
  "tracing",
  "uuid",
+]
+
+[[package]]
+name = "tc-llm"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "reqwest",
+ "serde",
+ "tracing",
 ]
 
 [[package]]
@@ -3640,6 +3652,7 @@ dependencies = [
  "tc-crypto",
  "tc-engine-api",
  "tc-engine-polling",
+ "tc-llm",
  "tc-test-macros",
  "testcontainers",
  "thiserror 2.0.17",
