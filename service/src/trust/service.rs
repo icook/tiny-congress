@@ -120,8 +120,7 @@ impl TrustService for DefaultTrustService {
         let is_verifier = self
             .reputation_repo
             .has_endorsement(endorser_id, "authorized_verifier")
-            .await
-            .unwrap_or(false);
+            .await?;
 
         if !is_verifier {
             let active_count = self
