@@ -17,7 +17,7 @@ function makePoll(question: string): Poll {
     room_id: 'r1',
     question,
     description: null,
-    status: 'pending',
+    status: 'draft',
     created_at: '',
     closes_at: null,
     activated_at: null,
