@@ -1,6 +1,7 @@
 export {
   getMyScores,
   getMyBudget,
+  getMyEndorsements,
   createInvite,
   listMyInvites,
   acceptInvite,
@@ -11,6 +12,7 @@ export {
   lookupAccount,
   useTrustScores,
   useTrustBudget,
+  useMyEndorsementsList,
   useMyInvites,
   useCreateInvite,
   useAcceptInvite,
@@ -30,6 +32,8 @@ export type {
   Denouncement,
   DenouncementPayload,
   AccountLookup,
+  Endorsement,
+  EndorsementsListResponse,
 } from './api';
 export { TrustScoreCard, DenouncementSection } from './components';
 export { getTierInfo } from './tierInfo';

@@ -10,6 +10,7 @@ import {
   denounce,
   endorse,
   getMyBudget,
+  getMyEndorsements,
   getMyScores,
   listMyDenouncements,
   listMyInvites,
@@ -50,6 +51,24 @@ export function useTrustBudget(
         throw new Error('Not authenticated');
       }
       return getMyBudget(deviceKid, privateKey, wasmCrypto);
+    },
+    enabled: Boolean(deviceKid && privateKey && wasmCrypto),
+    staleTime: 30_000,
+  });
+}
+
+export function useMyEndorsementsList(
+  deviceKid: string | null,
+  privateKey: CryptoKey | null,
+  wasmCrypto: CryptoModule | null
+) {
+  return useQuery({
+    queryKey: ['trust-endorsements', deviceKid],
+    queryFn: async () => {
+      if (!deviceKid || !privateKey || !wasmCrypto) {
+        throw new Error('Not authenticated');
+      }
+      return getMyEndorsements(deviceKid, privateKey, wasmCrypto);
     },
     enabled: Boolean(deviceKid && privateKey && wasmCrypto),
     staleTime: 30_000,
@@ -101,6 +120,8 @@ export function useAcceptInvite(
       void queryClient.invalidateQueries({ queryKey: ['trust-scores'] });
       void queryClient.invalidateQueries({ queryKey: ['trust-invites'] });
       void queryClient.invalidateQueries({ queryKey: ['trust-budget'] });
+      void queryClient.invalidateQueries({ queryKey: ['trust-endorsements'] });
+      void queryClient.invalidateQueries({ queryKey: ['verification-status'] });
     },
   });
 }
@@ -179,6 +200,7 @@ export function useRevokeEndorsement(
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['trust-budget'] });
       void queryClient.invalidateQueries({ queryKey: ['trust-scores'] });
+      void queryClient.invalidateQueries({ queryKey: ['trust-endorsements'] });
     },
   });
 }

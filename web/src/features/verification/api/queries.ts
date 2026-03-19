@@ -3,8 +3,8 @@
  */
 
 import { useQuery } from '@tanstack/react-query';
+import { getMyEndorsements } from '@/api/endorsements';
 import type { CryptoModule } from '@/providers/CryptoProvider';
-import { getMyEndorsements } from './client';
 
 export interface VerificationStatus {
   isVerified: boolean;

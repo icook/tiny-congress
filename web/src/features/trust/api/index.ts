@@ -1,6 +1,7 @@
 export {
   getMyScores,
   getMyBudget,
+  getMyEndorsements,
   createInvite,
   listMyInvites,
   acceptInvite,
@@ -20,10 +21,13 @@ export type {
   Denouncement,
   DenouncementPayload,
   AccountLookup,
+  Endorsement,
+  EndorsementsListResponse,
 } from './client';
 export {
   useTrustScores,
   useTrustBudget,
+  useMyEndorsementsList,
   useMyInvites,
   useCreateInvite,
   useAcceptInvite,

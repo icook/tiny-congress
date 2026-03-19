@@ -43,6 +43,7 @@ function makeBudget(overrides?: Partial<TrustBudget>): TrustBudget {
     slots_total: 3,
     slots_used: 0,
     slots_available: 3,
+    out_of_slot_count: 0,
     denouncements_total: 2,
     denouncements_used: 0,
     denouncements_available: 2,
