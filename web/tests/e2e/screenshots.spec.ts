@@ -57,7 +57,7 @@ test.describe.serial('screenshot gallery @screenshots', () => {
     await page.getByLabel(/username/i).fill('nonexistent-user');
     await page.getByLabel(/password/i).fill('wrong-password');
     await page.getByRole('button', { name: /log in/i }).click();
-    await expect(page.getByText(/not found|invalid|error/i)).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText(/login failed/i)).toBeVisible({ timeout: 10_000 });
     await capture(page, 'login-error-desktop-dark', { viewport: DESKTOP, colorScheme: 'dark' });
   });
 
@@ -77,13 +77,14 @@ test.describe.serial('screenshot gallery @screenshots', () => {
 
   test('signup success', async ({ page }) => {
     await signupUser(page);
+    await expect(page.getByText(/welcome/i)).toBeVisible();
     await capture(page, 'signup-success-desktop-dark', { viewport: DESKTOP, colorScheme: 'dark' });
   });
 
   test('rooms list', async ({ page }) => {
     await signupUser(page);
     await page.goto('/rooms');
-    await page.waitForLoadState('load');
+    await expect(page.getByRole('heading', { name: /rooms/i })).toBeVisible();
     await capture(page, 'rooms-desktop-dark', { viewport: DESKTOP, colorScheme: 'dark' });
     await capture(page, 'rooms-mobile-dark', { viewport: MOBILE, colorScheme: 'dark' });
   });
@@ -98,7 +99,7 @@ test.describe.serial('screenshot gallery @screenshots', () => {
     test.skip(!pollExists, 'No polls seeded in this environment');
 
     await pollLink.click();
-    await page.waitForLoadState('load');
+    await expect(page.locator('h1, h2, h3').first()).toBeVisible();
     await capture(page, 'poll-desktop-dark', { viewport: DESKTOP, colorScheme: 'dark' });
     await capture(page, 'poll-mobile-dark', { viewport: MOBILE, colorScheme: 'dark' });
   });

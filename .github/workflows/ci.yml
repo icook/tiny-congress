@@ -1606,7 +1606,10 @@ jobs:
           if [ -d artifacts/playwright/playwright-report ]; then mv artifacts/playwright/playwright-report site/playwright; fi
           if [ -d artifacts/docs/target/doc ]; then mv artifacts/docs/target/doc site/rust-docs; fi
           if [ -d artifacts/docs/web/docs ]; then mv artifacts/docs/web/docs site/ts-docs; fi
-          if [ -d artifacts/screenshots ]; then mkdir -p site/screenshots && mv artifacts/screenshots/*.png site/screenshots/ 2>/dev/null || true; fi
+          if [ -d artifacts/screenshots ]; then
+            mkdir -p site/screenshots
+            mv artifacts/screenshots/*.png site/screenshots/ 2>/dev/null || true
+          fi
           rm -rf artifacts
 
       - name: Build screenshot gallery
