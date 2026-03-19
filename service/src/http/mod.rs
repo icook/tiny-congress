@@ -59,10 +59,11 @@ pub fn internal_error() -> axum::response::Response {
         .into_response()
 }
 
+/// 409 Conflict response with a JSON error body.
 #[must_use]
-pub fn too_many_requests(msg: &str) -> axum::response::Response {
+pub fn conflict(msg: &str) -> axum::response::Response {
     (
-        StatusCode::TOO_MANY_REQUESTS,
+        StatusCode::CONFLICT,
         Json(ErrorResponse {
             error: msg.to_string(),
         }),
@@ -70,10 +71,23 @@ pub fn too_many_requests(msg: &str) -> axum::response::Response {
         .into_response()
 }
 
+/// 403 Forbidden response with a JSON error body.
 #[must_use]
-pub fn conflict(msg: &str) -> axum::response::Response {
+pub fn forbidden(msg: &str) -> axum::response::Response {
     (
-        StatusCode::CONFLICT,
+        StatusCode::FORBIDDEN,
+        Json(ErrorResponse {
+            error: msg.to_string(),
+        }),
+    )
+        .into_response()
+}
+
+/// 429 Too Many Requests response with a JSON error body.
+#[must_use]
+pub fn too_many_requests(msg: &str) -> axum::response::Response {
+    (
+        StatusCode::TOO_MANY_REQUESTS,
         Json(ErrorResponse {
             error: msg.to_string(),
         }),

@@ -127,13 +127,7 @@ fn room_error_response(e: RoomError) -> axum::response::Response {
             (StatusCode::BAD_REQUEST, Json(ErrorResponse { error: msg })).into_response()
         }
         RoomError::RoomNotFound => not_found("Room not found"),
-        RoomError::DuplicateRoomName => (
-            StatusCode::CONFLICT,
-            Json(ErrorResponse {
-                error: "Room name already exists".to_string(),
-            }),
-        )
-            .into_response(),
+        RoomError::DuplicateRoomName => crate::http::conflict("Room name already exists"),
         RoomError::Internal(_) => internal_error(),
     }
 }

@@ -569,17 +569,9 @@ fn vote_error_response(e: VoteError) -> axum::response::Response {
         VoteError::Validation(msg) => {
             (StatusCode::BAD_REQUEST, Json(ErrorResponse { error: msg })).into_response()
         }
-        VoteError::NotEligible(msg) => {
-            (StatusCode::FORBIDDEN, Json(ErrorResponse { error: msg })).into_response()
-        }
+        VoteError::NotEligible(msg) => crate::http::forbidden(&msg),
         VoteError::PollNotFound => not_found("Poll not found"),
-        VoteError::PollNotActive => (
-            StatusCode::CONFLICT,
-            Json(ErrorResponse {
-                error: "Poll is not currently active".to_string(),
-            }),
-        )
-            .into_response(),
+        VoteError::PollNotActive => crate::http::conflict("Poll is not currently active"),
         VoteError::Internal(_) => internal_error(),
     }
 }

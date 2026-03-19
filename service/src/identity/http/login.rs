@@ -19,7 +19,6 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
-use super::ErrorResponse;
 use crate::identity::repo::{AccountRepoError, DeviceKeyRepoError, IdentityRepo, NonceRepoError};
 use crate::identity::service::{validate_username, CertificateSignature, DeviceName, DevicePubkey};
 use tc_crypto::{verify_ed25519, Kid};
@@ -175,25 +174,8 @@ pub async fn login(
             }),
         )
             .into_response(),
-        Err(DeviceKeyRepoError::DuplicateKid) => (
-            StatusCode::CONFLICT,
-            Json(ErrorResponse {
-                error: "Device key already registered".to_string(),
-            }),
-        )
-            .into_response(),
-        Err(DeviceKeyRepoError::MaxDevicesReached) => (
-            StatusCode::UNPROCESSABLE_ENTITY,
-            Json(ErrorResponse {
-                error: "Maximum device limit reached".to_string(),
-            }),
-        )
-            .into_response(),
-        Err(e) => {
-            tracing::error!("Login device creation failed: {e}");
-            // lint-patterns:allow-inline-error — this 500 is recoverable by the
-            // client (generate a new device cert and retry), so we include
-            // actionable guidance rather than the generic "Internal server error".
+        Err(DeviceKeyRepoError::Database(ref db_err)) => {
+            tracing::error!("Login device creation failed: {db_err}");
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(crate::http::ErrorResponse {
@@ -202,6 +184,7 @@ pub async fn login(
             )
                 .into_response()
         }
+        Err(ref e) => super::device_key_repo_error_response(e),
     }
 }
 

@@ -16,17 +16,16 @@
 
 use std::sync::Arc;
 
+#[cfg(test)]
+use axum::http::StatusCode;
 use axum::{
     body::Bytes,
     extract::{FromRequest, Request},
-    http::StatusCode,
-    response::{IntoResponse, Response},
-    Json,
+    response::Response,
 };
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
-use super::ErrorResponse;
 use crate::identity::repo::{DeviceKeyRepoError, IdentityRepo, NonceRepoError};
 use crate::identity::service::DevicePubkey;
 use tc_crypto::{decode_base64url, verify_ed25519, Kid};
@@ -109,16 +108,6 @@ fn validate_nonce(nonce: &str) -> Result<(), &'static str> {
 
 fn auth_error(msg: &str) -> Response {
     super::unauthorized(msg)
-}
-
-fn forbidden_error(msg: &str) -> Response {
-    (
-        StatusCode::FORBIDDEN,
-        Json(ErrorResponse {
-            error: msg.to_string(),
-        }),
-    )
-        .into_response()
 }
 
 impl<S: Send + Sync> FromRequest<S> for AuthenticatedDevice {
@@ -260,7 +249,7 @@ impl<S: Send + Sync> FromRequest<S> for AuthenticatedDevice {
         // Must happen after nonce recording so a revoked device's valid request
         // doesn't allow the same nonce to be reused by another caller.
         if device.revoked_at.is_some() {
-            return Err(forbidden_error("Device has been revoked"));
+            return Err(super::forbidden("Device has been revoked"));
         }
 
         // Touch last_used_at (fire-and-forget, don't fail the request)
