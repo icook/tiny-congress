@@ -1,4 +1,4 @@
-CREATE TABLE rooms__bot_traces (
+CREATE TABLE IF NOT EXISTS rooms__bot_traces (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     room_id UUID NOT NULL REFERENCES rooms__rooms(id),
     poll_id UUID REFERENCES rooms__polls(id),
@@ -12,6 +12,6 @@ CREATE TABLE rooms__bot_traces (
     completed_at TIMESTAMPTZ
 );
 
-CREATE INDEX idx_bot_traces_room_id ON rooms__bot_traces(room_id);
-CREATE INDEX idx_bot_traces_poll_id ON rooms__bot_traces(poll_id);
-CREATE INDEX idx_bot_traces_status ON rooms__bot_traces(status);
+CREATE INDEX IF NOT EXISTS idx_bot_traces_room_id ON rooms__bot_traces(room_id);
+CREATE INDEX IF NOT EXISTS idx_bot_traces_poll_id ON rooms__bot_traces(poll_id);
+CREATE INDEX IF NOT EXISTS idx_bot_traces_status ON rooms__bot_traces(status);
