@@ -28,6 +28,7 @@ pub struct PollResponse {
     pub description: Option<String>,
     pub status: String,
     pub closes_at: Option<String>,
+    pub activated_at: Option<String>,
     pub created_at: String,
 }
 
@@ -549,6 +550,7 @@ fn poll_to_response(p: crate::rooms::repo::PollRecord) -> PollResponse {
         description: p.description,
         status: p.status,
         closes_at: p.closes_at.map(|t| t.to_rfc3339()),
+        activated_at: p.activated_at.map(|t| t.to_rfc3339()),
         created_at: p.created_at.to_rfc3339(),
     }
 }

@@ -17,6 +17,7 @@ function makePoll(id: string): Poll {
     status: 'active',
     created_at: '',
     closes_at: null,
+    activated_at: null,
   };
 }
 

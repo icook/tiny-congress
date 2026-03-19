@@ -28,6 +28,7 @@ export interface Poll {
   status: string;
   created_at: string;
   closes_at: string | null;
+  activated_at: string | null;
 }
 
 export interface Evidence {

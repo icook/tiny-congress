@@ -20,6 +20,7 @@ function makePoll(question: string): Poll {
     status: 'pending',
     created_at: '',
     closes_at: null,
+    activated_at: null,
   };
 }
 
