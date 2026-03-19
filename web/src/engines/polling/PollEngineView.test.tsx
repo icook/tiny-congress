@@ -68,7 +68,7 @@ describe('PollEngineView', () => {
 
     render(<PollEngineView {...defaultProps} />);
 
-    expect(screen.getByText('Test Room')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Test Room' })).toBeInTheDocument();
     expect(screen.getByText('A test room description')).toBeInTheDocument();
   });
 
