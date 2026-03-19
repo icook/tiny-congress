@@ -309,3 +309,63 @@ async fn test_process_batch_invalid_payload_fails() {
         "error_message should be set for a failed action"
     );
 }
+
+// ---------------------------------------------------------------------------
+// Test 5: endorse action with out-of-range weight fails the action
+// ---------------------------------------------------------------------------
+#[shared_runtime_test]
+async fn test_process_batch_endorse_invalid_weight_fails() {
+    let db = isolated_db().await;
+    let pool = db.pool().clone();
+
+    let actor = AccountFactory::new()
+        .with_seed(1)
+        .create(&pool)
+        .await
+        .expect("create actor");
+
+    let subject = AccountFactory::new()
+        .with_seed(2)
+        .create(&pool)
+        .await
+        .expect("create subject");
+
+    // Seed an 'endorse' action with weight=1.5 (valid range is (0.0, 1.0])
+    sqlx::query(
+        "INSERT INTO trust__action_queue (actor_id, action_type, payload) VALUES ($1, $2, $3)",
+    )
+    .bind(actor.id)
+    .bind("endorse")
+    .bind(json!({ "subject_id": subject.id, "weight": 1.5, "attestation": null }))
+    .execute(&pool)
+    .await
+    .expect("seed action");
+
+    let trust_repo = Arc::new(PgTrustRepo::new(pool.clone()));
+    let reputation_repo = Arc::new(PgReputationRepo::new(pool.clone()));
+    let engine = Arc::new(TrustEngine::new(pool.clone()));
+    let worker = Arc::new(TrustWorker::new(
+        trust_repo,
+        reputation_repo,
+        engine,
+        50,
+        30,
+    ));
+
+    let processed = worker.process_batch().await.expect("process_batch");
+    assert_eq!(processed, 1);
+
+    // Action should be marked failed with an error mentioning weight
+    let (status, error_message): (String, Option<String>) =
+        sqlx::query_as("SELECT status, error_message FROM trust__action_queue WHERE actor_id = $1")
+            .bind(actor.id)
+            .fetch_one(&pool)
+            .await
+            .expect("fetch action");
+
+    assert_eq!(status, "failed");
+    assert!(
+        error_message.as_deref().unwrap_or("").contains("weight"),
+        "error_message should mention 'weight', got: {error_message:?}"
+    );
+}
