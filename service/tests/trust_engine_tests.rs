@@ -54,7 +54,7 @@ async fn test_linear_chain_trust_distance() {
 
     let c_score = scores
         .iter()
-        .find(|s| s.user_id == c.id)
+        .find(|s| s.account_id == c.id)
         .expect("C should be reachable");
 
     let distance = c_score.trust_distance.expect("C should have a distance");
@@ -101,7 +101,7 @@ async fn test_mixed_weight_distance() {
 
     let b_score = scores
         .iter()
-        .find(|s| s.user_id == b.id)
+        .find(|s| s.account_id == b.id)
         .expect("B should be reachable");
 
     let distance = b_score.trust_distance.expect("B should have a distance");
@@ -266,7 +266,7 @@ async fn test_revoked_edge_exclusion() {
         .await
         .expect("compute_distances_from");
 
-    let b_score = scores.iter().find(|s| s.user_id == b.id);
+    let b_score = scores.iter().find(|s| s.account_id == b.id);
     assert!(
         b_score.is_none(),
         "B should be unreachable (A→B edge is revoked)"
@@ -313,7 +313,7 @@ async fn test_cycle_prevention() {
 
     let a_score = scores
         .iter()
-        .find(|s| s.user_id == a.id)
+        .find(|s| s.account_id == a.id)
         .expect("A should be reachable");
 
     let distance = a_score.trust_distance.expect("A should have a distance");
@@ -474,7 +474,7 @@ async fn test_anchor_has_distance_zero() {
 
     let anchor_score = scores
         .iter()
-        .find(|s| s.user_id == seed.id)
+        .find(|s| s.account_id == seed.id)
         .expect("Anchor should be present in results");
 
     let distance = anchor_score
