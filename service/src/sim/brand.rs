@@ -29,6 +29,7 @@ pub const ROOM_NAME: &str = "Brand Ethics";
 /// # Errors
 ///
 /// Returns an error if any API call fails.
+#[allow(clippy::too_many_lines)]
 pub async fn seed_brand_ethics(
     http: &reqwest::Client,
     client: &SimClient,
@@ -38,14 +39,42 @@ pub async fn seed_brand_ethics(
 ) -> Result<Usage, anyhow::Error> {
     let mut usage = Usage::default();
 
-    // 1. Check if room already exists
+    // 1. Check if room already exists (and has polls — empty room means interrupted seed)
     let rooms = client.list_rooms().await?;
     let existing = rooms.iter().find(|r| r.name == ROOM_NAME);
 
-    if existing.is_some() {
-        tracing::info!("Brand Ethics room already exists, skipping creation");
-        return Ok(usage);
-    }
+    let room = if let Some(existing) = existing {
+        let polls = client.list_polls(existing.id).await?;
+        if !polls.is_empty() {
+            tracing::info!(
+                poll_count = polls.len(),
+                "Brand Ethics room already seeded, skipping"
+            );
+            return Ok(usage);
+        }
+        tracing::warn!(
+            room_id = %existing.id,
+            "Brand Ethics room exists but has 0 polls — resuming interrupted seed"
+        );
+        existing.clone()
+    } else {
+        // Create room with identity_verified constraint
+        let constraint_config =
+            verifier_account_id.map(|id| serde_json::json!({"verifier_ids": [id]}));
+        client
+            .create_room(
+                admin,
+                ROOM_NAME,
+                "Rate S&P 500 companies on ethical dimensions. How do the companies that touch your daily life actually behave?",
+                "identity_verified",
+                "identity_verified",
+                constraint_config.as_ref(),
+                Some(config.poll_duration_secs),
+            )
+            .await
+            .context("failed to create Brand Ethics room")?
+    };
+    tracing::info!(room_id = %room.id, "Brand Ethics room ready");
 
     // 2. Phase 1: Curate companies via LLM
     tracing::info!(
@@ -56,22 +85,6 @@ pub async fn seed_brand_ethics(
         llm::generate_company_curation(http, config, config.company_count).await?;
     usage += curation_usage;
     tracing::info!(companies = curation.companies.len(), "companies curated");
-
-    // 3. Create room with identity_verified constraint
-    let constraint_config = verifier_account_id.map(|id| serde_json::json!({"verifier_ids": [id]}));
-    let room = client
-        .create_room(
-            admin,
-            ROOM_NAME,
-            "Rate S&P 500 companies on ethical dimensions. How do the companies that touch your daily life actually behave?",
-            "identity_verified",
-            "identity_verified",
-            constraint_config.as_ref(),
-            Some(config.poll_duration_secs),
-        )
-        .await
-        .context("failed to create Brand Ethics room")?;
-    tracing::info!(room_id = %room.id, "Brand Ethics room created");
 
     // 4. For each company: create poll, dimensions, evidence
     for (i, company) in curation.companies.iter().enumerate() {

@@ -15,7 +15,7 @@ use super::identity::SimAccount;
 // Response types (deserialization-only, local to sim)
 // ---------------------------------------------------------------------------
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct RoomResponse {
     pub id: Uuid,
     pub name: String,
