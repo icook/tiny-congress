@@ -90,7 +90,15 @@ impl TrustWorker {
             "endorse" => {
                 let subject_id = parse_uuid(&action.payload, "subject_id")?;
                 #[allow(clippy::cast_possible_truncation)]
-                let weight = action.payload["weight"].as_f64().unwrap_or(1.0) as f32;
+                let weight = action.payload["weight"]
+                    .as_f64()
+                    .ok_or_else(|| anyhow::anyhow!("endorse payload missing 'weight'"))?
+                    as f32;
+                if weight <= 0.0 || weight > 1.0 {
+                    return Err(anyhow::anyhow!(
+                        "endorse payload 'weight' out of range (0.0, 1.0]: {weight}"
+                    ));
+                }
                 let attestation = match &action.payload["attestation"] {
                     serde_json::Value::Null => None,
                     v => Some(v.clone()),
