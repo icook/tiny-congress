@@ -774,6 +774,36 @@ async fn denounce_rejects_reason_too_long() {
     assert!(json["error"].as_str().unwrap_or("").contains("reason"));
 }
 
+// ─── Denounce self-action validation ─────────────────────────────────────────
+
+#[shared_runtime_test]
+async fn denounce_rejects_self_denouncement() {
+    let db = isolated_db().await;
+    let (app, keys, account_id) = signup_and_get_account("selfdenouncer", db.pool()).await;
+
+    let body = serde_json::json!({
+        "target_id": account_id,
+        "reason": "testing self denouncement"
+    })
+    .to_string();
+    let request = build_authed_request(
+        Method::POST,
+        "/trust/denounce",
+        &body,
+        &keys.device_signing_key,
+        &keys.device_kid,
+    );
+
+    let response = app.oneshot(request).await.expect("response");
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let json = json_body(response).await;
+    assert!(json["error"]
+        .as_str()
+        .unwrap_or("")
+        .to_lowercase()
+        .contains("yourself"));
+}
+
 // ─── List denouncements ───────────────────────────────────────────────────────
 
 #[shared_runtime_test]
