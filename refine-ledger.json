@@ -205,10 +205,10 @@
     },
     "service/src/trust/": {
       "status": "active",
-      "total_prs": 16,
+      "total_prs": 17,
       "total_skips": 0,
       "consecutive_idle": 0,
-      "last_run": "2026-03-19T21:06:45Z",
+      "last_run": "2026-03-19T21:26:13Z",
       "graduated_at": "",
       "history": [
         {
@@ -306,6 +306,12 @@
           "type": "test_coverage",
           "impact": "medium",
           "summary": "Added `test_process_batch_endorse_invalid_weight_fails` integration test covering the untested error path in `worker.rs:97-101` where an endorse payload with weight outside (0.0, 1.0] causes the action to be marked failed."
+        },
+        {
+          "pr": 0,
+          "type": "test_coverage",
+          "impact": "medium",
+          "summary": "Added `accept_invite_returns_404_when_already_accepted` HTTP integration test covering the untested path where a second POST to /trust/invites/{id}/accept returns 404 because the SQL UPDATE's `accepted_by IS NULL` guard rejects it — the repo-level double-accept case was tested but the HTTP layer had no coverage for this user-facing scenario."
         }
       ],
       "skipped": []
