@@ -205,10 +205,10 @@
     },
     "service/src/trust/": {
       "status": "active",
-      "total_prs": 14,
+      "total_prs": 15,
       "total_skips": 0,
       "consecutive_idle": 0,
-      "last_run": "2026-03-19T20:20:06Z",
+      "last_run": "2026-03-19T20:50:27Z",
       "graduated_at": "",
       "history": [
         {
@@ -294,6 +294,12 @@
           "type": "test_coverage",
           "impact": "medium",
           "summary": "Added `denounce_returns_429_when_budget_exhausted` HTTP integration test covering the previously untested `DenouncementSlotsExhausted` error path, which returns 429 when a user exhausts their d=2 denouncement budget."
+        },
+        {
+          "pr": 0,
+          "type": "test_coverage",
+          "impact": "medium",
+          "summary": "Added `endorse_returns_429_when_endorsement_slots_exhausted` HTTP integration test covering the previously untested `EndorsementSlotsExhausted` error path, which returns 429 when a non-verifier user's k=3 endorsement slots are full on a direct endorse call."
         }
       ],
       "skipped": []
