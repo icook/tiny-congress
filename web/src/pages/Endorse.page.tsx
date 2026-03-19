@@ -1,15 +1,11 @@
 import { IconHandGrab, IconQrcode } from '@tabler/icons-react';
 import { useSearch } from '@tanstack/react-router';
 import { Alert, Card, Loader, Stack, Tabs, Title } from '@mantine/core';
-import {
-  useMyEndorsementsList,
-  useRevokeEndorsement,
-  useTrustBudget,
-} from '@/features/endorsements';
 import { AcceptTab } from '@/features/endorsements/components/AcceptTab';
 import { EndorsementList } from '@/features/endorsements/components/EndorsementList';
 import { GiveTab } from '@/features/endorsements/components/GiveTab';
 import { SlotCounter } from '@/features/endorsements/components/SlotCounter';
+import { useMyEndorsementsList, useRevokeEndorsement, useTrustBudget } from '@/features/trust';
 import { useCryptoRequired } from '@/providers/CryptoProvider';
 import { useDevice } from '@/providers/DeviceProvider';
 

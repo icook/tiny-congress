@@ -1,51 +1,19 @@
-export interface Endorsement {
-  id: string;
-  subject_id: string;
-  topic: string;
-  issuer_id: string | null;
-  created_at: string;
-  revoked: boolean;
-}
+// InvitesListResponse: endorsements had { invites: InviteResponse[] }.
+// No direct equivalent in @/api/trust (listMyInvites returns Invite[]).
+import type { Invite } from '@/api/trust';
 
-export interface EndorsementsListResponse {
-  endorsements: Endorsement[];
-}
+/**
+ * Re-exports from shared @/api layer — single source of truth for endorsement types.
+ */
+export type { Endorsement, EndorsementsListResponse } from '@/api/endorsements';
+export type { TrustBudget as BudgetResponse } from '@/api/trust';
+export type { Invite as InviteResponse } from '@/api/trust';
+export type { CreateInvitePayload } from '@/api/trust';
+export type { AcceptInviteResult as AcceptInviteResponse } from '@/api/trust';
 
-export interface BudgetResponse {
-  slots_total: number;
-  slots_used: number;
-  slots_available: number;
-  out_of_slot_count: number;
-  denouncements_total: number;
-  denouncements_used: number;
-  denouncements_available: number;
-}
-
-export interface CreateInviteResponse {
-  id: string;
-  expires_at: string;
-}
-
-export interface InviteResponse {
-  id: string;
-  delivery_method: string;
-  accepted_by: string | null;
-  expires_at: string;
-  accepted_at: string | null;
-}
+// createInvite returns Invite (same shape as InviteResponse); alias for backward compat.
+export type { Invite as CreateInviteResponse } from '@/api/trust';
 
 export interface InvitesListResponse {
-  invites: InviteResponse[];
-}
-
-export interface AcceptInviteResponse {
-  endorser_id: string;
-  accepted_at: string;
-}
-
-export interface CreateInvitePayload {
-  envelope: string;
-  delivery_method: string;
-  relationship_depth?: string;
-  attestation: Record<string, unknown>;
+  invites: Invite[];
 }

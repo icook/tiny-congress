@@ -1,6 +1,5 @@
 /**
- * Verification API client
- * Queries endorsement status for the authenticated user
+ * Endorsements API client — shared across trust, endorsements, and verification features.
  */
 
 import { signedFetchJson } from '@/api/signing';
