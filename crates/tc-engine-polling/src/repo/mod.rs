@@ -3,6 +3,7 @@
 //! Contains poll, vote, evidence, and lifecycle queue operations.
 //! These are pure SQL functions with no service-layer dependencies.
 
+pub mod bot_traces;
 pub mod evidence;
 pub mod lifecycle_queue;
 pub mod pgmq;
