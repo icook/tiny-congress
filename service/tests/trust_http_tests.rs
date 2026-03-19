@@ -1158,7 +1158,7 @@ async fn accept_invite_succeeds_even_when_endorser_slots_exhausted() {
         .expect("accept response");
     assert_eq!(accept_resp.status(), StatusCode::OK);
 
-    // No endorsement action should have been queued (slots were exhausted).
+    // An out-of-slot endorsement action should have been queued.
     let trust_repo = PgTrustRepo::new(pool);
     let pending = trust_repo
         .claim_pending_actions(10)
@@ -1168,8 +1168,15 @@ async fn accept_invite_succeeds_even_when_endorser_slots_exhausted() {
         .iter()
         .find(|a| a.actor_id == endorser_id && a.action_type == "endorse");
     assert!(
-        endorse_action.is_none(),
-        "expected no pending endorse action when slots exhausted, found: {pending:?}"
+        endorse_action.is_some(),
+        "expected an out-of-slot endorse action to be queued, found none"
+    );
+    let in_slot = endorse_action
+        .and_then(|a| a.payload["in_slot"].as_bool())
+        .unwrap_or(true);
+    assert!(
+        !in_slot,
+        "expected in_slot=false for out-of-slot endorsement"
     );
 
     let _ = (endorser_keys, acceptor_keys);

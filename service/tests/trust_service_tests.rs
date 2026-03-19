@@ -376,7 +376,7 @@ async fn test_endorse_beyond_slot_limit_succeeds() {
 
     // 4th endorsement should succeed (not error) but be out-of-slot
     let extra_subject = AccountFactory::new()
-        .with_seed(257)
+        .with_seed(254)
         .create(&pool)
         .await
         .expect("create extra subject");
