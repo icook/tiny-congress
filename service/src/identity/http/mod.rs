@@ -20,8 +20,9 @@ use uuid::Uuid;
 use super::service::{validate_username, IdentityService, RootPubkey, SignupError, SignupRequest};
 // Re-export shared error helpers so submodules and external callers can use them.
 pub use crate::http::{bad_request, internal_error, not_found, unauthorized, ErrorResponse};
+pub(crate) use crate::http::{conflict, forbidden};
 use crate::identity::http::auth::AuthenticatedDevice;
-use crate::identity::repo::{AccountRecord, AccountRepoError, IdentityRepo};
+use crate::identity::repo::{AccountRecord, AccountRepoError, DeviceKeyRepoError, IdentityRepo};
 use tc_crypto::Kid;
 
 /// Signup response
@@ -106,6 +107,32 @@ pub(crate) const fn timestamp_is_stale(now: i64, timestamp: i64) -> bool {
     now.abs_diff(timestamp) > auth::MAX_TIMESTAMP_SKEW as u64
 }
 
+// ── Shared error response helpers ───────────────────────────────────────────
+
+/// Map a [`DeviceKeyRepoError`] to an HTTP response.
+///
+/// Handles the common mapping used across device management, add-device, and login handlers.
+/// Callers that need context-specific messages for [`DeviceKeyRepoError::AlreadyRevoked`]
+/// (e.g. "Cannot rename a revoked device") should match on that variant before delegating here.
+pub(crate) fn device_key_repo_error_response(e: &DeviceKeyRepoError) -> axum::response::Response {
+    match e {
+        DeviceKeyRepoError::DuplicateKid => conflict("Device key already registered"),
+        DeviceKeyRepoError::MaxDevicesReached => (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            Json(ErrorResponse {
+                error: "Maximum device limit reached".to_string(),
+            }),
+        )
+            .into_response(),
+        DeviceKeyRepoError::NotFound => not_found("Device not found"),
+        DeviceKeyRepoError::AlreadyRevoked => conflict("Device already revoked"),
+        DeviceKeyRepoError::Database(ref db_err) => {
+            tracing::error!("Device key repo database error: {db_err}");
+            internal_error()
+        }
+    }
+}
+
 /// Decode the stored base64url root public key from an account record into raw bytes.
 ///
 /// Both the login and add-device flows look up the root pubkey from the account record
@@ -145,20 +172,8 @@ async fn signup(
 fn signup_error_response(e: SignupError) -> axum::response::Response {
     match e {
         SignupError::Validation(msg) => bad_request(&msg),
-        SignupError::DuplicateUsername => (
-            StatusCode::CONFLICT,
-            Json(ErrorResponse {
-                error: "Username already taken".to_string(),
-            }),
-        )
-            .into_response(),
-        SignupError::DuplicateKey => (
-            StatusCode::CONFLICT,
-            Json(ErrorResponse {
-                error: "Public key already registered".to_string(),
-            }),
-        )
-            .into_response(),
+        SignupError::DuplicateUsername => conflict("Username already taken"),
+        SignupError::DuplicateKey => conflict("Public key already registered"),
         SignupError::MaxDevicesReached => (
             StatusCode::UNPROCESSABLE_ENTITY,
             Json(ErrorResponse {

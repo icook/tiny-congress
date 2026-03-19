@@ -178,13 +178,7 @@ async fn create_endorsement_as_verifier(
         Err(e) => return endorsement_error_response(e),
     };
     if !is_verifier {
-        return (
-            StatusCode::FORBIDDEN,
-            Json(crate::http::ErrorResponse {
-                error: "Account is not an authorized verifier".to_string(),
-            }),
-        )
-            .into_response();
+        return crate::http::forbidden("Account is not an authorized verifier");
     }
 
     // 2. Resolve username → account_id

@@ -115,24 +115,7 @@ pub async fn add_device(
             }),
         )
             .into_response(),
-        Err(DeviceKeyRepoError::DuplicateKid) => (
-            StatusCode::CONFLICT,
-            Json(ErrorResponse {
-                error: "Device key already registered".to_string(),
-            }),
-        )
-            .into_response(),
-        Err(DeviceKeyRepoError::MaxDevicesReached) => (
-            StatusCode::UNPROCESSABLE_ENTITY,
-            Json(ErrorResponse {
-                error: "Maximum device limit reached".to_string(),
-            }),
-        )
-            .into_response(),
-        Err(e) => {
-            tracing::error!("Failed to create device key: {e}");
-            super::internal_error()
-        }
+        Err(e) => super::device_key_repo_error_response(&e),
     }
 }
 
@@ -223,18 +206,8 @@ pub async fn revoke_device(
 
     match repo.revoke_device_key(&kid).await {
         Ok(()) => StatusCode::NO_CONTENT.into_response(),
-        Err(DeviceKeyRepoError::AlreadyRevoked) => (
-            StatusCode::CONFLICT,
-            Json(ErrorResponse {
-                error: "Device already revoked".to_string(),
-            }),
-        )
-            .into_response(),
-        Err(DeviceKeyRepoError::NotFound) => super::not_found("Device not found"),
-        Err(e) => {
-            tracing::error!("Failed to revoke device: {e}");
-            super::internal_error()
-        }
+        Err(DeviceKeyRepoError::AlreadyRevoked) => super::conflict("Device already revoked"),
+        Err(e) => super::device_key_repo_error_response(&e),
     }
 }
 
@@ -266,18 +239,10 @@ pub async fn rename_device(
 
     match repo.rename_device_key(&kid, new_name.as_str()).await {
         Ok(()) => StatusCode::NO_CONTENT.into_response(),
-        Err(DeviceKeyRepoError::AlreadyRevoked) => (
-            StatusCode::CONFLICT,
-            Json(ErrorResponse {
-                error: "Cannot rename a revoked device".to_string(),
-            }),
-        )
-            .into_response(),
-        Err(DeviceKeyRepoError::NotFound) => super::not_found("Device not found"),
-        Err(e) => {
-            tracing::error!("Failed to rename device: {e}");
-            super::internal_error()
+        Err(DeviceKeyRepoError::AlreadyRevoked) => {
+            super::conflict("Cannot rename a revoked device")
         }
+        Err(e) => super::device_key_repo_error_response(&e),
     }
 }
 
