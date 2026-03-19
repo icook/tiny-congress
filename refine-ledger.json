@@ -205,10 +205,10 @@
     },
     "service/src/trust/": {
       "status": "active",
-      "total_prs": 22,
+      "total_prs": 23,
       "total_skips": 0,
       "consecutive_idle": 0,
-      "last_run": "2026-03-19T23:12:17Z",
+      "last_run": "2026-03-19T23:27:51Z",
       "graduated_at": "",
       "history": [
         {
@@ -342,6 +342,12 @@
           "type": "test_coverage",
           "impact": "medium",
           "summary": "Added `denounce_returns_429_when_quota_exceeded` HTTP integration test covering the previously untested `QuotaExceeded` error path for `POST /trust/denounce`, which returns 429 when the daily action limit is exhausted — the endorse and revoke handlers had this test but denounce did not."
+        },
+        {
+          "pr": 0,
+          "type": "unknown",
+          "impact": "medium",
+          "summary": "refine: fail closed on count_all_active_trust_endorsements_by error in budget handler"
         }
       ],
       "skipped": []
