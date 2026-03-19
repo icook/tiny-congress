@@ -398,7 +398,9 @@ function VoteSlider({
           styles={{
             markLabel: {
               fontSize: 'var(--mantine-font-size-xs)',
-              whiteSpace: 'nowrap',
+              whiteSpace: 'normal',
+              textAlign: 'center',
+              maxWidth: 100,
             },
           }}
         />
