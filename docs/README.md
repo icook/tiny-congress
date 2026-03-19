@@ -105,6 +105,7 @@ LLM-specific task guides for AI assistants:
 
 - [test-writing.md](skills/test-writing.md) - Decision tree for choosing test types and placement
 - [testing-local-dev.md](skills/testing-local-dev.md) - Validate Skaffold dev environment (required before Skaffold changes)
+- [screenshot-report.md](skills/screenshot-report.md) - Generate visual change reports with Playwright screenshots after UI work
 
 ## Related Documentation
 

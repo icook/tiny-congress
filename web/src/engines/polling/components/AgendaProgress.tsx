@@ -1,4 +1,4 @@
-import { Text } from '@mantine/core';
+import { Group, Progress, Text } from '@mantine/core';
 import type { Poll } from '../api';
 
 interface Props {
@@ -16,9 +16,14 @@ export function AgendaProgress({ polls, activePollId }: Props) {
     return null;
   }
 
+  const pct = ((index + 1) / polls.length) * 100;
+
   return (
-    <Text size="sm" c="dimmed">
-      Question {index + 1} of {polls.length}
-    </Text>
+    <Group gap="xs" style={{ flex: 1 }}>
+      <Text size="xs" c="dimmed" fw={500} style={{ whiteSpace: 'nowrap' }}>
+        {index + 1} / {polls.length}
+      </Text>
+      <Progress value={pct} size="sm" style={{ flex: 1 }} color="blue" />
+    </Group>
   );
 }

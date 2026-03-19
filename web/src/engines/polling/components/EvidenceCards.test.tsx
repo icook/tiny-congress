@@ -12,33 +12,33 @@ describe('EvidenceCards', () => {
     render(<EvidenceCards evidence={[]} />);
     // No toggle button should appear when evidence is empty
     expect(screen.queryByRole('button')).not.toBeInTheDocument();
-    expect(screen.queryByText(/evidence card/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Research/)).not.toBeInTheDocument();
   });
 
-  it('shows evidence count and expands on click', async () => {
-    const user = userEvent.setup();
+  it('shows research label and evidence by default', () => {
     render(<EvidenceCards evidence={mockEvidence} />);
 
-    // Count label is visible
-    expect(screen.getByText(/2 evidence cards/)).toBeInTheDocument();
+    // Research label with count is visible
+    expect(screen.getByText(/Research \(2\)/)).toBeInTheDocument();
 
-    // Claims are in the DOM (inside Collapse, not yet visible by CSS, but present)
-    expect(screen.getByText('Good labor practices')).toBeInTheDocument();
-
-    // Click to expand — Collapse should open
-    await user.click(screen.getByText(/2 evidence cards/));
-
-    // Claims still in the DOM after click
+    // Claims are visible by default (open by default)
     expect(screen.getByText('Good labor practices')).toBeInTheDocument();
     expect(screen.getByText('Low wages reported')).toBeInTheDocument();
   });
 
-  it('shows pro/con indicators and source attribution', async () => {
+  it('collapses on click', async () => {
     const user = userEvent.setup();
     render(<EvidenceCards evidence={mockEvidence} />);
 
-    // Expand
-    await user.click(screen.getByText(/2 evidence cards/));
+    // Click to collapse
+    await user.click(screen.getByText(/Research \(2\)/));
+
+    // Claims still in the DOM (Collapse hides via CSS, not removal)
+    expect(screen.getByText('Good labor practices')).toBeInTheDocument();
+  });
+
+  it('shows pro/con indicators and source attribution', () => {
+    render(<EvidenceCards evidence={mockEvidence} />);
 
     // Pro indicator
     const plusIndicators = screen.getAllByText('+');
