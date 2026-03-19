@@ -322,6 +322,51 @@ lint-typecheck: _typecheck-frontend
 lint-static: lint-typos lint-dockerfiles lint-workflows lint-scripts
     @echo "✓ All static analysis passed"
 
+# Check for anti-patterns that shared utilities should replace
+lint-patterns:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    FAIL=0
+
+    # 1. Inline ErrorResponse for status codes that have shared helpers
+    #    (BAD_REQUEST, NOT_FOUND, UNAUTHORIZED, INTERNAL_SERVER_ERROR)
+    #    Domain-specific mappers using CONFLICT, TOO_MANY_REQUESTS, etc. are fine.
+    VIOLATIONS=$(rg 'StatusCode::(BAD_REQUEST|NOT_FOUND|UNAUTHORIZED|INTERNAL_SERVER_ERROR).*\n.*ErrorResponse' \
+         service/src/ \
+         --glob '!service/src/http/mod.rs' \
+         --glob '!**/tests/**' \
+         --glob '!**/test*' \
+         --multiline \
+         -l 2>/dev/null || true)
+    # Exclude files that contain a "lint-patterns:allow-inline-error" marker
+    for f in $VIOLATIONS; do
+        if ! grep -q 'lint-patterns:allow-inline-error' "$f" 2>/dev/null; then
+            echo "  $f"
+            FAIL=1
+        fi
+    done
+    if [ "$FAIL" -eq 1 ]; then
+        echo "FAIL: Inline ErrorResponse construction for standard status codes."
+        echo "  Use crate::http::{bad_request,not_found,unauthorized,internal_error} instead."
+        echo "  See AGENTS.md 'Shared Utilities' section."
+    fi
+
+    # 2. serde_json::json! used for error responses in handlers
+    if rg 'serde_json::json!\(\s*\{\s*"error"' service/src/ \
+         --glob '!**/tests/**' \
+         --glob '!**/test*' \
+         -l 2>/dev/null; then
+        echo "FAIL: serde_json::json! used for error responses."
+        echo "  Use crate::http::ErrorResponse struct instead."
+        FAIL=1
+    fi
+
+    if [ "$FAIL" -eq 0 ]; then
+        echo "✓ No anti-patterns found"
+    else
+        exit 1
+    fi
+
 # Check for typos in code and docs (requires typos: cargo install typos-cli)
 lint-typos:
     typos

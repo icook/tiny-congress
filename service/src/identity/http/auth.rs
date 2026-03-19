@@ -108,13 +108,7 @@ fn validate_nonce(nonce: &str) -> Result<(), &'static str> {
 }
 
 fn auth_error(msg: &str) -> Response {
-    (
-        StatusCode::UNAUTHORIZED,
-        Json(ErrorResponse {
-            error: msg.to_string(),
-        }),
-    )
-        .into_response()
+    super::unauthorized(msg)
 }
 
 fn forbidden_error(msg: &str) -> Response {

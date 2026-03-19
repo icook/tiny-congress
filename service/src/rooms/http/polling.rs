@@ -276,13 +276,7 @@ pub async fn update_poll_status(
         "active" => polling.activate_poll(poll_id).await,
         "closed" => polling.close_poll(poll_id).await,
         _ => {
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(ErrorResponse {
-                    error: "Status must be 'active' or 'closed'".to_string(),
-                }),
-            )
-                .into_response()
+            return crate::http::bad_request("Status must be 'active' or 'closed'");
         }
     };
     match result {

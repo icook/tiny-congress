@@ -81,6 +81,18 @@ Some files are generated from source definitions and must not be hand-edited. Ed
 
 When a generated file needs changes, edit the source and run the generator. The CI `check-dashboards` job verifies the committed JSON matches the generator output.
 
+## Shared Utilities (use these, don't reinvent)
+
+When writing HTTP handlers, use the shared helpers. Do NOT construct `(StatusCode, Json(ErrorResponse { ... })).into_response()` inline or use `serde_json::json!({"error": ...})` for error responses. `just lint-patterns` enforces this mechanically.
+
+| Need | Import from | NOT |
+|------|------------|-----|
+| Error responses (`bad_request`, `not_found`, `unauthorized`, `internal_error`) | `crate::http` | Inline `(StatusCode::BAD_REQUEST, Json(ErrorResponse {...}))` |
+| `ErrorResponse` struct | `crate::http::ErrorResponse` | `serde_json::json!({"error": ...})` |
+| Auth extractor | `crate::identity::http::auth::AuthenticatedDevice` | — |
+
+When adding a new shared utility, add it to this table so it stays discoverable. A helper that exists but isn't listed here will be reinvented.
+
 ## Common Mistakes
 - **Subagents don't reliably run lint.** Always verify lint passes in the main session before committing, even if a subagent reports success.
 - Using `String` where a newtype exists (`Kid`, `BackupEnvelope`). If a domain type exists, use it — the type system is the guardrail.
@@ -127,6 +139,7 @@ Use the `justfile` as the single source of truth for all commands. Run `just --l
 | **Dep vulnerabilities** | `just audit-deps` | cargo-deny + yarn audit |
 | **Secret detection** | `just audit-secrets` | gitleaks scan |
 | **Unused deps** | `just audit-unused` | cargo-machete |
+| **Pattern checks** | `just lint-patterns` | Detects anti-patterns that shared utilities should replace |
 | **Static analysis** | `just lint-static` | hadolint, actionlint, shellcheck, typos |
 | **Codegen** | `just codegen` | Export schemas + regenerate TypeScript types (required after changing documented types) |
 | **Build WASM** | `just build-wasm` | Compile `tc-crypto` to WASM for frontend |

@@ -141,9 +141,7 @@ async fn signup(
 
 fn signup_error_response(e: SignupError) -> axum::response::Response {
     match e {
-        SignupError::Validation(msg) => {
-            (StatusCode::BAD_REQUEST, Json(ErrorResponse { error: msg })).into_response()
-        }
+        SignupError::Validation(msg) => bad_request(&msg),
         SignupError::DuplicateUsername => (
             StatusCode::CONFLICT,
             Json(ErrorResponse {
@@ -167,13 +165,7 @@ fn signup_error_response(e: SignupError) -> axum::response::Response {
             .into_response(),
         SignupError::Internal(ref msg) => {
             tracing::error!("Signup returned internal error: {msg}");
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorResponse {
-                    error: "Internal server error".to_string(),
-                }),
-            )
-                .into_response()
+            internal_error()
         }
     }
 }
