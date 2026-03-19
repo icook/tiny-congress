@@ -14,6 +14,12 @@
      "WASM-dependent flows only run in CI, not local dev"
      Delete this section if genuinely N/A. -->
 
+## Screenshots
+<!-- REQUIRED if this PR changes visible UI (touches web/src/ and affects rendering).
+     Include before/after or current-state screenshots of affected pages/components.
+     Use Playwright MCP, browser DevTools, or manual capture.
+     Delete this section ONLY if the PR has zero visual impact. -->
+
 ## Testing
 - [ ] `just test` (backend + frontend unit)
 - [ ] `just lint` (all linters)
