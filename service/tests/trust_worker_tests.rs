@@ -369,3 +369,63 @@ async fn test_process_batch_endorse_invalid_weight_fails() {
         "error_message should mention 'weight', got: {error_message:?}"
     );
 }
+
+// ---------------------------------------------------------------------------
+// Test 6: denounce action with empty reason fails the action
+// ---------------------------------------------------------------------------
+#[shared_runtime_test]
+async fn test_process_batch_denounce_empty_reason_fails() {
+    let db = isolated_db().await;
+    let pool = db.pool().clone();
+
+    let actor = AccountFactory::new()
+        .with_seed(1)
+        .create(&pool)
+        .await
+        .expect("create actor");
+
+    let target = AccountFactory::new()
+        .with_seed(2)
+        .create(&pool)
+        .await
+        .expect("create target");
+
+    // Seed a 'denounce' action with an empty reason (valid range is 1-500 chars)
+    sqlx::query(
+        "INSERT INTO trust__action_queue (actor_id, action_type, payload) VALUES ($1, $2, $3)",
+    )
+    .bind(actor.id)
+    .bind("denounce")
+    .bind(json!({ "target_id": target.id, "reason": "" }))
+    .execute(&pool)
+    .await
+    .expect("seed action");
+
+    let trust_repo = Arc::new(PgTrustRepo::new(pool.clone()));
+    let reputation_repo = Arc::new(PgReputationRepo::new(pool.clone()));
+    let engine = Arc::new(TrustEngine::new(pool.clone()));
+    let worker = Arc::new(TrustWorker::new(
+        trust_repo,
+        reputation_repo,
+        engine,
+        50,
+        30,
+    ));
+
+    let processed = worker.process_batch().await.expect("process_batch");
+    assert_eq!(processed, 1);
+
+    // Action should be marked failed with an error mentioning reason
+    let (status, error_message): (String, Option<String>) =
+        sqlx::query_as("SELECT status, error_message FROM trust__action_queue WHERE actor_id = $1")
+            .bind(actor.id)
+            .fetch_one(&pool)
+            .await
+            .expect("fetch action");
+
+    assert_eq!(status, "failed");
+    assert!(
+        error_message.as_deref().unwrap_or("").contains("reason"),
+        "error_message should mention 'reason', got: {error_message:?}"
+    );
+}

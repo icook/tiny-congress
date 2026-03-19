@@ -141,6 +141,12 @@ impl TrustWorker {
                     .as_str()
                     .ok_or_else(|| anyhow::anyhow!("denounce payload missing 'reason'"))?
                     .to_string();
+                if reason.is_empty() || reason.len() > 500 {
+                    return Err(anyhow::anyhow!(
+                        "denounce payload 'reason' length out of range [1, 500]: {}",
+                        reason.len()
+                    ));
+                }
 
                 self.trust_repo
                     .create_denouncement(action.actor_id, target_id, &reason)
