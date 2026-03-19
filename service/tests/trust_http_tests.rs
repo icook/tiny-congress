@@ -748,6 +748,27 @@ async fn denounce_rejects_reason_too_long() {
     assert!(json["error"].as_str().unwrap_or("").contains("reason"));
 }
 
+// ─── Accept invite — error paths ─────────────────────────────────────────────
+
+#[shared_runtime_test]
+async fn accept_invite_returns_404_for_nonexistent_invite() {
+    let db = isolated_db().await;
+    let (app, keys, _account_id) = signup_and_get_account("acceptnotfound", db.pool()).await;
+
+    let fake_id = uuid::Uuid::new_v4();
+    let uri = format!("/trust/invites/{fake_id}/accept");
+    let request = build_authed_request(
+        Method::POST,
+        &uri,
+        "",
+        &keys.device_signing_key,
+        &keys.device_kid,
+    );
+
+    let response = app.oneshot(request).await.expect("response");
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+}
+
 // ─── Endorse after denounce ───────────────────────────────────────────────────
 
 #[shared_runtime_test]
