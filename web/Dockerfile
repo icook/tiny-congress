@@ -48,9 +48,9 @@ RUN yarn build
 
 # Production stage — nginx-unprivileged runs as UID 101, listens on 8080
 FROM nginxinc/nginx-unprivileged:alpine
-# Upgrade system packages to pick up security patches (e.g. zlib CVE-2026-22184)
+# Upgrade system packages to pick up security patches
 USER root
-RUN apk upgrade --no-cache
+RUN apk upgrade --no-cache  # CVE-2026-32767
 
 # Entrypoint generates /tmp/config.js from env vars, then starts nginx
 # Must be copied as root to ensure correct permissions and ownership
