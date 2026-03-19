@@ -61,3 +61,5 @@ After you are done, your final text output MUST be valid JSON matching this sche
 - `"clean"`: Nothing worth improving in the focus area. No changes made.
 
 `type` and `impact` are REQUIRED on all actions (including `clean` — categorize and rate what was found, even if nothing was worth doing).
+
+**CRITICAL: Your very last output MUST be the JSON object above and nothing else. Do not write any text after the JSON. Do not wrap it in a code fence. Just output raw JSON as your final message.**

@@ -799,10 +799,21 @@ for i, c in enumerate(text):
     fi
 
     if [[ -z "$json_block" ]]; then
-        log "WARNING: Could not parse JSON from Claude's response"
-        log "Response: $(echo "$response_text" | head -5)"
-        cleanup_worktree "$wt_path" "$branch"
-        return 1
+        # Fallback: if Claude made commits but forgot to output JSON,
+        # don't waste the work — treat it as a change with unknown metadata.
+        local fallback_commits
+        fallback_commits="$(git -C "$wt_path" rev-list --count master..HEAD 2>/dev/null || echo "0")"
+        if [[ "$fallback_commits" -gt 0 ]]; then
+            local fallback_summary
+            fallback_summary="$(git -C "$wt_path" log -1 --format=%s 2>/dev/null || echo "auto-detected change")"
+            log "WARNING: No JSON output but found $fallback_commits commit(s), treating as change"
+            json_block="{\"action\":\"change\",\"type\":\"unknown\",\"impact\":\"medium\",\"summary\":$(echo "$fallback_summary" | jq -Rs '.')}"
+        else
+            log "WARNING: Could not parse JSON from Claude's response"
+            log "Response: $(echo "$response_text" | head -5)"
+            cleanup_worktree "$wt_path" "$branch"
+            return 1
+        fi
     fi
 
     local action
