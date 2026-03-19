@@ -12,11 +12,18 @@ use axum::{
 use tc_engine_api::engine::{EngineContext, EngineRegistry};
 use uuid::Uuid;
 
-use super::{CreateRoomRequest, RoomResponse};
+use sqlx::PgPool;
+use tc_engine_api::constraints::build_constraint;
+
+use super::{
+    AssignRoleRequest, AssignRoleResponse, CreateRoomRequest, MyCapabilitiesResponse, RoomResponse,
+};
 use crate::http::ErrorResponse;
 use crate::identity::http::auth::AuthenticatedDevice;
 use crate::rooms::repo::RoomRecord;
 use crate::rooms::service::{RoomError, RoomsService};
+use crate::trust::graph_reader::TrustRepoGraphReader;
+use crate::trust::repo::TrustRepo;
 
 // ─── Room handlers ─────────────────────────────────────────────────────────
 
@@ -111,6 +118,165 @@ pub async fn get_capacity(
             (StatusCode::OK, Json(rooms)).into_response()
         }
         Err(e) => room_error_response(e),
+    }
+}
+
+// ─── Capabilities endpoint ────────────────────────────────────────────────
+
+pub async fn my_capabilities(
+    Extension(service): Extension<Arc<dyn RoomsService>>,
+    Extension(trust_repo): Extension<Arc<dyn TrustRepo>>,
+    Extension(pool): Extension<PgPool>,
+    Path(room_id): Path<Uuid>,
+    auth: AuthenticatedDevice,
+) -> impl IntoResponse {
+    let room = match service.get_room(room_id).await {
+        Ok(r) => r,
+        Err(e) => return room_error_response(e),
+    };
+
+    // Owner check
+    if room.owner_id == Some(auth.account_id) {
+        return (
+            StatusCode::OK,
+            Json(MyCapabilitiesResponse {
+                role: "owner".to_string(),
+                can_vote: true,
+                can_configure: true,
+                reason: None,
+                next_step: None,
+            }),
+        )
+            .into_response();
+    }
+
+    // Check for explicit role assignment (layer 2: per-room elevation)
+    let assigned_role: Option<String> = sqlx::query_scalar(
+        "SELECT role FROM rooms__role_assignments WHERE room_id = $1 AND account_id = $2",
+    )
+    .bind(room_id)
+    .bind(auth.account_id)
+    .fetch_optional(&pool)
+    .await
+    .unwrap_or(None);
+
+    if let Some(role) = assigned_role {
+        return (
+            StatusCode::OK,
+            Json(MyCapabilitiesResponse {
+                role,
+                can_vote: true,
+                can_configure: false,
+                reason: None,
+                next_step: None,
+            }),
+        )
+            .into_response();
+    }
+
+    // Participant check: evaluate room constraint (layer 1: platform endorsement)
+    let trust_reader = TrustRepoGraphReader::new(trust_repo);
+    let constraint = match build_constraint(&room.constraint_type, &room.constraint_config) {
+        Ok(c) => c,
+        Err(e) => {
+            tracing::error!(room_id = %room_id, "failed to build constraint: {e}");
+            return internal_error();
+        }
+    };
+
+    match constraint.check(auth.account_id, &trust_reader).await {
+        Ok(eligibility) if eligibility.is_eligible => (
+            StatusCode::OK,
+            Json(MyCapabilitiesResponse {
+                role: "participant".to_string(),
+                can_vote: true,
+                can_configure: false,
+                reason: None,
+                next_step: None,
+            }),
+        )
+            .into_response(),
+        Ok(eligibility) => {
+            let next_step = if room.constraint_type == "endorsed_by_user" {
+                Some("Ask the room owner to endorse you".to_string())
+            } else {
+                Some("Complete identity verification or get endorsed".to_string())
+            };
+            (
+                StatusCode::OK,
+                Json(MyCapabilitiesResponse {
+                    role: "none".to_string(),
+                    can_vote: false,
+                    can_configure: false,
+                    reason: eligibility.reason,
+                    next_step,
+                }),
+            )
+                .into_response()
+        }
+        Err(e) => {
+            tracing::error!(room_id = %room_id, "constraint check error: {e}");
+            internal_error()
+        }
+    }
+}
+
+// ─── Role assignment endpoint ─────────────────────────────────────────────
+
+pub async fn assign_role(
+    Extension(service): Extension<Arc<dyn RoomsService>>,
+    Extension(pool): Extension<PgPool>,
+    Path(room_id): Path<Uuid>,
+    auth: AuthenticatedDevice,
+) -> impl IntoResponse {
+    let req: AssignRoleRequest = match auth.json() {
+        Ok(r) => r,
+        Err(resp) => return resp,
+    };
+
+    // Only the room owner can assign roles
+    let room = match service.get_room(room_id).await {
+        Ok(r) => r,
+        Err(e) => return room_error_response(e),
+    };
+
+    if room.owner_id != Some(auth.account_id) {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(ErrorResponse {
+                error: "Only the room owner can assign roles".to_string(),
+            }),
+        )
+            .into_response();
+    }
+
+    // Upsert role assignment
+    match sqlx::query(
+        "INSERT INTO rooms__role_assignments (room_id, account_id, role, assigned_by) \
+         VALUES ($1, $2, $3, $4) \
+         ON CONFLICT (room_id, account_id) \
+         DO UPDATE SET role = EXCLUDED.role, assigned_by = EXCLUDED.assigned_by, assigned_at = now()",
+    )
+    .bind(room_id)
+    .bind(req.account_id)
+    .bind(&req.role)
+    .bind(auth.account_id)
+    .execute(&pool)
+    .await
+    {
+        Ok(_) => (
+            StatusCode::OK,
+            Json(AssignRoleResponse {
+                room_id,
+                account_id: req.account_id,
+                role: req.role,
+            }),
+        )
+            .into_response(),
+        Err(e) => {
+            tracing::error!(room_id = %room_id, "role assignment failed: {e}");
+            internal_error()
+        }
     }
 }
 
