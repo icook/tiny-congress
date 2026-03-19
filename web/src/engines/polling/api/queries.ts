@@ -12,9 +12,11 @@ import {
   getPollDetail,
   getPollDistribution,
   getPollResults,
+  getPollTraces,
   getRoom,
   listPolls,
   listRooms,
+  type BotTrace,
   type DimensionVote,
   type MyCapabilitiesResponse,
   type Poll,
@@ -72,6 +74,14 @@ export function usePollResults(roomId: string, pollId: string) {
     queryFn: () => getPollResults(roomId, pollId),
     enabled: Boolean(roomId && pollId),
     refetchInterval: 20_000,
+  });
+}
+
+export function usePollTraces(roomId: string, pollId: string) {
+  return useQuery<BotTrace[]>({
+    queryKey: ['poll-traces', roomId, pollId],
+    queryFn: () => getPollTraces(roomId, pollId),
+    enabled: Boolean(roomId && pollId),
   });
 }
 

@@ -19,6 +19,8 @@ import {
   Text,
   Title,
 } from '@mantine/core';
+import { usePollTraces } from '@/engines/polling/api/queries';
+import { BotTraceViewer } from '@/engines/polling/components/BotTraceViewer';
 import {
   EvidenceCards,
   PollDeadline,
@@ -56,6 +58,7 @@ export function PollPage({ roomId, pollId }: PollPageProps) {
   const capabilitiesQuery = useMyCapabilities(roomId, deviceKid, privateKey, crypto);
 
   const agendaQuery = useAgenda(roomId);
+  const tracesQuery = usePollTraces(roomId, pollId);
   const { secondsLeft, isExpired } = usePollCountdown(detailQuery.data?.poll);
 
   // Immediately refetch when countdown expires so the UI transitions without waiting for the next 20s interval
@@ -316,6 +319,10 @@ export function PollPage({ roomId, pollId }: PollPageProps) {
           ) : null}
         </Stack>
       </Card>
+
+      {tracesQuery.data && tracesQuery.data.length > 0 ? (
+        <BotTraceViewer traces={tracesQuery.data} />
+      ) : null}
     </Stack>
   );
 }
