@@ -1,6 +1,7 @@
 import '@mantine/core/styles.css';
 
 import React, { useCallback, useEffect } from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { DARK_MODE_EVENT_NAME } from '@vueless/storybook-dark-mode';
 import { addons } from 'storybook/preview-api';
 import { MantineProvider, useMantineColorScheme } from '@mantine/core';
@@ -34,7 +35,14 @@ function ColorSchemeWrapper({ children }: { children: React.ReactNode }) {
   return children;
 }
 
+const queryClient = new QueryClient({
+  defaultOptions: { queries: { retry: false } },
+});
+
 export const decorators = [
   (renderStory: any) => <ColorSchemeWrapper>{renderStory()}</ColorSchemeWrapper>,
   (renderStory: any) => <MantineProvider theme={mantineTheme}>{renderStory()}</MantineProvider>,
+  (renderStory: any) => (
+    <QueryClientProvider client={queryClient}>{renderStory()}</QueryClientProvider>
+  ),
 ];
