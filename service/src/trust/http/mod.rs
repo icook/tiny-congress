@@ -81,6 +81,7 @@ pub struct BudgetResponse {
     pub slots_total: u32,
     pub slots_used: i64,
     pub slots_available: i64,
+    pub out_of_slot_count: i64,
     pub denouncements_total: u32,
     pub denouncements_used: i64,
     pub denouncements_available: i64,
@@ -319,6 +320,12 @@ async fn budget_handler(
         }
     };
 
+    let all_endorsements = reputation_repo
+        .count_all_active_trust_endorsements_by(auth.account_id)
+        .await
+        .unwrap_or(0);
+    let out_of_slot_count = all_endorsements - endorsements_used;
+
     let denouncements_used = match trust_repo
         .count_active_denouncements_by(auth.account_id)
         .await
@@ -336,6 +343,7 @@ async fn budget_handler(
             slots_total: ENDORSEMENT_SLOTS,
             slots_used: endorsements_used,
             slots_available: i64::from(ENDORSEMENT_SLOTS) - endorsements_used,
+            out_of_slot_count,
             denouncements_total: DENOUNCEMENT_SLOTS,
             denouncements_used,
             denouncements_available: i64::from(DENOUNCEMENT_SLOTS) - denouncements_used,
