@@ -37,6 +37,7 @@ against the focus area. If any match, fix them — they are always worth a PR.
 | Inline error response | `Json(ErrorResponse {` outside `http/mod.rs` | Use `crate::http::{bad_request,not_found,internal_error}` |
 | Inconsistent JSON errors | `serde_json::json!.*error` in handler files | Use `crate::http::ErrorResponse` |
 | Duplicated StatusCode mapping | Same `StatusCode::X, Json(ErrorResponse` in 2+ files | Extract to shared error mapper or use helpers |
+| Raw PgPool in HTTP handler | `Extension<PgPool>` outside identity/repo modules | Use `Arc<dyn *Repo>` or `Arc<dyn *Service>` trait |
 
 Run the equivalent grep commands against your focus path before engaging
 LLM judgment. If you find matches, that IS the highest-value improvement.

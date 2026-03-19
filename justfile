@@ -361,6 +361,30 @@ lint-patterns:
         FAIL=1
     fi
 
+    # 3. Raw PgPool in HTTP handlers outside identity repo
+    #    Handlers should use Arc<dyn *Repo> or Arc<dyn *Service>, not raw pool.
+    #    Allowed: identity/http/ (owns the repo), repo/ modules, main.rs, tests.
+    POOL_VIOLATIONS=$(rg 'Extension<PgPool>' service/src/ \
+         --glob '!service/src/identity/**' \
+         --glob '!service/src/**/repo/**' \
+         --glob '!service/src/main.rs' \
+         --glob '!service/src/app_builder.rs' \
+         --glob '!**/tests/**' \
+         --glob '!**/test*' \
+         -l 2>/dev/null || true)
+    for f in $POOL_VIOLATIONS; do
+        if ! grep -q 'lint-patterns:allow-raw-pool' "$f" 2>/dev/null; then
+            echo "  $f"
+            POOL_FAIL=1
+        fi
+    done
+    if [ "${POOL_FAIL:-0}" -eq 1 ]; then
+        echo "FAIL: Raw PgPool used in HTTP handler outside identity."
+        echo "  Use Arc<dyn *Repo> or Arc<dyn *Service> instead."
+        echo "  See AGENTS.md 'Shared Utilities' section."
+        FAIL=1
+    fi
+
     if [ "$FAIL" -eq 0 ]; then
         echo "✓ No anti-patterns found"
     else
