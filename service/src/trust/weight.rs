@@ -4,25 +4,37 @@
 //! clamped to (0, 1.0].
 
 /// Base weight for each delivery method (ADR-023).
+///
+/// # Panics
+///
+/// Panics if `delivery_method` is not a recognised value. Callers must validate
+/// input before invoking this function (e.g. at the HTTP boundary).
 #[must_use]
 pub fn base_weight(delivery_method: &str) -> f32 {
     match delivery_method {
+        "qr" => 1.0,
         "video" => 0.7,
         "text" | "messaging" => 0.4,
         "email" => 0.2,
-        // "qr" and unknown methods default to full weight
-        _ => 1.0,
+        other => unreachable!("unrecognised delivery_method: {other:?}; validate before calling"),
     }
 }
 
 /// Multiplier for relationship depth (ADR-023).
+///
+/// # Panics
+///
+/// Panics if `relationship_depth` is `Some` with an unrecognised value. Callers
+/// must validate input before invoking this function (e.g. at the HTTP boundary).
 #[must_use]
 pub fn depth_multiplier(relationship_depth: Option<&str>) -> f32 {
     match relationship_depth {
+        Some("years") | None => 1.0,
         Some("months") => 0.7,
         Some("acquaintance") => 0.5,
-        // "years", None, or unrecognised values default to no reduction
-        _ => 1.0,
+        Some(other) => {
+            unreachable!("unrecognised relationship_depth: {other:?}; validate before calling")
+        }
     }
 }
 
