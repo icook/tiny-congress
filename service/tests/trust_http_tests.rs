@@ -1261,6 +1261,51 @@ async fn accept_invite_succeeds_even_when_endorser_slots_exhausted() {
     let _ = (endorser_keys, acceptor_keys);
 }
 
+// ─── List invites ─────────────────────────────────────────────────────────────
+
+#[shared_runtime_test]
+async fn list_invites_returns_created_invite() {
+    let db = isolated_db().await;
+    let (app, keys, _account_id) = signup_and_get_account("listinvitecreator", db.pool()).await;
+
+    let envelope_b64 = tc_crypto::encode_base64url(b"dummy-envelope-bytes");
+    let body = serde_json::json!({
+        "envelope": envelope_b64,
+        "delivery_method": "email",
+        "attestation": { "note": "list test" }
+    })
+    .to_string();
+
+    let create_req = build_authed_request(
+        Method::POST,
+        "/trust/invites",
+        &body,
+        &keys.device_signing_key,
+        &keys.device_kid,
+    );
+    let create_resp = app.clone().oneshot(create_req).await.expect("create");
+    assert_eq!(create_resp.status(), StatusCode::CREATED);
+    let created = json_body(create_resp).await;
+    let invite_id = created["id"].as_str().expect("invite id");
+
+    let list_req = build_authed_request(
+        Method::GET,
+        "/trust/invites/mine",
+        "",
+        &keys.device_signing_key,
+        &keys.device_kid,
+    );
+    let list_resp = app.oneshot(list_req).await.expect("list");
+    assert_eq!(list_resp.status(), StatusCode::OK);
+
+    let json = json_body(list_resp).await;
+    let invites = json["invites"].as_array().expect("invites array");
+    assert_eq!(invites.len(), 1);
+    assert_eq!(invites[0]["id"].as_str().unwrap(), invite_id);
+    assert_eq!(invites[0]["delivery_method"].as_str().unwrap(), "email");
+    assert!(invites[0]["accepted_by"].is_null());
+}
+
 // ─── Endorse beyond slot limit ────────────────────────────────────────────────
 
 /// When a non-verifier user has used all k=3 endorsement slots, a direct
