@@ -134,6 +134,51 @@ mod tests {
     use super::*;
 
     #[test]
+    fn is_valid_weight_accepts_minimum_positive() {
+        assert!(is_valid_endorsement_weight(f32::MIN_POSITIVE));
+    }
+
+    #[test]
+    fn is_valid_weight_accepts_one() {
+        assert!(is_valid_endorsement_weight(1.0));
+    }
+
+    #[test]
+    fn is_valid_weight_accepts_midrange() {
+        assert!(is_valid_endorsement_weight(0.5));
+    }
+
+    #[test]
+    fn is_valid_weight_rejects_zero() {
+        assert!(!is_valid_endorsement_weight(0.0));
+    }
+
+    #[test]
+    fn is_valid_weight_rejects_negative() {
+        assert!(!is_valid_endorsement_weight(-0.1));
+    }
+
+    #[test]
+    fn is_valid_weight_rejects_above_one() {
+        assert!(!is_valid_endorsement_weight(1.1));
+    }
+
+    #[test]
+    fn is_valid_weight_rejects_nan() {
+        assert!(!is_valid_endorsement_weight(f32::NAN));
+    }
+
+    #[test]
+    fn is_valid_weight_rejects_positive_infinity() {
+        assert!(!is_valid_endorsement_weight(f32::INFINITY));
+    }
+
+    #[test]
+    fn is_valid_weight_rejects_negative_infinity() {
+        assert!(!is_valid_endorsement_weight(f32::NEG_INFINITY));
+    }
+
+    #[test]
     fn is_valid_reason_accepts_nonempty_within_limit() {
         assert!(is_valid_reason("valid reason"));
     }
