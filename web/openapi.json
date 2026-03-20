@@ -15,6 +15,426 @@
     }
   ],
   "paths": {
+    "/accounts/lookup": {
+      "get": {
+        "tags": [
+          "Identity"
+        ],
+        "summary": "Look up an account by username.",
+        "description": "Returns `{ id, username }` so the caller can use the UUID for trust actions.\nRequires authentication — callers must have a valid device session.",
+        "operationId": "account_lookup",
+        "parameters": [
+          {
+            "name": "username",
+            "in": "query",
+            "description": "Username to look up",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Account found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountLookupResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid username"
+          },
+          "404": {
+            "description": "User not found"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/auth/backup/{username}": {
+      "get": {
+        "tags": [
+          "Identity"
+        ],
+        "summary": "GET /auth/backup/{username} -- fetch encrypted backup for login.",
+        "description": "Returns 200 with an encrypted backup envelope for both real and unknown\nusernames. Unknown usernames receive a deterministic synthetic backup\nto prevent username enumeration.\n\nTo mitigate timing side-channels, both the account lookup and backup\nlookup are always performed regardless of whether the account exists.",
+        "operationId": "get_backup",
+        "parameters": [
+          {
+            "name": "username",
+            "in": "path",
+            "description": "Username to fetch backup for",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Encrypted backup (real or synthetic)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BackupResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid username"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/auth/devices": {
+      "get": {
+        "tags": [
+          "Identity"
+        ],
+        "summary": "GET /auth/devices — list all devices for the authenticated account",
+        "operationId": "list_devices",
+        "responses": {
+          "200": {
+            "description": "Device list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Identity"
+        ],
+        "summary": "POST /auth/devices — add a new device key",
+        "operationId": "add_device",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddDeviceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Device added",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AddDeviceResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "409": {
+            "description": "Device key already registered"
+          },
+          "422": {
+            "description": "Maximum device limit reached"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/auth/devices/{kid}": {
+      "delete": {
+        "tags": [
+          "Identity"
+        ],
+        "summary": "DELETE /auth/devices/:kid — revoke a device key",
+        "operationId": "revoke_device",
+        "parameters": [
+          {
+            "name": "kid",
+            "in": "path",
+            "description": "Key identifier of the device to revoke",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Device revoked"
+          },
+          "400": {
+            "description": "Invalid KID"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "Device not found"
+          },
+          "409": {
+            "description": "Device already revoked"
+          },
+          "422": {
+            "description": "Cannot revoke the device making this request"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "Identity"
+        ],
+        "summary": "PATCH /auth/devices/:kid — rename a device",
+        "operationId": "rename_device",
+        "parameters": [
+          {
+            "name": "kid",
+            "in": "path",
+            "description": "Key identifier of the device to rename",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RenameDeviceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Device renamed"
+          },
+          "400": {
+            "description": "Invalid request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "Device not found"
+          },
+          "409": {
+            "description": "Cannot rename a revoked device"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/auth/idme/authorize": {
+      "get": {
+        "tags": [
+          "reputation"
+        ],
+        "summary": "Generate the ID.me authorization URL and return it.",
+        "operationId": "authorize",
+        "responses": {
+          "200": {
+            "description": "Authorization URL generated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthorizeResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "device_auth": []
+          }
+        ]
+      }
+    },
+    "/auth/idme/callback": {
+      "get": {
+        "tags": [
+          "reputation"
+        ],
+        "summary": "OAuth callback from ID.me (browser redirect, unauthenticated).",
+        "description": "The `account_id` is embedded in the HMAC-signed state parameter.\nOn success, redirects to the frontend with `verification=success`.\nOn failure, redirects with `verification=error&message=...`.",
+        "operationId": "callback",
+        "parameters": [
+          {
+            "name": "code",
+            "in": "query",
+            "description": "Authorization code from ID.me",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "description": "HMAC-signed state parameter",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "error",
+            "in": "query",
+            "description": "Error code from ID.me",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "error_description",
+            "in": "query",
+            "description": "Human-readable error description",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "302": {
+            "description": "Redirect to frontend with verification result"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/auth/login": {
+      "post": {
+        "tags": [
+          "Identity"
+        ],
+        "summary": "POST /auth/login -- authenticate and register a device key",
+        "operationId": "login",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Login successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error or replay detected"
+          },
+          "401": {
+            "description": "Invalid credentials"
+          },
+          "409": {
+            "description": "Device key already registered"
+          },
+          "422": {
+            "description": "Maximum device limit reached"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/auth/signup": {
+      "post": {
+        "tags": [
+          "Identity"
+        ],
+        "summary": "Handle signup request — delegates validation and persistence to [`IdentityService`].",
+        "operationId": "signup",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SignupRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Account created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignupResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error"
+          },
+          "409": {
+            "description": "Username or key already registered"
+          },
+          "422": {
+            "description": "Maximum device limit reached"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
     "/build-info": {
       "get": {
         "tags": [
@@ -43,6 +463,1066 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/endorsements/check": {
+      "get": {
+        "tags": [
+          "reputation"
+        ],
+        "summary": "Check if a subject has an endorsement for a topic (public endpoint).",
+        "operationId": "check_endorsement",
+        "parameters": [
+          {
+            "name": "subject_id",
+            "in": "query",
+            "description": "Account UUID to check endorsement for",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "topic",
+            "in": "query",
+            "description": "Endorsement topic to check",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Endorsement check result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HasEndorsementResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing required query parameters"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/me/endorsements": {
+      "get": {
+        "tags": [
+          "reputation"
+        ],
+        "summary": "List endorsements for the authenticated user.",
+        "operationId": "my_endorsements",
+        "responses": {
+          "200": {
+            "description": "List of endorsements for the authenticated user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EndorsementsListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "device_auth": []
+          }
+        ]
+      }
+    },
+    "/rooms": {
+      "get": {
+        "tags": [
+          "Rooms"
+        ],
+        "operationId": "list_rooms",
+        "responses": {
+          "200": {
+            "description": "List of open rooms",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RoomResponse"
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Rooms"
+        ],
+        "operationId": "create_room",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateRoomRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Room created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoomResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "409": {
+            "description": "Room name already exists"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/rooms/capacity": {
+      "get": {
+        "tags": [
+          "Rooms"
+        ],
+        "operationId": "get_capacity",
+        "responses": {
+          "200": {
+            "description": "Rooms needing content",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RoomResponse"
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/rooms/{room_id}": {
+      "get": {
+        "tags": [
+          "Rooms"
+        ],
+        "operationId": "get_room",
+        "parameters": [
+          {
+            "name": "room_id",
+            "in": "path",
+            "description": "Room ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Room details",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoomResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Room not found"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/rooms/{room_id}/agenda": {
+      "get": {
+        "tags": [
+          "Polls"
+        ],
+        "operationId": "get_agenda",
+        "parameters": [
+          {
+            "name": "room_id",
+            "in": "path",
+            "description": "Room ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Poll agenda",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PollResponse"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Room not found"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/rooms/{room_id}/my-capabilities": {
+      "get": {
+        "tags": [
+          "Rooms"
+        ],
+        "operationId": "my_capabilities",
+        "parameters": [
+          {
+            "name": "room_id",
+            "in": "path",
+            "description": "Room ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "User capabilities in this room",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MyCapabilitiesResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "Room not found"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/rooms/{room_id}/polls": {
+      "get": {
+        "tags": [
+          "Polls"
+        ],
+        "operationId": "list_polls",
+        "parameters": [
+          {
+            "name": "room_id",
+            "in": "path",
+            "description": "Room ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of polls",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PollResponse"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Room not found"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Polls"
+        ],
+        "operationId": "create_poll",
+        "parameters": [
+          {
+            "name": "room_id",
+            "in": "path",
+            "description": "Room ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePollRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Poll created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PollResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/rooms/{room_id}/polls/{poll_id}": {
+      "get": {
+        "tags": [
+          "Polls"
+        ],
+        "operationId": "get_poll_detail",
+        "parameters": [
+          {
+            "name": "room_id",
+            "in": "path",
+            "description": "Room ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "poll_id",
+            "in": "path",
+            "description": "Poll ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Poll detail with dimensions and evidence",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PollDetailResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Poll not found"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/rooms/{room_id}/polls/{poll_id}/dimensions": {
+      "post": {
+        "tags": [
+          "Polls"
+        ],
+        "operationId": "add_dimension",
+        "parameters": [
+          {
+            "name": "room_id",
+            "in": "path",
+            "description": "Room ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "poll_id",
+            "in": "path",
+            "description": "Poll ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateDimensionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Dimension added",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DimensionResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/rooms/{room_id}/polls/{poll_id}/dimensions/{dimension_id}/evidence": {
+      "post": {
+        "tags": [
+          "Polls"
+        ],
+        "operationId": "create_evidence",
+        "parameters": [
+          {
+            "name": "room_id",
+            "in": "path",
+            "description": "Room ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "poll_id",
+            "in": "path",
+            "description": "Poll ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "dimension_id",
+            "in": "path",
+            "description": "Dimension ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateEvidenceBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Evidence created"
+          },
+          "404": {
+            "description": "Dimension not found"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/rooms/{room_id}/polls/{poll_id}/evidence": {
+      "delete": {
+        "tags": [
+          "Polls"
+        ],
+        "operationId": "delete_evidence",
+        "parameters": [
+          {
+            "name": "room_id",
+            "in": "path",
+            "description": "Room ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "poll_id",
+            "in": "path",
+            "description": "Poll ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Evidence deleted"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/rooms/{room_id}/polls/{poll_id}/my-votes": {
+      "get": {
+        "tags": [
+          "Polls"
+        ],
+        "operationId": "my_votes",
+        "parameters": [
+          {
+            "name": "room_id",
+            "in": "path",
+            "description": "Room ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "poll_id",
+            "in": "path",
+            "description": "Poll ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "User's votes for this poll",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/VoteResponse"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "Poll not found"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/rooms/{room_id}/polls/{poll_id}/reset": {
+      "patch": {
+        "tags": [
+          "Polls"
+        ],
+        "summary": "Sim-only: reset a poll back to draft status, clearing all timing fields.\nUsed by the ring buffer refill logic to recycle polls for a new cycle.",
+        "operationId": "reset_poll",
+        "parameters": [
+          {
+            "name": "room_id",
+            "in": "path",
+            "description": "Room ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "poll_id",
+            "in": "path",
+            "description": "Poll ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Poll reset to draft"
+          },
+          "404": {
+            "description": "Poll not found"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/rooms/{room_id}/polls/{poll_id}/results": {
+      "get": {
+        "tags": [
+          "Polls"
+        ],
+        "operationId": "get_results",
+        "parameters": [
+          {
+            "name": "room_id",
+            "in": "path",
+            "description": "Room ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "poll_id",
+            "in": "path",
+            "description": "Poll ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Poll results",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PollResultsResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Poll not found"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/rooms/{room_id}/polls/{poll_id}/results/distribution": {
+      "get": {
+        "tags": [
+          "Polls"
+        ],
+        "operationId": "get_distribution",
+        "parameters": [
+          {
+            "name": "room_id",
+            "in": "path",
+            "description": "Room ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "poll_id",
+            "in": "path",
+            "description": "Poll ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Vote distribution",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PollDistributionResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Poll not found"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/rooms/{room_id}/polls/{poll_id}/status": {
+      "post": {
+        "tags": [
+          "Polls"
+        ],
+        "operationId": "update_poll_status",
+        "parameters": [
+          {
+            "name": "room_id",
+            "in": "path",
+            "description": "Room ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "poll_id",
+            "in": "path",
+            "description": "Poll ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PollStatusRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Status updated"
+          },
+          "400": {
+            "description": "Validation error"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "Poll not found"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/rooms/{room_id}/polls/{poll_id}/traces": {
+      "get": {
+        "tags": [
+          "Polls"
+        ],
+        "operationId": "get_poll_traces",
+        "parameters": [
+          {
+            "name": "room_id",
+            "in": "path",
+            "description": "Room ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "poll_id",
+            "in": "path",
+            "description": "Poll ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bot traces for this poll",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/BotTraceResponse"
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/rooms/{room_id}/polls/{poll_id}/vote": {
+      "post": {
+        "tags": [
+          "Polls"
+        ],
+        "operationId": "cast_vote",
+        "parameters": [
+          {
+            "name": "room_id",
+            "in": "path",
+            "description": "Room ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "poll_id",
+            "in": "path",
+            "description": "Poll ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Vote recorded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/VoteResponse"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Not eligible to vote"
+          },
+          "404": {
+            "description": "Poll not found"
+          },
+          "409": {
+            "description": "Poll not active"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/rooms/{room_id}/roles": {
+      "post": {
+        "tags": [
+          "Rooms"
+        ],
+        "operationId": "assign_role",
+        "parameters": [
+          {
+            "name": "room_id",
+            "in": "path",
+            "description": "Room ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssignRoleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Role assigned",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssignRoleResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Only room owner can assign roles"
+          },
+          "404": {
+            "description": "Room not found"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/rooms/{room_id}/suggestions": {
+      "get": {
+        "tags": [
+          "Rooms"
+        ],
+        "operationId": "list_suggestions",
+        "parameters": [
+          {
+            "name": "room_id",
+            "in": "path",
+            "description": "Room ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of suggestions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SuggestionResponse"
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Rooms"
+        ],
+        "operationId": "create_suggestion",
+        "parameters": [
+          {
+            "name": "room_id",
+            "in": "path",
+            "description": "Room ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateSuggestionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Suggestion created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuggestionResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error or daily limit reached"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "500": {
+            "description": "Internal server error"
           }
         }
       }
@@ -399,6 +1879,188 @@
           }
         }
       },
+      "AccountLookupResponse": {
+        "type": "object",
+        "description": "Account lookup response — returns only what the UI needs to target a user.",
+        "required": [
+          "id",
+          "username"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "username": {
+            "type": "string"
+          }
+        }
+      },
+      "AddDeviceRequest": {
+        "type": "object",
+        "required": [
+          "pubkey",
+          "name",
+          "certificate"
+        ],
+        "properties": {
+          "certificate": {
+            "type": "string",
+            "description": "Base64url-encoded certificate (root key's signature over device pubkey)"
+          },
+          "name": {
+            "type": "string"
+          },
+          "pubkey": {
+            "type": "string",
+            "description": "Base64url-encoded Ed25519 public key"
+          }
+        }
+      },
+      "AddDeviceResponse": {
+        "type": "object",
+        "required": [
+          "device_kid",
+          "created_at"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string"
+          },
+          "device_kid": {
+            "type": "string"
+          }
+        }
+      },
+      "AssignRoleRequest": {
+        "type": "object",
+        "required": [
+          "account_id",
+          "role"
+        ],
+        "properties": {
+          "account_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "role": {
+            "type": "string"
+          }
+        }
+      },
+      "AssignRoleResponse": {
+        "type": "object",
+        "required": [
+          "room_id",
+          "account_id",
+          "role"
+        ],
+        "properties": {
+          "account_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "role": {
+            "type": "string"
+          },
+          "room_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "AuthorizeResponse": {
+        "type": "object",
+        "required": [
+          "url"
+        ],
+        "properties": {
+          "url": {
+            "type": "string"
+          }
+        }
+      },
+      "BackupResponse": {
+        "type": "object",
+        "required": [
+          "encrypted_backup",
+          "root_kid"
+        ],
+        "properties": {
+          "encrypted_backup": {
+            "type": "string",
+            "description": "Base64url-encoded encrypted backup envelope"
+          },
+          "root_kid": {
+            "type": "string"
+          }
+        }
+      },
+      "BotTraceResponse": {
+        "type": "object",
+        "required": [
+          "id",
+          "task",
+          "run_mode",
+          "steps",
+          "total_cost_usd",
+          "status",
+          "created_at"
+        ],
+        "properties": {
+          "completed_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "run_mode": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "steps": {
+            "type": "array",
+            "items": {}
+          },
+          "task": {
+            "type": "string"
+          },
+          "total_cost_usd": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      },
+      "BucketResponse": {
+        "type": "object",
+        "required": [
+          "label",
+          "count"
+        ],
+        "properties": {
+          "count": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "label": {
+            "type": "string"
+          }
+        }
+      },
       "BudgetResponse": {
         "type": "object",
         "required": [
@@ -473,6 +2135,77 @@
           }
         }
       },
+      "CallbackQuery": {
+        "type": "object",
+        "description": "OAuth callback query parameters from ID.me.",
+        "properties": {
+          "code": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "error_description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "state": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "CreateDimensionRequest": {
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "max_label": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "max_value": {
+            "type": "number",
+            "format": "float"
+          },
+          "min_label": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "min_value": {
+            "type": "number",
+            "format": "float"
+          },
+          "name": {
+            "type": "string"
+          },
+          "sort_order": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
       "CreateEndorsementRequest": {
         "type": "object",
         "required": [
@@ -486,6 +2219,20 @@
           },
           "username": {
             "type": "string"
+          }
+        }
+      },
+      "CreateEvidenceBody": {
+        "type": "object",
+        "required": [
+          "evidence"
+        ],
+        "properties": {
+          "evidence": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EvidenceItem"
+            }
           }
         }
       },
@@ -533,6 +2280,69 @@
           "id": {
             "type": "string",
             "format": "uuid"
+          }
+        }
+      },
+      "CreatePollRequest": {
+        "type": "object",
+        "required": [
+          "question"
+        ],
+        "properties": {
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "question": {
+            "type": "string"
+          }
+        }
+      },
+      "CreateRoomRequest": {
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "constraint_config": {},
+          "constraint_type": {
+            "type": "string"
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "eligibility_topic": {
+            "type": "string"
+          },
+          "engine_config": {},
+          "engine_type": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "poll_duration_secs": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          }
+        }
+      },
+      "CreateSuggestionRequest": {
+        "type": "object",
+        "required": [
+          "suggestion_text"
+        ],
+        "properties": {
+          "suggestion_text": {
+            "type": "string"
           }
         }
       },
@@ -611,6 +2421,226 @@
           }
         }
       },
+      "DeviceInfo": {
+        "type": "object",
+        "description": "Device info returned in API responses (omits certificate and raw pubkey)",
+        "required": [
+          "device_kid",
+          "device_name",
+          "created_at"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string"
+          },
+          "device_kid": {
+            "type": "string"
+          },
+          "device_name": {
+            "type": "string"
+          },
+          "last_used_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "revoked_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "DeviceListResponse": {
+        "type": "object",
+        "required": [
+          "devices"
+        ],
+        "properties": {
+          "devices": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DeviceInfo"
+            }
+          }
+        }
+      },
+      "DimensionDetailResponse": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "min_value",
+          "max_value",
+          "sort_order",
+          "evidence"
+        ],
+        "properties": {
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EvidenceResponse"
+            }
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "max_label": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "max_value": {
+            "type": "number",
+            "format": "float"
+          },
+          "min_label": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "min_value": {
+            "type": "number",
+            "format": "float"
+          },
+          "name": {
+            "type": "string"
+          },
+          "sort_order": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "DimensionDistributionResponse": {
+        "type": "object",
+        "required": [
+          "dimension_id",
+          "dimension_name",
+          "buckets"
+        ],
+        "properties": {
+          "buckets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BucketResponse"
+            }
+          },
+          "dimension_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "dimension_name": {
+            "type": "string"
+          }
+        }
+      },
+      "DimensionResponse": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "min_value",
+          "max_value",
+          "sort_order"
+        ],
+        "properties": {
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "max_label": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "max_value": {
+            "type": "number",
+            "format": "float"
+          },
+          "min_label": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "min_value": {
+            "type": "number",
+            "format": "float"
+          },
+          "name": {
+            "type": "string"
+          },
+          "sort_order": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "DimensionStatsResponse": {
+        "type": "object",
+        "required": [
+          "dimension_id",
+          "dimension_name",
+          "count",
+          "mean",
+          "median",
+          "stddev",
+          "min",
+          "max"
+        ],
+        "properties": {
+          "count": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "dimension_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "dimension_name": {
+            "type": "string"
+          },
+          "max": {
+            "type": "number",
+            "format": "double"
+          },
+          "mean": {
+            "type": "number",
+            "format": "double"
+          },
+          "median": {
+            "type": "number",
+            "format": "double"
+          },
+          "min": {
+            "type": "number",
+            "format": "double"
+          },
+          "stddev": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      },
       "EndorseRequest": {
         "type": "object",
         "required": [
@@ -625,6 +2655,131 @@
           "weight": {
             "type": "number",
             "format": "float"
+          }
+        }
+      },
+      "EndorsementQuery": {
+        "type": "object",
+        "properties": {
+          "subject_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "topic": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "EndorsementResponse": {
+        "type": "object",
+        "required": [
+          "id",
+          "subject_id",
+          "topic",
+          "created_at",
+          "revoked"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "issuer_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "revoked": {
+            "type": "boolean"
+          },
+          "subject_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "topic": {
+            "type": "string"
+          }
+        }
+      },
+      "EndorsementsListResponse": {
+        "type": "object",
+        "required": [
+          "endorsements"
+        ],
+        "properties": {
+          "endorsements": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EndorsementResponse"
+            }
+          }
+        }
+      },
+      "EvidenceItem": {
+        "type": "object",
+        "required": [
+          "stance",
+          "claim"
+        ],
+        "properties": {
+          "claim": {
+            "type": "string"
+          },
+          "source": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "stance": {
+            "type": "string"
+          }
+        }
+      },
+      "EvidenceResponse": {
+        "type": "object",
+        "required": [
+          "id",
+          "stance",
+          "claim"
+        ],
+        "properties": {
+          "claim": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "source": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "stance": {
+            "type": "string"
+          }
+        }
+      },
+      "HasEndorsementResponse": {
+        "type": "object",
+        "required": [
+          "has_endorsement"
+        ],
+        "properties": {
+          "has_endorsement": {
+            "type": "boolean"
           }
         }
       },
@@ -675,6 +2830,72 @@
           }
         }
       },
+      "LoginDevice": {
+        "type": "object",
+        "description": "Device data for login",
+        "required": [
+          "pubkey",
+          "name",
+          "certificate"
+        ],
+        "properties": {
+          "certificate": {
+            "type": "string",
+            "description": "Base64url-encoded certificate (root key's signature over `device_pubkey || timestamp`)"
+          },
+          "name": {
+            "type": "string",
+            "description": "User-provided device name"
+          },
+          "pubkey": {
+            "type": "string",
+            "description": "Base64url-encoded Ed25519 public key"
+          }
+        }
+      },
+      "LoginRequest": {
+        "type": "object",
+        "description": "Login request payload",
+        "required": [
+          "username",
+          "timestamp",
+          "device"
+        ],
+        "properties": {
+          "device": {
+            "$ref": "#/components/schemas/LoginDevice"
+          },
+          "timestamp": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Unix timestamp (seconds) — must be within ±300s of server time"
+          },
+          "username": {
+            "type": "string"
+          }
+        }
+      },
+      "LoginResponse": {
+        "type": "object",
+        "description": "Login response",
+        "required": [
+          "account_id",
+          "root_kid",
+          "device_kid"
+        ],
+        "properties": {
+          "account_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "device_kid": {
+            "type": "string"
+          },
+          "root_kid": {
+            "type": "string"
+          }
+        }
+      },
       "MessageResponse": {
         "type": "object",
         "required": [
@@ -685,6 +2906,157 @@
             "type": "string"
           }
         }
+      },
+      "MyCapabilitiesResponse": {
+        "type": "object",
+        "required": [
+          "role",
+          "can_vote",
+          "can_configure"
+        ],
+        "properties": {
+          "can_configure": {
+            "type": "boolean"
+          },
+          "can_vote": {
+            "type": "boolean"
+          },
+          "next_step": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "role": {
+            "type": "string"
+          }
+        }
+      },
+      "PollDetailResponse": {
+        "type": "object",
+        "required": [
+          "poll",
+          "dimensions"
+        ],
+        "properties": {
+          "dimensions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DimensionDetailResponse"
+            }
+          },
+          "poll": {
+            "$ref": "#/components/schemas/PollResponse"
+          }
+        }
+      },
+      "PollDistributionResponse": {
+        "type": "object",
+        "required": [
+          "dimensions"
+        ],
+        "properties": {
+          "dimensions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DimensionDistributionResponse"
+            }
+          }
+        }
+      },
+      "PollResponse": {
+        "type": "object",
+        "required": [
+          "id",
+          "room_id",
+          "question",
+          "status",
+          "created_at"
+        ],
+        "properties": {
+          "activated_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "closes_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "question": {
+            "type": "string"
+          },
+          "room_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string"
+          }
+        }
+      },
+      "PollResultsResponse": {
+        "type": "object",
+        "required": [
+          "poll",
+          "dimensions",
+          "voter_count"
+        ],
+        "properties": {
+          "dimensions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DimensionStatsResponse"
+            }
+          },
+          "poll": {
+            "$ref": "#/components/schemas/PollResponse"
+          },
+          "voter_count": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "PollStatusRequest": {
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "properties": {
+          "status": {
+            "$ref": "#/components/schemas/PollStatusTransition"
+          }
+        }
+      },
+      "PollStatusTransition": {
+        "type": "string",
+        "enum": [
+          "active",
+          "closed"
+        ]
       },
       "ProblemDetails": {
         "type": "object",
@@ -754,6 +3126,17 @@
           }
         }
       },
+      "RenameDeviceRequest": {
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          }
+        }
+      },
       "RevokeRequest": {
         "type": "object",
         "required": [
@@ -763,6 +3146,64 @@
           "subject_id": {
             "type": "string",
             "format": "uuid"
+          }
+        }
+      },
+      "RoomResponse": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "eligibility_topic",
+          "status",
+          "created_at",
+          "engine_type",
+          "engine_config",
+          "constraint_type"
+        ],
+        "properties": {
+          "constraint_type": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "eligibility_topic": {
+            "type": "string"
+          },
+          "engine_config": {},
+          "engine_type": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "owner_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "poll_duration_secs": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          },
+          "status": {
+            "type": "string"
           }
         }
       },
@@ -816,6 +3257,167 @@
             "items": {
               "$ref": "#/components/schemas/ScoreSnapshotResponse"
             }
+          }
+        }
+      },
+      "SignupBackup": {
+        "type": "object",
+        "description": "Backup data included in signup request",
+        "required": [
+          "encrypted_blob"
+        ],
+        "properties": {
+          "encrypted_blob": {
+            "type": "string",
+            "description": "Base64url-encoded encrypted backup envelope"
+          }
+        }
+      },
+      "SignupDevice": {
+        "type": "object",
+        "description": "Device data included in signup request",
+        "required": [
+          "pubkey",
+          "name",
+          "certificate"
+        ],
+        "properties": {
+          "certificate": {
+            "type": "string",
+            "description": "Base64url-encoded certificate (root key's signature over canonical cert message)"
+          },
+          "name": {
+            "type": "string",
+            "description": "User-provided device name"
+          },
+          "pubkey": {
+            "type": "string",
+            "description": "Base64url-encoded Ed25519 public key"
+          }
+        }
+      },
+      "SignupRequest": {
+        "type": "object",
+        "description": "Signup request payload — atomic creation of account + backup + first device",
+        "required": [
+          "username",
+          "root_pubkey",
+          "backup",
+          "device"
+        ],
+        "properties": {
+          "backup": {
+            "$ref": "#/components/schemas/SignupBackup"
+          },
+          "device": {
+            "$ref": "#/components/schemas/SignupDevice"
+          },
+          "root_pubkey": {
+            "type": "string",
+            "description": "Base64url-encoded root Ed25519 public key"
+          },
+          "username": {
+            "type": "string"
+          }
+        }
+      },
+      "SignupResponse": {
+        "type": "object",
+        "description": "Signup response",
+        "required": [
+          "account_id",
+          "root_kid",
+          "device_kid"
+        ],
+        "properties": {
+          "account_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "device_kid": {
+            "type": "string"
+          },
+          "root_kid": {
+            "type": "string"
+          }
+        }
+      },
+      "SuggestionResponse": {
+        "type": "object",
+        "required": [
+          "id",
+          "room_id",
+          "poll_id",
+          "account_id",
+          "suggestion_text",
+          "status",
+          "evidence_ids",
+          "created_at"
+        ],
+        "properties": {
+          "account_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "evidence_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "filter_reason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "poll_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "processed_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "room_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string"
+          },
+          "suggestion_text": {
+            "type": "string"
+          }
+        }
+      },
+      "VoteResponse": {
+        "type": "object",
+        "required": [
+          "dimension_id",
+          "value",
+          "updated_at"
+        ],
+        "properties": {
+          "dimension_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "updated_at": {
+            "type": "string"
+          },
+          "value": {
+            "type": "number",
+            "format": "float"
           }
         }
       }

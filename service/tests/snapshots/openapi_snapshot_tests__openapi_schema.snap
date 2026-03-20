@@ -1531,6 +1531,295 @@ expression: schema
         }
       }
     },
+    "/trust/budget": {
+      "get": {
+        "tags": [
+          "Trust"
+        ],
+        "operationId": "budget_handler",
+        "responses": {
+          "200": {
+            "description": "Endorsement and denouncement budget for the authenticated user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BudgetResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        }
+      }
+    },
+    "/trust/denounce": {
+      "post": {
+        "tags": [
+          "Trust"
+        ],
+        "operationId": "denounce_handler",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DenounceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Denouncement queued",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "429": {
+            "description": "Quota exceeded"
+          }
+        }
+      }
+    },
+    "/trust/denouncements/mine": {
+      "get": {
+        "tags": [
+          "Trust"
+        ],
+        "operationId": "list_my_denouncements_handler",
+        "responses": {
+          "200": {
+            "description": "List of denouncements",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DenouncementResponse"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        }
+      }
+    },
+    "/trust/endorse": {
+      "post": {
+        "tags": [
+          "Trust"
+        ],
+        "operationId": "endorse_handler",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EndorseRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Endorsement queued",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "429": {
+            "description": "Quota exceeded"
+          }
+        }
+      }
+    },
+    "/trust/invites": {
+      "post": {
+        "tags": [
+          "Trust"
+        ],
+        "operationId": "create_invite_handler",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateInviteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Invite created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateInviteResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        }
+      }
+    },
+    "/trust/invites/mine": {
+      "get": {
+        "tags": [
+          "Trust"
+        ],
+        "operationId": "list_invites_handler",
+        "responses": {
+          "200": {
+            "description": "List of invites created by the authenticated user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvitesResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        }
+      }
+    },
+    "/trust/invites/{id}/accept": {
+      "post": {
+        "tags": [
+          "Trust"
+        ],
+        "operationId": "accept_invite_handler",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Invite ID",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Invite accepted and endorsement queued",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AcceptInviteResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "Invite not found"
+          }
+        }
+      }
+    },
+    "/trust/revoke": {
+      "post": {
+        "tags": [
+          "Trust"
+        ],
+        "operationId": "revoke_handler",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RevokeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Revocation queued",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "429": {
+            "description": "Quota exceeded"
+          }
+        }
+      }
+    },
+    "/trust/scores/me": {
+      "get": {
+        "tags": [
+          "Trust"
+        ],
+        "operationId": "scores_me_handler",
+        "responses": {
+          "200": {
+            "description": "Trust scores for the authenticated user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScoresResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        }
+      }
+    },
     "/verifiers/endorsements": {
       "post": {
         "tags": [
@@ -1578,6 +1867,22 @@ expression: schema
   },
   "components": {
     "schemas": {
+      "AcceptInviteResponse": {
+        "type": "object",
+        "required": [
+          "endorser_id",
+          "accepted_at"
+        ],
+        "properties": {
+          "accepted_at": {
+            "type": "string"
+          },
+          "endorser_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
       "AccountLookupResponse": {
         "type": "object",
         "description": "Account lookup response — returns only what the UI needs to target a user.",
@@ -1760,6 +2065,50 @@ expression: schema
           }
         }
       },
+      "BudgetResponse": {
+        "type": "object",
+        "required": [
+          "slots_total",
+          "slots_used",
+          "slots_available",
+          "out_of_slot_count",
+          "denouncements_total",
+          "denouncements_used",
+          "denouncements_available"
+        ],
+        "properties": {
+          "denouncements_available": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "denouncements_total": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "denouncements_used": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "out_of_slot_count": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "slots_available": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "slots_total": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "slots_used": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
       "BuildInfo": {
         "type": "object",
         "description": "Build metadata exposed via GraphQL, REST, and logs.\n\nLoaded from environment variables at startup (see [`BuildInfo::from_env`]).\nThese are typically set by the CI pipeline or Dockerfile at image build time.",
@@ -1891,6 +2240,53 @@ expression: schema
           }
         }
       },
+      "CreateInviteRequest": {
+        "type": "object",
+        "required": [
+          "envelope",
+          "delivery_method",
+          "attestation"
+        ],
+        "properties": {
+          "attestation": {},
+          "delivery_method": {
+            "type": "string"
+          },
+          "envelope": {
+            "type": "string",
+            "description": "base64url-encoded invite envelope bytes"
+          },
+          "relationship_depth": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "weight": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "float"
+          }
+        }
+      },
+      "CreateInviteResponse": {
+        "type": "object",
+        "required": [
+          "id",
+          "expires_at"
+        ],
+        "properties": {
+          "expires_at": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
       "CreatePollRequest": {
         "type": "object",
         "required": [
@@ -1980,6 +2376,51 @@ expression: schema
             "format": "uuid"
           },
           "topic": {
+            "type": "string"
+          }
+        }
+      },
+      "DenounceRequest": {
+        "type": "object",
+        "required": [
+          "target_id",
+          "reason"
+        ],
+        "properties": {
+          "reason": {
+            "type": "string"
+          },
+          "target_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "DenouncementResponse": {
+        "type": "object",
+        "required": [
+          "id",
+          "target_id",
+          "target_username",
+          "reason",
+          "created_at"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "target_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "target_username": {
             "type": "string"
           }
         }
@@ -2204,6 +2645,23 @@ expression: schema
           }
         }
       },
+      "EndorseRequest": {
+        "type": "object",
+        "required": [
+          "subject_id"
+        ],
+        "properties": {
+          "attestation": {},
+          "subject_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "weight": {
+            "type": "number",
+            "format": "float"
+          }
+        }
+      },
       "EndorsementQuery": {
         "type": "object",
         "properties": {
@@ -2329,6 +2787,53 @@ expression: schema
           }
         }
       },
+      "InviteResponse": {
+        "type": "object",
+        "required": [
+          "id",
+          "delivery_method",
+          "expires_at"
+        ],
+        "properties": {
+          "accepted_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "accepted_by": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "delivery_method": {
+            "type": "string"
+          },
+          "expires_at": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "InvitesResponse": {
+        "type": "object",
+        "required": [
+          "invites"
+        ],
+        "properties": {
+          "invites": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InviteResponse"
+            }
+          }
+        }
+      },
       "LoginDevice": {
         "type": "object",
         "description": "Device data for login",
@@ -2391,6 +2896,17 @@ expression: schema
             "type": "string"
           },
           "root_kid": {
+            "type": "string"
+          }
+        }
+      },
+      "MessageResponse": {
+        "type": "object",
+        "required": [
+          "message"
+        ],
+        "properties": {
+          "message": {
             "type": "string"
           }
         }
@@ -2625,6 +3141,18 @@ expression: schema
           }
         }
       },
+      "RevokeRequest": {
+        "type": "object",
+        "required": [
+          "subject_id"
+        ],
+        "properties": {
+          "subject_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
       "RoomResponse": {
         "type": "object",
         "required": [
@@ -2680,6 +3208,59 @@ expression: schema
           },
           "status": {
             "type": "string"
+          }
+        }
+      },
+      "ScoreSnapshotResponse": {
+        "type": "object",
+        "required": [
+          "computed_at"
+        ],
+        "properties": {
+          "computed_at": {
+            "type": "string"
+          },
+          "context_user_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "eigenvector_centrality": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "float"
+          },
+          "path_diversity": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          },
+          "trust_distance": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "float"
+          }
+        }
+      },
+      "ScoresResponse": {
+        "type": "object",
+        "required": [
+          "scores"
+        ],
+        "properties": {
+          "scores": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ScoreSnapshotResponse"
+            }
           }
         }
       },
@@ -2770,6 +3351,7 @@ expression: schema
         "required": [
           "id",
           "room_id",
+          "poll_id",
           "account_id",
           "suggestion_text",
           "status",
@@ -2797,6 +3379,10 @@ expression: schema
             ]
           },
           "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "poll_id": {
             "type": "string",
             "format": "uuid"
           },
