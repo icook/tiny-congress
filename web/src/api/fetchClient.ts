@@ -22,10 +22,15 @@ export async function fetchJson<T>(path: string, options?: RequestInit): Promise
     });
   }
 
-  const response = await fetch(url, {
-    ...options,
-    headers: merged,
-  });
+  let response: Response;
+  try {
+    response = await fetch(url, { ...options, headers: merged });
+  } catch (err) {
+    if (err instanceof DOMException && err.name === 'AbortError') {
+      throw new Error('The request was cancelled.');
+    }
+    throw new Error('Unable to connect. Check your internet connection and try again.');
+  }
 
   if (!response.ok) {
     let errorBody: ApiErrorResponse = { error: 'Unknown error' };
