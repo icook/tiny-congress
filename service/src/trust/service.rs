@@ -16,7 +16,7 @@ pub enum TrustServiceError {
     EndorsementSlotsExhausted { max: u32 },
 
     #[error("denouncement slots exhausted (max {max})")]
-    DenouncementSlotsExhausted { max: i32 },
+    DenouncementSlotsExhausted { max: u32 },
 
     #[error("daily action quota exceeded")]
     QuotaExceeded,
@@ -69,7 +69,7 @@ pub struct DefaultTrustService {
     /// Max active endorsement slots per user (k=3 demo, k=5 production)
     endorsement_slots: u32,
     /// Max active denouncements per user
-    max_denouncement_slots: i32, // d=2
+    max_denouncement_slots: u32, // d=2
     /// Max actions per day (resets at midnight UTC)
     daily_quota: i64, // 5
 }
