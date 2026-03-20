@@ -1469,6 +1469,106 @@ async fn accept_invite_succeeds_even_when_endorser_slots_exhausted() {
     let _ = (endorser_keys, acceptor_keys);
 }
 
+/// When the endorser denounces the acceptor between invite creation and
+/// acceptance, `accept_invite` returns 200 OK (the invite IS consumed) but the
+/// auto-endorse step silently fails with `DenouncementConflict`.  This
+/// documents the fire-and-forget contract so any future change that propagates
+/// the error is caught by a test failure.
+#[shared_runtime_test]
+async fn accept_invite_succeeds_even_when_endorser_has_denounced_acceptor() {
+    let db = isolated_db().await;
+    let pool = db.pool().clone();
+    let (app, endorser_keys, endorser_id) =
+        signup_and_get_account("conflictinviteendorser", db.pool()).await;
+
+    // Sign up the acceptor.
+    let (json2, acceptor_keys) = valid_signup_with_keys("conflictinviteacceptor");
+    let resp2 = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/auth/signup")
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(json2))
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+    assert_eq!(resp2.status(), StatusCode::CREATED);
+    let body2 = axum::body::to_bytes(resp2.into_body(), 1024 * 1024)
+        .await
+        .expect("body2");
+    let j2: Value = serde_json::from_slice(&body2).expect("json2");
+    let acceptor_id: uuid::Uuid = j2["account_id"]
+        .as_str()
+        .expect("account_id")
+        .parse()
+        .expect("uuid");
+
+    // Endorser creates an invite.
+    let envelope_b64 = tc_crypto::encode_base64url(b"signed-invite-envelope");
+    let invite_body = serde_json::json!({
+        "envelope": envelope_b64,
+        "delivery_method": "qr",
+        "attestation": {}
+    })
+    .to_string();
+    let create_req = build_authed_request(
+        Method::POST,
+        "/trust/invites",
+        &invite_body,
+        &endorser_keys.device_signing_key,
+        &endorser_keys.device_kid,
+    );
+    let create_resp = app.clone().oneshot(create_req).await.expect("create");
+    assert_eq!(create_resp.status(), StatusCode::CREATED);
+    let invite_id = json_body(create_resp).await;
+    let invite_id = invite_id["id"].as_str().expect("invite id");
+
+    // Endorser denounces the acceptor directly via SQL (bypassing the API so
+    // the daily action quota isn't consumed, which would fire QuotaExceeded
+    // instead of DenouncementConflict).
+    sqlx::query(
+        "INSERT INTO trust__denouncements (accuser_id, target_id, reason) VALUES ($1, $2, $3)",
+    )
+    .bind(endorser_id)
+    .bind(acceptor_id)
+    .bind("changed my mind")
+    .execute(&pool)
+    .await
+    .expect("seed denouncement");
+
+    // Acceptor accepts the invite — 200 OK even though auto-endorse fails with DenouncementConflict.
+    let accept_uri = format!("/trust/invites/{invite_id}/accept");
+    let accept_req = build_authed_request(
+        Method::POST,
+        &accept_uri,
+        "",
+        &acceptor_keys.device_signing_key,
+        &acceptor_keys.device_kid,
+    );
+    let accept_resp = app.clone().oneshot(accept_req).await.expect("accept");
+    assert_eq!(accept_resp.status(), StatusCode::OK);
+
+    // No endorsement action should have been queued — the denouncement blocks it.
+    let pending = sqlx::query_as::<_, tinycongress_api::trust::repo::ActionRecord>(
+        "SELECT * FROM trust__action_log WHERE status = 'pending' ORDER BY created_at",
+    )
+    .fetch_all(&pool)
+    .await
+    .expect("query pending actions");
+    let endorse_action = pending
+        .iter()
+        .find(|a| a.actor_id == endorser_id && a.action_type == "endorse");
+    assert!(
+        endorse_action.is_none(),
+        "expected no endorse action when endorser has denounced acceptor, found: {pending:?}"
+    );
+
+    let _ = (endorser_keys, acceptor_keys);
+}
+
 // ─── List invites ─────────────────────────────────────────────────────────────
 
 #[shared_runtime_test]
