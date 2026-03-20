@@ -1,7 +1,11 @@
 import { existsSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { expect, test } from './fixtures';
 import { signupUser } from './helpers';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const SCREENSHOTS_DIR = path.join(process.cwd(), 'screenshots');
 const DESKTOP = { width: 1280, height: 720 };
