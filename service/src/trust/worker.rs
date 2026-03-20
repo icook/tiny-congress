@@ -150,24 +150,13 @@ impl TrustWorker {
                     ));
                 }
 
+                // Both operations run inside a single transaction: if the endorsement
+                // revocation fails after the denouncement is inserted, the whole thing
+                // rolls back, preventing the unique-constraint error on retry.
                 self.trust_repo
-                    .create_denouncement(action.actor_id, target_id, &reason)
+                    .create_denouncement_and_revoke_endorsement(action.actor_id, target_id, &reason)
                     .await
-                    .map_err(|e| anyhow::anyhow!("create_denouncement failed: {e}"))?;
-
-                // Revoke the denouncer's endorsement of the target if one exists.
-                // revoke_endorsement is a no-op when no active endorsement exists.
-                if let Err(e) = self
-                    .reputation_repo
-                    .revoke_endorsement(action.actor_id, target_id, "trust")
-                    .await
-                {
-                    tracing::debug!(
-                        actor_id = %action.actor_id,
-                        target_id = %target_id,
-                        "no endorsement to revoke on denouncement: {e}"
-                    );
-                }
+                    .map_err(|e| anyhow::anyhow!("denounce_and_revoke failed: {e}"))?;
 
                 self.trust_engine
                     .recompute_from_anchor(action.actor_id, self.trust_repo.as_ref())
