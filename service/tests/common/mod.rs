@@ -73,6 +73,11 @@
 //! reuse it via TCP health probe. This reduces container count from ~24
 //! to 1 during a full test run.
 //!
+//! The state file also stores a SHA-256 hash of all migration `.sql` files.
+//! When any migration changes (rename, edit, add new), the hash no longer
+//! matches and the `tiny_congress_template` database is automatically dropped
+//! and rebuilt on the next test run — no manual `docker rm` required.
+//!
 //! To force a fresh container (e.g., after changing the postgres image):
 //! ```bash
 //! rm /tmp/tc-test-postgres.json
@@ -121,6 +126,45 @@ pub mod test_db {
         container_id: String,
         host: String,
         port: u16,
+        /// SHA-256 hex digest of all migration .sql files (sorted by name).
+        /// When this changes, the template database is invalidated and rebuilt.
+        #[serde(default)]
+        migration_hash: String,
+    }
+
+    /// Compute a SHA-256 hash over all migration `.sql` files (sorted by name).
+    /// Returns a lowercase hex string, or an empty string on any I/O error.
+    fn compute_migration_hash() -> String {
+        use sha2::{Digest, Sha256};
+
+        let migrations_dir =
+            std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/migrations"));
+
+        let mut entries: Vec<_> = match std::fs::read_dir(migrations_dir) {
+            Ok(rd) => rd
+                .filter_map(|e| e.ok())
+                .filter(|e| e.path().extension().map(|x| x == "sql").unwrap_or(false))
+                .collect(),
+            Err(_) => return String::new(),
+        };
+
+        entries.sort_by_key(|e| e.file_name());
+
+        let mut hasher = Sha256::new();
+        for entry in entries {
+            match std::fs::read(entry.path()) {
+                Ok(contents) => {
+                    // Include the filename in the hash so renames are detected.
+                    hasher.update(entry.file_name().to_string_lossy().as_bytes());
+                    hasher.update(b"\0");
+                    hasher.update(&contents);
+                    hasher.update(b"\0");
+                }
+                Err(_) => return String::new(),
+            }
+        }
+
+        format!("{:x}", hasher.finalize())
     }
 
     /// RAII file lock using flock(2). Holds an exclusive lock on LOCK_FILE
@@ -184,7 +228,7 @@ pub mod test_db {
     }
 
     fn write_state_file(info: &SharedContainerInfo) {
-        let data = serde_json::to_string(info).expect("Failed to serialize container state");
+        let data = serde_json::to_string_pretty(info).expect("Failed to serialize container state");
         std::fs::write(STATE_FILE, data).expect("Failed to write container state file");
     }
 
@@ -305,9 +349,62 @@ pub mod test_db {
                 let (host, port, container) = {
                     let _lock = FileLock::acquire();
 
-                    if let Some(info) = read_state_file() {
+                    if let Some(mut info) = read_state_file() {
                         if is_container_alive(&info.host, info.port) {
-                            // Container exists and is healthy — reuse it.
+                            // Container exists and is healthy.
+                            // Check whether migrations have changed since the
+                            // template was last built. If so, drop and rebuild.
+                            let current_hash = compute_migration_hash();
+                            if !current_hash.is_empty() && current_hash != info.migration_hash {
+                                eprintln!(
+                                    "[test-db] Migration hash changed ({} → {}); \
+                                     invalidating template database.",
+                                    &info.migration_hash[..8.min(info.migration_hash.len())],
+                                    &current_hash[..8],
+                                );
+                                let maintenance_url = format!(
+                                    "postgres://postgres:postgres@{}:{}/postgres",
+                                    info.host, info.port
+                                );
+                                // Connect synchronously is not possible here; use a blocking
+                                // runtime call. We are already inside an async block on
+                                // TEST_RUNTIME so we can await directly.
+                                if let Ok(mut conn) =
+                                    PgConnection::connect(&maintenance_url).await
+                                {
+                                    let _ = sqlx::query(
+                                        "DROP DATABASE IF EXISTS tiny_congress_template",
+                                    )
+                                    .execute(&mut conn)
+                                    .await;
+
+                                    // Also reset the main DB so migrations re-run cleanly.
+                                    let _ = sqlx::query(
+                                        "SELECT pg_terminate_backend(pid) \
+                                         FROM pg_stat_activity \
+                                         WHERE datname = 'tiny-congress' \
+                                           AND pid != pg_backend_pid()",
+                                    )
+                                    .execute(&mut conn)
+                                    .await;
+
+                                    let _ = sqlx::query(
+                                        "DROP DATABASE IF EXISTS \"tiny-congress\"",
+                                    )
+                                    .execute(&mut conn)
+                                    .await;
+
+                                    let _ = sqlx::query(
+                                        "CREATE DATABASE \"tiny-congress\"",
+                                    )
+                                    .execute(&mut conn)
+                                    .await;
+                                }
+
+                                // Persist updated hash so the next binary skips this work.
+                                info.migration_hash = current_hash;
+                                write_state_file(&info);
+                            }
                             (info.host, info.port, None)
                         } else {
                             // Stale state file — start a fresh container.
@@ -459,6 +556,9 @@ pub mod test_db {
             container_id: container.id().to_string(),
             host: host.clone(),
             port,
+            // Record the hash at container-start time so the first binary that
+            // runs migrations won't immediately re-invalidate the template.
+            migration_hash: compute_migration_hash(),
         });
 
         (host, port, Some(container))
