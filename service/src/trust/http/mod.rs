@@ -20,9 +20,7 @@ use super::service::{
     is_valid_endorsement_weight, is_valid_reason, TrustService, TrustServiceError,
     DENOUNCEMENT_SLOT_LIMIT, ENDORSEMENT_SLOT_LIMIT,
 };
-use super::weight::{
-    compute_endorsement_weight, VALID_DELIVERY_METHODS, VALID_RELATIONSHIP_DEPTHS,
-};
+use super::weight::{compute_endorsement_weight, DeliveryMethod, RelationshipDepth};
 use crate::http::{bad_request, conflict, internal_error, not_found, too_many_requests, Path};
 use crate::identity::http::auth::AuthenticatedDevice;
 use crate::reputation::repo::ReputationRepo;
@@ -59,8 +57,10 @@ pub struct DenounceRequest {
 pub struct CreateInviteRequest {
     /// base64url-encoded invite envelope bytes
     pub envelope: String,
-    pub delivery_method: String,
-    pub relationship_depth: Option<String>,
+    #[schema(value_type = String)]
+    pub delivery_method: DeliveryMethod,
+    #[schema(value_type = Option<String>)]
+    pub relationship_depth: Option<RelationshipDepth>,
     pub weight: Option<f32>,
     pub attestation: serde_json::Value,
 }
@@ -450,19 +450,9 @@ async fn create_invite_handler(
         return bad_request("envelope must be between 1 and 4096 bytes");
     }
 
-    if !VALID_DELIVERY_METHODS.contains(&body.delivery_method.as_str()) {
-        return bad_request("delivery_method must be one of: qr, email, video, text, messaging");
-    }
-
-    if let Some(ref depth) = body.relationship_depth {
-        if !VALID_RELATIONSHIP_DEPTHS.contains(&depth.as_str()) {
-            return bad_request("relationship_depth must be one of: years, months, acquaintance");
-        }
-    }
-
     // Use the client-supplied weight if present; otherwise compute from method + depth.
     let weight = body.weight.unwrap_or_else(|| {
-        compute_endorsement_weight(&body.delivery_method, body.relationship_depth.as_deref())
+        compute_endorsement_weight(body.delivery_method, body.relationship_depth)
     });
     if !is_valid_endorsement_weight(weight) {
         return bad_request("weight must be in range (0.0, 1.0]");
@@ -474,8 +464,8 @@ async fn create_invite_handler(
         .create_invite(
             auth.account_id,
             &envelope_bytes,
-            &body.delivery_method,
-            body.relationship_depth.as_deref(),
+            body.delivery_method.as_str(),
+            body.relationship_depth.map(RelationshipDepth::as_str),
             weight,
             &body.attestation,
             expires_at,

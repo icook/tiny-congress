@@ -690,10 +690,11 @@ async fn create_invite_rejects_invalid_delivery_method() {
     let response = app.oneshot(request).await.expect("response");
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     let json = json_body(response).await;
-    assert!(json["error"]
-        .as_str()
-        .unwrap_or("")
-        .contains("delivery_method"));
+    assert!(
+        json["error"].as_str().unwrap_or("").contains("fax"),
+        "error should mention the invalid value, got: {}",
+        json["error"]
+    );
 }
 
 #[shared_runtime_test]
@@ -721,10 +722,11 @@ async fn create_invite_rejects_invalid_relationship_depth() {
     let response = app.oneshot(request).await.expect("response");
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     let json = json_body(response).await;
-    assert!(json["error"]
-        .as_str()
-        .unwrap_or("")
-        .contains("relationship_depth"));
+    assert!(
+        json["error"].as_str().unwrap_or("").contains("decades"),
+        "error should mention the invalid value, got: {}",
+        json["error"]
+    );
 }
 
 // ─── Create invite weight validation ─────────────────────────────────────────
