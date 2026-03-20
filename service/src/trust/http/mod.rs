@@ -17,8 +17,8 @@ use uuid::Uuid;
 
 use super::repo::{TrustRepo, TrustRepoError};
 use super::service::{
-    is_valid_denouncement_reason, is_valid_endorsement_weight, TrustService, TrustServiceError,
-    DENOUNCEMENT_SLOT_LIMIT, ENDORSEMENT_SLOT_LIMIT,
+    is_valid_endorsement_weight, TrustService, TrustServiceError, DENOUNCEMENT_SLOT_LIMIT,
+    ENDORSEMENT_SLOT_LIMIT,
 };
 use super::weight::{
     compute_endorsement_weight, VALID_DELIVERY_METHODS, VALID_RELATIONSHIP_DEPTHS,
@@ -180,10 +180,6 @@ async fn endorse_handler(
         Err(e) => return e,
     };
 
-    if !is_valid_endorsement_weight(body.weight) {
-        return bad_request("weight must be in range (0.0, 1.0]");
-    }
-
     match trust_service
         .endorse(
             auth.account_id,
@@ -260,10 +256,6 @@ async fn denounce_handler(
         Ok(b) => b,
         Err(e) => return e,
     };
-
-    if !is_valid_denouncement_reason(&body.reason) {
-        return bad_request("reason must be between 1 and 500 characters");
-    }
 
     match trust_service
         .denounce(auth.account_id, body.target_id, &body.reason)
