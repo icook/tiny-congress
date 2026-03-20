@@ -602,6 +602,70 @@ async fn create_invite_rejects_invalid_base64url_envelope() {
 }
 
 #[shared_runtime_test]
+async fn create_invite_rejects_oversized_envelope() {
+    let db = isolated_db().await;
+    let (app, keys, _account_id) = signup_and_get_account("invitebigenvelop", db.pool()).await;
+
+    // 4097 bytes exceeds the 4096-byte maximum
+    let oversized = vec![0u8; 4097];
+    let envelope_b64 = tc_crypto::encode_base64url(&oversized);
+    let body = serde_json::json!({
+        "envelope": envelope_b64,
+        "delivery_method": "qr",
+        "attestation": {}
+    })
+    .to_string();
+
+    let request = build_authed_request(
+        Method::POST,
+        "/trust/invites",
+        &body,
+        &keys.device_signing_key,
+        &keys.device_kid,
+    );
+
+    let response = app.oneshot(request).await.expect("response");
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let json = json_body(response).await;
+    assert!(
+        json["error"].as_str().unwrap_or("").contains("envelope"),
+        "error should mention envelope, got: {}",
+        json["error"]
+    );
+}
+
+#[shared_runtime_test]
+async fn create_invite_rejects_empty_envelope() {
+    let db = isolated_db().await;
+    let (app, keys, _account_id) = signup_and_get_account("inviteemptyenv", db.pool()).await;
+
+    let envelope_b64 = tc_crypto::encode_base64url(&[]);
+    let body = serde_json::json!({
+        "envelope": envelope_b64,
+        "delivery_method": "qr",
+        "attestation": {}
+    })
+    .to_string();
+
+    let request = build_authed_request(
+        Method::POST,
+        "/trust/invites",
+        &body,
+        &keys.device_signing_key,
+        &keys.device_kid,
+    );
+
+    let response = app.oneshot(request).await.expect("response");
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let json = json_body(response).await;
+    assert!(
+        json["error"].as_str().unwrap_or("").contains("envelope"),
+        "error should mention envelope, got: {}",
+        json["error"]
+    );
+}
+
+#[shared_runtime_test]
 async fn create_invite_rejects_invalid_delivery_method() {
     let db = isolated_db().await;
     let (app, keys, _account_id) = signup_and_get_account("invitedelivery", db.pool()).await;

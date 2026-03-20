@@ -349,6 +349,10 @@ async fn create_invite_handler(
         return bad_request("Invalid base64url encoding for envelope");
     };
 
+    if envelope_bytes.is_empty() || envelope_bytes.len() > 4096 {
+        return bad_request("envelope must be between 1 and 4096 bytes");
+    }
+
     if !VALID_DELIVERY_METHODS.contains(&body.delivery_method.as_str()) {
         return bad_request("delivery_method must be one of: qr, email, video, text, messaging");
     }
