@@ -20,7 +20,8 @@ END $$;
 --    Only runs if the old table still exists (first run).
 DO $$ BEGIN
     IF EXISTS (SELECT 1 FROM information_schema.tables
-               WHERE table_name = 'rooms__lifecycle_queue') THEN
+               WHERE table_schema = 'public'
+                 AND table_name = 'rooms__lifecycle_queue') THEN
         INSERT INTO pgmq.q_rooms__lifecycle (vt, message)
         SELECT GREATEST(visible_at, now()), payload
         FROM rooms__lifecycle_queue
@@ -36,17 +37,30 @@ DROP TABLE IF EXISTS rooms__lifecycle_queue;
 --    If only the old name exists (first run), rename it.
 DO $$ BEGIN
     IF EXISTS (SELECT 1 FROM information_schema.tables
-               WHERE table_name = 'trust__action_log') THEN
+               WHERE table_schema = 'public'
+                 AND table_name = 'trust__action_log') THEN
         -- Already migrated; drop the re-created source if present
         DROP TABLE IF EXISTS trust__action_queue;
     ELSIF EXISTS (SELECT 1 FROM information_schema.tables
-                  WHERE table_name = 'trust__action_queue') THEN
+                  WHERE table_schema = 'public'
+                    AND table_name = 'trust__action_queue') THEN
         ALTER TABLE trust__action_queue RENAME TO trust__action_log;
     END IF;
 END $$;
 
--- 5. Rename indexes to match new table name
-ALTER INDEX IF EXISTS idx_action_queue_pending
-    RENAME TO idx_action_log_pending;
-ALTER INDEX IF EXISTS idx_action_queue_actor_date
-    RENAME TO idx_action_log_actor_date;
+-- 5. Rename indexes to match new table name (drop stale duplicates on re-run)
+DO $$ BEGIN
+    IF EXISTS (SELECT 1 FROM pg_class WHERE relname = 'idx_action_queue_pending')
+       AND EXISTS (SELECT 1 FROM pg_class WHERE relname = 'idx_action_log_pending') THEN
+        DROP INDEX idx_action_queue_pending;
+    ELSIF EXISTS (SELECT 1 FROM pg_class WHERE relname = 'idx_action_queue_pending') THEN
+        ALTER INDEX idx_action_queue_pending RENAME TO idx_action_log_pending;
+    END IF;
+
+    IF EXISTS (SELECT 1 FROM pg_class WHERE relname = 'idx_action_queue_actor_date')
+       AND EXISTS (SELECT 1 FROM pg_class WHERE relname = 'idx_action_log_actor_date') THEN
+        DROP INDEX idx_action_queue_actor_date;
+    ELSIF EXISTS (SELECT 1 FROM pg_class WHERE relname = 'idx_action_queue_actor_date') THEN
+        ALTER INDEX idx_action_queue_actor_date RENAME TO idx_action_log_actor_date;
+    END IF;
+END $$;
