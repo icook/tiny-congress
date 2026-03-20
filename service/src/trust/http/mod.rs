@@ -17,11 +17,11 @@ use uuid::Uuid;
 
 use super::repo::{TrustRepo, TrustRepoError};
 use super::service::{
-    is_valid_denouncement_reason, is_valid_endorsement_weight, TrustService, TrustServiceError,
-    DENOUNCEMENT_SLOT_LIMIT, ENDORSEMENT_SLOT_LIMIT,
+    is_valid_denouncement_reason, TrustService, TrustServiceError, DENOUNCEMENT_SLOT_LIMIT,
+    ENDORSEMENT_SLOT_LIMIT,
 };
 use super::weight::{
-    compute_endorsement_weight, VALID_DELIVERY_METHODS, VALID_RELATIONSHIP_DEPTHS,
+    compute_endorsement_weight, is_valid_weight, VALID_DELIVERY_METHODS, VALID_RELATIONSHIP_DEPTHS,
 };
 use crate::http::{bad_request, conflict, internal_error, not_found, too_many_requests, Path};
 use crate::identity::http::auth::AuthenticatedDevice;
@@ -180,7 +180,7 @@ async fn endorse_handler(
         Err(e) => return e,
     };
 
-    if !is_valid_endorsement_weight(body.weight) {
+    if !is_valid_weight(body.weight) {
         return bad_request("weight must be in range (0.0, 1.0]");
     }
 
@@ -450,7 +450,7 @@ async fn create_invite_handler(
     let weight = body.weight.unwrap_or_else(|| {
         compute_endorsement_weight(&body.delivery_method, body.relationship_depth.as_deref())
     });
-    if !is_valid_endorsement_weight(weight) {
+    if !is_valid_weight(weight) {
         return bad_request("weight must be in range (0.0, 1.0]");
     }
 

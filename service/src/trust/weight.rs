@@ -44,6 +44,15 @@ pub fn depth_multiplier(relationship_depth: Option<&str>) -> f32 {
     }
 }
 
+/// Returns `true` if `weight` is a valid endorsement weight (finite and in (0.0, 1.0]).
+///
+/// Use this wherever the weight range needs to be checked — do not repeat the three-part
+/// condition inline, so the definition of "valid" stays in one place.
+#[must_use]
+pub fn is_valid_weight(weight: f32) -> bool {
+    weight.is_finite() && weight > 0.0 && weight <= 1.0
+}
+
 /// Compute the final endorsement weight, clamped to (0.0, 1.0].
 #[must_use]
 pub fn compute_endorsement_weight(delivery_method: &str, relationship_depth: Option<&str>) -> f32 {
@@ -78,6 +87,22 @@ mod tests {
     fn no_depth_defaults_to_no_reduction() {
         let w = compute_endorsement_weight("qr", None);
         assert!((w - 1.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn is_valid_weight_accepts_range() {
+        assert!(is_valid_weight(1.0));
+        assert!(is_valid_weight(0.5));
+        assert!(is_valid_weight(f32::MIN_POSITIVE));
+    }
+
+    #[test]
+    fn is_valid_weight_rejects_out_of_range() {
+        assert!(!is_valid_weight(0.0));
+        assert!(!is_valid_weight(-0.1));
+        assert!(!is_valid_weight(1.001));
+        assert!(!is_valid_weight(f32::INFINITY));
+        assert!(!is_valid_weight(f32::NAN));
     }
 
     #[test]

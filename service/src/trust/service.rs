@@ -8,6 +8,7 @@ use uuid::Uuid;
 
 use crate::reputation::repo::ReputationRepo;
 use crate::trust::repo::{TrustRepo, TrustRepoError};
+use crate::trust::weight::is_valid_weight;
 /// Demo endorsement slot limit per user (k=3).
 pub const ENDORSEMENT_SLOT_LIMIT: u32 = 3;
 /// Permanent denouncement budget per user (d=2, ADR-020).
@@ -45,12 +46,6 @@ impl ActionType {
             _ => None,
         }
     }
-}
-
-/// Returns `true` if `weight` is a valid endorsement weight: finite and in (0.0, 1.0].
-#[allow(clippy::missing_const_for_fn)]
-pub(crate) fn is_valid_endorsement_weight(weight: f32) -> bool {
-    weight.is_finite() && weight > 0.0 && weight <= 1.0
 }
 
 /// Returns `true` if `reason` is a valid denouncement reason: non-empty and within the limit.
@@ -156,7 +151,7 @@ impl TrustService for DefaultTrustService {
             return Err(TrustServiceError::SelfAction);
         }
 
-        if !is_valid_endorsement_weight(weight) {
+        if !is_valid_weight(weight) {
             return Err(TrustServiceError::InvalidWeight);
         }
 
