@@ -14,14 +14,19 @@ import { useCrypto } from '@/providers/CryptoProvider';
 import { useDevice } from '@/providers/DeviceProvider';
 
 function TrustDot({
+  isLoading,
   isVerified,
   trustScore,
   username,
 }: {
+  isLoading: boolean;
   isVerified: boolean;
   trustScore: { trust_distance?: number | null; path_diversity?: number | null } | null;
   username: string | null;
 }) {
+  if (isLoading) {
+    return null;
+  }
   if (isVerified && trustScore) {
     const tier = getTierInfo(trustScore.trust_distance ?? 0, trustScore.path_diversity ?? 0);
     if (tier) {
@@ -51,6 +56,7 @@ export function UserAccordion({ onNavigate }: UserAccordionProps) {
   const trustScoresQuery = useTrustScores(deviceKid, privateKey, crypto);
   const isVerified = verificationQuery.data?.isVerified ?? false;
   const trustScore = trustScoresQuery.data?.[0] ?? null;
+  const isVerificationLoading = verificationQuery.isLoading;
 
   const [opened, setOpened] = useState<string | null>(null);
 
@@ -71,7 +77,12 @@ export function UserAccordion({ onNavigate }: UserAccordionProps) {
             <Text size="sm" fw={500} truncate>
               {username}
             </Text>
-            <TrustDot isVerified={isVerified} trustScore={trustScore} username={username} />
+            <TrustDot
+              isLoading={isVerificationLoading}
+              isVerified={isVerified}
+              trustScore={trustScore}
+              username={username}
+            />
           </Group>
         </Accordion.Control>
         <Accordion.Panel>
