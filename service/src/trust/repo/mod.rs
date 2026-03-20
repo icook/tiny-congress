@@ -117,7 +117,7 @@ pub trait TrustRepo: Send + Sync {
 
     async fn count_daily_actions(&self, actor_id: Uuid) -> Result<i64, TrustRepoError>;
 
-    async fn claim_pending_actions(&self, limit: i64) -> Result<Vec<ActionRecord>, TrustRepoError>;
+    async fn get_action(&self, action_id: Uuid) -> Result<ActionRecord, TrustRepoError>;
 
     async fn complete_action(&self, action_id: Uuid) -> Result<(), TrustRepoError>;
 
@@ -263,8 +263,8 @@ impl TrustRepo for PgTrustRepo {
         action_queue::count_daily_actions(&self.pool, actor_id).await
     }
 
-    async fn claim_pending_actions(&self, limit: i64) -> Result<Vec<ActionRecord>, TrustRepoError> {
-        action_queue::claim_pending_actions(&self.pool, limit).await
+    async fn get_action(&self, action_id: Uuid) -> Result<ActionRecord, TrustRepoError> {
+        action_queue::get_action(&self.pool, action_id).await
     }
 
     async fn complete_action(&self, action_id: Uuid) -> Result<(), TrustRepoError> {

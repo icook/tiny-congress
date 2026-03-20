@@ -237,30 +237,28 @@ async fn denouncement_revokes_endorsement_edge() {
         "endorsement should exist before denouncement"
     );
 
-    // Seed a 'denounce' action
-    sqlx::query(
-        "INSERT INTO trust__action_queue (actor_id, action_type, payload) VALUES ($1, $2, $3)",
-    )
-    .bind(actor.id)
-    .bind("denounce")
-    .bind(json!({ "target_id": target.id, "reason": "bad actor" }))
-    .execute(&pool)
-    .await
-    .expect("seed denounce action");
+    // Enqueue a 'denounce' action
+    PgTrustRepo::new(pool.clone())
+        .enqueue_action(
+            actor.id,
+            "denounce",
+            &json!({ "target_id": target.id, "reason": "bad actor" }),
+        )
+        .await
+        .expect("enqueue denounce action");
 
     let trust_repo = Arc::new(PgTrustRepo::new(pool.clone()));
     let reputation_repo = Arc::new(PgReputationRepo::new(pool.clone()));
     let engine = Arc::new(TrustEngine::new(pool.clone()));
     let worker = Arc::new(TrustWorker::new(
+        pool.clone(),
         trust_repo,
         reputation_repo,
         engine,
-        50,
-        30,
     ));
 
-    let processed = worker.process_batch().await.expect("process_batch");
-    assert_eq!(processed, 1, "one action should be processed");
+    let processed = worker.process_one().await.expect("process_one");
+    assert!(processed, "one action should be processed");
 
     // Denouncement row should exist
     let denouncement_count: i64 = sqlx::query_scalar(
@@ -314,34 +312,32 @@ async fn denouncement_without_endorsement_succeeds() {
 
     // No endorsement exists between actor and target
 
-    // Seed a 'denounce' action
-    sqlx::query(
-        "INSERT INTO trust__action_queue (actor_id, action_type, payload) VALUES ($1, $2, $3)",
-    )
-    .bind(actor.id)
-    .bind("denounce")
-    .bind(json!({ "target_id": target.id, "reason": "suspicious" }))
-    .execute(&pool)
-    .await
-    .expect("seed denounce action");
+    // Enqueue a 'denounce' action
+    PgTrustRepo::new(pool.clone())
+        .enqueue_action(
+            actor.id,
+            "denounce",
+            &json!({ "target_id": target.id, "reason": "suspicious" }),
+        )
+        .await
+        .expect("enqueue denounce action");
 
     let trust_repo = Arc::new(PgTrustRepo::new(pool.clone()));
     let reputation_repo = Arc::new(PgReputationRepo::new(pool.clone()));
     let engine = Arc::new(TrustEngine::new(pool.clone()));
     let worker = Arc::new(TrustWorker::new(
+        pool.clone(),
         trust_repo,
         reputation_repo,
         engine,
-        50,
-        30,
     ));
 
-    let processed = worker.process_batch().await.expect("process_batch");
-    assert_eq!(processed, 1, "one action should be processed");
+    let processed = worker.process_one().await.expect("process_one");
+    assert!(processed, "one action should be processed");
 
     // Action should be completed (not failed)
     let (status,): (String,) =
-        sqlx::query_as("SELECT status FROM trust__action_queue WHERE actor_id = $1")
+        sqlx::query_as("SELECT status FROM trust__action_log WHERE actor_id = $1")
             .bind(actor.id)
             .fetch_one(&pool)
             .await

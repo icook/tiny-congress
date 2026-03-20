@@ -1,4 +1,4 @@
-//! Integration tests for TrustWorker batch processing.
+//! Integration tests for TrustWorker pgmq-based processing.
 
 mod common;
 
@@ -10,8 +10,16 @@ use serde_json::json;
 use tc_test_macros::shared_runtime_test;
 use tinycongress_api::reputation::repo::PgReputationRepo;
 use tinycongress_api::trust::engine::TrustEngine;
-use tinycongress_api::trust::repo::PgTrustRepo;
+use tinycongress_api::trust::repo::{PgTrustRepo, TrustRepo};
 use tinycongress_api::trust::worker::TrustWorker;
+
+/// Build a worker against the given pool.
+fn make_worker(pool: sqlx::PgPool) -> Arc<TrustWorker> {
+    let trust_repo = Arc::new(PgTrustRepo::new(pool.clone()));
+    let reputation_repo = Arc::new(PgReputationRepo::new(pool.clone()));
+    let engine = Arc::new(TrustEngine::new(pool.clone()));
+    Arc::new(TrustWorker::new(pool, trust_repo, reputation_repo, engine))
+}
 
 // ---------------------------------------------------------------------------
 // Test 1: endorse action — creates endorsement and completes the action
@@ -33,34 +41,24 @@ async fn test_process_batch_endorse_action() {
         .await
         .expect("create subject");
 
-    // Seed an 'endorse' action directly into the queue
-    sqlx::query(
-        "INSERT INTO trust__action_queue (actor_id, action_type, payload) VALUES ($1, $2, $3)",
-    )
-    .bind(actor.id)
-    .bind("endorse")
-    .bind(json!({ "subject_id": subject.id, "weight": 0.8, "attestation": null, "in_slot": true }))
-    .execute(&pool)
-    .await
-    .expect("seed action");
+    // Enqueue via repo (inserts into trust__action_log and sends pgmq message)
+    let trust_repo = PgTrustRepo::new(pool.clone());
+    trust_repo
+        .enqueue_action(
+            actor.id,
+            "endorse",
+            &json!({ "subject_id": subject.id, "weight": 0.8, "attestation": null, "in_slot": true }),
+        )
+        .await
+        .expect("enqueue action");
 
-    let trust_repo = Arc::new(PgTrustRepo::new(pool.clone()));
-    let reputation_repo = Arc::new(PgReputationRepo::new(pool.clone()));
-    let engine = Arc::new(TrustEngine::new(pool.clone()));
-    let worker = Arc::new(TrustWorker::new(
-        trust_repo,
-        reputation_repo,
-        engine,
-        50,
-        30,
-    ));
-
-    let processed = worker.process_batch().await.expect("process_batch");
-    assert_eq!(processed, 1);
+    let worker = make_worker(pool.clone());
+    let processed = worker.process_one().await.expect("process_one");
+    assert!(processed, "expected a message to be processed");
 
     // Action should be marked completed
     let (status,): (String,) =
-        sqlx::query_as("SELECT status FROM trust__action_queue WHERE actor_id = $1")
+        sqlx::query_as("SELECT status FROM trust__action_log WHERE actor_id = $1")
             .bind(actor.id)
             .fetch_one(&pool)
             .await
@@ -126,34 +124,20 @@ async fn test_process_batch_revoke_action() {
     .await
     .expect("seed endorsement");
 
-    // Seed a 'revoke' action
-    sqlx::query(
-        "INSERT INTO trust__action_queue (actor_id, action_type, payload) VALUES ($1, $2, $3)",
-    )
-    .bind(actor.id)
-    .bind("revoke")
-    .bind(json!({ "subject_id": subject.id }))
-    .execute(&pool)
-    .await
-    .expect("seed revoke action");
+    // Enqueue a 'revoke' action
+    let trust_repo = PgTrustRepo::new(pool.clone());
+    trust_repo
+        .enqueue_action(actor.id, "revoke", &json!({ "subject_id": subject.id }))
+        .await
+        .expect("enqueue revoke action");
 
-    let trust_repo = Arc::new(PgTrustRepo::new(pool.clone()));
-    let reputation_repo = Arc::new(PgReputationRepo::new(pool.clone()));
-    let engine = Arc::new(TrustEngine::new(pool.clone()));
-    let worker = Arc::new(TrustWorker::new(
-        trust_repo,
-        reputation_repo,
-        engine,
-        50,
-        30,
-    ));
-
-    let processed = worker.process_batch().await.expect("process_batch");
-    assert_eq!(processed, 1);
+    let worker = make_worker(pool.clone());
+    let processed = worker.process_one().await.expect("process_one");
+    assert!(processed, "expected a message to be processed");
 
     // Action should be marked completed
     let (status,): (String,) =
-        sqlx::query_as("SELECT status FROM trust__action_queue WHERE actor_id = $1")
+        sqlx::query_as("SELECT status FROM trust__action_log WHERE actor_id = $1")
             .bind(actor.id)
             .fetch_one(&pool)
             .await
@@ -206,34 +190,24 @@ async fn test_process_batch_denounce_action() {
     .await
     .expect("seed influence");
 
-    // Seed a 'denounce' action
-    sqlx::query(
-        "INSERT INTO trust__action_queue (actor_id, action_type, payload) VALUES ($1, $2, $3)",
-    )
-    .bind(actor.id)
-    .bind("denounce")
-    .bind(json!({ "target_id": target.id, "reason": "spam", "influence_cost": 1.0 }))
-    .execute(&pool)
-    .await
-    .expect("seed denounce action");
+    // Enqueue a 'denounce' action
+    let trust_repo = PgTrustRepo::new(pool.clone());
+    trust_repo
+        .enqueue_action(
+            actor.id,
+            "denounce",
+            &json!({ "target_id": target.id, "reason": "spam", "influence_cost": 1.0 }),
+        )
+        .await
+        .expect("enqueue denounce action");
 
-    let trust_repo = Arc::new(PgTrustRepo::new(pool.clone()));
-    let reputation_repo = Arc::new(PgReputationRepo::new(pool.clone()));
-    let engine = Arc::new(TrustEngine::new(pool.clone()));
-    let worker = Arc::new(TrustWorker::new(
-        trust_repo,
-        reputation_repo,
-        engine,
-        50,
-        30,
-    ));
-
-    let processed = worker.process_batch().await.expect("process_batch");
-    assert_eq!(processed, 1);
+    let worker = make_worker(pool.clone());
+    let processed = worker.process_one().await.expect("process_one");
+    assert!(processed, "expected a message to be processed");
 
     // Action should be marked completed
     let (status,): (String,) =
-        sqlx::query_as("SELECT status FROM trust__action_queue WHERE actor_id = $1")
+        sqlx::query_as("SELECT status FROM trust__action_log WHERE actor_id = $1")
             .bind(actor.id)
             .fetch_one(&pool)
             .await
@@ -269,35 +243,20 @@ async fn test_process_batch_invalid_payload_fails() {
         .await
         .expect("create actor");
 
-    // Seed a 'revoke' action with an invalid payload (missing subject_id)
-    // — this exercises the fail path without needing to bypass the action_type CHECK constraint.
-    sqlx::query(
-        "INSERT INTO trust__action_queue (actor_id, action_type, payload) VALUES ($1, $2, $3)",
-    )
-    .bind(actor.id)
-    .bind("revoke")
-    .bind(json!({ "not_subject_id": "garbage" }))
-    .execute(&pool)
-    .await
-    .expect("seed bad action");
+    // Enqueue a 'revoke' action with an invalid payload (missing subject_id)
+    let trust_repo = PgTrustRepo::new(pool.clone());
+    trust_repo
+        .enqueue_action(actor.id, "revoke", &json!({ "not_subject_id": "garbage" }))
+        .await
+        .expect("enqueue bad action");
 
-    let trust_repo = Arc::new(PgTrustRepo::new(pool.clone()));
-    let reputation_repo = Arc::new(PgReputationRepo::new(pool.clone()));
-    let engine = Arc::new(TrustEngine::new(pool.clone()));
-    let worker = Arc::new(TrustWorker::new(
-        trust_repo,
-        reputation_repo,
-        engine,
-        50,
-        30,
-    ));
-
-    let processed = worker.process_batch().await.expect("process_batch");
-    assert_eq!(processed, 1);
+    let worker = make_worker(pool.clone());
+    let processed = worker.process_one().await.expect("process_one");
+    assert!(processed, "expected a message to be processed");
 
     // Action should be marked failed with an error message
     let (status, error_message): (String, Option<String>) =
-        sqlx::query_as("SELECT status, error_message FROM trust__action_queue WHERE actor_id = $1")
+        sqlx::query_as("SELECT status, error_message FROM trust__action_log WHERE actor_id = $1")
             .bind(actor.id)
             .fetch_one(&pool)
             .await
@@ -330,34 +289,24 @@ async fn test_process_batch_endorse_invalid_weight_fails() {
         .await
         .expect("create subject");
 
-    // Seed an 'endorse' action with weight=1.5 (valid range is (0.0, 1.0])
-    sqlx::query(
-        "INSERT INTO trust__action_queue (actor_id, action_type, payload) VALUES ($1, $2, $3)",
-    )
-    .bind(actor.id)
-    .bind("endorse")
-    .bind(json!({ "subject_id": subject.id, "weight": 1.5, "attestation": null }))
-    .execute(&pool)
-    .await
-    .expect("seed action");
+    // Enqueue an 'endorse' action with weight=1.5 (valid range is (0.0, 1.0])
+    let trust_repo = PgTrustRepo::new(pool.clone());
+    trust_repo
+        .enqueue_action(
+            actor.id,
+            "endorse",
+            &json!({ "subject_id": subject.id, "weight": 1.5, "attestation": null, "in_slot": true }),
+        )
+        .await
+        .expect("enqueue action");
 
-    let trust_repo = Arc::new(PgTrustRepo::new(pool.clone()));
-    let reputation_repo = Arc::new(PgReputationRepo::new(pool.clone()));
-    let engine = Arc::new(TrustEngine::new(pool.clone()));
-    let worker = Arc::new(TrustWorker::new(
-        trust_repo,
-        reputation_repo,
-        engine,
-        50,
-        30,
-    ));
-
-    let processed = worker.process_batch().await.expect("process_batch");
-    assert_eq!(processed, 1);
+    let worker = make_worker(pool.clone());
+    let processed = worker.process_one().await.expect("process_one");
+    assert!(processed, "expected a message to be processed");
 
     // Action should be marked failed with an error mentioning weight
     let (status, error_message): (String, Option<String>) =
-        sqlx::query_as("SELECT status, error_message FROM trust__action_queue WHERE actor_id = $1")
+        sqlx::query_as("SELECT status, error_message FROM trust__action_log WHERE actor_id = $1")
             .bind(actor.id)
             .fetch_one(&pool)
             .await
@@ -390,34 +339,24 @@ async fn test_process_batch_endorse_missing_in_slot_fails() {
         .await
         .expect("create subject");
 
-    // Seed an 'endorse' action without the required 'in_slot' field
-    sqlx::query(
-        "INSERT INTO trust__action_queue (actor_id, action_type, payload) VALUES ($1, $2, $3)",
-    )
-    .bind(actor.id)
-    .bind("endorse")
-    .bind(json!({ "subject_id": subject.id, "weight": 0.5, "attestation": null }))
-    .execute(&pool)
-    .await
-    .expect("seed action");
+    // Enqueue an 'endorse' action without the required 'in_slot' field
+    let trust_repo = PgTrustRepo::new(pool.clone());
+    trust_repo
+        .enqueue_action(
+            actor.id,
+            "endorse",
+            &json!({ "subject_id": subject.id, "weight": 0.5, "attestation": null }),
+        )
+        .await
+        .expect("enqueue action");
 
-    let trust_repo = Arc::new(PgTrustRepo::new(pool.clone()));
-    let reputation_repo = Arc::new(PgReputationRepo::new(pool.clone()));
-    let engine = Arc::new(TrustEngine::new(pool.clone()));
-    let worker = Arc::new(TrustWorker::new(
-        trust_repo,
-        reputation_repo,
-        engine,
-        50,
-        30,
-    ));
-
-    let processed = worker.process_batch().await.expect("process_batch");
-    assert_eq!(processed, 1);
+    let worker = make_worker(pool.clone());
+    let processed = worker.process_one().await.expect("process_one");
+    assert!(processed, "expected a message to be processed");
 
     // Action should be marked failed with an error mentioning in_slot
     let (status, error_message): (String, Option<String>) =
-        sqlx::query_as("SELECT status, error_message FROM trust__action_queue WHERE actor_id = $1")
+        sqlx::query_as("SELECT status, error_message FROM trust__action_log WHERE actor_id = $1")
             .bind(actor.id)
             .fetch_one(&pool)
             .await
@@ -431,7 +370,7 @@ async fn test_process_batch_endorse_missing_in_slot_fails() {
 }
 
 // ---------------------------------------------------------------------------
-// Test 7: denounce action with empty reason fails the action
+// Test 7: denounce action with reason too long fails the action
 // ---------------------------------------------------------------------------
 #[shared_runtime_test]
 async fn test_process_batch_denounce_reason_too_long_fails() {
@@ -450,34 +389,24 @@ async fn test_process_batch_denounce_reason_too_long_fails() {
         .await
         .expect("create target");
 
-    // Seed a 'denounce' action with a reason that is 501 characters (upper bound is 500)
-    sqlx::query(
-        "INSERT INTO trust__action_queue (actor_id, action_type, payload) VALUES ($1, $2, $3)",
-    )
-    .bind(actor.id)
-    .bind("denounce")
-    .bind(json!({ "target_id": target.id, "reason": "a".repeat(501) }))
-    .execute(&pool)
-    .await
-    .expect("seed action");
+    // Enqueue a 'denounce' action with a reason that is 501 characters (upper bound is 500)
+    let trust_repo = PgTrustRepo::new(pool.clone());
+    trust_repo
+        .enqueue_action(
+            actor.id,
+            "denounce",
+            &json!({ "target_id": target.id, "reason": "a".repeat(501) }),
+        )
+        .await
+        .expect("enqueue action");
 
-    let trust_repo = Arc::new(PgTrustRepo::new(pool.clone()));
-    let reputation_repo = Arc::new(PgReputationRepo::new(pool.clone()));
-    let engine = Arc::new(TrustEngine::new(pool.clone()));
-    let worker = Arc::new(TrustWorker::new(
-        trust_repo,
-        reputation_repo,
-        engine,
-        50,
-        30,
-    ));
-
-    let processed = worker.process_batch().await.expect("process_batch");
-    assert_eq!(processed, 1);
+    let worker = make_worker(pool.clone());
+    let processed = worker.process_one().await.expect("process_one");
+    assert!(processed, "expected a message to be processed");
 
     // Action should be marked failed with an error mentioning reason
     let (status, error_message): (String, Option<String>) =
-        sqlx::query_as("SELECT status, error_message FROM trust__action_queue WHERE actor_id = $1")
+        sqlx::query_as("SELECT status, error_message FROM trust__action_log WHERE actor_id = $1")
             .bind(actor.id)
             .fetch_one(&pool)
             .await
@@ -507,34 +436,24 @@ async fn test_process_batch_denounce_empty_reason_fails() {
         .await
         .expect("create target");
 
-    // Seed a 'denounce' action with an empty reason (valid range is 1-500 chars)
-    sqlx::query(
-        "INSERT INTO trust__action_queue (actor_id, action_type, payload) VALUES ($1, $2, $3)",
-    )
-    .bind(actor.id)
-    .bind("denounce")
-    .bind(json!({ "target_id": target.id, "reason": "" }))
-    .execute(&pool)
-    .await
-    .expect("seed action");
+    // Enqueue a 'denounce' action with an empty reason (valid range is 1-500 chars)
+    let trust_repo = PgTrustRepo::new(pool.clone());
+    trust_repo
+        .enqueue_action(
+            actor.id,
+            "denounce",
+            &json!({ "target_id": target.id, "reason": "" }),
+        )
+        .await
+        .expect("enqueue action");
 
-    let trust_repo = Arc::new(PgTrustRepo::new(pool.clone()));
-    let reputation_repo = Arc::new(PgReputationRepo::new(pool.clone()));
-    let engine = Arc::new(TrustEngine::new(pool.clone()));
-    let worker = Arc::new(TrustWorker::new(
-        trust_repo,
-        reputation_repo,
-        engine,
-        50,
-        30,
-    ));
-
-    let processed = worker.process_batch().await.expect("process_batch");
-    assert_eq!(processed, 1);
+    let worker = make_worker(pool.clone());
+    let processed = worker.process_one().await.expect("process_one");
+    assert!(processed, "expected a message to be processed");
 
     // Action should be marked failed with an error mentioning reason
     let (status, error_message): (String, Option<String>) =
-        sqlx::query_as("SELECT status, error_message FROM trust__action_queue WHERE actor_id = $1")
+        sqlx::query_as("SELECT status, error_message FROM trust__action_log WHERE actor_id = $1")
             .bind(actor.id)
             .fetch_one(&pool)
             .await
