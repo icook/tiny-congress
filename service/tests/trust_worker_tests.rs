@@ -636,6 +636,40 @@ async fn test_process_batch_denounce_empty_reason_fails() {
 }
 
 // ---------------------------------------------------------------------------
+// Test: pgmq message with a missing/invalid log_id is archived gracefully
+// ---------------------------------------------------------------------------
+#[shared_runtime_test]
+async fn test_process_one_bad_log_id_archives_message() {
+    let db = isolated_db().await;
+    let pool = db.pool().clone();
+
+    // Send a pgmq message with no valid log_id — simulates a malformed message
+    // that could arrive if something outside TrustRepo inserts directly into the queue.
+    sqlx::query("SELECT pgmq.send('trust__actions', $1::jsonb)")
+        .bind(json!({ "bad_key": "not-a-uuid" }))
+        .execute(&pool)
+        .await
+        .expect("send bad message");
+
+    let worker = make_worker(pool.clone());
+    let processed = worker.process_one().await.expect("process_one");
+    assert!(
+        processed,
+        "expected the bad-log-id message to be processed (returned true)"
+    );
+
+    // The message should have been archived — the active queue is now empty.
+    let queue_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM pgmq.q_trust__actions")
+        .fetch_one(&pool)
+        .await
+        .expect("count active queue");
+    assert_eq!(
+        queue_count, 0,
+        "pgmq queue should be empty after bad-log-id message archived"
+    );
+}
+
+// ---------------------------------------------------------------------------
 // Test 10: denounce action with absent reason field fails the action
 // ---------------------------------------------------------------------------
 #[shared_runtime_test]
