@@ -2,9 +2,13 @@
 
 mod common;
 
+use std::sync::Arc;
+
 use common::factories::AccountFactory;
 use common::test_db::isolated_db;
+use tc_engine_api::trust::TrustGraphReader;
 use tc_test_macros::shared_runtime_test;
+use tinycongress_api::trust::graph_reader::TrustRepoGraphReader;
 use tinycongress_api::trust::repo::{PgTrustRepo, TrustRepo};
 
 #[shared_runtime_test]
@@ -162,4 +166,43 @@ async fn test_get_all_scores_returns_multiple_contexts() {
 
     assert_eq!(all.len(), 3);
     assert!(all.iter().all(|s| s.user_id == user.id));
+}
+
+// ---------------------------------------------------------------------------
+// Test 6: graph reader — negative path_diversity treated as no score
+// ---------------------------------------------------------------------------
+#[shared_runtime_test]
+async fn test_graph_reader_treats_negative_path_diversity_as_no_score() {
+    let db = isolated_db().await;
+    let pool = db.pool().clone();
+
+    let user = AccountFactory::new()
+        .with_seed(78)
+        .create(&pool)
+        .await
+        .expect("create user");
+
+    // Insert a score with negative path_diversity directly — simulates data corruption.
+    // The column is INTEGER so -1 is representable even though the engine never writes it.
+    sqlx::query(
+        "INSERT INTO trust__score_snapshots \
+         (user_id, context_user_id, trust_distance, path_diversity, eigenvector_centrality) \
+         VALUES ($1, NULL, 1.0, -1, 0.5)",
+    )
+    .bind(user.id)
+    .execute(&pool)
+    .await
+    .expect("insert corrupted score");
+
+    let trust_repo = Arc::new(PgTrustRepo::new(pool));
+    let reader = TrustRepoGraphReader::new(trust_repo);
+    let score = reader
+        .get_score(user.id, None)
+        .await
+        .expect("get_score should not error even on corrupt data");
+
+    assert!(
+        score.is_none(),
+        "negative path_diversity should be treated as no score (data corruption guard)"
+    );
 }
