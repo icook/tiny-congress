@@ -2,42 +2,82 @@
 
 Rust-specific error handling patterns for the service layer. For general error codes and concepts, see [Error Handling Patterns](./error-handling.md).
 
-## Error Type Hierarchy
+## REST Error Response Format
 
-Organize errors into domain and infrastructure categories:
-
-```
-Domain Errors (business logic)
-├── AccountError
-│   ├── NotFound
-│   ├── DuplicateUsername
-│   └── InvalidSignature
-├── EndorsementError
-│   ├── InvalidSignature
-│   └── ExpiredTimestamp
-└── AuthError
-    ├── InvalidToken
-    └── Expired
-
-Infrastructure Errors (technical)
-├── DatabaseError
-├── NetworkError
-└── ConfigError
-```
-
-## Using `thiserror` for Domain Errors
-
-Define typed errors for each module:
+All REST error responses use a single shared struct:
 
 ```rust
-// service/src/identity/repo/accounts.rs
+// service/src/http/mod.rs
+pub struct ErrorResponse {
+    pub error: String,
+}
+```
+
+Wire format — all errors look like this:
+
+```json
+{ "error": "Username already taken" }
+```
+
+## Shared Helper Functions
+
+Import from `crate::http`. These are the **only** correct way to build error responses in handlers.
+
+| Helper | Status | Signature |
+|---|---|---|
+| `bad_request` | 400 | `bad_request(msg: &str) -> Response` |
+| `unauthorized` | 401 | `unauthorized(msg: &str) -> Response` |
+| `forbidden` | 403 | `forbidden(msg: &str) -> Response` |
+| `not_found` | 404 | `not_found(msg: &str) -> Response` |
+| `conflict` | 409 | `conflict(msg: &str) -> Response` |
+| `too_many_requests` | 429 | `too_many_requests(msg: &str) -> Response` |
+| `internal_error` | 500 | `internal_error() -> Response` |
+
+`internal_error` takes no message — it always returns `"Internal server error"` to avoid leaking details.
+
+### Usage in handlers
+
+```rust
+use crate::http::{bad_request, not_found, unauthorized, internal_error};
+
+async fn get_account(
+    Path(id): Path<Uuid>,
+    Extension(repo): Extension<Arc<dyn AccountRepo>>,
+) -> axum::response::Response {
+    match repo.find(id).await {
+        Ok(account) => Json(account).into_response(),
+        Err(AccountRepoError::NotFound(_)) => not_found("account not found"),
+        Err(e) => {
+            tracing::error!("database error: {e}");
+            internal_error()
+        }
+    }
+}
+```
+
+### What not to do
+
+`just lint-patterns` mechanically rejects these patterns:
+
+```rust
+// BAD: inline construction — blocked by lint-patterns
+(StatusCode::BAD_REQUEST, Json(ErrorResponse { error: "...".into() })).into_response()
+
+// BAD: json macro — blocked by lint-patterns
+serde_json::json!({"error": "..."})
+```
+
+`conflict`, `forbidden`, and `too_many_requests` are not covered by the lint check (they are less commonly misused) but should still use the shared helpers.
+
+## Domain Error Types
+
+Use `thiserror` for typed domain errors:
+
+```rust
 #[derive(Debug, thiserror::Error)]
 pub enum AccountRepoError {
     #[error("username already taken")]
     DuplicateUsername,
-
-    #[error("public key already registered")]
-    DuplicateKey,
 
     #[error("account not found: {0}")]
     NotFound(Uuid),
@@ -47,223 +87,56 @@ pub enum AccountRepoError {
 }
 ```
 
-**Key principles:**
-- Each variant represents a specific failure mode
-- Use `#[from]` for automatic conversion from underlying errors
-- Include relevant context (IDs, field names) in variants
-
-## HTTP Error Responses
-
-### REST API: RFC 7807 Problem Details
-
-Use the `ProblemDetails` struct for REST endpoints:
-
-```rust
-// service/src/rest.rs
-#[derive(Debug, Serialize, ToSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct ProblemDetails {
-    #[serde(rename = "type")]
-    pub problem_type: String,    // URI identifying the error type
-    pub title: String,           // Short summary
-    pub status: u16,             // HTTP status code
-    pub detail: String,          // Human-readable explanation
-    pub instance: Option<String>, // URI for this occurrence
-    pub extensions: Option<ProblemExtensions>,
-}
-
-#[derive(Debug, Serialize, ToSchema)]
-pub struct ProblemExtensions {
-    pub code: String,            // Standard error code
-    pub field: Option<String>,   // Field that caused error (validation)
-}
-```
-
-Example response:
-
-```json
-{
-  "type": "https://tinycongress.com/errors/validation",
-  "title": "Validation Error",
-  "status": 400,
-  "detail": "Username must be between 3 and 64 characters",
-  "extensions": {
-    "code": "VALIDATION_ERROR",
-    "field": "username"
-  }
-}
-```
-
-### Handler Error Mapping
-
-Map domain errors to HTTP responses using `IntoResponse`:
-
-```rust
-// service/src/identity/http/mod.rs
-impl IntoResponse for AccountRepoError {
-    fn into_response(self) -> axum::response::Response {
-        match self {
-            Self::DuplicateUsername => (
-                StatusCode::CONFLICT,
-                Json(ErrorResponse { error: "Username already taken".to_string() }),
-            ).into_response(),
-
-            Self::DuplicateKey => (
-                StatusCode::CONFLICT,
-                Json(ErrorResponse { error: "Public key already registered".to_string() }),
-            ).into_response(),
-
-            Self::NotFound(id) => (
-                StatusCode::NOT_FOUND,
-                Json(ErrorResponse { error: format!("Account not found: {id}") }),
-            ).into_response(),
-
-            Self::Database(e) => {
-                tracing::error!("Database error: {e}");
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(ErrorResponse { error: "Internal server error".to_string() }),
-                ).into_response()
-            }
-        }
-    }
-}
-```
-
-**Important:** Never expose internal error details (SQL errors, stack traces) in responses.
-
-## GraphQL Error Responses
-
-For GraphQL, use `async_graphql::Error` with extensions:
-
-```rust
-use async_graphql::{Error, ErrorExtensions};
-
-async fn get_account(&self, ctx: &Context<'_>, id: Uuid) -> Result<Account> {
-    let account = repo.find(id).await.map_err(|e| match e {
-        AccountRepoError::NotFound(_) => Error::new("Account not found")
-            .extend_with(|_, e| {
-                e.set("code", "NOT_FOUND");
-                e.set("id", id.to_string());
-            }),
-        _ => Error::new("Internal error")
-            .extend_with(|_, e| e.set("code", "INTERNAL_ERROR")),
-    })?;
-    Ok(account)
-}
-```
-
-Response format:
-
-```json
-{
-  "data": null,
-  "errors": [{
-    "message": "Account not found",
-    "locations": [{"line": 1, "column": 1}],
-    "path": ["getAccount"],
-    "extensions": {
-      "code": "NOT_FOUND",
-      "id": "550e8400-e29b-41d4-a716-446655440000"
-    }
-  }]
-}
-```
-
-## Error Propagation
-
-Use the `?` operator with `#[from]` conversions:
-
-```rust
-// Good: Clean propagation
-async fn create_account(pool: &PgPool, req: CreateRequest) -> Result<Account, AccountError> {
-    let validated = validate_request(&req)?;  // ValidationError -> AccountError
-    let account = repo.create(&validated).await?;  // sqlx::Error -> AccountError
-    Ok(account)
-}
-
-// Bad: Manual mapping everywhere
-async fn create_account(pool: &PgPool, req: CreateRequest) -> Result<Account, String> {
-    let validated = validate_request(&req)
-        .map_err(|e| format!("validation failed: {e}"))?;
-    // ...
-}
-```
+Map domain errors to HTTP responses explicitly in the handler. Do not implement `IntoResponse` on repo error types — the same error can map to different status codes depending on context (e.g., `DuplicateUsername` during signup is a user error; during an internal migration step it is a 500).
 
 ## Logging vs Returning Errors
 
-| Scenario | Log Level | Return to Client |
-|----------|-----------|------------------|
+| Scenario | Log level | Response message |
+|---|---|---|
 | Validation failure | `debug!` | Full error message |
 | Business rule violation | `info!` | User-friendly message |
-| Database error | `error!` | Generic "Internal error" |
-| External service failure | `warn!` | Retry message or generic error |
+| Database error | `error!` | `internal_error()` — no details |
+| External service failure | `warn!` | `internal_error()` or retry message |
 
-```rust
-match repo.create(account).await {
-    Ok(account) => Ok(Json(account)),
-    Err(AccountRepoError::DuplicateUsername) => {
-        tracing::debug!("Duplicate username attempt: {}", account.username);
-        Err((StatusCode::CONFLICT, "Username already taken"))
-    }
-    Err(AccountRepoError::Database(e)) => {
-        tracing::error!("Database error creating account: {e}");
-        Err((StatusCode::INTERNAL_SERVER_ERROR, "Internal error"))
-    }
-}
-```
+Never expose SQL errors, stack traces, or internal identifiers in `error` response bodies.
 
 ## Structured Error Inspection
 
-Never match errors by parsing string output:
+Match on typed error variants, not string output:
 
 ```rust
-// Bad: String matching is fragile
-if e.to_string().contains("unique constraint") {
-    return Err(ApiError::DuplicateUsername);
-}
-
-// Good: Use structured error accessors
+// Good
 if let sqlx::Error::Database(db_err) = &e {
-    if let Some(constraint) = db_err.constraint() {
-        match constraint {
-            "accounts_username_key" => return Err(ApiError::DuplicateUsername),
-            "accounts_root_kid_key" => return Err(ApiError::DuplicateKey),
-            _ => {}
-        }
+    if let Some("accounts_username_key") = db_err.constraint() {
+        return conflict("username already taken");
     }
 }
+
+// Bad — fragile
+if e.to_string().contains("unique constraint") { ... }
 ```
 
-## Testing Error Handling
+## GraphQL Error Responses
+
+GraphQL (currently a stub — `buildInfo` only) uses `async_graphql::Error`:
 
 ```rust
-#[sqlx::test]
-async fn test_duplicate_username_returns_conflict(pool: PgPool) {
-    // Create first account
-    create_account(&pool, request_with_username("alice")).await.unwrap();
-
-    // Attempt duplicate
-    let result = create_account(&pool, request_with_username("alice")).await;
-    assert!(matches!(result, Err(AccountError::DuplicateUsername)));
-}
-
-#[tokio::test]
-async fn test_error_response_format() {
-    let app = TestAppBuilder::with_mocks().build();
-
-    let response = app.oneshot(/* invalid request */).await.unwrap();
-    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
-
-    let body: ErrorResponse = parse_body(response).await;
-    assert!(!body.error.is_empty());
-}
+repo.find(id).await.map_err(|e| match e {
+    AccountRepoError::NotFound(_) => async_graphql::Error::new("not found"),
+    _ => async_graphql::Error::new("internal error"),
+})?;
 ```
+
+All feature work uses REST. GraphQL error handling is not exercised in production paths.
+
+## Adding a New Helper
+
+If a new status code is needed frequently enough to warrant a helper, add it to `service/src/http/mod.rs` following the existing pattern (all helpers are `#[must_use]` and take `msg: &str` except `internal_error`). Update the table in this document and in `AGENTS.md`.
 
 ---
 
 ## See Also
 
-- [Error Handling Patterns](./error-handling.md) - Overview and standard error codes
-- [Frontend Error Handling](./error-handling-frontend.md) - React error boundaries and network errors
-- [Rust Coding Standards](./rust-coding-standards.md) - General Rust conventions
+- [Error Handling Patterns](./error-handling.md) — Overview and standard error codes
+- [Frontend Error Handling](./error-handling-frontend.md) — React error boundaries and network errors
+- [Rust Coding Standards](./rust-coding-standards.md) — General Rust conventions
