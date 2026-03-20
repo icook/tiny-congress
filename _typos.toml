@@ -11,5 +11,7 @@ extend-ignore-re = [
 extend-exclude = ["*.lock", "*.snap", ".sqlx/", "web/src/wasm/", "web/src/api/generated/"]
 
 # Known false positives can be added here:
-# [default.extend-words]
-# ot = "ot"
+[default.extend-words]
+# "ba"/"BA" = Barabasi-Albert graph model used in scale simulation tests
+ba = "ba"
+BA = "BA"
