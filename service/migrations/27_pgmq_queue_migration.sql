@@ -32,10 +32,15 @@ END $$;
 DROP TABLE IF EXISTS rooms__lifecycle_queue;
 
 -- 4. Rename trust__action_queue → trust__action_log
---    Only runs if the old name still exists (first run).
+--    If both exist (idempotent re-run), drop the stale source table.
+--    If only the old name exists (first run), rename it.
 DO $$ BEGIN
     IF EXISTS (SELECT 1 FROM information_schema.tables
-               WHERE table_name = 'trust__action_queue') THEN
+               WHERE table_name = 'trust__action_log') THEN
+        -- Already migrated; drop the re-created source if present
+        DROP TABLE IF EXISTS trust__action_queue;
+    ELSIF EXISTS (SELECT 1 FROM information_schema.tables
+                  WHERE table_name = 'trust__action_queue') THEN
         ALTER TABLE trust__action_queue RENAME TO trust__action_log;
     END IF;
 END $$;
