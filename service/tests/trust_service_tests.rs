@@ -800,3 +800,40 @@ async fn test_endorse_rejected_after_denouncement() {
         "expected DenouncementConflict, got: {result:?}"
     );
 }
+
+#[shared_runtime_test]
+async fn test_denounce_quota_exceeded() {
+    let db = isolated_db().await;
+    let pool = db.pool().clone();
+
+    let accuser = AccountFactory::new()
+        .with_seed(12)
+        .create(&pool)
+        .await
+        .expect("create accuser");
+
+    let target = AccountFactory::new()
+        .with_seed(13)
+        .create(&pool)
+        .await
+        .expect("create target");
+
+    let rep_repo = Arc::new(PgReputationRepo::new(pool.clone())) as Arc<dyn ReputationRepo>;
+    let repo = Arc::new(PgTrustRepo::new(pool));
+    let payload = serde_json::json!({});
+
+    // Enqueue 5 actions directly to hit the daily quota
+    for _ in 0..5 {
+        repo.enqueue_action(accuser.id, "denounce", &payload)
+            .await
+            .expect("enqueue action");
+    }
+
+    let service = DefaultTrustService::new(repo, rep_repo);
+    let result = service.denounce(accuser.id, target.id, "spam").await;
+
+    assert!(
+        matches!(result, Err(TrustServiceError::QuotaExceeded)),
+        "expected QuotaExceeded for denounce, got: {result:?}"
+    );
+}
