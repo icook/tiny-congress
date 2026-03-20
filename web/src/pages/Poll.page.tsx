@@ -24,6 +24,7 @@ import { BotTraceViewer } from '@/engines/polling/components/BotTraceViewer';
 import {
   EvidenceCards,
   PollDeadline,
+  SuggestionFeed,
   UpcomingPollPreview,
   useAgenda,
   useCastVote,
@@ -323,6 +324,8 @@ export function PollPage({ roomId, pollId }: PollPageProps) {
       {tracesQuery.data && tracesQuery.data.length > 0 ? (
         <BotTraceViewer traces={tracesQuery.data} />
       ) : null}
+
+      <SuggestionFeed roomId={roomId} pollId={pollId} />
     </Stack>
   );
 }

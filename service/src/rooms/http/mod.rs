@@ -106,6 +106,7 @@ pub struct CreateSuggestionRequest {
 pub struct SuggestionResponse {
     pub id: uuid::Uuid,
     pub room_id: uuid::Uuid,
+    pub poll_id: uuid::Uuid,
     pub account_id: uuid::Uuid,
     pub suggestion_text: String,
     pub status: String,
@@ -133,7 +134,7 @@ pub fn router() -> Router {
         .route("/rooms/{room_id}/roles", post(platform::assign_role))
         // Platform: suggestions
         .route(
-            "/rooms/{room_id}/suggestions",
+            "/rooms/{room_id}/polls/{poll_id}/suggestions",
             get(platform::list_suggestions).post(platform::create_suggestion),
         )
         // Polling: agenda

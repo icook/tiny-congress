@@ -111,6 +111,7 @@ export interface DimensionVote {
 export interface Suggestion {
   id: string;
   room_id: string;
+  poll_id: string;
   account_id: string;
   suggestion_text: string;
   status: string;
@@ -234,19 +235,20 @@ export async function getMyVotes(
 
 // === Suggestion endpoints ===
 
-export async function listSuggestions(roomId: string): Promise<Suggestion[]> {
-  return fetchJson(`/rooms/${roomId}/suggestions`);
+export async function listSuggestions(roomId: string, pollId: string): Promise<Suggestion[]> {
+  return fetchJson(`/rooms/${roomId}/polls/${pollId}/suggestions`);
 }
 
 export async function createSuggestion(
   roomId: string,
+  pollId: string,
   suggestionText: string,
   deviceKid: string,
   privateKey: CryptoKey,
   wasmCrypto: CryptoModule
 ): Promise<Suggestion> {
   return signedFetchJson(
-    `/rooms/${roomId}/suggestions`,
+    `/rooms/${roomId}/polls/${pollId}/suggestions`,
     'POST',
     deviceKid,
     privateKey,

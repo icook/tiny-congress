@@ -9,7 +9,6 @@ import { Badge, Button, Card, Group, Loader, Stack, Text, Title } from '@mantine
 import type { EngineViewProps } from '../api';
 import { usePolls, type Poll } from './api';
 import { PollCountdown } from './components/PollCountdown';
-import { SuggestionFeed } from './components/SuggestionFeed';
 import { usePollCountdown } from './hooks/usePollCountdown';
 
 function queueLabel(index: number): string {
@@ -62,8 +61,6 @@ export function PollEngineView({ room, roomId }: EngineViewProps) {
       {active.map((poll) => (
         <ActivePollCard key={poll.id} roomId={roomId} poll={poll} />
       ))}
-
-      <SuggestionFeed roomId={roomId} />
 
       {drafts.length > 0 ? (
         <Stack gap="xs">

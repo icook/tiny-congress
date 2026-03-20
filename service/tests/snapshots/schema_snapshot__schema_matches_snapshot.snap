@@ -116,7 +116,8 @@ CREATE TABLE rooms__research_suggestions (
     filter_reason TEXT,
     evidence_ids _UUID NOT NULL DEFAULT '{}'::uuid[],
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    processed_at TIMESTAMPTZ);
+    processed_at TIMESTAMPTZ,
+    poll_id UUID NOT NULL);
 
 CREATE TABLE rooms__role_assignments (
     id UUID NOT NULL DEFAULT gen_random_uuid(),
@@ -305,6 +306,9 @@ CREATE UNIQUE INDEX rooms__polls_pkey ON public.rooms__polls USING btree (id)
 -- rooms__research_suggestions.idx_suggestions_account_daily
 CREATE INDEX idx_suggestions_account_daily ON public.rooms__research_suggestions USING btree (room_id, account_id, created_at)
 
+-- rooms__research_suggestions.idx_suggestions_poll_status
+CREATE INDEX idx_suggestions_poll_status ON public.rooms__research_suggestions USING btree (poll_id, status, created_at)
+
 -- rooms__research_suggestions.idx_suggestions_room_status
 CREATE INDEX idx_suggestions_room_status ON public.rooms__research_suggestions USING btree (room_id, status, created_at)
 
@@ -383,6 +387,7 @@ CREATE UNIQUE INDEX trust__user_influence_pkey ON public.trust__user_influence U
 -- rooms__poll_evidence.dimension_id -> rooms__poll_dimensions.id (ON UPDATE NO ACTION, ON DELETE CASCADE)
 -- rooms__polls.room_id -> rooms__rooms.id (ON UPDATE NO ACTION, ON DELETE CASCADE)
 -- rooms__research_suggestions.account_id -> accounts.id (ON UPDATE NO ACTION, ON DELETE NO ACTION)
+-- rooms__research_suggestions.poll_id -> rooms__polls.id (ON UPDATE NO ACTION, ON DELETE NO ACTION)
 -- rooms__research_suggestions.room_id -> rooms__rooms.id (ON UPDATE NO ACTION, ON DELETE NO ACTION)
 -- rooms__role_assignments.account_id -> accounts.id (ON UPDATE NO ACTION, ON DELETE NO ACTION)
 -- rooms__role_assignments.assigned_by -> accounts.id (ON UPDATE NO ACTION, ON DELETE NO ACTION)
@@ -489,6 +494,7 @@ CREATE UNIQUE INDEX trust__user_influence_pkey ON public.trust__user_influence U
 -- rooms__research_suggestions: rooms__research_suggestions_evidence_ids_not_null (CHECK)
 -- rooms__research_suggestions: rooms__research_suggestions_id_not_null (CHECK)
 -- rooms__research_suggestions: rooms__research_suggestions_pkey (PRIMARY KEY)
+-- rooms__research_suggestions: rooms__research_suggestions_poll_id_not_null (CHECK)
 -- rooms__research_suggestions: rooms__research_suggestions_room_id_not_null (CHECK)
 -- rooms__research_suggestions: rooms__research_suggestions_status_not_null (CHECK)
 -- rooms__research_suggestions: rooms__research_suggestions_suggestion_text_not_null (CHECK)
