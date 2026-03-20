@@ -26,6 +26,7 @@ export function SignupPage() {
   const [password, setPassword] = useState('');
   const [passwordConfirm, setPasswordConfirm] = useState('');
   const [isGeneratingKeys, setIsGeneratingKeys] = useState(false);
+  const [localError, setLocalError] = useState<string | null>(null);
   const [createdAccount, setCreatedAccount] = useState<{
     account_id: string;
     root_kid: string;
@@ -34,6 +35,7 @@ export function SignupPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setLocalError(null);
 
     if (!username.trim() || !password || password !== passwordConfirm) {
       return;
@@ -74,8 +76,8 @@ export function SignupPage() {
       setDevice(response.device_kid, deviceKeyPair.privateKey, username.trim());
 
       setCreatedAccount(response);
-    } catch {
-      // Error is handled by TanStack Query mutation state
+    } catch (err) {
+      setLocalError(err instanceof Error ? err.message : 'An unexpected error occurred');
     } finally {
       setIsGeneratingKeys(false);
     }
@@ -94,7 +96,7 @@ export function SignupPage() {
       }}
       isLoading={signup.isPending || isGeneratingKeys}
       loadingText={isGeneratingKeys ? 'Generating keys and encrypting backup...' : undefined}
-      error={signup.isError ? signup.error.message : null}
+      error={localError ?? (signup.isError ? signup.error.message : null)}
       successData={createdAccount}
       verifierUrl={buildVerifierUrl(username)}
     />

@@ -3,6 +3,7 @@ import '@mantine/notifications/styles.css';
 
 import { MantineProvider } from '@mantine/core';
 import { Notifications } from '@mantine/notifications';
+import { BrowserCapabilityGate } from './components/BrowserCapabilityGate';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { CryptoProvider } from './providers/CryptoProvider';
 import { DeviceProvider } from './providers/DeviceProvider';
@@ -15,13 +16,15 @@ export default function App() {
     <ErrorBoundary context="Application">
       <MantineProvider theme={mantineTheme} defaultColorScheme="dark">
         <Notifications />
-        <CryptoProvider>
-          <DeviceProvider>
-            <QueryProvider>
-              <Router />
-            </QueryProvider>
-          </DeviceProvider>
-        </CryptoProvider>
+        <BrowserCapabilityGate>
+          <CryptoProvider>
+            <DeviceProvider>
+              <QueryProvider>
+                <Router />
+              </QueryProvider>
+            </DeviceProvider>
+          </CryptoProvider>
+        </BrowserCapabilityGate>
       </MantineProvider>
     </ErrorBoundary>
   );
