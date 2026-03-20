@@ -154,6 +154,43 @@ mod tests {
         let reason = "a".repeat(DENOUNCEMENT_REASON_MAX_LEN + 1);
         assert!(!is_valid_reason(&reason));
     }
+
+    #[test]
+    fn is_valid_endorsement_weight_accepts_midrange() {
+        assert!(is_valid_endorsement_weight(0.5));
+    }
+
+    #[test]
+    fn is_valid_endorsement_weight_accepts_exactly_one() {
+        // upper bound is inclusive: weight=1.0 is valid
+        assert!(is_valid_endorsement_weight(1.0));
+    }
+
+    #[test]
+    fn is_valid_endorsement_weight_rejects_zero() {
+        // lower bound is exclusive: weight=0.0 is invalid
+        assert!(!is_valid_endorsement_weight(0.0));
+    }
+
+    #[test]
+    fn is_valid_endorsement_weight_rejects_above_one() {
+        assert!(!is_valid_endorsement_weight(1.1));
+    }
+
+    #[test]
+    fn is_valid_endorsement_weight_rejects_negative() {
+        assert!(!is_valid_endorsement_weight(-0.1));
+    }
+
+    #[test]
+    fn is_valid_endorsement_weight_rejects_nan() {
+        assert!(!is_valid_endorsement_weight(f32::NAN));
+    }
+
+    #[test]
+    fn is_valid_endorsement_weight_rejects_infinity() {
+        assert!(!is_valid_endorsement_weight(f32::INFINITY));
+    }
 }
 
 impl DefaultTrustService {
