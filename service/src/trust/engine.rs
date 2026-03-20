@@ -6,7 +6,19 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::trust::max_flow::FlowGraph;
-use crate::trust::repo::TrustRepo;
+use crate::trust::repo::{TrustRepo, TrustRepoError};
+
+/// Errors returned by [`TrustEngine::recompute_from_anchor`].
+#[derive(Debug, thiserror::Error)]
+pub enum TrustEngineError {
+    /// A database query failed during score computation.
+    #[error("database error: {0}")]
+    Database(#[from] sqlx::Error),
+
+    /// Persisting a computed score failed.
+    #[error("upsert_score failed: {0}")]
+    UpsertScore(#[from] TrustRepoError),
+}
 
 /// A computed trust score for a single user, relative to an anchor.
 #[derive(Debug, Clone)]
@@ -205,7 +217,7 @@ WHERE revoked_at IS NULL
         &self,
         anchor_id: Uuid,
         trust_repo: &dyn TrustRepo,
-    ) -> Result<usize, anyhow::Error> {
+    ) -> Result<usize, TrustEngineError> {
         let distances = self.compute_distances_from(anchor_id).await?;
         let diversities: HashMap<Uuid, i32> = self
             .compute_diversity_from(anchor_id)
@@ -231,8 +243,7 @@ WHERE revoked_at IS NULL
                     Some(diversity),
                     None,
                 )
-                .await
-                .map_err(|e| anyhow::anyhow!("upsert_score failed: {e}"))?;
+                .await?;
         }
         Ok(count)
     }
