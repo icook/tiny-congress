@@ -36,6 +36,17 @@ impl ActionType {
     }
 }
 
+/// Returns `true` if `weight` is a valid endorsement weight: finite and in (0.0, 1.0].
+#[allow(clippy::missing_const_for_fn)]
+pub(crate) fn is_valid_endorsement_weight(weight: f32) -> bool {
+    weight.is_finite() && weight > 0.0 && weight <= 1.0
+}
+
+/// Returns `true` if `reason` is a valid denouncement reason: non-empty and within the limit.
+pub(crate) const fn is_valid_denouncement_reason(reason: &str) -> bool {
+    !reason.is_empty() && reason.len() <= DENOUNCEMENT_REASON_MAX_LEN
+}
+
 /// Errors returned by [`TrustService`] operations.
 #[derive(Debug, thiserror::Error)]
 pub enum TrustServiceError {
@@ -134,7 +145,7 @@ impl TrustService for DefaultTrustService {
             return Err(TrustServiceError::SelfAction);
         }
 
-        if !weight.is_finite() || weight <= 0.0 || weight > 1.0 {
+        if !is_valid_endorsement_weight(weight) {
             return Err(TrustServiceError::InvalidWeight);
         }
 
@@ -214,7 +225,7 @@ impl TrustService for DefaultTrustService {
             return Err(TrustServiceError::SelfAction);
         }
 
-        if reason.is_empty() || reason.len() > DENOUNCEMENT_REASON_MAX_LEN {
+        if !is_valid_denouncement_reason(reason) {
             return Err(TrustServiceError::InvalidReason {
                 max: DENOUNCEMENT_REASON_MAX_LEN,
             });
