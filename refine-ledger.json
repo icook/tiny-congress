@@ -205,10 +205,10 @@
     },
     "service/src/trust/": {
       "status": "active",
-      "total_prs": 26,
+      "total_prs": 27,
       "total_skips": 0,
       "consecutive_idle": 0,
-      "last_run": "2026-03-20T00:32:23Z",
+      "last_run": "2026-03-20T00:58:56Z",
       "graduated_at": "",
       "history": [
         {
@@ -366,6 +366,12 @@
           "type": "test_coverage",
           "impact": "medium",
           "summary": "Added integration test covering the untested negative path_diversity data-corruption guard in TrustRepoGraphReader::get_score, which logs a warning and returns Ok(None) rather than an error when the DB contains a corrupt score row."
+        },
+        {
+          "pr": 0,
+          "type": "security_hardening",
+          "impact": "medium",
+          "summary": "Added 1–4096 byte size validation for the invite envelope in `create_invite_handler`, mirroring the backup envelope's `MAX_ENVELOPE_SIZE` convention; previously only the base64url encoding was checked, allowing arbitrarily large payloads to reach the database."
         }
       ],
       "skipped": []
