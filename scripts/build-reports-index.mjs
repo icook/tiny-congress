@@ -6,8 +6,8 @@
 // entry, and caps at MAX_ENTRIES.
 //
 // Usage: node scripts/build-reports-index.mjs [--existing path] --output path
-// Required env: GITHUB_SHA, GITHUB_REF_NAME, GITHUB_RUN_ID, GITHUB_RUN_NUMBER,
-//               COVERAGE_PCT, BUILD_DATE
+// Required env: GITHUB_SHA, GITHUB_REF_NAME, REPORT_DEST_KEY, GITHUB_RUN_ID,
+//               GITHUB_RUN_NUMBER, COVERAGE_PCT, BUILD_DATE
 
 import { readFileSync, writeFileSync } from 'node:fs';
 import { parseArgs } from 'node:util';
@@ -43,9 +43,11 @@ function extractBuilds(html) {
 // Build the new entry from env vars
 // ---------------------------------------------------------------------------
 const sha = process.env.GITHUB_SHA ?? '';
+const key = process.env.REPORT_DEST_KEY ?? sha;
 const newBuild = {
   sha,
   short: sha.slice(0, 7) || '???????',
+  key,
   branch: process.env.GITHUB_REF_NAME ?? 'unknown',
   date: process.env.BUILD_DATE ?? new Date().toISOString().replace('T', ' ').slice(0, 19) + ' UTC',
   coverage: process.env.COVERAGE_PCT ?? '?',
@@ -65,7 +67,7 @@ if (values.existing) {
   }
 }
 
-builds = [newBuild, ...builds.filter((b) => b.sha !== sha)].slice(0, MAX_ENTRIES);
+builds = [newBuild, ...builds.filter((b) => b.key !== key)].slice(0, MAX_ENTRIES);
 
 // ---------------------------------------------------------------------------
 // Render
@@ -81,7 +83,7 @@ function coverageClass(pct) {
 const rows = builds
   .map(
     (b, i) => `        <tr${i === 0 ? ' class="current"' : ''}>
-          <td class="mono"><a href="${b.sha}/index.html">${b.short}</a></td>
+          <td class="mono"><a href="${b.key ?? b.sha}/index.html">${b.short}</a></td>
           <td>${b.branch}</td>
           <td class="pct${coverageClass(b.coverage)}">${b.coverage}%</td>
           <td class="mono">${b.date}</td>

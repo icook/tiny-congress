@@ -367,6 +367,8 @@ jobs:
       use-arc: ${{ steps.runner.outputs.use-arc }}
       # Image registry — where built images are pushed/pulled during CI.
       image-registry: ${{ steps.runner.outputs.image-registry }}
+      # Report destination key — branch name with slashes replaced by hyphens.
+      report-key: ${{ steps.report-key.outputs.dest }}
     steps:
       - uses: actions/checkout@v6
 
@@ -462,6 +464,14 @@ jobs:
               - '!.github/workflows/build-arc-runner.yml'
               - 'skaffold.yaml'
               - 'justfile'
+
+      - name: Compute report destination key
+        id: report-key
+        env:
+          RAW_BRANCH: ${{ github.head_ref || github.ref_name }}
+        run: |
+          KEY="${RAW_BRANCH//\//-}"
+          echo "dest=${KEY}" >> "$GITHUB_OUTPUT"
 
   # ── Build WASM tc-crypto (shared artifact) ────────────────
   build-wasm:
@@ -1665,6 +1675,7 @@ jobs:
       - name: Build root build-history index
         env:
           COVERAGE_PCT: ${{ steps.artifacts.outputs.coverage_pct }}
+          REPORT_DEST_KEY: ${{ needs.detect-changes.outputs.report-key }}
         run: |
           # Download existing root index (may 404 on first run)
           curl -fsSL -o existing-index.html \
@@ -1684,7 +1695,7 @@ jobs:
           DUFS_PASSWORD: ${{ secrets.DUFS_UPLOAD_PASSWORD }}
         run: |
           set -euo pipefail
-          DEST="${{ github.sha }}"
+          DEST="${{ needs.detect-changes.outputs.report-key }}"
           BASE="https://reports-upload.ibcook.com"
 
           upload_dir() {
@@ -1747,17 +1758,17 @@ jobs:
           message: |
             ## 🏛️ CI Reports
 
-            **[📋 All Reports](https://reports.ibcook.com/${{ github.sha }}/index.html)** | [Build History](https://reports.ibcook.com/index.html)
+            **[📋 All Reports](https://reports.ibcook.com/${{ needs.detect-changes.outputs.report-key }}/index.html)** | [Build History](https://reports.ibcook.com/index.html)
 
             ### 📚 API Documentation
             | | |
             |---|---|
-            | 🦀 [Rust API Docs](https://reports.ibcook.com/${{ github.sha }}/rust-docs/tinycongress_api/) | 📘 [TypeScript Docs](https://reports.ibcook.com/${{ github.sha }}/ts-docs/) |
+            | 🦀 [Rust API Docs](https://reports.ibcook.com/${{ needs.detect-changes.outputs.report-key }}/rust-docs/tinycongress_api/) | 📘 [TypeScript Docs](https://reports.ibcook.com/${{ needs.detect-changes.outputs.report-key }}/ts-docs/) |
 
             ### 🧪 Test Artifacts
             | | |
             |---|---|
-            | 📊 [Coverage](https://reports.ibcook.com/${{ github.sha }}/coverage/index.html) | 📚 [Storybook](https://reports.ibcook.com/${{ github.sha }}/storybook/index.html) |
-            | 🎭 [Playwright](https://reports.ibcook.com/${{ github.sha }}/playwright/index.html) | 📸 [Screenshots](https://reports.ibcook.com/${{ github.sha }}/screenshots/index.html) |
+            | 📊 [Coverage](https://reports.ibcook.com/${{ needs.detect-changes.outputs.report-key }}/coverage/index.html) | 📚 [Storybook](https://reports.ibcook.com/${{ needs.detect-changes.outputs.report-key }}/storybook/index.html) |
+            | 🎭 [Playwright](https://reports.ibcook.com/${{ needs.detect-changes.outputs.report-key }}/playwright/index.html) | 📸 [Screenshots](https://reports.ibcook.com/${{ needs.detect-changes.outputs.report-key }}/screenshots/index.html) |
 
-            <sub>🤖 Generated from commit ${{ github.sha }}</sub>
+            <sub>🤖 Generated from commit ${{ github.sha }} · reports keyed by branch `${{ needs.detect-changes.outputs.report-key }}`</sub>
