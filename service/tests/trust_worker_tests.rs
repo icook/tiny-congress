@@ -419,6 +419,66 @@ async fn test_process_batch_denounce_reason_too_long_fails() {
     );
 }
 
+// ---------------------------------------------------------------------------
+// Test 9: poison message — action is marked failed and pgmq message archived
+// ---------------------------------------------------------------------------
+#[shared_runtime_test]
+async fn test_process_one_poison_message_marks_action_failed() {
+    let db = isolated_db().await;
+    let pool = db.pool().clone();
+
+    let actor = AccountFactory::new()
+        .with_seed(1)
+        .create(&pool)
+        .await
+        .expect("create actor");
+
+    // Enqueue any well-formed action — the poison-message guard fires before
+    // the payload is inspected, so the content doesn't need to be valid.
+    let trust_repo = PgTrustRepo::new(pool.clone());
+    trust_repo
+        .enqueue_action(actor.id, "endorse", &json!({}))
+        .await
+        .expect("enqueue action");
+
+    // Simulate a message that has been delivered many times (e.g., the worker
+    // crashed mid-flight each time) by bumping read_ct directly in the pgmq
+    // queue table.  After pgmq.read increments read_ct by 1, the worker sees
+    // read_ct = 11 > MAX_RETRIES (3) and takes the poison-message path.
+    sqlx::query("UPDATE pgmq.q_trust__actions SET read_ct = 10")
+        .execute(&pool)
+        .await
+        .expect("bump read_ct past MAX_RETRIES");
+
+    let worker = make_worker(pool.clone());
+    let processed = worker.process_one().await.expect("process_one");
+    assert!(processed, "expected poison message to be processed");
+
+    // Action should be marked failed with 'poison message' in error_message.
+    let (status, error_message): (String, Option<String>) =
+        sqlx::query_as("SELECT status, error_message FROM trust__action_log WHERE actor_id = $1")
+            .bind(actor.id)
+            .fetch_one(&pool)
+            .await
+            .expect("fetch action");
+
+    assert_eq!(status, "failed");
+    assert!(
+        error_message.as_deref().unwrap_or("").contains("poison"),
+        "error_message should mention 'poison', got: {error_message:?}"
+    );
+
+    // The message should have been archived — the active queue is now empty.
+    let queue_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM pgmq.q_trust__actions")
+        .fetch_one(&pool)
+        .await
+        .expect("count active queue");
+    assert_eq!(
+        queue_count, 0,
+        "pgmq queue should be empty after poison message archived"
+    );
+}
+
 #[shared_runtime_test]
 async fn test_process_batch_denounce_empty_reason_fails() {
     let db = isolated_db().await;
