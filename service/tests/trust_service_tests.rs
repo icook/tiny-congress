@@ -517,6 +517,45 @@ async fn test_verifier_bypasses_endorsement_slots() {
 }
 
 #[shared_runtime_test]
+async fn test_endorse_rejects_invalid_weight() {
+    let db = isolated_db().await;
+    let pool = db.pool().clone();
+
+    let endorser = AccountFactory::new()
+        .with_seed(200)
+        .create(&pool)
+        .await
+        .expect("create endorser");
+
+    let subject = AccountFactory::new()
+        .with_seed(201)
+        .create(&pool)
+        .await
+        .expect("create subject");
+
+    let rep_repo = Arc::new(PgReputationRepo::new(pool.clone())) as Arc<dyn ReputationRepo>;
+    let repo = Arc::new(PgTrustRepo::new(pool));
+    let service = DefaultTrustService::new(repo, rep_repo);
+
+    for bad_weight in [
+        0.0f32,
+        -0.5,
+        1.1,
+        f32::NAN,
+        f32::INFINITY,
+        f32::NEG_INFINITY,
+    ] {
+        let result = service
+            .endorse(endorser.id, subject.id, bad_weight, None)
+            .await;
+        assert!(
+            matches!(result, Err(TrustServiceError::InvalidWeight)),
+            "expected InvalidWeight for weight={bad_weight}, got: {result:?}"
+        );
+    }
+}
+
+#[shared_runtime_test]
 async fn test_denounce_rejects_empty_reason() {
     let db = isolated_db().await;
     let pool = db.pool().clone();

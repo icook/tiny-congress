@@ -39,6 +39,9 @@ pub enum TrustServiceError {
     #[error("reason must be between 1 and {max} characters")]
     InvalidReason { max: usize },
 
+    #[error("weight must be in range (0.0, 1.0]")]
+    InvalidWeight,
+
     #[error("repository error: {0}")]
     Repo(#[from] TrustRepoError),
 
@@ -111,6 +114,10 @@ impl TrustService for DefaultTrustService {
     ) -> Result<(), TrustServiceError> {
         if endorser_id == subject_id {
             return Err(TrustServiceError::SelfAction);
+        }
+
+        if !weight.is_finite() || weight <= 0.0 || weight > 1.0 {
+            return Err(TrustServiceError::InvalidWeight);
         }
 
         let daily_count = self.trust_repo.count_daily_actions(endorser_id).await?;
