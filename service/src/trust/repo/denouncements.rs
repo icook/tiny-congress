@@ -49,18 +49,16 @@ pub(super) async fn create_denouncement_and_revoke_endorsement(
 
     // Revoke any active trust endorsement from accuser → target.  This is a
     // no-op when no such endorsement exists, so we don't treat it as an error.
-    crate::reputation::repo::endorsements::revoke_endorsement(
+    match crate::reputation::repo::endorsements::revoke_endorsement(
         &mut *tx, accuser_id, target_id, "trust",
     )
     .await
-    .map_err(|e| match e {
-        crate::reputation::repo::endorsements::EndorsementRepoError::Database(db_err) => {
-            TrustRepoError::Database(db_err)
+    {
+        Ok(()) | Err(crate::reputation::repo::endorsements::EndorsementRepoError::NotFound) => {}
+        Err(crate::reputation::repo::endorsements::EndorsementRepoError::Database(db_err)) => {
+            return Err(TrustRepoError::Database(db_err));
         }
-        crate::reputation::repo::endorsements::EndorsementRepoError::NotFound => {
-            TrustRepoError::NotFound
-        }
-    })?;
+    }
 
     tx.commit().await?;
 
