@@ -36,6 +36,65 @@ impl MechanismComparison {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_comparison(before_eligible: bool, after_eligible: bool) -> MechanismComparison {
+        MechanismComparison {
+            scenario: "test-scenario".to_string(),
+            mechanism: "test-mechanism".to_string(),
+            target_name: "target".to_string(),
+            before_distance: Some(1.0),
+            before_diversity: 2,
+            before_eligible,
+            after_distance: None,
+            after_diversity: 0,
+            after_eligible,
+            blue_casualties: 0,
+            blue_total: 5,
+            survived_weaponization: None,
+        }
+    }
+
+    #[test]
+    fn target_lost_access_returns_true_when_eligible_before_and_not_after() {
+        let c = make_comparison(true, false);
+        assert!(
+            c.target_lost_access(),
+            "eligible before, ineligible after = access lost"
+        );
+    }
+
+    #[test]
+    fn target_lost_access_returns_false_when_never_eligible() {
+        let c = make_comparison(false, false);
+        assert!(
+            !c.target_lost_access(),
+            "ineligible before AND after = did not lose access (never had it)"
+        );
+    }
+
+    #[test]
+    fn target_lost_access_returns_false_when_still_eligible_after() {
+        let c = make_comparison(true, true);
+        assert!(
+            !c.target_lost_access(),
+            "eligible before AND after = mechanism failed to remove access"
+        );
+    }
+
+    #[test]
+    fn target_lost_access_returns_false_when_gained_eligibility() {
+        // Unusual case: wasn't eligible before, is now. Not a "lost access" event.
+        let c = make_comparison(false, true);
+        assert!(
+            !c.target_lost_access(),
+            "ineligible before, eligible after = gained access, not lost"
+        );
+    }
+}
+
 /// Collects comparison rows and prints a summary table.
 pub struct ComparisonTable {
     pub rows: Vec<MechanismComparison>,
