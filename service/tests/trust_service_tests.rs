@@ -676,6 +676,38 @@ async fn test_denounce_rejects_oversized_reason() {
 }
 
 #[shared_runtime_test]
+async fn test_denounce_accepts_reason_at_max_length() {
+    use tinycongress_api::trust::service::DENOUNCEMENT_REASON_MAX_LEN;
+
+    let db = isolated_db().await;
+    let pool = db.pool().clone();
+
+    let accuser = AccountFactory::new()
+        .with_seed(60)
+        .create(&pool)
+        .await
+        .expect("create accuser");
+
+    let target = AccountFactory::new()
+        .with_seed(61)
+        .create(&pool)
+        .await
+        .expect("create target");
+
+    let rep_repo = Arc::new(PgReputationRepo::new(pool.clone())) as Arc<dyn ReputationRepo>;
+    let repo = Arc::new(PgTrustRepo::new(pool));
+    let service = DefaultTrustService::new(repo, rep_repo);
+
+    let at_limit = "x".repeat(DENOUNCEMENT_REASON_MAX_LEN);
+    let result = service.denounce(accuser.id, target.id, &at_limit).await;
+
+    assert!(
+        result.is_ok(),
+        "expected Ok for reason at max length, got: {result:?}"
+    );
+}
+
+#[shared_runtime_test]
 async fn test_revoke_self_action_rejected() {
     let db = isolated_db().await;
     let pool = db.pool().clone();
