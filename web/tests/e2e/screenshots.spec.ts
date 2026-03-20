@@ -1,11 +1,22 @@
 import { existsSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { expect, test } from './fixtures';
 import { signupUser } from './helpers';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const SCREENSHOTS_DIR = path.join(process.cwd(), 'screenshots');
 const DESKTOP = { width: 1280, height: 720 };
 const MOBILE = { width: 390, height: 844 };
+
+// Visual regression baselines live next to the spec file.
+// When baselines are committed, capture() asserts pixel-level consistency.
+// When missing (first run or baselines not yet generated), only gallery
+// screenshots are saved — no regression failure.
+const BASELINES_DIR = path.join(__dirname, 'screenshots.spec.ts-snapshots');
+const hasBaselines = existsSync(BASELINES_DIR);
 
 if (!existsSync(SCREENSHOTS_DIR)) {
   mkdirSync(SCREENSHOTS_DIR, { recursive: true });
@@ -23,10 +34,17 @@ async function capture(
     await page.emulateMedia({ colorScheme: options.colorScheme });
   }
   await page.waitForLoadState('load');
+
+  // Save for gallery (always)
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, `${name}.png`),
     fullPage: true,
   });
+
+  // Visual regression assertion (only when baselines are committed)
+  if (hasBaselines) {
+    await expect(page).toHaveScreenshot(`${name}.png`, { fullPage: true });
+  }
 }
 
 test.describe.serial('screenshot gallery @screenshots', () => {

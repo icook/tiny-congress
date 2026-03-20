@@ -17,6 +17,10 @@ on:
         description: "Bypass change detection — run every job"
         type: boolean
         default: false
+      update_snapshots:
+        description: "Regenerate visual regression baselines (screenshots)"
+        type: boolean
+        default: false
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.number || github.sha }}
@@ -1241,7 +1245,11 @@ jobs:
 
           # Run tests - coverage report generated in Playwright global teardown
           yarn playwright:clean
-          yarn playwright:test --project chromium || TEST_EXIT=$?
+          SNAPSHOT_FLAG=""
+          if [ "${{ inputs.update_snapshots }}" = "true" ]; then
+            SNAPSHOT_FLAG="--update-snapshots"
+          fi
+          yarn playwright:test --project chromium $SNAPSHOT_FLAG || TEST_EXIT=$?
 
           # Cleanup
           kill "$PREVIEW_PID" "$PF_API_PID" 2>/dev/null || true
@@ -1276,6 +1284,15 @@ jobs:
           if-no-files-found: ignore
           path: web/screenshots/
           retention-days: 30
+
+      - name: Upload visual baselines
+        if: always() && inputs.update_snapshots == 'true'
+        uses: actions/upload-artifact@v6
+        with:
+          name: visual-baselines
+          if-no-files-found: warn
+          path: web/tests/e2e/screenshots.spec.ts-snapshots/
+          retention-days: 7
 
       - name: Analyze Playwright flakiness
         if: always()

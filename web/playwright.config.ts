@@ -26,6 +26,13 @@ export default defineConfig({
     // JSON reporter for programmatic analysis and flakiness tracking
     ['json', { outputFile: 'reports/playwright-results.json' }],
   ],
+  expect: {
+    toHaveScreenshot: {
+      // Allow minor anti-aliasing and sub-pixel rendering differences across CI runs.
+      maxDiffPixelRatio: 0.01,
+      threshold: 0.3,
+    },
+  },
   use: {
     baseURL: process.env.PLAYWRIGHT_BASE_URL ?? 'http://127.0.0.1:4173',
     headless: true,
