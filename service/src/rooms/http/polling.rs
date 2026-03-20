@@ -432,8 +432,12 @@ pub async fn add_dimension(
 pub async fn create_evidence(
     Extension(polling): Extension<Arc<dyn PollingService>>,
     Path((_room_id, poll_id, dimension_id)): Path<(Uuid, Uuid, Uuid)>,
-    Json(body): Json<CreateEvidenceBody>,
+    auth: AuthenticatedDevice,
 ) -> impl IntoResponse {
+    let body: CreateEvidenceBody = match auth.json() {
+        Ok(b) => b,
+        Err(resp) => return resp,
+    };
     let items: Vec<CreateEvidenceItem> = body
         .evidence
         .into_iter()
@@ -471,6 +475,7 @@ pub async fn create_evidence(
 pub async fn delete_evidence(
     Extension(polling): Extension<Arc<dyn PollingService>>,
     Path((_room_id, poll_id)): Path<(Uuid, Uuid)>,
+    _auth: AuthenticatedDevice,
 ) -> impl IntoResponse {
     match polling.delete_evidence_for_poll(poll_id).await {
         Ok(deleted) => (
@@ -501,6 +506,7 @@ pub async fn delete_evidence(
 pub async fn reset_poll(
     Extension(polling): Extension<Arc<dyn PollingService>>,
     Path((room_id, poll_id)): Path<(Uuid, Uuid)>,
+    _auth: AuthenticatedDevice,
 ) -> impl IntoResponse {
     match polling.reset_poll(room_id, poll_id).await {
         Ok(()) => StatusCode::OK.into_response(),
