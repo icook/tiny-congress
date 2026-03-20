@@ -51,6 +51,9 @@ pub enum TrustServiceError {
     #[error("cannot endorse a user you have denounced")]
     DenouncementConflict,
 
+    #[error("already denounced this user")]
+    AlreadyDenounced,
+
     #[error("reason must be between 1 and {max} characters")]
     InvalidReason { max: usize },
 
@@ -215,6 +218,17 @@ impl TrustService for DefaultTrustService {
             return Err(TrustServiceError::InvalidReason {
                 max: DENOUNCEMENT_REASON_MAX_LEN,
             });
+        }
+
+        // Cannot file a denouncement against someone already denounced. This mirrors
+        // the DenouncementConflict check on the endorse path and prevents the user
+        // from wasting their daily quota on an action the worker will silently reject.
+        let already_denounced = self
+            .trust_repo
+            .has_active_denouncement(accuser_id, target_id)
+            .await?;
+        if already_denounced {
+            return Err(TrustServiceError::AlreadyDenounced);
         }
 
         let daily_count = self.trust_repo.count_daily_actions(accuser_id).await?;

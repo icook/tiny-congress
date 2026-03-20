@@ -579,6 +579,42 @@ async fn test_endorse_rejects_invalid_weight() {
 }
 
 #[shared_runtime_test]
+async fn test_denounce_rejects_duplicate_denouncement() {
+    let db = isolated_db().await;
+    let pool = db.pool().clone();
+
+    let accuser = AccountFactory::new()
+        .with_seed(214)
+        .create(&pool)
+        .await
+        .expect("create accuser");
+
+    let target = AccountFactory::new()
+        .with_seed(215)
+        .create(&pool)
+        .await
+        .expect("create target");
+
+    let rep_repo = Arc::new(PgReputationRepo::new(pool.clone())) as Arc<dyn ReputationRepo>;
+    let repo = Arc::new(PgTrustRepo::new(pool.clone()));
+
+    // Seed an active denouncement directly (simulates a processed worker action).
+    repo.create_denouncement(accuser.id, target.id, "initial reason")
+        .await
+        .expect("create initial denouncement");
+
+    let service = DefaultTrustService::new(repo, rep_repo);
+    let result = service
+        .denounce(accuser.id, target.id, "duplicate reason")
+        .await;
+
+    assert!(
+        matches!(result, Err(TrustServiceError::AlreadyDenounced)),
+        "expected AlreadyDenounced, got: {result:?}"
+    );
+}
+
+#[shared_runtime_test]
 async fn test_denounce_rejects_empty_reason() {
     let db = isolated_db().await;
     let pool = db.pool().clone();
