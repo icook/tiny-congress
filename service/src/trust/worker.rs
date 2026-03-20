@@ -43,6 +43,27 @@ pub enum TrustActionError {
     Queue(sqlx::Error),
 }
 
+/// Parsed representation of the `action_type` column values stored in the action log.
+#[derive(Debug)]
+enum ActionType {
+    Endorse,
+    Revoke,
+    Denounce,
+}
+
+impl TryFrom<&str> for ActionType {
+    type Error = TrustActionError;
+
+    fn try_from(s: &str) -> Result<Self, Self::Error> {
+        match s {
+            "endorse" => Ok(Self::Endorse),
+            "revoke" => Ok(Self::Revoke),
+            "denounce" => Ok(Self::Denounce),
+            other => Err(TrustActionError::UnknownActionType(other.to_string())),
+        }
+    }
+}
+
 const QUEUE_NAME: &str = "trust__actions";
 const MAX_RETRIES: i32 = 3;
 const VISIBILITY_TIMEOUT_SECS: i32 = 120;
@@ -229,8 +250,9 @@ impl TrustWorker {
     }
 
     async fn process_action(&self, action: &ActionRecord) -> Result<(), TrustActionError> {
-        match action.action_type.as_str() {
-            "endorse" => {
+        let action_type = ActionType::try_from(action.action_type.as_str())?;
+        match action_type {
+            ActionType::Endorse => {
                 let subject_id = parse_uuid(&action.payload, "subject_id")?;
                 #[allow(clippy::cast_possible_truncation)]
                 let weight = action.payload["weight"].as_f64().ok_or_else(|| {
@@ -268,7 +290,7 @@ impl TrustWorker {
                     .await?;
             }
 
-            "revoke" => {
+            ActionType::Revoke => {
                 let subject_id = parse_uuid(&action.payload, "subject_id")?;
                 self.reputation_repo
                     .revoke_endorsement(action.actor_id, subject_id, "trust")
@@ -279,7 +301,7 @@ impl TrustWorker {
                     .await?;
             }
 
-            "denounce" => {
+            ActionType::Denounce => {
                 let target_id = parse_uuid(&action.payload, "target_id")?;
                 let reason = action.payload["reason"]
                     .as_str()
@@ -307,10 +329,6 @@ impl TrustWorker {
                 self.trust_engine
                     .recompute_from_anchor(action.actor_id, self.trust_repo.as_ref())
                     .await?;
-            }
-
-            other => {
-                return Err(TrustActionError::UnknownActionType(other.to_string()));
             }
         }
 
