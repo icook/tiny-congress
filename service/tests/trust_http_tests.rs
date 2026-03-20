@@ -1050,6 +1050,64 @@ async fn accept_invite_returns_404_for_nonexistent_invite() {
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
 }
 
+/// Accepting an expired invite must return 404 — the SQL UPDATE's `expires_at > now()`
+/// guard rejects it even though the invite row itself still exists in the DB.
+#[shared_runtime_test]
+async fn accept_invite_returns_404_when_expired() {
+    let db = isolated_db().await;
+    let pool = db.pool().clone();
+
+    // Sign up an endorser and an acceptor.
+    let (app, _endorser_keys, endorser_id) =
+        signup_and_get_account("expiredendorser", db.pool()).await;
+
+    let (json2, acceptor_keys) = valid_signup_with_keys("expiredacceptor");
+    let resp2 = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/auth/signup")
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(json2))
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+    assert_eq!(resp2.status(), StatusCode::CREATED);
+
+    // Insert an already-expired invite directly via SQL, bypassing the HTTP
+    // handler that always sets expires_at = now() + 7 days.
+    let invite_id: uuid::Uuid = sqlx::query_scalar(
+        "INSERT INTO trust__invites \
+         (endorser_id, envelope, delivery_method, weight, attestation, expires_at) \
+         VALUES ($1, $2, $3, $4, $5, now() - interval '1 hour') \
+         RETURNING id",
+    )
+    .bind(endorser_id)
+    .bind(b"dummy-envelope" as &[u8])
+    .bind("qr")
+    .bind(1.0_f32)
+    .bind(serde_json::json!({}))
+    .fetch_one(&pool)
+    .await
+    .expect("insert expired invite");
+
+    // Acceptor attempts to accept the expired invite — must return 404.
+    let accept_uri = format!("/trust/invites/{invite_id}/accept");
+    let accept_req = build_authed_request(
+        Method::POST,
+        &accept_uri,
+        "",
+        &acceptor_keys.device_signing_key,
+        &acceptor_keys.device_kid,
+    );
+    let accept_resp = app.oneshot(accept_req).await.expect("accept response");
+    assert_eq!(accept_resp.status(), StatusCode::NOT_FOUND);
+
+    let _ = (_endorser_keys, acceptor_keys);
+}
+
 /// Accepting an already-accepted invite must return 404 — the SQL UPDATE's
 /// `accepted_by IS NULL` guard rejects it the same way as a missing invite.
 #[shared_runtime_test]
