@@ -216,6 +216,9 @@ CREATE INDEX idx_device_keys_account ON public.device_keys USING btree (account_
 -- device_keys.uq_device_keys_kid
 CREATE UNIQUE INDEX uq_device_keys_kid ON public.device_keys USING btree (device_kid)
 
+-- reputation__endorsements.idx_endorsements_endorser
+CREATE INDEX idx_endorsements_endorser ON public.reputation__endorsements USING btree (endorser_id)
+
 -- reputation__endorsements.idx_endorsements_in_slot_budget
 CREATE INDEX idx_endorsements_in_slot_budget ON public.reputation__endorsements USING btree (endorser_id) WHERE ((topic = 'trust'::text) AND (revoked_at IS NULL) AND (in_slot = true))
 
@@ -320,6 +323,9 @@ CREATE INDEX idx_action_queue_pending ON public.trust__action_queue USING btree 
 
 -- trust__action_queue.trust__action_queue_pkey
 CREATE UNIQUE INDEX trust__action_queue_pkey ON public.trust__action_queue USING btree (id)
+
+-- trust__denouncements.idx_denouncements_target
+CREATE INDEX idx_denouncements_target ON public.trust__denouncements USING btree (target_id)
 
 -- trust__denouncements.trust__denouncements_pkey
 CREATE UNIQUE INDEX trust__denouncements_pkey ON public.trust__denouncements USING btree (id)
