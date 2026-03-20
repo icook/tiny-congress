@@ -65,11 +65,11 @@ pub enum TrustServiceError {
     #[error("already denounced this user")]
     AlreadyDenounced,
 
-    #[error("reason must be between 1 and {max} characters")]
-    InvalidReason { max: usize },
-
     #[error("weight must be in range (0.0, 1.0]")]
     InvalidWeight,
+
+    #[error("reason must be between 1 and {max} characters")]
+    InvalidReason { max: usize },
 
     #[error("repository error: {0}")]
     Repo(#[from] TrustRepoError),

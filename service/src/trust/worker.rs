@@ -14,7 +14,8 @@ use crate::trust::engine::TrustEngine;
 use crate::trust::engine::TrustEngineError;
 use crate::trust::repo::{ActionRecord, TrustRepo, TrustRepoError};
 use crate::trust::service::{
-    is_valid_denouncement_reason, is_valid_endorsement_weight, ActionType, DENOUNCEMENT_REASON_MAX_LEN,
+    is_valid_denouncement_reason, is_valid_endorsement_weight, ActionType,
+    DENOUNCEMENT_REASON_MAX_LEN,
 };
 
 /// Errors that can occur while processing a single trust action.

@@ -590,7 +590,6 @@ fn trust_service_error_response(e: &TrustServiceError) -> axum::response::Respon
         TrustServiceError::InvalidReason { max } => {
             bad_request(&format!("reason must be between 1 and {max} characters"))
         }
-        TrustServiceError::InvalidWeight => bad_request("weight must be in range (0.0, 1.0]"),
         TrustServiceError::SelfAction => bad_request("Cannot target yourself"),
         TrustServiceError::QuotaExceeded => too_many_requests("Daily action quota exceeded"),
         TrustServiceError::DenouncementSlotsExhausted { max } => {
