@@ -479,6 +479,49 @@ async fn test_process_one_poison_message_marks_action_failed() {
     );
 }
 
+// ---------------------------------------------------------------------------
+// Test 10: unknown action type causes action to be marked failed
+// ---------------------------------------------------------------------------
+#[shared_runtime_test]
+async fn test_process_batch_unknown_action_type_fails() {
+    let db = isolated_db().await;
+    let pool = db.pool().clone();
+
+    let actor = AccountFactory::new()
+        .with_seed(1)
+        .create(&pool)
+        .await
+        .expect("create actor");
+
+    // Enqueue an action with an unrecognised action type
+    let trust_repo = PgTrustRepo::new(pool.clone());
+    trust_repo
+        .enqueue_action(actor.id, "bogus_action", &json!({}))
+        .await
+        .expect("enqueue action");
+
+    let worker = make_worker(pool.clone());
+    let processed = worker.process_one().await.expect("process_one");
+    assert!(processed, "expected a message to be processed");
+
+    // Action should be marked failed, error should mention the unknown type
+    let (status, error_message): (String, Option<String>) =
+        sqlx::query_as("SELECT status, error_message FROM trust__action_log WHERE actor_id = $1")
+            .bind(actor.id)
+            .fetch_one(&pool)
+            .await
+            .expect("fetch action");
+
+    assert_eq!(status, "failed");
+    assert!(
+        error_message
+            .as_deref()
+            .unwrap_or("")
+            .contains("bogus_action"),
+        "error_message should mention the unknown action type, got: {error_message:?}"
+    );
+}
+
 #[shared_runtime_test]
 async fn test_process_batch_denounce_empty_reason_fails() {
     let db = isolated_db().await;
