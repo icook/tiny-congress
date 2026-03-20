@@ -19,6 +19,7 @@ import {
   type ReactNode,
 } from 'react';
 import { openDB, type IDBPDatabase } from 'idb';
+import { clearOn401Handler, setOn401Handler } from '@/api/fetchClient';
 
 const DB_NAME = 'tc-device-store';
 const DB_VERSION = 2;
@@ -114,6 +115,25 @@ export function DeviceProvider({ children }: DeviceProviderProps) {
       .finally(() => {
         setIsLoading(false);
       });
+  }, []);
+
+  // Register a global 401 handler so any fetchJson call that receives an
+  // unexpected 401 (expired session, revoked device key) clears credentials
+  // and redirects to login — regardless of which page initiated the request.
+  useEffect(() => {
+    setOn401Handler(() => {
+      setDeviceKid(null);
+      setPrivateKey(null);
+      setUsername(null);
+      deleteDevice().catch((err: unknown) => {
+        // eslint-disable-next-line no-console
+        console.warn('Failed to delete device from IndexedDB on 401:', err);
+      });
+      window.location.href = '/login';
+    });
+    return () => {
+      clearOn401Handler();
+    };
   }, []);
 
   const setDeviceFn = useCallback((kid: string, key: CryptoKey, name: string) => {
