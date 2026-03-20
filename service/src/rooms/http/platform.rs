@@ -13,7 +13,6 @@ use sqlx::PgPool;
 use tc_engine_api::engine::{EngineContext, EngineRegistry};
 use uuid::Uuid;
 
-use sqlx::PgPool;
 use tc_engine_api::constraints::build_constraint;
 
 use super::{
