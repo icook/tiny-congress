@@ -383,7 +383,7 @@ async fn budget_handler(
     let out_of_slot_count = all_endorsements - endorsements_used;
 
     let denouncements_used = match trust_repo
-        .count_active_denouncements_by(auth.account_id)
+        .count_total_denouncements_by(auth.account_id)
         .await
     {
         Ok(n) => n,
