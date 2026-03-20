@@ -36,6 +36,9 @@ pub enum TrustServiceError {
     #[error("cannot endorse a user you have denounced")]
     DenouncementConflict,
 
+    #[error("reason must be between 1 and {max} characters")]
+    InvalidReason { max: usize },
+
     #[error("repository error: {0}")]
     Repo(#[from] TrustRepoError),
 
@@ -180,6 +183,12 @@ impl TrustService for DefaultTrustService {
     ) -> Result<(), TrustServiceError> {
         if accuser_id == target_id {
             return Err(TrustServiceError::SelfAction);
+        }
+
+        if reason.is_empty() || reason.len() > DENOUNCEMENT_REASON_MAX_LEN {
+            return Err(TrustServiceError::InvalidReason {
+                max: DENOUNCEMENT_REASON_MAX_LEN,
+            });
         }
 
         let daily_count = self.trust_repo.count_daily_actions(accuser_id).await?;

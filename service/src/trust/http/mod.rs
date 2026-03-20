@@ -476,6 +476,9 @@ async fn accept_invite_handler(
 
 fn trust_service_error_response(e: &TrustServiceError) -> axum::response::Response {
     match e {
+        TrustServiceError::InvalidReason { max } => {
+            bad_request(&format!("reason must be between 1 and {max} characters"))
+        }
         TrustServiceError::SelfAction => bad_request("Cannot target yourself"),
         TrustServiceError::QuotaExceeded => too_many_requests("Daily action quota exceeded"),
         TrustServiceError::EndorsementSlotsExhausted { max } => {
