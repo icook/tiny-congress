@@ -219,20 +219,28 @@ pub async fn chat_completion(
         return Err(anyhow::anyhow!("LLM API returned {status}: {body}"));
     }
 
-    // Read cache headers before consuming the body
+    // Read cache headers before consuming the body.
+    //
+    // LiteLLM signals cache hits in multiple ways across versions:
+    // - `x-litellm-cache-hit: True` (older versions)
+    // - `x-litellm-cache-key: <hash>` (v1.82+, present only on cache hits)
+    // - `x-cache: HIT` (some proxy configs)
     let litellm_hit = {
-        let litellm_header = response
+        let explicit_hit = response
             .headers()
             .get("x-litellm-cache-hit")
             .and_then(|v| v.to_str().ok())
-            .unwrap_or("");
-        let x_cache_header = response
+            .unwrap_or("")
+            .eq_ignore_ascii_case("true");
+        let has_cache_key = response.headers().contains_key("x-litellm-cache-key");
+        let x_cache_hit = response
             .headers()
             .get("x-cache")
             .and_then(|v| v.to_str().ok())
-            .unwrap_or("");
-        litellm_header.eq_ignore_ascii_case("true")
-            || x_cache_header.to_ascii_uppercase().contains("HIT")
+            .unwrap_or("")
+            .to_ascii_uppercase()
+            .contains("HIT");
+        explicit_hit || has_cache_key || x_cache_hit
     };
 
     let chat_response: ChatResponse = response
