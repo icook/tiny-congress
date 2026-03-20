@@ -174,12 +174,13 @@ describe('BotTraceViewer', () => {
     // Expand trace card
     await user.click(screen.getByText('Bot generated'));
 
-    // Click "Show output" on the LLM step
+    // Click "Show output" on the LLM step — getAllByText guarantees >= 1 element
     const showButtons = screen.getAllByText('Show output');
-    expect(showButtons.length).toBeGreaterThan(0);
-
-    // eslint narrowing: getAllByText guarantees length >= 1 and expect above confirms
-    await user.click(showButtons[showButtons.length - 1] ?? showButtons[0]);
+    const lastShowButton = showButtons.at(-1);
+    if (!lastShowButton) {
+      throw new Error('Expected at least one "Show output" button');
+    }
+    await user.click(lastShowButton);
 
     expect(screen.getByText('Generated 4 evidence items for Apple Inc.')).toBeInTheDocument();
   });
@@ -191,7 +192,11 @@ describe('BotTraceViewer', () => {
     await user.click(screen.getByText('Bot generated'));
 
     const showButtons = screen.getAllByText('Show output');
-    await user.click(showButtons[showButtons.length - 1] ?? showButtons[0]);
+    const lastShowButton = showButtons.at(-1);
+    if (!lastShowButton) {
+      throw new Error('Expected at least one "Show output" button');
+    }
+    await user.click(lastShowButton);
 
     expect(screen.getByText('Hide output')).toBeInTheDocument();
     await user.click(screen.getByText('Hide output'));
