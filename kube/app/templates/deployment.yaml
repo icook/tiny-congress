@@ -71,6 +71,8 @@ spec:
                   name: {{ include "app.fullname" . }}-idme
                   key: state-secret
             {{- end }}
+            - name: TC_RATE_LIMIT__ENABLED
+              value: {{ .Values.rateLimitEnabled | toString | quote }}
           startupProbe:
             {{- toYaml .Values.startupProbe | nindent 12 }}
           livenessProbe:

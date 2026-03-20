@@ -4,29 +4,51 @@
 //! false` the helper returns `None` so callers skip the layer entirely,
 //! keeping tests and local dev free of rate-limit interference.
 //!
-//! Key extractor: [`SmartIpKeyExtractor`] — prefers `X-Forwarded-For` /
-//! `X-Real-IP` / `Forwarded` headers then falls back to peer IP. Works
-//! correctly behind the Kubernetes ingress.
+//! Key extractor: [`FallbackIpKeyExtractor`] — prefers `X-Forwarded-For` /
+//! `X-Real-IP` / `Forwarded` headers then falls back to peer IP. If no IP
+//! can be extracted at all (e.g. unix socket), it falls back to `0.0.0.0`
+//! rather than failing the request (fail-open for availability).
 //!
 //! Error response: JSON `{"error": "..."}` with `Retry-After`, produced by
 //! the shared [`crate::http::too_many_requests`] helper.
+
+use std::net::{IpAddr, Ipv4Addr};
 
 use axum::{body::Body, http::HeaderValue, response::IntoResponse};
 use governor::middleware::NoOpMiddleware;
 use tower_governor::{
     governor::{GovernorConfig, GovernorConfigBuilder},
-    key_extractor::SmartIpKeyExtractor,
+    key_extractor::{KeyExtractor, SmartIpKeyExtractor},
     GovernorError, GovernorLayer,
 };
 
 use crate::config::RateLimitConfig;
 use crate::http::too_many_requests;
 
+/// Fallback IP `0.0.0.0` used when the peer address cannot be extracted.
+const FALLBACK_IP: IpAddr = IpAddr::V4(Ipv4Addr::UNSPECIFIED);
+
+/// Key extractor that wraps [`SmartIpKeyExtractor`].
+///
+/// Falls back to `0.0.0.0` when no IP can be determined rather than returning
+/// an error, ensuring rate limiting never blocks requests due to key extraction
+/// failure (fail-open for availability).
+#[derive(Clone)]
+pub struct FallbackIpKeyExtractor;
+
+impl KeyExtractor for FallbackIpKeyExtractor {
+    type Key = IpAddr;
+
+    fn extract<B>(&self, req: &axum::http::Request<B>) -> Result<Self::Key, GovernorError> {
+        Ok(SmartIpKeyExtractor.extract(req).unwrap_or(FALLBACK_IP))
+    }
+}
+
 /// Concrete governor config type used throughout this module.
-pub type IpGovernorConfig = GovernorConfig<SmartIpKeyExtractor, NoOpMiddleware>;
+pub type IpGovernorConfig = GovernorConfig<FallbackIpKeyExtractor, NoOpMiddleware>;
 
 /// Concrete governor layer type returned by this module.
-pub type IpGovernorLayer = GovernorLayer<SmartIpKeyExtractor, NoOpMiddleware, Body>;
+pub type IpGovernorLayer = GovernorLayer<FallbackIpKeyExtractor, NoOpMiddleware, Body>;
 
 /// Build a [`GovernorLayer`] that allows `per_minute` requests per IP per minute.
 ///
@@ -49,7 +71,7 @@ pub fn make_governor_layer(per_minute: u32, config: &RateLimitConfig) -> Option<
     // key_extractor() takes &mut self and returns a new GovernorConfigBuilder<K2, M>.
     // Bind the default builder first so we can take &mut of it.
     let mut base = GovernorConfigBuilder::default();
-    let mut builder = base.key_extractor(SmartIpKeyExtractor);
+    let mut builder = base.key_extractor(FallbackIpKeyExtractor);
     builder.per_second(secs_per_token).burst_size(per_minute);
     let gov_config: IpGovernorConfig = builder.finish()?;
 
