@@ -17,6 +17,11 @@ pub const DAILY_ACTION_QUOTA: i64 = 5;
 /// Maximum byte length of a denouncement reason (matches migration CHECK constraint).
 pub const DENOUNCEMENT_REASON_MAX_LEN: usize = 500;
 
+/// Returns `true` if `reason` is a valid denouncement reason: non-empty and within the max length.
+pub(crate) const fn is_valid_reason(reason: &str) -> bool {
+    !reason.is_empty() && reason.len() <= DENOUNCEMENT_REASON_MAX_LEN
+}
+
 /// The canonical set of trust action types, shared between the service (write) and
 /// the worker (read/parse).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -51,11 +56,6 @@ impl ActionType {
 #[allow(clippy::missing_const_for_fn)]
 pub(crate) fn is_valid_endorsement_weight(weight: f32) -> bool {
     weight.is_finite() && weight > 0.0 && weight <= 1.0
-}
-
-/// Returns `true` if `reason` is a valid denouncement reason: non-empty and within the limit.
-pub(crate) const fn is_valid_denouncement_reason(reason: &str) -> bool {
-    !reason.is_empty() && reason.len() <= DENOUNCEMENT_REASON_MAX_LEN
 }
 
 /// Errors returned by [`TrustService`] operations.
@@ -127,6 +127,33 @@ pub struct DefaultTrustService {
     max_denouncement_slots: u32, // d=2
     /// Max actions per day (resets at midnight UTC)
     daily_quota: i64, // 5
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn is_valid_reason_accepts_nonempty_within_limit() {
+        assert!(is_valid_reason("valid reason"));
+    }
+
+    #[test]
+    fn is_valid_reason_rejects_empty() {
+        assert!(!is_valid_reason(""));
+    }
+
+    #[test]
+    fn is_valid_reason_accepts_exactly_max_len() {
+        let reason = "a".repeat(DENOUNCEMENT_REASON_MAX_LEN);
+        assert!(is_valid_reason(&reason));
+    }
+
+    #[test]
+    fn is_valid_reason_rejects_over_max_len() {
+        let reason = "a".repeat(DENOUNCEMENT_REASON_MAX_LEN + 1);
+        assert!(!is_valid_reason(&reason));
+    }
 }
 
 impl DefaultTrustService {
@@ -236,7 +263,7 @@ impl TrustService for DefaultTrustService {
             return Err(TrustServiceError::SelfAction);
         }
 
-        if !is_valid_denouncement_reason(reason) {
+        if !is_valid_reason(reason) {
             return Err(TrustServiceError::InvalidReason {
                 max: DENOUNCEMENT_REASON_MAX_LEN,
             });

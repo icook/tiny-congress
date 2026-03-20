@@ -17,7 +17,7 @@ use uuid::Uuid;
 
 use super::repo::{TrustRepo, TrustRepoError};
 use super::service::{
-    is_valid_denouncement_reason, is_valid_endorsement_weight, TrustService, TrustServiceError,
+    is_valid_endorsement_weight, is_valid_reason, TrustService, TrustServiceError,
     DENOUNCEMENT_SLOT_LIMIT, ENDORSEMENT_SLOT_LIMIT,
 };
 use super::weight::{
@@ -261,7 +261,7 @@ async fn denounce_handler(
         Err(e) => return e,
     };
 
-    if !is_valid_denouncement_reason(&body.reason) {
+    if !is_valid_reason(&body.reason) {
         return bad_request("reason must be between 1 and 500 characters");
     }
 
