@@ -980,6 +980,57 @@ async fn list_my_denouncements_returns_denouncement_with_username() {
 
 // ─── Accept invite — error paths ─────────────────────────────────────────────
 
+/// The endorser who created an invite must not be able to accept it themselves.
+/// Without this guard they could permanently consume the invite token, preventing
+/// the intended recipient from ever accepting it.
+#[shared_runtime_test]
+async fn accept_invite_rejects_self_accept() {
+    let db = isolated_db().await;
+    let (app, keys, _account_id) = signup_and_get_account("selfacceptendorser", db.pool()).await;
+
+    let envelope_b64 = tc_crypto::encode_base64url(b"dummy-envelope");
+    let body = serde_json::json!({
+        "envelope": envelope_b64,
+        "delivery_method": "qr",
+        "attestation": {}
+    })
+    .to_string();
+
+    let create_req = build_authed_request(
+        Method::POST,
+        "/trust/invites",
+        &body,
+        &keys.device_signing_key,
+        &keys.device_kid,
+    );
+    let create_resp = app.clone().oneshot(create_req).await.expect("create");
+    assert_eq!(create_resp.status(), StatusCode::CREATED);
+    let invite_json = json_body(create_resp).await;
+    let invite_id = invite_json["id"].as_str().expect("invite id");
+
+    // Endorser attempts to accept their own invite — must be rejected.
+    let accept_uri = format!("/trust/invites/{invite_id}/accept");
+    let accept_req = build_authed_request(
+        Method::POST,
+        &accept_uri,
+        "",
+        &keys.device_signing_key,
+        &keys.device_kid,
+    );
+    let accept_resp = app.oneshot(accept_req).await.expect("accept");
+    assert_eq!(accept_resp.status(), StatusCode::BAD_REQUEST);
+    let json = json_body(accept_resp).await;
+    assert!(
+        json["error"]
+            .as_str()
+            .unwrap_or("")
+            .to_lowercase()
+            .contains("own invite"),
+        "error should mention 'own invite', got: {}",
+        json["error"]
+    );
+}
+
 #[shared_runtime_test]
 async fn accept_invite_returns_404_for_nonexistent_invite() {
     let db = isolated_db().await;

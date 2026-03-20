@@ -423,6 +423,17 @@ async fn accept_invite_handler(
     Path(invite_id): Path<Uuid>,
     auth: AuthenticatedDevice,
 ) -> impl IntoResponse {
+    // Reject self-accept before touching state: endorser_id is immutable so this
+    // check is race-free even though accept_invite runs as a separate SQL statement.
+    match trust_repo.get_invite(invite_id).await {
+        Ok(invite) if invite.endorser_id == auth.account_id => {
+            return bad_request("Cannot accept your own invite");
+        }
+        Ok(_) => {}
+        Err(TrustRepoError::NotFound) => return not_found("Invite not found"),
+        Err(ref e) => return trust_repo_error_response(e),
+    }
+
     match trust_repo.accept_invite(invite_id, auth.account_id).await {
         Ok(invite) => {
             let accepted_at = match invite.accepted_at {
