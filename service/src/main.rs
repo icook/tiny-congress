@@ -44,6 +44,7 @@ use tinycongress_api::{
     rest::{self, ApiDoc},
     rooms::{
         self,
+        content_filter::{ContentFilter, NoopFilter},
         repo::{PgRoomsRepo, RoomsRepo},
         service::{DefaultRoomsService, RoomsService},
     },
@@ -299,7 +300,8 @@ async fn build_app(
         .layer(Extension(build_info))
         .layer(Extension(pool.clone()))
         .layer(Extension(engine_registry))
-        .layer(Extension(engine_ctx));
+        .layer(Extension(engine_ctx))
+        .layer(Extension(Arc::new(NoopFilter) as Arc<dyn ContentFilter>));
 
     // Add ID.me config extension if configured
     let app = if let Some(ref idme_config) = config.idme {

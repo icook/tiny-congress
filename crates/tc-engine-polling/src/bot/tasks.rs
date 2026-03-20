@@ -527,3 +527,101 @@ pub async fn generate_evidence(
 
     Ok(Some(poll_id))
 }
+
+/// Claim the next queued suggestion and enqueue a research task for it.
+/// Enqueued periodically by the lifecycle scheduler.
+///
+/// # Errors
+///
+/// Returns an error if the database query fails or task enqueue fails.
+pub async fn process_suggestions(
+    pool: &PgPool,
+    _http: &reqwest::Client,
+    _config: &BotWorkerConfig,
+    task: &BotTask,
+    _trace_id: Uuid,
+) -> anyhow::Result<Option<Uuid>> {
+    // Claim next queued suggestion (FIFO, with FOR UPDATE SKIP LOCKED)
+    let row: Option<(Uuid, String)> = sqlx::query_as(
+        r"UPDATE rooms__research_suggestions
+         SET status = 'researching', processed_at = now()
+         WHERE id = (
+             SELECT id FROM rooms__research_suggestions
+             WHERE status = 'queued' AND room_id = $1
+             ORDER BY created_at ASC
+             LIMIT 1
+             FOR UPDATE SKIP LOCKED
+         )
+         RETURNING id, suggestion_text",
+    )
+    .bind(task.room_id)
+    .fetch_optional(pool)
+    .await?;
+
+    let Some((suggestion_id, suggestion_text)) = row else {
+        tracing::debug!(room_id = %task.room_id, "no queued suggestions");
+        return Ok(None);
+    };
+
+    tracing::info!(
+        suggestion_id = %suggestion_id,
+        room_id = %task.room_id,
+        "claimed suggestion, enqueuing research task"
+    );
+
+    // Enqueue the actual research task
+    crate::repo::pgmq::send_task(
+        pool,
+        &BotTask {
+            room_id: task.room_id,
+            task: "research_suggestion".to_string(),
+            params: serde_json::json!({
+                "suggestion_id": suggestion_id,
+                "suggestion_text": suggestion_text,
+            }),
+        },
+    )
+    .await?;
+
+    Ok(None)
+}
+
+/// Process a research suggestion. Stub implementation — marks suggestion as completed
+/// without generating evidence. Will be replaced with LLM/Exa research when tc-llm matures.
+///
+/// Params:
+/// - `suggestion_id` (Uuid): the suggestion to process
+///
+/// # Errors
+///
+/// Returns an error if the `suggestion_id` param is missing/invalid or the database update fails.
+pub async fn research_suggestion(
+    pool: &PgPool,
+    _http: &reqwest::Client,
+    _config: &BotWorkerConfig,
+    task: &BotTask,
+    trace_id: Uuid,
+) -> anyhow::Result<Option<Uuid>> {
+    let suggestion_id: Uuid = serde_json::from_value(
+        task.params
+            .get("suggestion_id")
+            .ok_or_else(|| anyhow::anyhow!("missing suggestion_id in params"))?
+            .clone(),
+    )?;
+
+    tracing::info!(
+        suggestion_id = %suggestion_id,
+        trace_id = %trace_id,
+        "research_suggestion stub — marking completed without evidence"
+    );
+
+    // Mark suggestion as completed with no linked evidence
+    sqlx::query(
+        "UPDATE rooms__research_suggestions SET status = 'completed', processed_at = now() WHERE id = $1",
+    )
+    .bind(suggestion_id)
+    .execute(pool)
+    .await?;
+
+    Ok(None)
+}

@@ -974,3 +974,181 @@ async fn test_poll_detail_includes_evidence() {
     assert_eq!(con_item["claim"], "Anti-union policies documented");
     assert!(con_item["source"].is_null());
 }
+
+// ─── Suggestions ─────────────────────────────────────────────────────────────
+
+/// Helper: create a room and return its string ID.
+async fn create_room_for_suggestions(
+    app: &axum::Router,
+    keys: &common::factories::SignupKeys,
+    name: &str,
+) -> String {
+    let body = serde_json::json!({"name": name}).to_string();
+    let req = build_authed_request(
+        Method::POST,
+        "/rooms",
+        &body,
+        &keys.device_signing_key,
+        &keys.device_kid,
+    );
+    let response = app.clone().oneshot(req).await.expect("response");
+    assert_eq!(response.status(), StatusCode::CREATED);
+    let json = json_body(response).await;
+    json["id"].as_str().expect("room id").to_string()
+}
+
+#[shared_runtime_test]
+async fn test_create_suggestion() {
+    let db = isolated_db().await;
+    let (app, keys, _) = signup_and_get_account("suggestor1", db.pool()).await;
+    let room_id = create_room_for_suggestions(&app, &keys, "Suggestion Room 1").await;
+
+    let body = serde_json::json!({"suggestion_text": "Investigate renewable energy subsidies"})
+        .to_string();
+    let req = build_authed_request(
+        Method::POST,
+        &format!("/rooms/{room_id}/suggestions"),
+        &body,
+        &keys.device_signing_key,
+        &keys.device_kid,
+    );
+    let response = app.oneshot(req).await.expect("response");
+    assert_eq!(response.status(), StatusCode::CREATED);
+
+    let json = json_body(response).await;
+    assert_eq!(json["status"], "queued");
+    assert_eq!(
+        json["suggestion_text"],
+        "Investigate renewable energy subsidies"
+    );
+    assert_eq!(json["room_id"], room_id.as_str());
+    assert!(json["id"].is_string());
+}
+
+#[shared_runtime_test]
+async fn test_create_suggestion_empty_text() {
+    let db = isolated_db().await;
+    let (app, keys, _) = signup_and_get_account("suggestor2", db.pool()).await;
+    let room_id = create_room_for_suggestions(&app, &keys, "Suggestion Room 2").await;
+
+    let body = serde_json::json!({"suggestion_text": ""}).to_string();
+    let req = build_authed_request(
+        Method::POST,
+        &format!("/rooms/{room_id}/suggestions"),
+        &body,
+        &keys.device_signing_key,
+        &keys.device_kid,
+    );
+    let response = app.oneshot(req).await.expect("response");
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}
+
+#[shared_runtime_test]
+async fn test_create_suggestion_too_long() {
+    let db = isolated_db().await;
+    let (app, keys, _) = signup_and_get_account("suggestor3", db.pool()).await;
+    let room_id = create_room_for_suggestions(&app, &keys, "Suggestion Room 3").await;
+
+    // 501 characters — one over the 500-char limit
+    let long_text = "a".repeat(501);
+    let body = serde_json::json!({"suggestion_text": long_text}).to_string();
+    let req = build_authed_request(
+        Method::POST,
+        &format!("/rooms/{room_id}/suggestions"),
+        &body,
+        &keys.device_signing_key,
+        &keys.device_kid,
+    );
+    let response = app.oneshot(req).await.expect("response");
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}
+
+#[shared_runtime_test]
+async fn test_list_suggestions() {
+    let db = isolated_db().await;
+    let (app, keys, _) = signup_and_get_account("suggestor4", db.pool()).await;
+    let room_id = create_room_for_suggestions(&app, &keys, "Suggestion Room 4").await;
+
+    // Submit a suggestion
+    let body =
+        serde_json::json!({"suggestion_text": "Study housing affordability metrics"}).to_string();
+    let req = build_authed_request(
+        Method::POST,
+        &format!("/rooms/{room_id}/suggestions"),
+        &body,
+        &keys.device_signing_key,
+        &keys.device_kid,
+    );
+    let create_response = app.clone().oneshot(req).await.expect("response");
+    assert_eq!(create_response.status(), StatusCode::CREATED);
+    let created = json_body(create_response).await;
+    let suggestion_id = created["id"].as_str().expect("id").to_string();
+
+    // List suggestions
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri(format!("/rooms/{room_id}/suggestions"))
+                .body(Body::empty())
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let json = json_body(response).await;
+    let items = json.as_array().expect("array");
+    assert_eq!(items.len(), 1);
+    assert_eq!(items[0]["id"], suggestion_id.as_str());
+    assert_eq!(
+        items[0]["suggestion_text"],
+        "Study housing affordability metrics"
+    );
+    assert_eq!(items[0]["status"], "queued");
+}
+
+#[shared_runtime_test]
+async fn test_suggestion_rate_limit() {
+    let db = isolated_db().await;
+    let (app, keys, _) = signup_and_get_account("suggestor5", db.pool()).await;
+    let room_id = create_room_for_suggestions(&app, &keys, "Suggestion Room 5").await;
+
+    // Submit 3 suggestions (the daily limit)
+    for i in 0..3 {
+        let body = serde_json::json!({"suggestion_text": format!("Research topic number {i}")})
+            .to_string();
+        let req = build_authed_request(
+            Method::POST,
+            &format!("/rooms/{room_id}/suggestions"),
+            &body,
+            &keys.device_signing_key,
+            &keys.device_kid,
+        );
+        let response = app.clone().oneshot(req).await.expect("response");
+        assert_eq!(
+            response.status(),
+            StatusCode::CREATED,
+            "suggestion {i} should succeed"
+        );
+    }
+
+    // 4th suggestion should be rejected with 400
+    let body =
+        serde_json::json!({"suggestion_text": "This one should be rate limited"}).to_string();
+    let req = build_authed_request(
+        Method::POST,
+        &format!("/rooms/{room_id}/suggestions"),
+        &body,
+        &keys.device_signing_key,
+        &keys.device_kid,
+    );
+    let response = app.clone().oneshot(req).await.expect("response");
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+    let json = json_body(response).await;
+    assert!(
+        json["error"].as_str().expect("error").contains("limit"),
+        "expected rate limit message, got: {}",
+        json["error"]
+    );
+}

@@ -6,6 +6,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { CryptoModule } from '@/providers/CryptoProvider';
 import {
   castVote,
+  createSuggestion,
   fetchMyCapabilities,
   getAgenda,
   getMyVotes,
@@ -16,6 +17,7 @@ import {
   getRoom,
   listPolls,
   listRooms,
+  listSuggestions,
   type BotTrace,
   type DimensionVote,
   type MyCapabilitiesResponse,
@@ -24,6 +26,7 @@ import {
   type PollDistribution,
   type PollResults,
   type Room,
+  type Suggestion,
   type Vote,
 } from './client';
 
@@ -151,6 +154,36 @@ export function useCastVote(
       void queryClient.invalidateQueries({ queryKey: ['my-votes', pollId] });
       void queryClient.invalidateQueries({ queryKey: ['poll-results', pollId] });
       void queryClient.invalidateQueries({ queryKey: ['poll-distribution', pollId] });
+    },
+  });
+}
+
+export function useSuggestions(roomId: string) {
+  return useQuery<Suggestion[]>({
+    queryKey: ['suggestions', roomId],
+    queryFn: () => listSuggestions(roomId),
+    enabled: Boolean(roomId),
+    refetchInterval: 15_000,
+  });
+}
+
+export function useCreateSuggestion(
+  roomId: string,
+  deviceKid: string | null,
+  privateKey: CryptoKey | null,
+  wasmCrypto: CryptoModule | null
+) {
+  const queryClient = useQueryClient();
+
+  return useMutation<Suggestion, Error, string>({
+    mutationFn: async (suggestionText: string) => {
+      if (!deviceKid || !privateKey || !wasmCrypto) {
+        throw new Error('Not authenticated');
+      }
+      return createSuggestion(roomId, suggestionText, deviceKid, privateKey, wasmCrypto);
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['suggestions', roomId] });
     },
   });
 }

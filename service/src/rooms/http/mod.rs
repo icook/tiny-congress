@@ -95,6 +95,26 @@ pub struct AssignRoleResponse {
     pub role: String,
 }
 
+// ─── Suggestion types ────────────────────────────────────────────────────
+
+#[derive(Debug, Deserialize)]
+pub struct CreateSuggestionRequest {
+    pub suggestion_text: String,
+}
+
+#[derive(Debug, serde::Serialize)]
+pub struct SuggestionResponse {
+    pub id: uuid::Uuid,
+    pub room_id: uuid::Uuid,
+    pub account_id: uuid::Uuid,
+    pub suggestion_text: String,
+    pub status: String,
+    pub filter_reason: Option<String>,
+    pub evidence_ids: Vec<uuid::Uuid>,
+    pub created_at: String,
+    pub processed_at: Option<String>,
+}
+
 // ─── Router ────────────────────────────────────────────────────────────────
 
 pub fn router() -> Router {
@@ -111,6 +131,11 @@ pub fn router() -> Router {
             get(platform::my_capabilities),
         )
         .route("/rooms/{room_id}/roles", post(platform::assign_role))
+        // Platform: suggestions
+        .route(
+            "/rooms/{room_id}/suggestions",
+            get(platform::list_suggestions).post(platform::create_suggestion),
+        )
         // Polling: agenda
         .route("/rooms/{room_id}/agenda", get(polling::get_agenda))
         // Polling: poll endpoints

@@ -1,6 +1,7 @@
 //! Repository layer for rooms persistence
 
 pub mod rooms;
+pub mod suggestions;
 
 // Poll/vote/evidence/lifecycle modules now live in tc-engine-polling.
 // Re-export them here for backward compatibility.
@@ -14,6 +15,7 @@ pub use lifecycle_queue::{
 };
 pub use polls::{DimensionRecord, PollRecord, PollRepoError};
 pub use rooms::{RoomRecord, RoomRepoError};
+pub use suggestions::{SuggestionRecord, SuggestionRepoError};
 pub use votes::{BucketCount, DimensionDistribution, DimensionStats, VoteRecord, VoteRepoError};
 
 use async_trait::async_trait;

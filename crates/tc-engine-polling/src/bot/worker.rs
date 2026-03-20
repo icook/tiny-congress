@@ -149,6 +149,12 @@ async fn dispatch_task(
         "generate_evidence" => {
             super::tasks::generate_evidence(pool, http, config, task, trace_id).await
         }
+        "process_suggestions" => {
+            super::tasks::process_suggestions(pool, http, config, task, trace_id).await
+        }
+        "research_suggestion" => {
+            super::tasks::research_suggestion(pool, http, config, task, trace_id).await
+        }
         other => {
             anyhow::bail!("unknown bot task type: {other:?}")
         }
