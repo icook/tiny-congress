@@ -145,7 +145,7 @@ mod tests {
     use tower::ServiceExt;
     use uuid::Uuid;
 
-    /// Verify that an invalid path parameter (unparseable as UUID) returns a
+    /// Verify that an invalid path parameter (unparsable as UUID) returns a
     /// JSON `ErrorResponse` with status 400 rather than a plain-text error.
     #[tokio::test]
     async fn invalid_path_param_returns_json_error() {
