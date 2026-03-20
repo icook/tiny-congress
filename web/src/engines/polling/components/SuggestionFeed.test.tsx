@@ -61,7 +61,7 @@ describe('SuggestionFeed', () => {
     mockUseSuggestions.mockReturnValue({ data: [], isLoading: false });
     mockCreateMutation();
 
-    render(<SuggestionFeed roomId="room-1" />);
+    render(<SuggestionFeed roomId="room-1" pollId="poll-1" />);
 
     expect(screen.getByText(/No suggestions yet/)).toBeInTheDocument();
   });
@@ -73,6 +73,7 @@ describe('SuggestionFeed', () => {
         {
           id: 's-1',
           room_id: 'room-1',
+          poll_id: 'poll-1',
           account_id: 'acc-1',
           suggestion_text: 'Investigate labor conditions',
           status: 'queued',
@@ -84,6 +85,7 @@ describe('SuggestionFeed', () => {
         {
           id: 's-2',
           room_id: 'room-1',
+          poll_id: 'poll-1',
           account_id: 'acc-2',
           suggestion_text: 'Review wage statistics',
           status: 'completed',
@@ -95,6 +97,7 @@ describe('SuggestionFeed', () => {
         {
           id: 's-3',
           room_id: 'room-1',
+          poll_id: 'poll-1',
           account_id: 'acc-3',
           suggestion_text: 'Off-topic request',
           status: 'rejected',
@@ -108,7 +111,7 @@ describe('SuggestionFeed', () => {
     });
     mockCreateMutation();
 
-    render(<SuggestionFeed roomId="room-1" />);
+    render(<SuggestionFeed roomId="room-1" pollId="poll-1" />);
 
     expect(screen.getByText('Investigate labor conditions')).toBeInTheDocument();
     expect(screen.getByText('Review wage statistics')).toBeInTheDocument();
@@ -128,7 +131,7 @@ describe('SuggestionFeed', () => {
     mockUseSuggestions.mockReturnValue({ data: [], isLoading: false });
     mockCreateMutation();
 
-    render(<SuggestionFeed roomId="room-1" />);
+    render(<SuggestionFeed roomId="room-1" pollId="poll-1" />);
 
     expect(screen.queryByPlaceholderText(/Suggest something/)).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Suggest/i })).not.toBeInTheDocument();
@@ -139,7 +142,7 @@ describe('SuggestionFeed', () => {
     mockUseSuggestions.mockReturnValue({ data: [], isLoading: false });
     mockCreateMutation();
 
-    render(<SuggestionFeed roomId="room-1" />);
+    render(<SuggestionFeed roomId="room-1" pollId="poll-1" />);
 
     expect(screen.getByPlaceholderText(/Suggest something/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Suggest/i })).toBeInTheDocument();
