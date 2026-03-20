@@ -57,7 +57,9 @@ pub(super) async fn get_score(
     context_user_id: Option<Uuid>,
 ) -> Result<Option<ScoreSnapshot>, TrustRepoError> {
     let record = sqlx::query_as::<_, ScoreSnapshot>(
-        "SELECT * FROM trust__score_snapshots \
+        "SELECT user_id, context_user_id, trust_distance, path_diversity, \
+         eigenvector_centrality, computed_at \
+         FROM trust__score_snapshots \
          WHERE user_id = $1 AND context_user_id IS NOT DISTINCT FROM $2",
     )
     .bind(user_id)
@@ -73,7 +75,9 @@ pub(super) async fn get_all_scores(
     user_id: Uuid,
 ) -> Result<Vec<ScoreSnapshot>, TrustRepoError> {
     let records = sqlx::query_as::<_, ScoreSnapshot>(
-        "SELECT * FROM trust__score_snapshots \
+        "SELECT user_id, context_user_id, trust_distance, path_diversity, \
+         eigenvector_centrality, computed_at \
+         FROM trust__score_snapshots \
          WHERE user_id = $1 \
          ORDER BY computed_at DESC",
     )
