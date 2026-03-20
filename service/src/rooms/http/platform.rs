@@ -1,3 +1,4 @@
+// lint-patterns:allow-no-utoipa — tracked by #907
 //! HTTP handlers for room CRUD (platform-level, not engine-specific)
 
 use std::sync::Arc;
