@@ -636,6 +636,68 @@ async fn test_process_batch_denounce_empty_reason_fails() {
 }
 
 // ---------------------------------------------------------------------------
+// Test: orphaned pgmq message — get_action returns NotFound
+// ---------------------------------------------------------------------------
+
+/// When a pgmq message references a log_id that no longer exists in
+/// `trust__action_log` (e.g. the row was deleted between enqueue and
+/// processing), the worker should log the error, leave the message in the
+/// queue for retry, and return `true` (a message was consumed from read).
+#[shared_runtime_test]
+async fn test_process_one_orphaned_message_leaves_queue_and_continues() {
+    let db = isolated_db().await;
+    let pool = db.pool().clone();
+
+    let actor = AccountFactory::new()
+        .with_seed(1)
+        .create(&pool)
+        .await
+        .expect("create actor");
+
+    // Enqueue an action — inserts into trust__action_log AND sends a pgmq message.
+    let trust_repo = PgTrustRepo::new(pool.clone());
+    let record = trust_repo
+        .enqueue_action(actor.id, "endorse", &json!({}))
+        .await
+        .expect("enqueue action");
+
+    // Delete the action log row, leaving the pgmq message orphaned.
+    sqlx::query("DELETE FROM trust__action_log WHERE id = $1")
+        .bind(record.id)
+        .execute(&pool)
+        .await
+        .expect("delete action log row");
+
+    let worker = make_worker(pool.clone());
+    let processed = worker.process_one().await.expect("process_one");
+    assert!(
+        processed,
+        "expected process_one to return true for an orphaned pgmq message"
+    );
+
+    // The message must remain in the queue (invisible) so the visibility
+    // timeout will re-expose it for retry — it must NOT be archived.
+    let queue_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM pgmq.q_trust__actions")
+        .fetch_one(&pool)
+        .await
+        .expect("count active queue");
+    assert_eq!(
+        queue_count, 1,
+        "orphaned message should remain in queue for retry, not be archived"
+    );
+
+    // No action log entries should exist (none were created by the worker).
+    let log_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM trust__action_log")
+        .fetch_one(&pool)
+        .await
+        .expect("count action log");
+    assert_eq!(
+        log_count, 0,
+        "orphaned-message handling must not create new action log entries"
+    );
+}
+
+// ---------------------------------------------------------------------------
 // Test 10: denounce action with absent reason field fails the action
 // ---------------------------------------------------------------------------
 #[shared_runtime_test]
