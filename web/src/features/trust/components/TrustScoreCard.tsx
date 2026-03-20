@@ -41,7 +41,7 @@ export function TrustScoreCard({ deviceKid, privateKey, wasmCrypto }: TrustScore
     );
   }
 
-  const tier = getTierInfo(topScore.distance, topScore.path_diversity);
+  const tier = getTierInfo(topScore.trust_distance ?? 0, topScore.path_diversity ?? 0);
   const budgetUsed = budget?.slots_used ?? 0;
   const budgetTotal = budget?.slots_total ?? 0;
   const budgetPercent = budgetTotal > 0 ? Math.round((budgetUsed / budgetTotal) * 100) : 0;
@@ -63,7 +63,7 @@ export function TrustScoreCard({ deviceKid, privateKey, wasmCrypto }: TrustScore
             <Group gap={4} align="center">
               <IconShield size={16} />
               <Text size="xl" fw={700}>
-                {topScore.distance.toFixed(1)}
+                {(topScore.trust_distance ?? 0).toFixed(1)}
               </Text>
             </Group>
             <Text size="xs" c="dimmed">
@@ -75,7 +75,7 @@ export function TrustScoreCard({ deviceKid, privateKey, wasmCrypto }: TrustScore
             <Group gap={4} align="center">
               <IconUsers size={16} />
               <Text size="xl" fw={700}>
-                {topScore.path_diversity}
+                {topScore.path_diversity ?? 0}
               </Text>
             </Group>
             <Text size="xs" c="dimmed">

@@ -86,13 +86,38 @@ impl IntoResponse for ProblemDetails {
     servers(
         (url = "/api/v1", description = "REST API v1")
     ),
-    paths(get_build_info, crate::reputation::http::create_endorsement_as_verifier),
+    paths(
+        get_build_info,
+        crate::reputation::http::create_endorsement_as_verifier,
+        crate::trust::http::budget_handler,
+        crate::trust::http::endorse_handler,
+        crate::trust::http::revoke_handler,
+        crate::trust::http::scores_me_handler,
+        crate::trust::http::create_invite_handler,
+        crate::trust::http::list_invites_handler,
+        crate::trust::http::accept_invite_handler,
+        crate::trust::http::denounce_handler,
+        crate::trust::http::list_my_denouncements_handler,
+    ),
     components(schemas(
         BuildInfo,
         ProblemDetails,
         ProblemExtensions,
         crate::reputation::http::CreateEndorsementRequest,
         crate::reputation::http::CreatedEndorsementResponse,
+        crate::trust::http::BudgetResponse,
+        crate::trust::http::ScoreSnapshotResponse,
+        crate::trust::http::ScoresResponse,
+        crate::trust::http::CreateInviteResponse,
+        crate::trust::http::InviteResponse,
+        crate::trust::http::InvitesResponse,
+        crate::trust::http::AcceptInviteResponse,
+        crate::trust::http::DenouncementResponse,
+        crate::trust::http::MessageResponse,
+        crate::trust::http::EndorseRequest,
+        crate::trust::http::RevokeRequest,
+        crate::trust::http::DenounceRequest,
+        crate::trust::http::CreateInviteRequest,
     ))
 )]
 pub struct ApiDoc;

@@ -5,38 +5,14 @@
  * without violating the no-cross-feature-import ESLint rule.
  */
 
+import type { components } from '@/api/generated/rest';
 import { signedFetchJson } from '@/api/signing';
 import type { CryptoModule } from '@/providers/CryptoProvider';
 
-export interface TrustBudget {
-  slots_total: number;
-  slots_used: number;
-  slots_available: number;
-  out_of_slot_count: number;
-  denouncements_total: number;
-  denouncements_used: number;
-  denouncements_available: number;
-}
-
-export interface Invite {
-  id: string;
-  delivery_method: string;
-  accepted_by: string | null;
-  expires_at: string;
-  accepted_at: string | null;
-}
-
-export interface AcceptInviteResult {
-  endorser_id: string;
-  accepted_at: string;
-}
-
-export interface CreateInvitePayload {
-  envelope: string;
-  delivery_method: string;
-  relationship_depth?: string;
-  attestation: Record<string, unknown>;
-}
+export type TrustBudget = components['schemas']['BudgetResponse'];
+export type Invite = components['schemas']['InviteResponse'];
+export type AcceptInviteResult = components['schemas']['AcceptInviteResponse'];
+export type CreateInvitePayload = components['schemas']['CreateInviteRequest'];
 
 export async function getMyBudget(
   deviceKid: string,
@@ -51,7 +27,7 @@ export async function createInvite(
   privateKey: CryptoKey,
   wasmCrypto: CryptoModule,
   payload: CreateInvitePayload
-): Promise<Invite> {
+): Promise<components['schemas']['CreateInviteResponse']> {
   return signedFetchJson('/trust/invites', 'POST', deviceKid, privateKey, wasmCrypto, payload);
 }
 
@@ -60,7 +36,14 @@ export async function listMyInvites(
   privateKey: CryptoKey,
   wasmCrypto: CryptoModule
 ): Promise<Invite[]> {
-  return signedFetchJson('/trust/invites/mine', 'GET', deviceKid, privateKey, wasmCrypto);
+  const response = await signedFetchJson<components['schemas']['InvitesResponse']>(
+    '/trust/invites/mine',
+    'GET',
+    deviceKid,
+    privateKey,
+    wasmCrypto
+  );
+  return response.invites;
 }
 
 export async function acceptInvite(

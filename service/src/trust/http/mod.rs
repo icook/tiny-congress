@@ -12,6 +12,7 @@ use axum::{
 };
 use chrono::{Duration, Utc};
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 use uuid::Uuid;
 
 use super::repo::{TrustRepo, TrustRepoError};
@@ -28,8 +29,9 @@ use crate::reputation::repo::ReputationRepo;
 
 // ─── Request types ─────────────────────────────────────────────────────────
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct EndorseRequest {
+    #[schema(value_type = String, format = "uuid")]
     pub subject_id: Uuid,
     #[serde(default = "default_weight")]
     pub weight: f32,
@@ -40,20 +42,23 @@ const fn default_weight() -> f32 {
     1.0
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct RevokeRequest {
+    #[schema(value_type = String, format = "uuid")]
     pub subject_id: Uuid,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct DenounceRequest {
+    #[schema(value_type = String, format = "uuid")]
     pub target_id: Uuid,
     pub reason: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct CreateInviteRequest {
-    pub envelope: String, // base64url-encoded bytes
+    /// base64url-encoded invite envelope bytes
+    pub envelope: String,
     pub delivery_method: String,
     pub relationship_depth: Option<String>,
     pub weight: Option<f32>,
@@ -62,13 +67,14 @@ pub struct CreateInviteRequest {
 
 // ─── Response types ────────────────────────────────────────────────────────
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct MessageResponse {
     pub message: String,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct ScoreSnapshotResponse {
+    #[schema(value_type = Option<String>, format = "uuid")]
     pub context_user_id: Option<Uuid>,
     pub trust_distance: Option<f32>,
     pub path_diversity: Option<i32>,
@@ -76,12 +82,12 @@ pub struct ScoreSnapshotResponse {
     pub computed_at: String,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct ScoresResponse {
     pub scores: Vec<ScoreSnapshotResponse>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct BudgetResponse {
     pub slots_total: u32,
     pub slots_used: i64,
@@ -92,35 +98,41 @@ pub struct BudgetResponse {
     pub denouncements_available: i64,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct CreateInviteResponse {
+    #[schema(value_type = String, format = "uuid")]
     pub id: Uuid,
     pub expires_at: String,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct InviteResponse {
+    #[schema(value_type = String, format = "uuid")]
     pub id: Uuid,
     pub delivery_method: String,
+    #[schema(value_type = Option<String>, format = "uuid")]
     pub accepted_by: Option<Uuid>,
     pub expires_at: String,
     pub accepted_at: Option<String>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct InvitesResponse {
     pub invites: Vec<InviteResponse>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct AcceptInviteResponse {
+    #[schema(value_type = String, format = "uuid")]
     pub endorser_id: Uuid,
     pub accepted_at: String,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct DenouncementResponse {
+    #[schema(value_type = String, format = "uuid")]
     pub id: Uuid,
+    #[schema(value_type = String, format = "uuid")]
     pub target_id: Uuid,
     pub target_username: String,
     pub reason: String,
@@ -147,6 +159,18 @@ pub fn trust_router() -> Router {
 
 // ─── Handlers ──────────────────────────────────────────────────────────────
 
+#[utoipa::path(
+    post,
+    path = "/trust/endorse",
+    tag = "Trust",
+    request_body = EndorseRequest,
+    responses(
+        (status = 202, description = "Endorsement queued", body = MessageResponse),
+        (status = 400, description = "Invalid request"),
+        (status = 401, description = "Unauthorized"),
+        (status = 429, description = "Quota exceeded"),
+    )
+)]
 async fn endorse_handler(
     Extension(trust_service): Extension<Arc<dyn TrustService>>,
     auth: AuthenticatedDevice,
@@ -180,6 +204,18 @@ async fn endorse_handler(
     }
 }
 
+#[utoipa::path(
+    post,
+    path = "/trust/revoke",
+    tag = "Trust",
+    request_body = RevokeRequest,
+    responses(
+        (status = 202, description = "Revocation queued", body = MessageResponse),
+        (status = 400, description = "Invalid request"),
+        (status = 401, description = "Unauthorized"),
+        (status = 429, description = "Quota exceeded"),
+    )
+)]
 async fn revoke_handler(
     Extension(trust_service): Extension<Arc<dyn TrustService>>,
     auth: AuthenticatedDevice,
@@ -204,6 +240,18 @@ async fn revoke_handler(
     }
 }
 
+#[utoipa::path(
+    post,
+    path = "/trust/denounce",
+    tag = "Trust",
+    request_body = DenounceRequest,
+    responses(
+        (status = 202, description = "Denouncement queued", body = MessageResponse),
+        (status = 400, description = "Invalid request"),
+        (status = 401, description = "Unauthorized"),
+        (status = 429, description = "Quota exceeded"),
+    )
+)]
 async fn denounce_handler(
     Extension(trust_service): Extension<Arc<dyn TrustService>>,
     auth: AuthenticatedDevice,
@@ -232,6 +280,15 @@ async fn denounce_handler(
     }
 }
 
+#[utoipa::path(
+    get,
+    path = "/trust/denouncements/mine",
+    tag = "Trust",
+    responses(
+        (status = 200, description = "List of denouncements", body = Vec<DenouncementResponse>),
+        (status = 401, description = "Unauthorized"),
+    )
+)]
 async fn list_my_denouncements_handler(
     Extension(trust_repo): Extension<Arc<dyn TrustRepo>>,
     auth: AuthenticatedDevice,
@@ -257,6 +314,15 @@ async fn list_my_denouncements_handler(
     }
 }
 
+#[utoipa::path(
+    get,
+    path = "/trust/scores/me",
+    tag = "Trust",
+    responses(
+        (status = 200, description = "Trust scores for the authenticated user", body = ScoresResponse),
+        (status = 401, description = "Unauthorized"),
+    )
+)]
 async fn scores_me_handler(
     Extension(trust_repo): Extension<Arc<dyn TrustRepo>>,
     auth: AuthenticatedDevice,
@@ -279,6 +345,15 @@ async fn scores_me_handler(
     }
 }
 
+#[utoipa::path(
+    get,
+    path = "/trust/budget",
+    tag = "Trust",
+    responses(
+        (status = 200, description = "Endorsement and denouncement budget for the authenticated user", body = BudgetResponse),
+        (status = 401, description = "Unauthorized"),
+    )
+)]
 async fn budget_handler(
     Extension(reputation_repo): Extension<Arc<dyn ReputationRepo>>,
     Extension(trust_repo): Extension<Arc<dyn TrustRepo>>,
@@ -333,6 +408,17 @@ async fn budget_handler(
         .into_response()
 }
 
+#[utoipa::path(
+    post,
+    path = "/trust/invites",
+    tag = "Trust",
+    request_body = CreateInviteRequest,
+    responses(
+        (status = 201, description = "Invite created", body = CreateInviteResponse),
+        (status = 400, description = "Invalid request"),
+        (status = 401, description = "Unauthorized"),
+    )
+)]
 async fn create_invite_handler(
     Extension(trust_repo): Extension<Arc<dyn TrustRepo>>,
     auth: AuthenticatedDevice,
@@ -394,6 +480,15 @@ async fn create_invite_handler(
     }
 }
 
+#[utoipa::path(
+    get,
+    path = "/trust/invites/mine",
+    tag = "Trust",
+    responses(
+        (status = 200, description = "List of invites created by the authenticated user", body = InvitesResponse),
+        (status = 401, description = "Unauthorized"),
+    )
+)]
 async fn list_invites_handler(
     Extension(trust_repo): Extension<Arc<dyn TrustRepo>>,
     auth: AuthenticatedDevice,
@@ -416,6 +511,20 @@ async fn list_invites_handler(
     }
 }
 
+#[utoipa::path(
+    post,
+    path = "/trust/invites/{id}/accept",
+    tag = "Trust",
+    params(
+        ("id" = String, Path, description = "Invite ID", format = "uuid")
+    ),
+    responses(
+        (status = 200, description = "Invite accepted and endorsement queued", body = AcceptInviteResponse),
+        (status = 400, description = "Invalid request"),
+        (status = 401, description = "Unauthorized"),
+        (status = 404, description = "Invite not found"),
+    )
+)]
 async fn accept_invite_handler(
     Extension(trust_repo): Extension<Arc<dyn TrustRepo>>,
     Extension(trust_service): Extension<Arc<dyn TrustService>>,
