@@ -24,7 +24,7 @@ use crate::identity::repo::{AccountRepoError, IdentityRepo};
 
 // ─── Response types ────────────────────────────────────────────────────────
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct EndorsementResponse {
     pub id: Uuid,
     pub subject_id: Uuid,
@@ -34,12 +34,12 @@ pub struct EndorsementResponse {
     pub revoked: bool,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct EndorsementsListResponse {
     pub endorsements: Vec<EndorsementResponse>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct HasEndorsementResponse {
     pub has_endorsement: bool,
 }
@@ -65,7 +65,7 @@ pub struct CreatedEndorsementResponse {
 
 // ─── Query types ───────────────────────────────────────────────────────────
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct EndorsementQuery {
     pub subject_id: Option<Uuid>,
     pub topic: Option<String>,
@@ -102,6 +102,17 @@ pub fn router(rate_limit_config: &RateLimitConfig) -> Router {
 // ─── Handlers ──────────────────────────────────────────────────────────────
 
 /// List endorsements for the authenticated user.
+#[utoipa::path(
+    get,
+    path = "/me/endorsements",
+    tag = "reputation",
+    responses(
+        (status = 200, description = "List of endorsements for the authenticated user", body = EndorsementsListResponse),
+        (status = 401, description = "Unauthorized"),
+        (status = 500, description = "Internal server error")
+    ),
+    security(("device_auth" = []))
+)]
 async fn my_endorsements(
     Extension(service): Extension<Arc<dyn EndorsementService>>,
     auth: AuthenticatedDevice,
@@ -128,6 +139,20 @@ async fn my_endorsements(
 }
 
 /// Check if a subject has an endorsement for a topic (public endpoint).
+#[utoipa::path(
+    get,
+    path = "/endorsements/check",
+    tag = "reputation",
+    params(
+        ("subject_id" = Option<Uuid>, Query, description = "Account UUID to check endorsement for"),
+        ("topic" = Option<String>, Query, description = "Endorsement topic to check")
+    ),
+    responses(
+        (status = 200, description = "Endorsement check result", body = HasEndorsementResponse),
+        (status = 400, description = "Missing required query parameters"),
+        (status = 500, description = "Internal server error")
+    )
+)]
 async fn check_endorsement(
     Extension(service): Extension<Arc<dyn EndorsementService>>,
     Query(query): Query<EndorsementQuery>,

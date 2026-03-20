@@ -12,7 +12,8 @@ use uuid::Uuid;
 use tc_engine_api::constraints::build_constraint;
 
 use super::{
-    AssignRoleRequest, AssignRoleResponse, CreateRoomRequest, MyCapabilitiesResponse, RoomResponse,
+    AssignRoleRequest, AssignRoleResponse, CreateRoomRequest, CreateSuggestionRequest,
+    MyCapabilitiesResponse, RoomResponse, SuggestionResponse,
 };
 use crate::http::ErrorResponse;
 use crate::identity::http::auth::AuthenticatedDevice;
@@ -25,6 +26,15 @@ use crate::trust::repo::TrustRepo;
 
 // ─── Room handlers ─────────────────────────────────────────────────────────
 
+#[utoipa::path(
+    get,
+    path = "/rooms",
+    tag = "Rooms",
+    responses(
+        (status = 200, description = "List of open rooms", body = Vec<RoomResponse>),
+        (status = 500, description = "Internal server error")
+    )
+)]
 pub async fn list_rooms(Extension(service): Extension<Arc<dyn RoomsService>>) -> impl IntoResponse {
     match service.list_rooms(Some("open")).await {
         Ok(rooms) => {
@@ -35,6 +45,17 @@ pub async fn list_rooms(Extension(service): Extension<Arc<dyn RoomsService>>) ->
     }
 }
 
+#[utoipa::path(
+    get,
+    path = "/rooms/{room_id}",
+    tag = "Rooms",
+    params(("room_id" = String, Path, description = "Room ID")),
+    responses(
+        (status = 200, description = "Room details", body = RoomResponse),
+        (status = 404, description = "Room not found"),
+        (status = 500, description = "Internal server error")
+    )
+)]
 pub async fn get_room(
     Extension(service): Extension<Arc<dyn RoomsService>>,
     Path(room_id): Path<Uuid>,
@@ -45,6 +66,19 @@ pub async fn get_room(
     }
 }
 
+#[utoipa::path(
+    post,
+    path = "/rooms",
+    tag = "Rooms",
+    request_body = CreateRoomRequest,
+    responses(
+        (status = 201, description = "Room created", body = RoomResponse),
+        (status = 400, description = "Validation error"),
+        (status = 401, description = "Unauthorized"),
+        (status = 409, description = "Room name already exists"),
+        (status = 500, description = "Internal server error")
+    )
+)]
 pub async fn create_room(
     Extension(service): Extension<Arc<dyn RoomsService>>,
     Extension(engine_registry): Extension<Arc<EngineRegistry>>,
@@ -107,6 +141,15 @@ pub async fn create_room(
     (StatusCode::CREATED, Json(room_to_response(room))).into_response()
 }
 
+#[utoipa::path(
+    get,
+    path = "/rooms/capacity",
+    tag = "Rooms",
+    responses(
+        (status = 200, description = "Rooms needing content", body = Vec<RoomResponse>),
+        (status = 500, description = "Internal server error")
+    )
+)]
 pub async fn get_capacity(
     Extension(service): Extension<Arc<dyn RoomsService>>,
 ) -> impl IntoResponse {
@@ -121,6 +164,18 @@ pub async fn get_capacity(
 
 // ─── Capabilities endpoint ────────────────────────────────────────────────
 
+#[utoipa::path(
+    get,
+    path = "/rooms/{room_id}/my-capabilities",
+    tag = "Rooms",
+    params(("room_id" = String, Path, description = "Room ID")),
+    responses(
+        (status = 200, description = "User capabilities in this room", body = MyCapabilitiesResponse),
+        (status = 401, description = "Unauthorized"),
+        (status = 404, description = "Room not found"),
+        (status = 500, description = "Internal server error")
+    )
+)]
 pub async fn my_capabilities(
     Extension(service): Extension<Arc<dyn RoomsService>>,
     Extension(trust_repo): Extension<Arc<dyn TrustRepo>>,
@@ -221,6 +276,20 @@ pub async fn my_capabilities(
 
 // ─── Role assignment endpoint ─────────────────────────────────────────────
 
+#[utoipa::path(
+    post,
+    path = "/rooms/{room_id}/roles",
+    tag = "Rooms",
+    request_body = AssignRoleRequest,
+    params(("room_id" = String, Path, description = "Room ID")),
+    responses(
+        (status = 200, description = "Role assigned", body = AssignRoleResponse),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Only room owner can assign roles"),
+        (status = 404, description = "Room not found"),
+        (status = 500, description = "Internal server error")
+    )
+)]
 pub async fn assign_role(
     Extension(service): Extension<Arc<dyn RoomsService>>,
     Extension(pool): Extension<PgPool>,
@@ -300,13 +369,26 @@ fn room_to_response(r: RoomRecord) -> RoomResponse {
 
 const DAILY_SUGGESTION_LIMIT: i64 = 3;
 
+#[utoipa::path(
+    post,
+    path = "/rooms/{room_id}/suggestions",
+    tag = "Rooms",
+    request_body = CreateSuggestionRequest,
+    params(("room_id" = String, Path, description = "Room ID")),
+    responses(
+        (status = 201, description = "Suggestion created", body = SuggestionResponse),
+        (status = 400, description = "Validation error or daily limit reached"),
+        (status = 401, description = "Unauthorized"),
+        (status = 500, description = "Internal server error")
+    )
+)]
 pub async fn create_suggestion(
     Extension(pool): Extension<PgPool>,
     Extension(content_filter): Extension<Arc<dyn ContentFilter>>,
     Path((room_id, poll_id)): Path<(Uuid, Uuid)>,
     auth: AuthenticatedDevice,
 ) -> impl IntoResponse {
-    let req: super::CreateSuggestionRequest = match auth.json() {
+    let req: CreateSuggestionRequest = match auth.json() {
         Ok(r) => r,
         Err(resp) => return resp,
     };
@@ -355,6 +437,16 @@ pub async fn create_suggestion(
     }
 }
 
+#[utoipa::path(
+    get,
+    path = "/rooms/{room_id}/suggestions",
+    tag = "Rooms",
+    params(("room_id" = String, Path, description = "Room ID")),
+    responses(
+        (status = 200, description = "List of suggestions", body = Vec<SuggestionResponse>),
+        (status = 500, description = "Internal server error")
+    )
+)]
 pub async fn list_suggestions(
     Extension(pool): Extension<PgPool>,
     Path((_room_id, poll_id)): Path<(Uuid, Uuid)>,
@@ -374,8 +466,8 @@ pub async fn list_suggestions(
     }
 }
 
-fn suggestion_to_response(s: suggestions::SuggestionRecord) -> super::SuggestionResponse {
-    super::SuggestionResponse {
+fn suggestion_to_response(s: suggestions::SuggestionRecord) -> SuggestionResponse {
+    SuggestionResponse {
         id: s.id,
         room_id: s.room_id,
         poll_id: s.poll_id,

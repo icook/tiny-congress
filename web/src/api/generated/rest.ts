@@ -4,6 +4,161 @@
  */
 
 export interface paths {
+  '/accounts/lookup': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Look up an account by username.
+     * @description Returns `{ id, username }` so the caller can use the UUID for trust actions.
+     *     Requires authentication — callers must have a valid device session.
+     */
+    get: operations['account_lookup'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/auth/backup/{username}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * GET /auth/backup/{username} -- fetch encrypted backup for login.
+     * @description Returns 200 with an encrypted backup envelope for both real and unknown
+     *     usernames. Unknown usernames receive a deterministic synthetic backup
+     *     to prevent username enumeration.
+     *
+     *     To mitigate timing side-channels, both the account lookup and backup
+     *     lookup are always performed regardless of whether the account exists.
+     */
+    get: operations['get_backup'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/auth/devices': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** GET /auth/devices — list all devices for the authenticated account */
+    get: operations['list_devices'];
+    put?: never;
+    /** POST /auth/devices — add a new device key */
+    post: operations['add_device'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/auth/devices/{kid}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    /** DELETE /auth/devices/:kid — revoke a device key */
+    delete: operations['revoke_device'];
+    options?: never;
+    head?: never;
+    /** PATCH /auth/devices/:kid — rename a device */
+    patch: operations['rename_device'];
+    trace?: never;
+  };
+  '/auth/idme/authorize': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Generate the ID.me authorization URL and return it. */
+    get: operations['authorize'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/auth/idme/callback': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * OAuth callback from ID.me (browser redirect, unauthenticated).
+     * @description The `account_id` is embedded in the HMAC-signed state parameter.
+     *     On success, redirects to the frontend with `verification=success`.
+     *     On failure, redirects with `verification=error&message=...`.
+     */
+    get: operations['callback'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/auth/login': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** POST /auth/login -- authenticate and register a device key */
+    post: operations['login'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/auth/signup': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Handle signup request — delegates validation and persistence to [`IdentityService`]. */
+    post: operations['signup'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/build-info': {
     parameters: {
       query?: never;
@@ -22,6 +177,348 @@ export interface paths {
     get: operations['get_build_info'];
     put?: never;
     post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/endorsements/check': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Check if a subject has an endorsement for a topic (public endpoint). */
+    get: operations['check_endorsement'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/me/endorsements': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** List endorsements for the authenticated user. */
+    get: operations['my_endorsements'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/rooms': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['list_rooms'];
+    put?: never;
+    post: operations['create_room'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/rooms/capacity': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['get_capacity'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/rooms/{room_id}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['get_room'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/rooms/{room_id}/agenda': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['get_agenda'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/rooms/{room_id}/my-capabilities': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['my_capabilities'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/rooms/{room_id}/polls': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['list_polls'];
+    put?: never;
+    post: operations['create_poll'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/rooms/{room_id}/polls/{poll_id}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['get_poll_detail'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/rooms/{room_id}/polls/{poll_id}/dimensions': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['add_dimension'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/rooms/{room_id}/polls/{poll_id}/dimensions/{dimension_id}/evidence': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['create_evidence'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/rooms/{room_id}/polls/{poll_id}/evidence': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    delete: operations['delete_evidence'];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/rooms/{room_id}/polls/{poll_id}/my-votes': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['my_votes'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/rooms/{room_id}/polls/{poll_id}/reset': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /**
+     * Sim-only: reset a poll back to draft status, clearing all timing fields.
+     *     Used by the ring buffer refill logic to recycle polls for a new cycle.
+     */
+    patch: operations['reset_poll'];
+    trace?: never;
+  };
+  '/rooms/{room_id}/polls/{poll_id}/results': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['get_results'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/rooms/{room_id}/polls/{poll_id}/results/distribution': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['get_distribution'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/rooms/{room_id}/polls/{poll_id}/status': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['update_poll_status'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/rooms/{room_id}/polls/{poll_id}/traces': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['get_poll_traces'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/rooms/{room_id}/polls/{poll_id}/vote': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['cast_vote'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/rooms/{room_id}/roles': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['assign_role'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/rooms/{room_id}/suggestions': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['list_suggestions'];
+    put?: never;
+    post: operations['create_suggestion'];
     delete?: never;
     options?: never;
     head?: never;
@@ -206,6 +703,60 @@ export interface components {
       /** Format: uuid */
       endorser_id: string;
     };
+    /** @description Account lookup response — returns only what the UI needs to target a user. */
+    AccountLookupResponse: {
+      /** Format: uuid */
+      id: string;
+      username: string;
+    };
+    AddDeviceRequest: {
+      /** @description Base64url-encoded certificate (root key's signature over device pubkey) */
+      certificate: string;
+      name: string;
+      /** @description Base64url-encoded Ed25519 public key */
+      pubkey: string;
+    };
+    AddDeviceResponse: {
+      created_at: string;
+      device_kid: string;
+    };
+    AssignRoleRequest: {
+      /** Format: uuid */
+      account_id: string;
+      role: string;
+    };
+    AssignRoleResponse: {
+      /** Format: uuid */
+      account_id: string;
+      role: string;
+      /** Format: uuid */
+      room_id: string;
+    };
+    AuthorizeResponse: {
+      url: string;
+    };
+    BackupResponse: {
+      /** @description Base64url-encoded encrypted backup envelope */
+      encrypted_backup: string;
+      root_kid: string;
+    };
+    BotTraceResponse: {
+      completed_at?: string | null;
+      created_at: string;
+      error?: string | null;
+      id: string;
+      run_mode: string;
+      status: string;
+      steps: unknown[];
+      task: string;
+      /** Format: double */
+      total_cost_usd: number;
+    };
+    BucketResponse: {
+      /** Format: int64 */
+      count: number;
+      label: string;
+    };
     BudgetResponse: {
       /** Format: int64 */
       denouncements_available: number;
@@ -244,10 +795,32 @@ export interface components {
        */
       version: string;
     };
+    /** @description OAuth callback query parameters from ID.me. */
+    CallbackQuery: {
+      code?: string | null;
+      error?: string | null;
+      error_description?: string | null;
+      state?: string | null;
+    };
+    CreateDimensionRequest: {
+      description?: string | null;
+      max_label?: string | null;
+      /** Format: float */
+      max_value?: number;
+      min_label?: string | null;
+      /** Format: float */
+      min_value?: number;
+      name: string;
+      /** Format: int32 */
+      sort_order?: number;
+    };
     CreateEndorsementRequest: {
       evidence?: unknown;
       topic: string;
       username: string;
+    };
+    CreateEvidenceBody: {
+      evidence: components['schemas']['EvidenceItem'][];
     };
     CreateInviteRequest: {
       attestation: unknown;
@@ -262,6 +835,24 @@ export interface components {
       expires_at: string;
       /** Format: uuid */
       id: string;
+    };
+    CreatePollRequest: {
+      description?: string | null;
+      question: string;
+    };
+    CreateRoomRequest: {
+      constraint_config?: unknown;
+      constraint_type?: string;
+      description?: string | null;
+      eligibility_topic?: string;
+      engine_config?: unknown;
+      engine_type?: string;
+      name: string;
+      /** Format: int32 */
+      poll_duration_secs?: number | null;
+    };
+    CreateSuggestionRequest: {
+      suggestion_text: string;
     };
     CreatedEndorsementResponse: {
       created_at: string;
@@ -287,12 +878,108 @@ export interface components {
       target_id: string;
       target_username: string;
     };
+    /** @description Device info returned in API responses (omits certificate and raw pubkey) */
+    DeviceInfo: {
+      created_at: string;
+      device_kid: string;
+      device_name: string;
+      last_used_at?: string | null;
+      revoked_at?: string | null;
+    };
+    DeviceListResponse: {
+      devices: components['schemas']['DeviceInfo'][];
+    };
+    DimensionDetailResponse: {
+      description?: string | null;
+      evidence: components['schemas']['EvidenceResponse'][];
+      /** Format: uuid */
+      id: string;
+      max_label?: string | null;
+      /** Format: float */
+      max_value: number;
+      min_label?: string | null;
+      /** Format: float */
+      min_value: number;
+      name: string;
+      /** Format: int32 */
+      sort_order: number;
+    };
+    DimensionDistributionResponse: {
+      buckets: components['schemas']['BucketResponse'][];
+      /** Format: uuid */
+      dimension_id: string;
+      dimension_name: string;
+    };
+    DimensionResponse: {
+      description?: string | null;
+      /** Format: uuid */
+      id: string;
+      max_label?: string | null;
+      /** Format: float */
+      max_value: number;
+      min_label?: string | null;
+      /** Format: float */
+      min_value: number;
+      name: string;
+      /** Format: int32 */
+      sort_order: number;
+    };
+    DimensionStatsResponse: {
+      /** Format: int64 */
+      count: number;
+      /** Format: uuid */
+      dimension_id: string;
+      dimension_name: string;
+      /** Format: double */
+      max: number;
+      /** Format: double */
+      mean: number;
+      /** Format: double */
+      median: number;
+      /** Format: double */
+      min: number;
+      /** Format: double */
+      stddev: number;
+    };
     EndorseRequest: {
       attestation?: unknown;
       /** Format: uuid */
       subject_id: string;
       /** Format: float */
       weight?: number;
+    };
+    EndorsementQuery: {
+      /** Format: uuid */
+      subject_id?: string | null;
+      topic?: string | null;
+    };
+    EndorsementResponse: {
+      created_at: string;
+      /** Format: uuid */
+      id: string;
+      /** Format: uuid */
+      issuer_id?: string | null;
+      revoked: boolean;
+      /** Format: uuid */
+      subject_id: string;
+      topic: string;
+    };
+    EndorsementsListResponse: {
+      endorsements: components['schemas']['EndorsementResponse'][];
+    };
+    EvidenceItem: {
+      claim: string;
+      source?: string | null;
+      stance: string;
+    };
+    EvidenceResponse: {
+      claim: string;
+      id: string;
+      source?: string | null;
+      stance: string;
+    };
+    HasEndorsementResponse: {
+      has_endorsement: boolean;
     };
     InviteResponse: {
       accepted_at?: string | null;
@@ -306,9 +993,72 @@ export interface components {
     InvitesResponse: {
       invites: components['schemas']['InviteResponse'][];
     };
+    /** @description Device data for login */
+    LoginDevice: {
+      /** @description Base64url-encoded certificate (root key's signature over `device_pubkey || timestamp`) */
+      certificate: string;
+      /** @description User-provided device name */
+      name: string;
+      /** @description Base64url-encoded Ed25519 public key */
+      pubkey: string;
+    };
+    /** @description Login request payload */
+    LoginRequest: {
+      device: components['schemas']['LoginDevice'];
+      /**
+       * Format: int64
+       * @description Unix timestamp (seconds) — must be within ±300s of server time
+       */
+      timestamp: number;
+      username: string;
+    };
+    /** @description Login response */
+    LoginResponse: {
+      /** Format: uuid */
+      account_id: string;
+      device_kid: string;
+      root_kid: string;
+    };
     MessageResponse: {
       message: string;
     };
+    MyCapabilitiesResponse: {
+      can_configure: boolean;
+      can_vote: boolean;
+      next_step?: string | null;
+      reason?: string | null;
+      role: string;
+    };
+    PollDetailResponse: {
+      dimensions: components['schemas']['DimensionDetailResponse'][];
+      poll: components['schemas']['PollResponse'];
+    };
+    PollDistributionResponse: {
+      dimensions: components['schemas']['DimensionDistributionResponse'][];
+    };
+    PollResponse: {
+      activated_at?: string | null;
+      closes_at?: string | null;
+      created_at: string;
+      description?: string | null;
+      /** Format: uuid */
+      id: string;
+      question: string;
+      /** Format: uuid */
+      room_id: string;
+      status: string;
+    };
+    PollResultsResponse: {
+      dimensions: components['schemas']['DimensionStatsResponse'][];
+      poll: components['schemas']['PollResponse'];
+      /** Format: int64 */
+      voter_count: number;
+    };
+    PollStatusRequest: {
+      status: components['schemas']['PollStatusTransition'];
+    };
+    /** @enum {string} */
+    PollStatusTransition: 'active' | 'closed';
     /** @description RFC 7807 Problem Details error response. */
     ProblemDetails: {
       /** @description Human-readable explanation specific to this occurrence */
@@ -333,9 +1083,28 @@ export interface components {
       /** @description Field that caused the error (for validation errors) */
       field?: string | null;
     };
+    RenameDeviceRequest: {
+      name: string;
+    };
     RevokeRequest: {
       /** Format: uuid */
       subject_id: string;
+    };
+    RoomResponse: {
+      constraint_type: string;
+      created_at: string;
+      description?: string | null;
+      eligibility_topic: string;
+      engine_config: unknown;
+      engine_type: string;
+      /** Format: uuid */
+      id: string;
+      name: string;
+      /** Format: uuid */
+      owner_id?: string | null;
+      /** Format: int32 */
+      poll_duration_secs?: number | null;
+      status: string;
     };
     ScoreSnapshotResponse: {
       computed_at: string;
@@ -351,6 +1120,58 @@ export interface components {
     ScoresResponse: {
       scores: components['schemas']['ScoreSnapshotResponse'][];
     };
+    /** @description Backup data included in signup request */
+    SignupBackup: {
+      /** @description Base64url-encoded encrypted backup envelope */
+      encrypted_blob: string;
+    };
+    /** @description Device data included in signup request */
+    SignupDevice: {
+      /** @description Base64url-encoded certificate (root key's signature over canonical cert message) */
+      certificate: string;
+      /** @description User-provided device name */
+      name: string;
+      /** @description Base64url-encoded Ed25519 public key */
+      pubkey: string;
+    };
+    /** @description Signup request payload — atomic creation of account + backup + first device */
+    SignupRequest: {
+      backup: components['schemas']['SignupBackup'];
+      device: components['schemas']['SignupDevice'];
+      /** @description Base64url-encoded root Ed25519 public key */
+      root_pubkey: string;
+      username: string;
+    };
+    /** @description Signup response */
+    SignupResponse: {
+      /** Format: uuid */
+      account_id: string;
+      device_kid: string;
+      root_kid: string;
+    };
+    SuggestionResponse: {
+      /** Format: uuid */
+      account_id: string;
+      created_at: string;
+      evidence_ids: string[];
+      filter_reason?: string | null;
+      /** Format: uuid */
+      id: string;
+      /** Format: uuid */
+      poll_id: string;
+      processed_at?: string | null;
+      /** Format: uuid */
+      room_id: string;
+      status: string;
+      suggestion_text: string;
+    };
+    VoteResponse: {
+      /** Format: uuid */
+      dimension_id: string;
+      updated_at: string;
+      /** Format: float */
+      value: number;
+    };
   };
   responses: never;
   parameters: never;
@@ -360,6 +1181,482 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+  account_lookup: {
+    parameters: {
+      query: {
+        /** @description Username to look up */
+        username: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Account found */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['AccountLookupResponse'];
+        };
+      };
+      /** @description Invalid username */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description User not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Internal server error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  get_backup: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Username to fetch backup for */
+        username: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Encrypted backup (real or synthetic) */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['BackupResponse'];
+        };
+      };
+      /** @description Invalid username */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Internal server error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  list_devices: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Device list */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['DeviceListResponse'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Internal server error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  add_device: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['AddDeviceRequest'];
+      };
+    };
+    responses: {
+      /** @description Device added */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['AddDeviceResponse'];
+        };
+      };
+      /** @description Invalid request */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Device key already registered */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Maximum device limit reached */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Internal server error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  revoke_device: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Key identifier of the device to revoke */
+        kid: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Device revoked */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Invalid KID */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Device not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Device already revoked */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Cannot revoke the device making this request */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Internal server error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  rename_device: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Key identifier of the device to rename */
+        kid: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['RenameDeviceRequest'];
+      };
+    };
+    responses: {
+      /** @description Device renamed */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Invalid request */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Device not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Cannot rename a revoked device */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Internal server error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  authorize: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Authorization URL generated */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['AuthorizeResponse'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Internal server error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  callback: {
+    parameters: {
+      query?: {
+        /** @description Authorization code from ID.me */
+        code?: string;
+        /** @description HMAC-signed state parameter */
+        state?: string;
+        /** @description Error code from ID.me */
+        error?: string;
+        /** @description Human-readable error description */
+        error_description?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Redirect to frontend with verification result */
+      302: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Internal server error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  login: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['LoginRequest'];
+      };
+    };
+    responses: {
+      /** @description Login successful */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['LoginResponse'];
+        };
+      };
+      /** @description Validation error or replay detected */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Invalid credentials */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Device key already registered */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Maximum device limit reached */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Internal server error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  signup: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['SignupRequest'];
+      };
+    };
+    responses: {
+      /** @description Account created */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SignupResponse'];
+        };
+      };
+      /** @description Validation error */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Username or key already registered */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Maximum device limit reached */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Internal server error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
   get_build_info: {
     parameters: {
       query?: never;
@@ -386,6 +1683,998 @@ export interface operations {
         content: {
           'application/json': components['schemas']['ProblemDetails'];
         };
+      };
+    };
+  };
+  check_endorsement: {
+    parameters: {
+      query?: {
+        /** @description Account UUID to check endorsement for */
+        subject_id?: string;
+        /** @description Endorsement topic to check */
+        topic?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Endorsement check result */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HasEndorsementResponse'];
+        };
+      };
+      /** @description Missing required query parameters */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Internal server error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  my_endorsements: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description List of endorsements for the authenticated user */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['EndorsementsListResponse'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Internal server error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  list_rooms: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description List of open rooms */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['RoomResponse'][];
+        };
+      };
+      /** @description Internal server error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  create_room: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CreateRoomRequest'];
+      };
+    };
+    responses: {
+      /** @description Room created */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['RoomResponse'];
+        };
+      };
+      /** @description Validation error */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Room name already exists */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Internal server error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  get_capacity: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Rooms needing content */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['RoomResponse'][];
+        };
+      };
+      /** @description Internal server error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  get_room: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Room ID */
+        room_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Room details */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['RoomResponse'];
+        };
+      };
+      /** @description Room not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Internal server error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  get_agenda: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Room ID */
+        room_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Poll agenda */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PollResponse'][];
+        };
+      };
+      /** @description Room not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Internal server error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  my_capabilities: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Room ID */
+        room_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description User capabilities in this room */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['MyCapabilitiesResponse'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Room not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Internal server error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  list_polls: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Room ID */
+        room_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description List of polls */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PollResponse'][];
+        };
+      };
+      /** @description Room not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Internal server error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  create_poll: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Room ID */
+        room_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CreatePollRequest'];
+      };
+    };
+    responses: {
+      /** @description Poll created */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PollResponse'];
+        };
+      };
+      /** @description Validation error */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Internal server error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  get_poll_detail: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Room ID */
+        room_id: string;
+        /** @description Poll ID */
+        poll_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Poll detail with dimensions and evidence */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PollDetailResponse'];
+        };
+      };
+      /** @description Poll not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Internal server error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  add_dimension: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Room ID */
+        room_id: string;
+        /** @description Poll ID */
+        poll_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CreateDimensionRequest'];
+      };
+    };
+    responses: {
+      /** @description Dimension added */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['DimensionResponse'];
+        };
+      };
+      /** @description Validation error */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Internal server error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  create_evidence: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Room ID */
+        room_id: string;
+        /** @description Poll ID */
+        poll_id: string;
+        /** @description Dimension ID */
+        dimension_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CreateEvidenceBody'];
+      };
+    };
+    responses: {
+      /** @description Evidence created */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Dimension not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Internal server error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  delete_evidence: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Room ID */
+        room_id: string;
+        /** @description Poll ID */
+        poll_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Evidence deleted */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Internal server error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  my_votes: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Room ID */
+        room_id: string;
+        /** @description Poll ID */
+        poll_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description User's votes for this poll */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['VoteResponse'][];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Poll not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Internal server error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  reset_poll: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Room ID */
+        room_id: string;
+        /** @description Poll ID */
+        poll_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Poll reset to draft */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Poll not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Internal server error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  get_results: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Room ID */
+        room_id: string;
+        /** @description Poll ID */
+        poll_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Poll results */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PollResultsResponse'];
+        };
+      };
+      /** @description Poll not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Internal server error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  get_distribution: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Room ID */
+        room_id: string;
+        /** @description Poll ID */
+        poll_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Vote distribution */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PollDistributionResponse'];
+        };
+      };
+      /** @description Poll not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Internal server error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  update_poll_status: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Room ID */
+        room_id: string;
+        /** @description Poll ID */
+        poll_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['PollStatusRequest'];
+      };
+    };
+    responses: {
+      /** @description Status updated */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Validation error */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Poll not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Internal server error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  get_poll_traces: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Room ID */
+        room_id: string;
+        /** @description Poll ID */
+        poll_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Bot traces for this poll */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['BotTraceResponse'][];
+        };
+      };
+      /** @description Internal server error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  cast_vote: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Room ID */
+        room_id: string;
+        /** @description Poll ID */
+        poll_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Vote recorded */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['VoteResponse'][];
+        };
+      };
+      /** @description Validation error */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Not eligible to vote */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Poll not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Poll not active */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Internal server error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  assign_role: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Room ID */
+        room_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['AssignRoleRequest'];
+      };
+    };
+    responses: {
+      /** @description Role assigned */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['AssignRoleResponse'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Only room owner can assign roles */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Room not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Internal server error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  list_suggestions: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Room ID */
+        room_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description List of suggestions */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SuggestionResponse'][];
+        };
+      };
+      /** @description Internal server error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  create_suggestion: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Room ID */
+        room_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CreateSuggestionRequest'];
+      };
+    };
+    responses: {
+      /** @description Suggestion created */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SuggestionResponse'];
+        };
+      };
+      /** @description Validation error or daily limit reached */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Internal server error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
       };
     };
   };

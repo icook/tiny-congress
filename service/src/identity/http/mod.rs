@@ -16,6 +16,7 @@ use axum::{
     Json, Router,
 };
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 use uuid::Uuid;
 
 use super::service::{validate_username, IdentityService, RootPubkey, SignupError, SignupRequest};
@@ -29,16 +30,20 @@ use crate::identity::repo::{AccountRecord, AccountRepoError, DeviceKeyRepoError,
 use tc_crypto::Kid;
 
 /// Signup response
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct SignupResponse {
+    #[schema(value_type = String, format = "uuid")]
     pub account_id: Uuid,
+    #[schema(value_type = String)]
     pub root_kid: Kid,
+    #[schema(value_type = String)]
     pub device_kid: Kid,
 }
 
 /// Account lookup response — returns only what the UI needs to target a user.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct AccountLookupResponse {
+    #[schema(value_type = String, format = "uuid")]
     pub id: Uuid,
     pub username: String,
 }
@@ -118,6 +123,20 @@ pub fn router(rate_limit_config: &RateLimitConfig) -> Router {
 ///
 /// Returns `{ id, username }` so the caller can use the UUID for trust actions.
 /// Requires authentication — callers must have a valid device session.
+#[utoipa::path(
+    get,
+    path = "/accounts/lookup",
+    tag = "Identity",
+    params(
+        ("username" = String, Query, description = "Username to look up")
+    ),
+    responses(
+        (status = 200, description = "Account found", body = AccountLookupResponse),
+        (status = 400, description = "Invalid username"),
+        (status = 404, description = "User not found"),
+        (status = 500, description = "Internal server error")
+    )
+)]
 async fn account_lookup(
     Extension(repo): Extension<Arc<dyn IdentityRepo>>,
     Query(params): Query<AccountLookupQuery>,
@@ -202,6 +221,19 @@ pub(crate) fn decode_account_root_pubkey(
 }
 
 /// Handle signup request — delegates validation and persistence to [`IdentityService`].
+#[utoipa::path(
+    post,
+    path = "/auth/signup",
+    tag = "Identity",
+    request_body = SignupRequest,
+    responses(
+        (status = 201, description = "Account created", body = SignupResponse),
+        (status = 400, description = "Validation error"),
+        (status = 409, description = "Username or key already registered"),
+        (status = 422, description = "Maximum device limit reached"),
+        (status = 500, description = "Internal server error")
+    )
+)]
 async fn signup(
     Extension(service): Extension<Arc<dyn IdentityService>>,
     Json(req): Json<SignupRequest>,

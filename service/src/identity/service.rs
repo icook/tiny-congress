@@ -8,6 +8,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use serde::Deserialize;
 use tc_crypto::{decode_base64url, verify_ed25519, BackupEnvelope, Kid};
+use utoipa::ToSchema;
 
 use super::repo::{
     AccountRepoError, BackupRepoError, CreateSignupError, DeviceKeyRepoError, IdentityRepo,
@@ -21,14 +22,14 @@ pub use super::repo::SignupResult;
 // ─── Domain request types ────────────────────────────────────────────────────
 
 /// Backup data included in signup request
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct SignupBackup {
     /// Base64url-encoded encrypted backup envelope
     pub encrypted_blob: String,
 }
 
 /// Device data included in signup request
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct SignupDevice {
     /// Base64url-encoded Ed25519 public key
     pub pubkey: String,
@@ -39,10 +40,11 @@ pub struct SignupDevice {
 }
 
 /// Signup request payload — atomic creation of account + backup + first device
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct SignupRequest {
     pub username: String,
-    pub root_pubkey: String, // base64url encoded
+    /// Base64url-encoded root Ed25519 public key
+    pub root_pubkey: String,
     pub backup: SignupBackup,
     pub device: SignupDevice,
 }
