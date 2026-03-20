@@ -205,10 +205,10 @@
     },
     "service/src/trust/": {
       "status": "active",
-      "total_prs": 27,
+      "total_prs": 28,
       "total_skips": 0,
       "consecutive_idle": 0,
-      "last_run": "2026-03-20T00:58:56Z",
+      "last_run": "2026-03-20T01:18:04Z",
       "graduated_at": "",
       "history": [
         {
@@ -372,6 +372,12 @@
           "type": "security_hardening",
           "impact": "medium",
           "summary": "Added 1–4096 byte size validation for the invite envelope in `create_invite_handler`, mirroring the backup envelope's `MAX_ENVELOPE_SIZE` convention; previously only the base64url encoding was checked, allowing arbitrarily large payloads to reach the database."
+        },
+        {
+          "pr": 0,
+          "type": "test_coverage",
+          "impact": "medium",
+          "summary": "Added `test_process_batch_denounce_reason_too_long_fails` covering the upper bound (>500 chars) of the denounce reason length validation in the worker — the lower bound (empty) was already tested but the upper bound was not."
         }
       ],
       "skipped": []
