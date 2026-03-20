@@ -496,6 +496,98 @@ async fn test_process_one_poison_message_marks_action_failed() {
     );
 }
 
+// ---------------------------------------------------------------------------
+// Test: denounce action revokes an existing endorsement atomically
+// ---------------------------------------------------------------------------
+#[shared_runtime_test]
+async fn test_process_batch_denounce_revokes_existing_endorsement() {
+    let db = isolated_db().await;
+    let pool = db.pool().clone();
+
+    let actor = AccountFactory::new()
+        .with_seed(1)
+        .create(&pool)
+        .await
+        .expect("create actor");
+
+    let target = AccountFactory::new()
+        .with_seed(2)
+        .create(&pool)
+        .await
+        .expect("create target");
+
+    // Seed an active trust endorsement from actor → target
+    sqlx::query(
+        "INSERT INTO reputation__endorsements (endorser_id, subject_id, topic, weight) \
+         VALUES ($1, $2, 'trust', 1.0)",
+    )
+    .bind(actor.id)
+    .bind(target.id)
+    .execute(&pool)
+    .await
+    .expect("seed endorsement");
+
+    // Seed influence for the actor so create_denouncement doesn't fail
+    sqlx::query(
+        "INSERT INTO trust__user_influence (user_id, total_influence) VALUES ($1, 100.0) \
+         ON CONFLICT DO NOTHING",
+    )
+    .bind(actor.id)
+    .execute(&pool)
+    .await
+    .expect("seed influence");
+
+    // Enqueue a 'denounce' action
+    let trust_repo = PgTrustRepo::new(pool.clone());
+    trust_repo
+        .enqueue_action(
+            actor.id,
+            "denounce",
+            &json!({ "target_id": target.id, "reason": "spam" }),
+        )
+        .await
+        .expect("enqueue denounce action");
+
+    let worker = make_worker(pool.clone());
+    let processed = worker.process_one().await.expect("process_one");
+    assert!(processed, "expected a message to be processed");
+
+    // Action should be completed
+    let (status,): (String,) =
+        sqlx::query_as("SELECT status FROM trust__action_log WHERE actor_id = $1")
+            .bind(actor.id)
+            .fetch_one(&pool)
+            .await
+            .expect("fetch action");
+    assert_eq!(status, "completed");
+
+    // Denouncement row should exist
+    let denounce_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM trust__denouncements WHERE accuser_id = $1 AND target_id = $2",
+    )
+    .bind(actor.id)
+    .bind(target.id)
+    .fetch_one(&pool)
+    .await
+    .expect("count denouncements");
+    assert_eq!(denounce_count, 1, "denouncement row should exist");
+
+    // The endorsement should now be revoked (revoked_at IS NOT NULL)
+    let revoked_at: Option<chrono::DateTime<chrono::Utc>> = sqlx::query_scalar(
+        "SELECT revoked_at FROM reputation__endorsements \
+         WHERE endorser_id = $1 AND subject_id = $2 AND topic = 'trust'",
+    )
+    .bind(actor.id)
+    .bind(target.id)
+    .fetch_one(&pool)
+    .await
+    .expect("fetch endorsement");
+    assert!(
+        revoked_at.is_some(),
+        "denounce action should atomically revoke any existing endorsement"
+    );
+}
+
 #[shared_runtime_test]
 async fn test_process_batch_denounce_empty_reason_fails() {
     let db = isolated_db().await;
