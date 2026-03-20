@@ -592,9 +592,6 @@ fn trust_service_error_response(e: &TrustServiceError) -> axum::response::Respon
         TrustServiceError::InvalidWeight => bad_request("weight must be in range (0.0, 1.0]"),
         TrustServiceError::SelfAction => bad_request("Cannot target yourself"),
         TrustServiceError::QuotaExceeded => too_many_requests("Daily action quota exceeded"),
-        TrustServiceError::EndorsementSlotsExhausted { max } => {
-            too_many_requests(&format!("Endorsement slots exhausted (max {max})"))
-        }
         TrustServiceError::DenouncementSlotsExhausted { max } => {
             too_many_requests(&format!("Denouncement slots exhausted (max {max})"))
         }
