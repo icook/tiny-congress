@@ -219,20 +219,28 @@ pub async fn chat_completion(
         return Err(anyhow::anyhow!("LLM API returned {status}: {body}"));
     }
 
-    // Read cache headers before consuming the body
+    // Read cache headers before consuming the body.
+    //
+    // LiteLLM signals cache hits in multiple ways across versions:
+    // - `x-litellm-cache-hit: True` (older versions)
+    // - `x-litellm-cache-key: <hash>` (v1.82+, present only on cache hits)
+    // - `x-cache: HIT` (some proxy configs)
     let litellm_hit = {
-        let litellm_header = response
+        let explicit_hit = response
             .headers()
             .get("x-litellm-cache-hit")
             .and_then(|v| v.to_str().ok())
-            .unwrap_or("");
-        let x_cache_header = response
+            .unwrap_or("")
+            .eq_ignore_ascii_case("true");
+        let has_cache_key = response.headers().contains_key("x-litellm-cache-key");
+        let x_cache_hit = response
             .headers()
             .get("x-cache")
             .and_then(|v| v.to_str().ok())
-            .unwrap_or("");
-        litellm_header.eq_ignore_ascii_case("true")
-            || x_cache_header.to_ascii_uppercase().contains("HIT")
+            .unwrap_or("")
+            .to_ascii_uppercase()
+            .contains("HIT");
+        explicit_hit || has_cache_key || x_cache_hit
     };
 
     let chat_response: ChatResponse = response
@@ -407,6 +415,94 @@ pub async fn get_generation_cost(
         .await
         .context("parsing generation stats response")?;
     Ok(stats.total_cost)
+}
+
+// ---------------------------------------------------------------------------
+// Shared research pipeline constants and types
+// ---------------------------------------------------------------------------
+
+/// Fixed ethical dimensions for brand ethics research.
+/// Each tuple: (name, `min_label`, `max_label`).
+pub const DIMENSIONS: &[(&str, &str, &str)] = &[
+    ("Labor Practices", "Exploitative", "Exemplary"),
+    ("Environmental Impact", "Destructive", "Regenerative"),
+    ("Consumer Trust", "Deceptive", "Transparent"),
+    ("Community Impact", "Extractive", "Invested"),
+    ("Corporate Governance", "Self-Serving", "Accountable"),
+];
+
+/// Default system prompt for evidence synthesis.
+pub const DEFAULT_SYNTHESIS_SYSTEM_PROMPT: &str = r"You are a balanced research analyst extracting structured evidence from search results. For each of the 5 ethical dimensions, extract 2-3 specific, factual pro and con claims directly supported by the search results provided. Each claim must be one sentence and grounded in the sources — do not fabricate claims. If a dimension has weak search coverage, provide fewer claims rather than speculating.";
+
+/// Top-level LLM response for company evidence synthesis.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct CompanyEvidence {
+    pub relevance_hook: String,
+    pub dimensions: std::collections::HashMap<String, DimensionEvidence>,
+}
+
+/// Pro/con evidence for a single ethical dimension.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct DimensionEvidence {
+    pub pro: Vec<String>,
+    pub con: Vec<String>,
+}
+
+/// Build the synthesis messages for the LLM.
+///
+/// `system_prompt` overrides the default synthesis prompt when `Some`.
+#[must_use]
+pub fn build_synthesis_messages(
+    company_name: &str,
+    ticker: &str,
+    search_context: &str,
+    system_prompt: Option<&str>,
+) -> Vec<ChatMessage> {
+    let system = system_prompt.unwrap_or(DEFAULT_SYNTHESIS_SYSTEM_PROMPT);
+    let user_content = format!(
+        r#"Below are search results about {company_name} ({ticker}) organized by ethical dimension.
+Extract structured evidence cards from these results.
+
+{search_context}
+
+Respond with ONLY valid JSON matching this schema:
+{{
+  "relevance_hook": "One sentence explaining how this company affects daily life.",
+  "dimensions": {{
+    "Labor Practices": {{
+      "pro": ["Factual positive claim with source detail."],
+      "con": ["Factual negative claim with source detail."]
+    }},
+    "Environmental Impact": {{
+      "pro": ["Factual positive claim."],
+      "con": ["Factual negative claim."]
+    }},
+    "Consumer Trust": {{
+      "pro": ["Factual positive claim."],
+      "con": ["Factual negative claim."]
+    }},
+    "Community Impact": {{
+      "pro": ["Factual positive claim."],
+      "con": ["Factual negative claim."]
+    }},
+    "Corporate Governance": {{
+      "pro": ["Factual positive claim."],
+      "con": ["Factual negative claim."]
+    }}
+  }}
+}}"#
+    );
+
+    vec![
+        ChatMessage {
+            role: "system".to_string(),
+            content: system.to_string(),
+        },
+        ChatMessage {
+            role: "user".to_string(),
+            content: user_content,
+        },
+    ]
 }
 
 // ---------------------------------------------------------------------------
