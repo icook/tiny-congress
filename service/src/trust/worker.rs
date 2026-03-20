@@ -94,7 +94,7 @@ impl TrustWorker {
                     .as_f64()
                     .ok_or_else(|| anyhow::anyhow!("endorse payload missing 'weight'"))?
                     as f32;
-                if weight <= 0.0 || weight > 1.0 {
+                if !weight.is_finite() || weight <= 0.0 || weight > 1.0 {
                     return Err(anyhow::anyhow!(
                         "endorse payload 'weight' out of range (0.0, 1.0]: {weight}"
                     ));
