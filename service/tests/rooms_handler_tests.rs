@@ -977,12 +977,12 @@ async fn test_poll_detail_includes_evidence() {
 
 // ─── Suggestions ─────────────────────────────────────────────────────────────
 
-/// Helper: create a room and return its string ID.
-async fn create_room_for_suggestions(
+/// Helper: create a room and a poll within it, returning (room_id, poll_id).
+async fn create_room_and_poll_for_suggestions(
     app: &axum::Router,
     keys: &common::factories::SignupKeys,
     name: &str,
-) -> String {
+) -> (String, String) {
     let body = serde_json::json!({"name": name}).to_string();
     let req = build_authed_request(
         Method::POST,
@@ -994,20 +994,36 @@ async fn create_room_for_suggestions(
     let response = app.clone().oneshot(req).await.expect("response");
     assert_eq!(response.status(), StatusCode::CREATED);
     let json = json_body(response).await;
-    json["id"].as_str().expect("room id").to_string()
+    let room_id = json["id"].as_str().expect("room id").to_string();
+
+    let poll_body = serde_json::json!({"question": "What should we research next?"}).to_string();
+    let req = build_authed_request(
+        Method::POST,
+        &format!("/rooms/{room_id}/polls"),
+        &poll_body,
+        &keys.device_signing_key,
+        &keys.device_kid,
+    );
+    let response = app.clone().oneshot(req).await.expect("response");
+    assert_eq!(response.status(), StatusCode::CREATED);
+    let json = json_body(response).await;
+    let poll_id = json["id"].as_str().expect("poll id").to_string();
+
+    (room_id, poll_id)
 }
 
 #[shared_runtime_test]
 async fn test_create_suggestion() {
     let db = isolated_db().await;
     let (app, keys, _) = signup_and_get_account("suggestor1", db.pool()).await;
-    let room_id = create_room_for_suggestions(&app, &keys, "Suggestion Room 1").await;
+    let (room_id, poll_id) =
+        create_room_and_poll_for_suggestions(&app, &keys, "Suggestion Room 1").await;
 
     let body = serde_json::json!({"suggestion_text": "Investigate renewable energy subsidies"})
         .to_string();
     let req = build_authed_request(
         Method::POST,
-        &format!("/rooms/{room_id}/suggestions"),
+        &format!("/rooms/{room_id}/polls/{poll_id}/suggestions"),
         &body,
         &keys.device_signing_key,
         &keys.device_kid,
@@ -1029,12 +1045,13 @@ async fn test_create_suggestion() {
 async fn test_create_suggestion_empty_text() {
     let db = isolated_db().await;
     let (app, keys, _) = signup_and_get_account("suggestor2", db.pool()).await;
-    let room_id = create_room_for_suggestions(&app, &keys, "Suggestion Room 2").await;
+    let (room_id, poll_id) =
+        create_room_and_poll_for_suggestions(&app, &keys, "Suggestion Room 2").await;
 
     let body = serde_json::json!({"suggestion_text": ""}).to_string();
     let req = build_authed_request(
         Method::POST,
-        &format!("/rooms/{room_id}/suggestions"),
+        &format!("/rooms/{room_id}/polls/{poll_id}/suggestions"),
         &body,
         &keys.device_signing_key,
         &keys.device_kid,
@@ -1047,14 +1064,15 @@ async fn test_create_suggestion_empty_text() {
 async fn test_create_suggestion_too_long() {
     let db = isolated_db().await;
     let (app, keys, _) = signup_and_get_account("suggestor3", db.pool()).await;
-    let room_id = create_room_for_suggestions(&app, &keys, "Suggestion Room 3").await;
+    let (room_id, poll_id) =
+        create_room_and_poll_for_suggestions(&app, &keys, "Suggestion Room 3").await;
 
     // 501 characters — one over the 500-char limit
     let long_text = "a".repeat(501);
     let body = serde_json::json!({"suggestion_text": long_text}).to_string();
     let req = build_authed_request(
         Method::POST,
-        &format!("/rooms/{room_id}/suggestions"),
+        &format!("/rooms/{room_id}/polls/{poll_id}/suggestions"),
         &body,
         &keys.device_signing_key,
         &keys.device_kid,
@@ -1067,14 +1085,15 @@ async fn test_create_suggestion_too_long() {
 async fn test_list_suggestions() {
     let db = isolated_db().await;
     let (app, keys, _) = signup_and_get_account("suggestor4", db.pool()).await;
-    let room_id = create_room_for_suggestions(&app, &keys, "Suggestion Room 4").await;
+    let (room_id, poll_id) =
+        create_room_and_poll_for_suggestions(&app, &keys, "Suggestion Room 4").await;
 
     // Submit a suggestion
     let body =
         serde_json::json!({"suggestion_text": "Study housing affordability metrics"}).to_string();
     let req = build_authed_request(
         Method::POST,
-        &format!("/rooms/{room_id}/suggestions"),
+        &format!("/rooms/{room_id}/polls/{poll_id}/suggestions"),
         &body,
         &keys.device_signing_key,
         &keys.device_kid,
@@ -1088,7 +1107,7 @@ async fn test_list_suggestions() {
     let response = app
         .oneshot(
             Request::builder()
-                .uri(format!("/rooms/{room_id}/suggestions"))
+                .uri(format!("/rooms/{room_id}/polls/{poll_id}/suggestions"))
                 .body(Body::empty())
                 .expect("request"),
         )
@@ -1111,7 +1130,8 @@ async fn test_list_suggestions() {
 async fn test_suggestion_rate_limit() {
     let db = isolated_db().await;
     let (app, keys, _) = signup_and_get_account("suggestor5", db.pool()).await;
-    let room_id = create_room_for_suggestions(&app, &keys, "Suggestion Room 5").await;
+    let (room_id, poll_id) =
+        create_room_and_poll_for_suggestions(&app, &keys, "Suggestion Room 5").await;
 
     // Submit 3 suggestions (the daily limit)
     for i in 0..3 {
@@ -1119,7 +1139,7 @@ async fn test_suggestion_rate_limit() {
             .to_string();
         let req = build_authed_request(
             Method::POST,
-            &format!("/rooms/{room_id}/suggestions"),
+            &format!("/rooms/{room_id}/polls/{poll_id}/suggestions"),
             &body,
             &keys.device_signing_key,
             &keys.device_kid,
@@ -1137,7 +1157,7 @@ async fn test_suggestion_rate_limit() {
         serde_json::json!({"suggestion_text": "This one should be rate limited"}).to_string();
     let req = build_authed_request(
         Method::POST,
-        &format!("/rooms/{room_id}/suggestions"),
+        &format!("/rooms/{room_id}/polls/{poll_id}/suggestions"),
         &body,
         &keys.device_signing_key,
         &keys.device_kid,
