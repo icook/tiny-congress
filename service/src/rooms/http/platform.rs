@@ -343,6 +343,8 @@ pub async fn create_suggestion(
     match suggestions::create_suggestion(
         &pool,
         room_id,
+        // TODO(#852 Task 3): replace with poll_id from route parameter
+        Uuid::nil(),
         auth.account_id,
         &text,
         status,
