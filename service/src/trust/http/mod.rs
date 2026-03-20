@@ -598,6 +598,7 @@ fn trust_service_error_response(e: &TrustServiceError) -> axum::response::Respon
         TrustServiceError::DenouncementConflict => {
             conflict("Cannot endorse a user you have denounced")
         }
+        TrustServiceError::AlreadyDenounced => conflict("Already denounced this user"),
         TrustServiceError::Repo(ref inner) => {
             tracing::error!("Trust service repo error: {inner}");
             internal_error()
