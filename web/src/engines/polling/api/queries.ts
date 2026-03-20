@@ -158,17 +158,18 @@ export function useCastVote(
   });
 }
 
-export function useSuggestions(roomId: string) {
+export function useSuggestions(roomId: string, pollId: string) {
   return useQuery<Suggestion[]>({
-    queryKey: ['suggestions', roomId],
-    queryFn: () => listSuggestions(roomId),
-    enabled: Boolean(roomId),
+    queryKey: ['suggestions', roomId, pollId],
+    queryFn: () => listSuggestions(roomId, pollId),
+    enabled: Boolean(roomId && pollId),
     refetchInterval: 15_000,
   });
 }
 
 export function useCreateSuggestion(
   roomId: string,
+  pollId: string,
   deviceKid: string | null,
   privateKey: CryptoKey | null,
   wasmCrypto: CryptoModule | null
@@ -180,10 +181,10 @@ export function useCreateSuggestion(
       if (!deviceKid || !privateKey || !wasmCrypto) {
         throw new Error('Not authenticated');
       }
-      return createSuggestion(roomId, suggestionText, deviceKid, privateKey, wasmCrypto);
+      return createSuggestion(roomId, pollId, suggestionText, deviceKid, privateKey, wasmCrypto);
     },
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['suggestions', roomId] });
+      void queryClient.invalidateQueries({ queryKey: ['suggestions', roomId, pollId] });
     },
   });
 }
