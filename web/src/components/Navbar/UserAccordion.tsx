@@ -19,11 +19,11 @@ function TrustDot({
   username,
 }: {
   isVerified: boolean;
-  trustScore: { distance: number; path_diversity: number } | null;
+  trustScore: { trust_distance?: number | null; path_diversity?: number | null } | null;
   username: string | null;
 }) {
   if (isVerified && trustScore) {
-    const tier = getTierInfo(trustScore.distance, trustScore.path_diversity);
+    const tier = getTierInfo(trustScore.trust_distance ?? 0, trustScore.path_diversity ?? 0);
     if (tier) {
       return <Badge size="xs" color={tier.color} circle />;
     }

@@ -28,6 +28,150 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/trust/budget': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['budget_handler'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/trust/denounce': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['denounce_handler'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/trust/denouncements/mine': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['list_my_denouncements_handler'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/trust/endorse': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['endorse_handler'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/trust/invites': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['create_invite_handler'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/trust/invites/mine': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['list_invites_handler'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/trust/invites/{id}/accept': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['accept_invite_handler'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/trust/revoke': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['revoke_handler'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/trust/scores/me': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['scores_me_handler'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/verifiers/endorsements': {
     parameters: {
       query?: never;
@@ -57,6 +201,27 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
   schemas: {
+    AcceptInviteResponse: {
+      accepted_at: string;
+      /** Format: uuid */
+      endorser_id: string;
+    };
+    BudgetResponse: {
+      /** Format: int64 */
+      denouncements_available: number;
+      /** Format: int32 */
+      denouncements_total: number;
+      /** Format: int64 */
+      denouncements_used: number;
+      /** Format: int64 */
+      out_of_slot_count: number;
+      /** Format: int64 */
+      slots_available: number;
+      /** Format: int32 */
+      slots_total: number;
+      /** Format: int64 */
+      slots_used: number;
+    };
     /**
      * @description Build metadata exposed via GraphQL, REST, and logs.
      *
@@ -84,6 +249,20 @@ export interface components {
       topic: string;
       username: string;
     };
+    CreateInviteRequest: {
+      attestation: unknown;
+      delivery_method: string;
+      /** @description base64url-encoded invite envelope bytes */
+      envelope: string;
+      relationship_depth?: string | null;
+      /** Format: float */
+      weight?: number | null;
+    };
+    CreateInviteResponse: {
+      expires_at: string;
+      /** Format: uuid */
+      id: string;
+    };
     CreatedEndorsementResponse: {
       created_at: string;
       /** Format: uuid */
@@ -93,6 +272,42 @@ export interface components {
       /** Format: uuid */
       subject_id: string;
       topic: string;
+    };
+    DenounceRequest: {
+      reason: string;
+      /** Format: uuid */
+      target_id: string;
+    };
+    DenouncementResponse: {
+      created_at: string;
+      /** Format: uuid */
+      id: string;
+      reason: string;
+      /** Format: uuid */
+      target_id: string;
+      target_username: string;
+    };
+    EndorseRequest: {
+      attestation?: unknown;
+      /** Format: uuid */
+      subject_id: string;
+      /** Format: float */
+      weight?: number;
+    };
+    InviteResponse: {
+      accepted_at?: string | null;
+      /** Format: uuid */
+      accepted_by?: string | null;
+      delivery_method: string;
+      expires_at: string;
+      /** Format: uuid */
+      id: string;
+    };
+    InvitesResponse: {
+      invites: components['schemas']['InviteResponse'][];
+    };
+    MessageResponse: {
+      message: string;
     };
     /** @description RFC 7807 Problem Details error response. */
     ProblemDetails: {
@@ -117,6 +332,24 @@ export interface components {
       code: string;
       /** @description Field that caused the error (for validation errors) */
       field?: string | null;
+    };
+    RevokeRequest: {
+      /** Format: uuid */
+      subject_id: string;
+    };
+    ScoreSnapshotResponse: {
+      computed_at: string;
+      /** Format: uuid */
+      context_user_id?: string | null;
+      /** Format: float */
+      eigenvector_centrality?: number | null;
+      /** Format: int32 */
+      path_diversity?: number | null;
+      /** Format: float */
+      trust_distance?: number | null;
+    };
+    ScoresResponse: {
+      scores: components['schemas']['ScoreSnapshotResponse'][];
     };
   };
   responses: never;
@@ -153,6 +386,331 @@ export interface operations {
         content: {
           'application/json': components['schemas']['ProblemDetails'];
         };
+      };
+    };
+  };
+  budget_handler: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Endorsement and denouncement budget for the authenticated user */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['BudgetResponse'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  denounce_handler: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['DenounceRequest'];
+      };
+    };
+    responses: {
+      /** @description Denouncement queued */
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['MessageResponse'];
+        };
+      };
+      /** @description Invalid request */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Quota exceeded */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  list_my_denouncements_handler: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description List of denouncements */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['DenouncementResponse'][];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  endorse_handler: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['EndorseRequest'];
+      };
+    };
+    responses: {
+      /** @description Endorsement queued */
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['MessageResponse'];
+        };
+      };
+      /** @description Invalid request */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Quota exceeded */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  create_invite_handler: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CreateInviteRequest'];
+      };
+    };
+    responses: {
+      /** @description Invite created */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CreateInviteResponse'];
+        };
+      };
+      /** @description Invalid request */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  list_invites_handler: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description List of invites created by the authenticated user */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['InvitesResponse'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  accept_invite_handler: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Invite ID */
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Invite accepted and endorsement queued */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['AcceptInviteResponse'];
+        };
+      };
+      /** @description Invalid request */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Invite not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  revoke_handler: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['RevokeRequest'];
+      };
+    };
+    responses: {
+      /** @description Revocation queued */
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['MessageResponse'];
+        };
+      };
+      /** @description Invalid request */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Quota exceeded */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  scores_me_handler: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Trust scores for the authenticated user */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ScoresResponse'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
       };
     };
   };

@@ -7,6 +7,7 @@
  * violating the no-cross-feature-import ESLint rule.
  */
 
+import type { components } from '@/api/generated/rest';
 import { signedFetchJson } from '@/api/signing';
 import type { CryptoModule } from '@/providers/CryptoProvider';
 
@@ -25,13 +26,7 @@ export {
 
 // === Trust-feature-only types ===
 
-export interface Denouncement {
-  id: string;
-  target_id: string;
-  target_username: string;
-  reason: string;
-  created_at: string;
-}
+export type Denouncement = components['schemas']['DenouncementResponse'];
 
 export interface DenouncementPayload {
   target_id: string;
@@ -43,12 +38,7 @@ export interface AccountLookup {
   username: string;
 }
 
-export interface ScoreSnapshot {
-  subject_id: string;
-  distance: number;
-  path_diversity: number;
-  computed_at: string;
-}
+export type ScoreSnapshot = components['schemas']['ScoreSnapshotResponse'];
 
 export interface EndorsePayload {
   subject_id: string;
@@ -63,7 +53,14 @@ export async function getMyScores(
   privateKey: CryptoKey,
   wasmCrypto: CryptoModule
 ): Promise<ScoreSnapshot[]> {
-  return signedFetchJson('/trust/scores/me', 'GET', deviceKid, privateKey, wasmCrypto);
+  const response = await signedFetchJson<components['schemas']['ScoresResponse']>(
+    '/trust/scores/me',
+    'GET',
+    deviceKid,
+    privateKey,
+    wasmCrypto
+  );
+  return response.scores;
 }
 
 export async function endorse(
