@@ -116,7 +116,7 @@ async fn test_list_denouncements_against() {
 }
 
 #[shared_runtime_test]
-async fn test_count_active_denouncements_by() {
+async fn test_count_total_denouncements_by() {
     let db = isolated_db().await;
     let pool = db.pool().clone();
 
@@ -147,9 +147,9 @@ async fn test_count_active_denouncements_by() {
         .expect("denouncement 2");
 
     let count = repo
-        .count_active_denouncements_by(accuser.id)
+        .count_total_denouncements_by(accuser.id)
         .await
-        .expect("count_active_denouncements_by");
+        .expect("count_total_denouncements_by");
 
     assert_eq!(count, 2);
 }
@@ -190,7 +190,7 @@ async fn test_resolved_denouncement_still_counts() {
 
     // The count must still be 1 — resolving does not refund the slot
     let count = repo
-        .count_active_denouncements_by(accuser.id)
+        .count_total_denouncements_by(accuser.id)
         .await
         .expect("count");
     assert_eq!(count, 1);

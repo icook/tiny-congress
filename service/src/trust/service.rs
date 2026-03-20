@@ -207,7 +207,7 @@ impl TrustService for DefaultTrustService {
 
         let total_denouncements = self
             .trust_repo
-            .count_active_denouncements_by(accuser_id)
+            .count_total_denouncements_by(accuser_id)
             .await?;
         if total_denouncements >= i64::from(self.max_denouncement_slots) {
             return Err(TrustServiceError::DenouncementSlotsExhausted {

@@ -133,7 +133,8 @@ pub(super) async fn list_denouncements_by_with_username(
 }
 
 /// Count total denouncements filed by `accuser_id` (permanent budget — no refunds).
-pub(super) async fn count_active_denouncements_by(
+/// This includes resolved denouncements; resolving a denouncement does not free a slot.
+pub(super) async fn count_total_denouncements_by(
     pool: &PgPool,
     accuser_id: Uuid,
 ) -> Result<i64, TrustRepoError> {
