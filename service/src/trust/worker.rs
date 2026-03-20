@@ -12,6 +12,7 @@ use crate::reputation::repo::EndorsementRepoError;
 use crate::reputation::repo::ReputationRepo;
 use crate::trust::engine::TrustEngine;
 use crate::trust::engine::TrustEngineError;
+use crate::trust::repo::action_queue::QUEUE_NAME;
 use crate::trust::repo::{ActionRecord, TrustRepo, TrustRepoError};
 use crate::trust::service::{
     is_valid_endorsement_weight, is_valid_reason, ActionType, DENOUNCEMENT_REASON_MAX_LEN,
@@ -45,7 +46,6 @@ pub enum TrustActionError {
     Queue(sqlx::Error),
 }
 
-const QUEUE_NAME: &str = "trust__actions";
 const MAX_RETRIES: i32 = 3;
 const VISIBILITY_TIMEOUT_SECS: i32 = 120;
 const POLL_INTERVAL: Duration = Duration::from_secs(5);
