@@ -53,7 +53,14 @@ pub(super) async fn create_denouncement_and_revoke_endorsement(
         &mut *tx, accuser_id, target_id, "trust",
     )
     .await
-    .map_err(|e| TrustRepoError::Database(sqlx::Error::Protocol(e.to_string())))?;
+    .map_err(|e| match e {
+        crate::reputation::repo::endorsements::EndorsementRepoError::Database(db_err) => {
+            TrustRepoError::Database(db_err)
+        }
+        crate::reputation::repo::endorsements::EndorsementRepoError::NotFound => {
+            TrustRepoError::NotFound
+        }
+    })?;
 
     tx.commit().await?;
 
