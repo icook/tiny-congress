@@ -403,20 +403,23 @@ async fn main() -> Result<(), anyhow::Error> {
 
     spawn_nonce_cleanup(pool_for_cleanup);
 
-    // Add security headers middleware if enabled
-    if let Some(headers) = security_headers {
-        app = app
-            .layer(middleware::from_fn(security_headers_middleware))
-            .layer(Extension(headers));
-    }
-
-    // Add Swagger UI if enabled (disabled by default for security)
+    // Add Swagger UI if enabled (disabled by default for security).
+    // Must be merged before the security headers layer so swagger routes are
+    // covered by the same CSP / X-Frame-Options headers as all other routes.
     if config.swagger.enabled {
         tracing::info!("Swagger UI enabled at /swagger-ui");
         app = app
             .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", ApiDoc::openapi()));
     } else {
         tracing::info!("Swagger UI disabled (enable via TC_SWAGGER__ENABLED=true)");
+    }
+
+    // Add security headers middleware if enabled (outermost layer — applies to
+    // all routes including swagger).
+    if let Some(headers) = security_headers {
+        app = app
+            .layer(middleware::from_fn(security_headers_middleware))
+            .layer(Extension(headers));
     }
 
     // Start the server
