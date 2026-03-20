@@ -640,6 +640,66 @@ async fn test_denounce_rejects_oversized_reason() {
 }
 
 #[shared_runtime_test]
+async fn test_revoke_self_action_rejected() {
+    let db = isolated_db().await;
+    let pool = db.pool().clone();
+
+    let user = AccountFactory::new()
+        .with_seed(10)
+        .create(&pool)
+        .await
+        .expect("create user");
+
+    let rep_repo = Arc::new(PgReputationRepo::new(pool.clone())) as Arc<dyn ReputationRepo>;
+    let repo = Arc::new(PgTrustRepo::new(pool));
+    let service = DefaultTrustService::new(repo, rep_repo);
+
+    let result = service.revoke_endorsement(user.id, user.id).await;
+
+    assert!(
+        matches!(result, Err(TrustServiceError::SelfAction)),
+        "expected SelfAction, got: {result:?}"
+    );
+}
+
+#[shared_runtime_test]
+async fn test_revoke_quota_exceeded() {
+    let db = isolated_db().await;
+    let pool = db.pool().clone();
+
+    let endorser = AccountFactory::new()
+        .with_seed(11)
+        .create(&pool)
+        .await
+        .expect("create endorser");
+
+    let subject = AccountFactory::new()
+        .with_seed(12)
+        .create(&pool)
+        .await
+        .expect("create subject");
+
+    let rep_repo = Arc::new(PgReputationRepo::new(pool.clone())) as Arc<dyn ReputationRepo>;
+    let repo = Arc::new(PgTrustRepo::new(pool));
+    let payload = serde_json::json!({});
+
+    // Enqueue 5 actions directly to hit the daily quota
+    for _ in 0..5 {
+        repo.enqueue_action(endorser.id, "revoke", &payload)
+            .await
+            .expect("enqueue action");
+    }
+
+    let service = DefaultTrustService::new(repo, rep_repo);
+    let result = service.revoke_endorsement(endorser.id, subject.id).await;
+
+    assert!(
+        matches!(result, Err(TrustServiceError::QuotaExceeded)),
+        "expected QuotaExceeded, got: {result:?}"
+    );
+}
+
+#[shared_runtime_test]
 async fn test_endorse_rejected_after_denouncement() {
     let db = isolated_db().await;
     let pool = db.pool().clone();
