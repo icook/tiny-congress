@@ -742,3 +742,66 @@ async fn test_process_batch_denounce_missing_reason_field_fails() {
         "error_message should mention 'reason', got: {error_message:?}"
     );
 }
+
+// ---------------------------------------------------------------------------
+// Test: revoke action with no existing endorsement — completes as no-op
+// ---------------------------------------------------------------------------
+
+/// Revoking an endorsement that does not exist must complete successfully.
+///
+/// `revoke_endorsement` issues a bare UPDATE that affects 0 rows when the
+/// endorsement is absent; it does not return `NotFound`.  This test documents
+/// that contract so any future change (e.g. returning `NotFound` on zero rows)
+/// is caught before it silently starts failing user-initiated revocations.
+#[shared_runtime_test]
+async fn test_process_batch_revoke_no_endorsement_is_no_op() {
+    let db = isolated_db().await;
+    let pool = db.pool().clone();
+
+    let actor = AccountFactory::new()
+        .with_seed(1)
+        .create(&pool)
+        .await
+        .expect("create actor");
+
+    let subject = AccountFactory::new()
+        .with_seed(2)
+        .create(&pool)
+        .await
+        .expect("create subject");
+
+    // Enqueue a revoke action without seeding any prior endorsement.
+    let trust_repo = PgTrustRepo::new(pool.clone());
+    trust_repo
+        .enqueue_action(actor.id, "revoke", &json!({ "subject_id": subject.id }))
+        .await
+        .expect("enqueue revoke action");
+
+    let worker = make_worker(pool.clone());
+    let processed = worker.process_one().await.expect("process_one");
+    assert!(processed, "expected a message to be processed");
+
+    // Action must be marked completed — a no-op revoke is not a failure.
+    let (status,): (String,) =
+        sqlx::query_as("SELECT status FROM trust__action_log WHERE actor_id = $1")
+            .bind(actor.id)
+            .fetch_one(&pool)
+            .await
+            .expect("fetch action");
+    assert_eq!(
+        status, "completed",
+        "revoke action should complete even when no endorsement exists to revoke"
+    );
+
+    // No endorsement row should have been created as a side effect.
+    let count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM reputation__endorsements \
+         WHERE endorser_id = $1 AND subject_id = $2",
+    )
+    .bind(actor.id)
+    .bind(subject.id)
+    .fetch_one(&pool)
+    .await
+    .expect("count endorsements");
+    assert_eq!(count, 0, "revoke should not create any endorsement rows");
+}
