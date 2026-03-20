@@ -297,7 +297,7 @@ impl TrustWorker {
                     return Err(TrustActionError::InvalidPayload(format!(
                         "denounce payload 'reason' length out of range [1, {}]: {}",
                         DENOUNCEMENT_REASON_MAX_LEN,
-                        reason.len()
+                        reason.chars().count()
                     )));
                 }
 
