@@ -226,6 +226,7 @@ profiles:
               syntheticBackupKey: "ci-test-synthetic-backup-key-0123456789abcdef"
               frontend.service.port: 8080
               frontend.service.targetPort: 8080
+              rateLimitEnabled: false
             # CORS origins use overrides (not setValues) because Helm --set
             # misparses commas and colons in URLs.
             overrides:

@@ -19,6 +19,8 @@ use uuid::Uuid;
 
 use super::service::{validate_username, IdentityService, RootPubkey, SignupError, SignupRequest};
 // Re-export shared error helpers so submodules and external callers can use them.
+use crate::config::RateLimitConfig;
+use crate::http::rate_limit::make_governor_layer;
 pub use crate::http::{bad_request, internal_error, not_found, unauthorized, ErrorResponse};
 pub(crate) use crate::http::{conflict, forbidden};
 use crate::identity::http::auth::AuthenticatedDevice;
@@ -46,12 +48,55 @@ pub struct AccountLookupQuery {
     pub username: String,
 }
 
-/// Create identity router
-pub fn router() -> Router {
-    Router::new()
-        .route("/auth/signup", post(signup))
-        .route("/auth/backup/{username}", get(backup::get_backup))
-        .route("/auth/login", post(login::login))
+/// Create identity router.
+///
+/// Unauthenticated endpoints (`/auth/signup`, `/auth/login`,
+/// `/auth/backup/{username}`) get individual rate-limit layers based on
+/// `rate_limit_config`. Authenticated device-management and lookup routes are
+/// not rate-limited here.
+pub fn router(rate_limit_config: &RateLimitConfig) -> Router {
+    // ── Unauthenticated routes — each gets its own governor layer ──────────
+    //
+    // Tower layers apply inside-out, so we nest each route in its own
+    // single-route Router and apply the corresponding limit there.  Merging
+    // three small routers is equivalent to a single router with per-route
+    // layers, but avoids sharing one limiter across different routes.
+
+    let signup_router = {
+        let r = Router::new().route("/auth/signup", post(signup));
+        if let Some(layer) =
+            make_governor_layer(rate_limit_config.signup_per_minute, rate_limit_config)
+        {
+            r.layer(layer)
+        } else {
+            r
+        }
+    };
+
+    let login_router = {
+        let r = Router::new().route("/auth/login", post(login::login));
+        if let Some(layer) =
+            make_governor_layer(rate_limit_config.login_per_minute, rate_limit_config)
+        {
+            r.layer(layer)
+        } else {
+            r
+        }
+    };
+
+    let backup_router = {
+        let r = Router::new().route("/auth/backup/{username}", get(backup::get_backup));
+        if let Some(layer) =
+            make_governor_layer(rate_limit_config.backup_per_minute, rate_limit_config)
+        {
+            r.layer(layer)
+        } else {
+            r
+        }
+    };
+
+    // ── Authenticated routes — no rate limiting ────────────────────────────
+    let authenticated_router = Router::new()
         .route(
             "/auth/devices",
             get(devices::list_devices).post(devices::add_device),
@@ -60,7 +105,12 @@ pub fn router() -> Router {
             "/auth/devices/{kid}",
             delete(devices::revoke_device).patch(devices::rename_device),
         )
-        .route("/accounts/lookup", get(account_lookup))
+        .route("/accounts/lookup", get(account_lookup));
+
+    signup_router
+        .merge(login_router)
+        .merge(backup_router)
+        .merge(authenticated_router)
 }
 
 /// Look up an account by username.

@@ -277,8 +277,8 @@ async fn build_app(
             }
         })
         .nest("/api/v1", rest_v1)
-        .merge(identity::http::router())
-        .merge(reputation::http::router())
+        .merge(identity::http::router(&config.rate_limit))
+        .merge(reputation::http::router(&config.rate_limit))
         .merge(rooms::http::router())
         .merge(trust::http::trust_router())
         .nest("/api/v1", engine_registry::engines_router())
@@ -428,9 +428,12 @@ async fn main() -> Result<(), anyhow::Error> {
 
     let listener = tokio::net::TcpListener::bind(addr).await?;
     tracing::info!("Graceful shutdown enabled — listening for SIGTERM/SIGINT");
-    axum::serve(listener, app)
-        .with_graceful_shutdown(shutdown_signal())
-        .await?;
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .with_graceful_shutdown(shutdown_signal())
+    .await?;
 
     tracing::info!("Server shut down cleanly");
     Ok(())

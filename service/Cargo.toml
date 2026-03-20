@@ -77,6 +77,8 @@ ed25519-dalek = { version = "2", features = ["rand_core"] }
 hmac = "0.12"
 sha2 = "0.10"
 rand = "0.8"
+governor = "0.10"
+tower_governor = "0.8"
 
 [dev-dependencies]
 figment = { version = "0.10", features = ["test"] }

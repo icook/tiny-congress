@@ -178,6 +178,10 @@ database:
   # Only safe for ephemeral databases (e.g. demo environment).
   autoResetOnMigrationFailure: false
 
+# Rate limiting configuration
+# Set to false in test environments to prevent rate limits from interfering with E2E tests.
+rateLimitEnabled: true
+
 # Logging configuration
 logging:
   # Log level: debug, info, warn, error
