@@ -689,6 +689,7 @@ jobs:
     name: Scan ${{ matrix.image }}
     runs-on: ${{ needs.detect-changes.outputs.runner-small }}
     needs: [build-images, detect-changes]
+    continue-on-error: true  # non-blocking until public launch (base image CVEs aren't PR-actionable)
     strategy:
       fail-fast: false
       matrix:
