@@ -52,6 +52,7 @@ export function useEndorse(deviceKid: string, privateKey: CryptoKey, wasmCrypto:
   return useMutation({
     mutationFn: (payload: EndorsePayload) => endorse(deviceKid, privateKey, wasmCrypto, payload),
     onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['trust-endorsements'] });
       void queryClient.invalidateQueries({ queryKey: ['trust-budget'] });
       void queryClient.invalidateQueries({ queryKey: ['trust-scores'] });
     },
