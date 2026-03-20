@@ -14,12 +14,15 @@ pub const ENDORSEMENT_SLOT_LIMIT: u32 = 3;
 pub const DENOUNCEMENT_SLOT_LIMIT: u32 = 2;
 /// Max trust actions per user per day (resets at midnight UTC).
 pub const DAILY_ACTION_QUOTA: i64 = 5;
-/// Maximum byte length of a denouncement reason (matches migration CHECK constraint).
+/// Maximum character count of a denouncement reason (matches the user-facing "500 characters" limit).
 pub const DENOUNCEMENT_REASON_MAX_LEN: usize = 500;
 
 /// Returns `true` if `reason` is a valid denouncement reason: non-empty and within the max length.
-pub(crate) const fn is_valid_reason(reason: &str) -> bool {
-    !reason.is_empty() && reason.len() <= DENOUNCEMENT_REASON_MAX_LEN
+///
+/// Uses Unicode scalar value (character) count, not byte count, so that multi-byte scripts
+/// (e.g. Chinese, Arabic) are measured the same way as the user-facing error message.
+pub(crate) fn is_valid_reason(reason: &str) -> bool {
+    !reason.is_empty() && reason.chars().count() <= DENOUNCEMENT_REASON_MAX_LEN
 }
 
 /// The canonical set of trust action types, shared between the service (write) and
@@ -153,6 +156,26 @@ mod tests {
     fn is_valid_reason_rejects_over_max_len() {
         let reason = "a".repeat(DENOUNCEMENT_REASON_MAX_LEN + 1);
         assert!(!is_valid_reason(&reason));
+    }
+
+    #[test]
+    fn is_valid_reason_accepts_500_multibyte_chars() {
+        // Each '中' is 3 bytes; 500 of them is 1500 bytes but only 500 characters.
+        // The old `.len()` check would have rejected this; `.chars().count()` accepts it.
+        let reason = "中".repeat(DENOUNCEMENT_REASON_MAX_LEN);
+        assert!(
+            is_valid_reason(&reason),
+            "500 multi-byte characters should be accepted"
+        );
+    }
+
+    #[test]
+    fn is_valid_reason_rejects_501_multibyte_chars() {
+        let reason = "中".repeat(DENOUNCEMENT_REASON_MAX_LEN + 1);
+        assert!(
+            !is_valid_reason(&reason),
+            "501 multi-byte characters should be rejected"
+        );
     }
 }
 
