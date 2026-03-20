@@ -185,15 +185,22 @@ pub async fn login(
         )
         .await
     {
-        Ok(_created) => (
-            StatusCode::CREATED,
-            Json(LoginResponse {
-                account_id: account.id,
-                root_kid: account.root_kid,
-                device_kid: validated.device_kid,
-            }),
-        )
-            .into_response(),
+        Ok(_created) => {
+            tracing::info!(
+                account_id = %account.id,
+                device_kid = %validated.device_kid,
+                "User logged in"
+            );
+            (
+                StatusCode::CREATED,
+                Json(LoginResponse {
+                    account_id: account.id,
+                    root_kid: account.root_kid,
+                    device_kid: validated.device_kid,
+                }),
+            )
+                .into_response()
+        }
         Err(DeviceKeyRepoError::Database(ref db_err)) => {
             tracing::error!("Login device creation failed: {db_err}");
             (

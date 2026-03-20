@@ -239,15 +239,22 @@ async fn signup(
     Json(req): Json<SignupRequest>,
 ) -> impl IntoResponse {
     match service.signup(&req).await {
-        Ok(result) => (
-            StatusCode::CREATED,
-            Json(SignupResponse {
-                account_id: result.account_id,
-                root_kid: result.root_kid,
-                device_kid: result.device_kid,
-            }),
-        )
-            .into_response(),
+        Ok(result) => {
+            tracing::info!(
+                username = %req.username,
+                account_id = %result.account_id,
+                "User signed up"
+            );
+            (
+                StatusCode::CREATED,
+                Json(SignupResponse {
+                    account_id: result.account_id,
+                    root_kid: result.root_kid,
+                    device_kid: result.device_kid,
+                }),
+            )
+                .into_response()
+        }
         Err(e) => signup_error_response(e),
     }
 }

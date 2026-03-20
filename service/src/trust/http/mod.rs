@@ -193,13 +193,20 @@ async fn endorse_handler(
         )
         .await
     {
-        Ok(()) => (
-            StatusCode::ACCEPTED,
-            Json(MessageResponse {
-                message: "endorsement queued".to_string(),
-            }),
-        )
-            .into_response(),
+        Ok(()) => {
+            tracing::info!(
+                actor_id = %auth.account_id,
+                subject_id = %body.subject_id,
+                "Endorsement queued"
+            );
+            (
+                StatusCode::ACCEPTED,
+                Json(MessageResponse {
+                    message: "endorsement queued".to_string(),
+                }),
+            )
+                .into_response()
+        }
         Err(ref e) => trust_service_error_response(e),
     }
 }
@@ -269,13 +276,20 @@ async fn denounce_handler(
         .denounce(auth.account_id, body.target_id, &body.reason)
         .await
     {
-        Ok(()) => (
-            StatusCode::ACCEPTED,
-            Json(MessageResponse {
-                message: "denouncement queued".to_string(),
-            }),
-        )
-            .into_response(),
+        Ok(()) => {
+            tracing::info!(
+                actor_id = %auth.account_id,
+                target_id = %body.target_id,
+                "Denouncement queued"
+            );
+            (
+                StatusCode::ACCEPTED,
+                Json(MessageResponse {
+                    message: "denouncement queued".to_string(),
+                }),
+            )
+                .into_response()
+        }
         Err(ref e) => trust_service_error_response(e),
     }
 }
