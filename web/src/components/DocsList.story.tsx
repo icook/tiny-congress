@@ -13,5 +13,5 @@ const docs: DocEntry[] = [
 ];
 
 export const Default = () => <DocsList docs={docs} />;
-export const SingleEntry = () => <DocsList docs={[docs[0]]} />;
+export const SingleEntry = () => <DocsList docs={docs.slice(0, 1)} />;
 export const Empty = () => <DocsList docs={[]} />;

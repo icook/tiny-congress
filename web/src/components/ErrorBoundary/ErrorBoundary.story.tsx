@@ -3,7 +3,7 @@ import { ErrorBoundary } from './ErrorBoundary';
 
 export default { title: 'Components/ErrorBoundary' };
 
-function ThrowingChild() {
+function ThrowingChild(): React.ReactNode {
   throw new Error('Story: intentional throw to demo ErrorBoundary');
 }
 
