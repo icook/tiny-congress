@@ -16,6 +16,7 @@ use axum::{
 use hmac::{Hmac, Mac};
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
+use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::config::IdMeConfig;
@@ -102,13 +103,13 @@ struct UserInfoResponse {
     sub: String,
 }
 
-#[derive(Debug, Serialize)]
-struct AuthorizeResponse {
+#[derive(Debug, Serialize, ToSchema)]
+pub struct AuthorizeResponse {
     url: String,
 }
 
 /// OAuth callback query parameters from ID.me.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct CallbackQuery {
     pub code: Option<String>,
     pub state: Option<String>,
@@ -119,6 +120,17 @@ pub struct CallbackQuery {
 // ─── Handlers ──────────────────────────────────────────────────────────────
 
 /// Generate the ID.me authorization URL and return it.
+#[utoipa::path(
+    get,
+    path = "/auth/idme/authorize",
+    tag = "reputation",
+    responses(
+        (status = 200, description = "Authorization URL generated", body = AuthorizeResponse),
+        (status = 401, description = "Unauthorized"),
+        (status = 500, description = "Internal server error")
+    ),
+    security(("device_auth" = []))
+)]
 pub async fn authorize(
     Extension(config): Extension<Arc<IdMeConfig>>,
     auth: AuthenticatedDevice,
@@ -153,7 +165,25 @@ pub async fn authorize(
 }
 
 /// OAuth callback from ID.me (browser redirect, unauthenticated).
+///
 /// The `account_id` is embedded in the HMAC-signed state parameter.
+/// On success, redirects to the frontend with `verification=success`.
+/// On failure, redirects with `verification=error&message=...`.
+#[utoipa::path(
+    get,
+    path = "/auth/idme/callback",
+    tag = "reputation",
+    params(
+        ("code" = Option<String>, Query, description = "Authorization code from ID.me"),
+        ("state" = Option<String>, Query, description = "HMAC-signed state parameter"),
+        ("error" = Option<String>, Query, description = "Error code from ID.me"),
+        ("error_description" = Option<String>, Query, description = "Human-readable error description")
+    ),
+    responses(
+        (status = 302, description = "Redirect to frontend with verification result"),
+        (status = 500, description = "Internal server error")
+    )
+)]
 pub async fn callback(
     Extension(config): Extension<Arc<IdMeConfig>>,
     Extension(endorsement_service): Extension<Arc<dyn EndorsementService>>,
