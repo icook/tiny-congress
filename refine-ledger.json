@@ -205,10 +205,10 @@
     },
     "service/src/trust/": {
       "status": "active",
-      "total_prs": 28,
+      "total_prs": 29,
       "total_skips": 0,
       "consecutive_idle": 0,
-      "last_run": "2026-03-20T01:18:04Z",
+      "last_run": "2026-03-20T01:33:26Z",
       "graduated_at": "",
       "history": [
         {
@@ -378,6 +378,12 @@
           "type": "test_coverage",
           "impact": "medium",
           "summary": "Added `test_process_batch_denounce_reason_too_long_fails` covering the upper bound (>500 chars) of the denounce reason length validation in the worker — the lower bound (empty) was already tested but the upper bound was not."
+        },
+        {
+          "pr": 0,
+          "type": "unknown",
+          "impact": "medium",
+          "summary": "refine: use u32 for DenouncementSlotsExhausted max to match EndorsementSlotsExhausted"
         }
       ],
       "skipped": []
