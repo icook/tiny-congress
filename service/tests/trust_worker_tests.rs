@@ -420,6 +420,23 @@ async fn test_process_batch_denounce_reason_too_long_fails() {
 }
 
 // ---------------------------------------------------------------------------
+// Test 8: empty queue — process_one returns false without blocking
+// ---------------------------------------------------------------------------
+#[shared_runtime_test]
+async fn test_process_one_returns_false_on_empty_queue() {
+    let db = isolated_db().await;
+    let pool = db.pool().clone();
+
+    // Do not enqueue anything — the pgmq queue should be empty.
+    let worker = make_worker(pool.clone());
+    let processed = worker.process_one().await.expect("process_one");
+    assert!(
+        !processed,
+        "expected process_one to return false when the queue is empty"
+    );
+}
+
+// ---------------------------------------------------------------------------
 // Test 9: poison message — action is marked failed and pgmq message archived
 // ---------------------------------------------------------------------------
 #[shared_runtime_test]
