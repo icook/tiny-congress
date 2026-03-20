@@ -2,11 +2,13 @@
 
 use std::collections::HashMap;
 use std::fmt::Write as _;
-use std::ops::AddAssign;
 
 use serde::{Deserialize, Serialize};
 
 use super::config::SimConfig;
+
+// Re-export shared LLM types from tc-llm so callers can use `sim::llm::Usage` etc.
+pub use tc_llm::{extract_json, get_generation_cost, ChatMessage, PromptTokenDetails, Usage};
 
 // ---------------------------------------------------------------------------
 // Public response types – deserialized from LLM JSON output
@@ -45,24 +47,9 @@ pub struct SimDimension {
     pub max_label: Option<String>,
 }
 
-/// Token usage from a single `OpenRouter` API call.
-#[derive(Debug, Default, Clone, Copy, Deserialize, Serialize)]
-pub struct Usage {
-    pub prompt_tokens: u32,
-    pub completion_tokens: u32,
-    pub total_tokens: u32,
-}
-
-impl AddAssign for Usage {
-    fn add_assign(&mut self, rhs: Self) {
-        self.prompt_tokens += rhs.prompt_tokens;
-        self.completion_tokens += rhs.completion_tokens;
-        self.total_tokens += rhs.total_tokens;
-    }
-}
-
 // ---------------------------------------------------------------------------
-// OpenRouter API types (private)
+// OpenRouter API types — kept for generate_company_evidence_with_overrides
+// which has plugin/model-specific logic not supported by tc_llm::chat_completion
 // ---------------------------------------------------------------------------
 
 #[derive(Debug, Serialize)]
@@ -82,13 +69,6 @@ struct Plugin {
     id: String,
 }
 
-/// A single chat message in the `OpenRouter` request/response.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ChatMessage {
-    pub role: String,
-    pub content: String,
-}
-
 #[derive(Debug, Serialize)]
 struct ResponseFormat {
     r#type: String,
@@ -101,13 +81,6 @@ struct ChatResponse {
     usage: Option<Usage>,
 }
 
-/// Cost and metadata returned by the `OpenRouter` generation stats endpoint.
-#[derive(Debug, Deserialize)]
-struct GenerationStats {
-    /// Total cost in USD for this generation (tokens + search fees).
-    total_cost: Option<f64>,
-}
-
 #[derive(Debug, Deserialize)]
 struct Choice {
     message: ChoiceMessage,
@@ -116,41 +89,6 @@ struct Choice {
 #[derive(Debug, Deserialize)]
 struct ChoiceMessage {
     content: String,
-}
-
-// ---------------------------------------------------------------------------
-// Exa API types
-// ---------------------------------------------------------------------------
-
-#[derive(Debug, Serialize)]
-struct ExaSearchRequest {
-    query: String,
-    num_results: u32,
-    r#type: String,
-    contents: ExaContentsOptions,
-}
-
-#[derive(Debug, Serialize)]
-struct ExaContentsOptions {
-    text: ExaTextOptions,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct ExaTextOptions {
-    max_characters: u32,
-}
-
-#[derive(Debug, Deserialize)]
-struct ExaSearchResponse {
-    results: Vec<ExaResult>,
-}
-
-#[derive(Debug, Deserialize)]
-struct ExaResult {
-    url: String,
-    title: Option<String>,
-    text: Option<String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -290,50 +228,19 @@ pub async fn generate_content(
 
     let messages = build_messages(config, rooms_needed);
 
-    let request = ChatRequest {
-        model: config.openrouter_model.clone(),
+    let completion = tc_llm::chat_completion(
+        client,
+        &config.openrouter_api_key,
+        &config.llm_base_url,
+        &config.openrouter_model,
         messages,
-        response_format: Some(ResponseFormat {
-            r#type: "json_object".to_string(),
-        }),
-        temperature: Some(0.9),
-        plugins: Vec::new(),
-    };
+        true,
+        Some(0.9),
+    )
+    .await?;
 
-    let response = client
-        .post(format!("{}/chat/completions", config.llm_base_url))
-        .header(
-            "Authorization",
-            format!("Bearer {}", config.openrouter_api_key),
-        )
-        .json(&request)
-        .send()
-        .await?;
-
-    let status = response.status();
-    if !status.is_success() {
-        let body = response.text().await.unwrap_or_default();
-        return Err(anyhow::anyhow!("OpenRouter API returned {status}: {body}"));
-    }
-
-    let chat_response: ChatResponse = response.json().await?;
-
-    let usage = chat_response.usage.unwrap_or_default();
-    tracing::info!(
-        model = %config.openrouter_model,
-        prompt_tokens = usage.prompt_tokens,
-        completion_tokens = usage.completion_tokens,
-        total_tokens = usage.total_tokens,
-        "llm_call"
-    );
-
-    let first_choice = chat_response
-        .choices
-        .into_iter()
-        .next()
-        .ok_or_else(|| anyhow::anyhow!("OpenRouter returned empty choices array"))?;
-
-    let content: SimContent = serde_json::from_str(&first_choice.message.content)?;
+    let usage = completion.usage;
+    let content: SimContent = serde_json::from_str(&completion.content)?;
 
     Ok((content, usage))
 }
@@ -558,35 +465,18 @@ pub async fn generate_company_curation(
 
     let messages = build_brand_curation_messages(count);
 
-    let request = ChatRequest {
-        model: config.evidence_model.clone(),
+    let completion = tc_llm::chat_completion(
+        client,
+        &config.openrouter_api_key,
+        &config.llm_base_url,
+        &config.evidence_model,
         messages,
-        response_format: Some(ResponseFormat {
-            r#type: "json_object".to_string(),
-        }),
-        temperature: Some(0.7),
-        plugins: Vec::new(),
-    };
+        true,
+        Some(0.7),
+    )
+    .await?;
 
-    let response = client
-        .post(format!("{}/chat/completions", config.llm_base_url))
-        .header(
-            "Authorization",
-            format!("Bearer {}", config.openrouter_api_key),
-        )
-        .json(&request)
-        .send()
-        .await?;
-
-    let status = response.status();
-    if !status.is_success() {
-        let body = response.text().await.unwrap_or_default();
-        return Err(anyhow::anyhow!("OpenRouter API returned {status}: {body}"));
-    }
-
-    let chat_response: ChatResponse = response.json().await?;
-
-    let usage = chat_response.usage.unwrap_or_default();
+    let usage = completion.usage;
     tracing::info!(
         model = %config.evidence_model,
         prompt_tokens = usage.prompt_tokens,
@@ -595,17 +485,11 @@ pub async fn generate_company_curation(
         "llm_call brand_curation"
     );
 
-    let first_choice = chat_response
-        .choices
-        .into_iter()
-        .next()
-        .ok_or_else(|| anyhow::anyhow!("OpenRouter returned empty choices array"))?;
-
-    let json_str = extract_json(&first_choice.message.content);
+    let json_str = extract_json(&completion.content);
     let curation: CompanyCuration = serde_json::from_str(json_str).map_err(|e| {
         anyhow::anyhow!(
             "failed to parse curation JSON: {e}\nraw: {}",
-            first_choice.message.content
+            completion.content
         )
     })?;
 
@@ -654,24 +538,25 @@ pub async fn generate_company_evidence(
         let company = company_name.to_string();
         let dim_name = (*dim).to_string();
         join_set.spawn(async move {
-            let result = exa_search(&client, &api_key, &base_url, &company, &dim_name).await;
+            let query = format!("{company} {dim_name}");
+            let result = tc_llm::exa_search(&client, &api_key, &base_url, &query, 5).await;
             (dim_name, result)
         });
     }
 
     // Collect results as they complete
-    let mut dim_results: HashMap<String, Vec<ExaResult>> = HashMap::new();
+    let mut dim_results: HashMap<String, Vec<tc_llm::SearchResult>> = HashMap::new();
     while let Some(result) = join_set.join_next().await {
         if let Ok((dim_name, search_result)) = result {
             match search_result {
-                Ok(results) => {
+                Ok(response) => {
                     tracing::info!(
                         dimension = %dim_name,
-                        results = results.len(),
+                        results = response.results.len(),
                         company_name,
                         "exa_search complete"
                     );
-                    dim_results.insert(dim_name, results);
+                    dim_results.insert(dim_name, response.results);
                 }
                 Err(e) => {
                     tracing::warn!(
@@ -690,12 +575,16 @@ pub async fn generate_company_evidence(
         if let Some(results) = dim_results.get(*dim) {
             write!(search_context, "\n## {dim}\n\n").ok();
             for r in results {
-                let title = r.title.as_deref().unwrap_or("(no title)");
-                let text = r.text.as_deref().unwrap_or("");
+                let title = if r.title.is_empty() {
+                    "(no title)"
+                } else {
+                    &r.title
+                };
                 write!(
                     search_context,
                     "### [{title}]({url})\n{text}\n\n",
-                    url = r.url
+                    url = r.url,
+                    text = r.text,
                 )
                 .ok();
             }
@@ -711,37 +600,18 @@ pub async fn generate_company_evidence(
     // Step 2: Synthesize evidence from search results via LLM
     let messages = build_exa_synthesis_messages(company_name, ticker, &search_context);
 
-    let request = ChatRequest {
-        model: config.evidence_model.clone(),
+    let completion = tc_llm::chat_completion(
+        client,
+        &config.openrouter_api_key,
+        &config.llm_base_url,
+        &config.evidence_model,
         messages,
-        response_format: Some(ResponseFormat {
-            r#type: "json_object".to_string(),
-        }),
-        temperature: Some(0.3),
-        plugins: Vec::new(),
-    };
+        true,
+        Some(0.3),
+    )
+    .await?;
 
-    let response = client
-        .post(format!("{}/chat/completions", config.llm_base_url))
-        .header(
-            "Authorization",
-            format!("Bearer {}", config.openrouter_api_key),
-        )
-        .json(&request)
-        .send()
-        .await?;
-
-    let status = response.status();
-    if !status.is_success() {
-        let body = response.text().await.unwrap_or_default();
-        return Err(anyhow::anyhow!(
-            "OpenRouter synthesis returned {status}: {body}"
-        ));
-    }
-
-    let chat_response: ChatResponse = response.json().await?;
-
-    let usage = chat_response.usage.unwrap_or_default();
+    let usage = completion.usage;
     tracing::info!(
         model = %config.evidence_model,
         prompt_tokens = usage.prompt_tokens,
@@ -752,57 +622,15 @@ pub async fn generate_company_evidence(
         "llm_call exa_synthesis"
     );
 
-    let first_choice = chat_response
-        .choices
-        .into_iter()
-        .next()
-        .ok_or_else(|| anyhow::anyhow!("OpenRouter returned empty choices array"))?;
-
-    let json_str = extract_json(&first_choice.message.content);
+    let json_str = extract_json(&completion.content);
     let evidence: CompanyEvidence = serde_json::from_str(json_str).map_err(|e| {
         anyhow::anyhow!(
             "failed to parse synthesis JSON: {e}\nraw: {}",
-            first_choice.message.content
+            completion.content
         )
     })?;
 
     Ok((evidence, usage))
-}
-
-/// Search Exa for evidence about a company on a specific dimension.
-async fn exa_search(
-    client: &reqwest::Client,
-    api_key: &str,
-    exa_base_url: &str,
-    company_name: &str,
-    dimension: &str,
-) -> Result<Vec<ExaResult>, anyhow::Error> {
-    let request = ExaSearchRequest {
-        query: format!("{company_name} {dimension}"),
-        num_results: 5,
-        r#type: "auto".to_string(),
-        contents: ExaContentsOptions {
-            text: ExaTextOptions {
-                max_characters: 3000,
-            },
-        },
-    };
-
-    let response = client
-        .post(format!("{exa_base_url}/search"))
-        .header("x-api-key", api_key)
-        .json(&request)
-        .send()
-        .await?;
-
-    let status = response.status();
-    if !status.is_success() {
-        let body = response.text().await.unwrap_or_default();
-        return Err(anyhow::anyhow!("Exa API returned {status}: {body}"));
-    }
-
-    let exa_response: ExaSearchResponse = response.json().await?;
-    Ok(exa_response.results)
 }
 
 const EXA_SYNTHESIS_SYSTEM: &str = r"You are a balanced research analyst extracting structured evidence from search results. For each of the 5 ethical dimensions, extract 2-3 specific, factual pro and con claims directly supported by the search results provided. Each claim must be one sentence and grounded in the sources — do not fabricate claims. If a dimension has weak search coverage, provide fewer claims rather than speculating.";
@@ -856,37 +684,6 @@ Respond with ONLY valid JSON matching this schema:
             content: user_content,
         },
     ]
-}
-
-/// Query `OpenRouter`'s generation stats endpoint for cost data.
-///
-/// # Errors
-///
-/// Returns an error if the HTTP request fails.
-pub async fn get_generation_cost(
-    client: &reqwest::Client,
-    api_key: &str,
-    llm_base_url: &str,
-    generation_id: &str,
-) -> Result<Option<f64>, anyhow::Error> {
-    let url = format!("{llm_base_url}/generation?id={generation_id}");
-
-    let resp = client
-        .get(&url)
-        .header("Authorization", format!("Bearer {api_key}"))
-        .send()
-        .await?;
-
-    if !resp.status().is_success() {
-        tracing::warn!(
-            status = %resp.status(),
-            "failed to fetch generation stats (cost will be unavailable)"
-        );
-        return Ok(None);
-    }
-
-    let stats: GenerationStats = resp.json().await?;
-    Ok(stats.total_cost)
 }
 
 /// Generate company evidence with explicit model and search overrides.
@@ -987,33 +784,6 @@ pub async fn generate_company_evidence_with_overrides(
         .map_err(|e| anyhow::anyhow!("failed to parse evidence JSON: {e}\nraw: {raw}"))?;
 
     Ok((evidence, usage, raw, generation_id))
-}
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-/// Extract JSON from a response that may be wrapped in markdown fencing
-/// (e.g., `` ```json ... ``` ``) or contain prose around the JSON object.
-/// Returns the input unchanged if it already starts with `{`.
-fn extract_json(raw: &str) -> &str {
-    let trimmed = raw.trim();
-
-    // Already valid JSON start
-    if trimmed.starts_with('{') {
-        return trimmed;
-    }
-
-    // Strip markdown fencing: ```json ... ``` or ``` ... ```
-    if let Some(start) = trimmed.find('{') {
-        if let Some(end) = trimmed.rfind('}') {
-            if end > start {
-                return &trimmed[start..=end];
-            }
-        }
-    }
-
-    trimmed
 }
 
 // ---------------------------------------------------------------------------

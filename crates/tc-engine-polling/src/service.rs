@@ -9,8 +9,9 @@ use async_trait::async_trait;
 use serde::Deserialize;
 use uuid::Uuid;
 
+use crate::repo::bot_traces::BotTrace;
 use crate::repo::{
-    evidence, lifecycle_queue, polls, votes, DimensionDistribution, DimensionRecord,
+    bot_traces, evidence, lifecycle_queue, polls, votes, DimensionDistribution, DimensionRecord,
     DimensionStats, EvidenceRecord, PollRecord, PollRepoError, VoteRecord,
 };
 use tc_engine_api::constraints::build_constraint;
@@ -150,6 +151,9 @@ pub trait PollingService: Send + Sync {
 
     /// Sim-only: reset a poll back to draft status, clearing all timing fields.
     async fn reset_poll(&self, room_id: Uuid, poll_id: Uuid) -> Result<(), PollError>;
+
+    // Bot trace operations
+    async fn get_poll_traces(&self, poll_id: Uuid) -> Result<Vec<BotTrace>, PollError>;
 }
 
 // ─── Implementation ────────────────────────────────────────────────────────
@@ -704,6 +708,15 @@ impl PollingService for DefaultPollingService {
                     tracing::error!("Poll reset failed: {e}");
                     PollError::Internal("Internal server error".to_string())
                 }
+            })
+    }
+
+    async fn get_poll_traces(&self, poll_id: Uuid) -> Result<Vec<BotTrace>, PollError> {
+        bot_traces::get_traces_for_poll(&self.pool, poll_id)
+            .await
+            .map_err(|e| {
+                tracing::error!("Failed to fetch poll traces: {e}");
+                PollError::Internal("Internal server error".to_string())
             })
     }
 }

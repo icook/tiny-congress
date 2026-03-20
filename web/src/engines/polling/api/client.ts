@@ -141,6 +141,34 @@ export async function getPollDistribution(
   return fetchJson(`/rooms/${roomId}/polls/${pollId}/results/distribution`);
 }
 
+export interface TraceStep {
+  type: string;
+  model?: string;
+  query?: string;
+  prompt_tokens?: number;
+  completion_tokens?: number;
+  latency_ms: number;
+  cost_usd: number;
+  cache: Record<string, unknown>;
+  output_summary: string;
+}
+
+export interface BotTrace {
+  id: string;
+  task: string;
+  run_mode: string;
+  steps: TraceStep[];
+  total_cost_usd: number;
+  status: string;
+  error: string | null;
+  created_at: string;
+  completed_at: string | null;
+}
+
+export async function getPollTraces(roomId: string, pollId: string): Promise<BotTrace[]> {
+  return fetchJson(`/rooms/${roomId}/polls/${pollId}/traces`);
+}
+
 // === Authenticated endpoints ===
 
 export async function fetchMyCapabilities(
