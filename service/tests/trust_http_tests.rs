@@ -1659,6 +1659,74 @@ async fn revoke_returns_429_when_quota_exceeded() {
 
 // ─── Denounce quota ───────────────────────────────────────────────────────────
 
+// ─── Budget with out-of-slot endorsements ────────────────────────────────────
+
+/// Verify that `slots_used` only counts in-slot endorsements and `out_of_slot_count`
+/// correctly reflects endorsements stored beyond the k=3 slot limit.
+/// The empty-state case is covered by `test_budget_returns_200`; this test exercises
+/// the non-trivial `all_endorsements - endorsements_used` path.
+#[shared_runtime_test]
+async fn budget_correctly_reports_out_of_slot_count() {
+    use common::factories::{insert_endorsement, AccountFactory};
+
+    let db = isolated_db().await;
+    let pool = db.pool().clone();
+    let (app, keys, endorser_id) = signup_and_get_account("budgetoutofslot", db.pool()).await;
+
+    // Seed k=3 in-slot endorsements directly (default in_slot=true).
+    for seed in 70u8..73 {
+        let subject = AccountFactory::new()
+            .with_seed(seed)
+            .create(&pool)
+            .await
+            .expect("create in-slot subject");
+        insert_endorsement(&pool, endorser_id, subject.id, 1.0).await;
+    }
+
+    // Seed 1 out-of-slot endorsement (in_slot=false).
+    let oos_subject = AccountFactory::new()
+        .with_seed(73u8)
+        .create(&pool)
+        .await
+        .expect("create out-of-slot subject");
+    sqlx::query(
+        "INSERT INTO reputation__endorsements \
+         (endorser_id, subject_id, topic, weight, in_slot) \
+         VALUES ($1, $2, 'trust', 1.0, false)",
+    )
+    .bind(endorser_id)
+    .bind(oos_subject.id)
+    .execute(&pool)
+    .await
+    .expect("insert out-of-slot endorsement");
+
+    let request = build_authed_request(
+        Method::GET,
+        "/trust/budget",
+        "",
+        &keys.device_signing_key,
+        &keys.device_kid,
+    );
+
+    let response = app.oneshot(request).await.expect("response");
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let json = json_body(response).await;
+    assert_eq!(json["slots_total"], 3, "slots_total should equal k=3 limit");
+    assert_eq!(
+        json["slots_used"], 3,
+        "slots_used should count only in-slot endorsements"
+    );
+    assert_eq!(
+        json["slots_available"], 0,
+        "slots_available should be 0 when all slots used"
+    );
+    assert_eq!(
+        json["out_of_slot_count"], 1,
+        "out_of_slot_count should reflect endorsements beyond the slot limit"
+    );
+}
+
 #[shared_runtime_test]
 async fn denounce_returns_429_when_quota_exceeded() {
     let db = isolated_db().await;
