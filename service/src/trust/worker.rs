@@ -14,8 +14,7 @@ use crate::trust::engine::TrustEngine;
 use crate::trust::engine::TrustEngineError;
 use crate::trust::repo::{ActionRecord, TrustRepo, TrustRepoError};
 use crate::trust::service::{
-    is_valid_denouncement_reason, is_valid_endorsement_weight, ActionType,
-    DENOUNCEMENT_REASON_MAX_LEN,
+    is_valid_endorsement_weight, is_valid_reason, ActionType, DENOUNCEMENT_REASON_MAX_LEN,
 };
 
 /// Errors that can occur while processing a single trust action.
@@ -294,7 +293,7 @@ impl TrustWorker {
                         )
                     })?
                     .to_string();
-                if !is_valid_denouncement_reason(&reason) {
+                if !is_valid_reason(&reason) {
                     return Err(TrustActionError::InvalidPayload(format!(
                         "denounce payload 'reason' length out of range [1, {}]: {}",
                         DENOUNCEMENT_REASON_MAX_LEN,
