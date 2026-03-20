@@ -598,6 +598,10 @@ pf-bot:
     echo "Press Ctrl-C to stop"
     wait
 
+# Run tc-ops CLI (requires just pf-bot for API access)
+ops *ARGS:
+    cargo run --bin tc-ops -- {{ARGS}}
+
 # Enqueue a bot research task and show recent traces
 bot-run company="Apple Inc." room_id="a1111111-1111-1111-1111-111111111111":
     #!/usr/bin/env bash
