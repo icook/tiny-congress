@@ -50,7 +50,10 @@ async fn main() -> Result<(), anyhow::Error> {
     );
 
     // 3. Create HTTP client
-    let http = reqwest::Client::new();
+    let http = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+        .context("failed to build HTTP client")?;
 
     // Battery mode: compare model+search pairs for a single company
     if let Some(ref battery_path) = config.battery_config {

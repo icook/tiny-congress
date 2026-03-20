@@ -29,9 +29,15 @@ type HmacSha256 = Hmac<Sha256>;
 #[derive(Clone)]
 pub struct IdMeVerifierAccountId(pub Uuid);
 
+#[allow(clippy::expect_used)] // builder().build() with no custom TLS config is infallible
 fn http_client() -> &'static reqwest::Client {
     static CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
-    CLIENT.get_or_init(reqwest::Client::new)
+    CLIENT.get_or_init(|| {
+        reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(30))
+            .build()
+            .expect("reqwest client")
+    })
 }
 
 // ─── State parameter (anti-CSRF) ──────────────────────────────────────────
