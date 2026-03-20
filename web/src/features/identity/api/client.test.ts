@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, Mock, test, vi } from 'vitest';
+import { clearOn401Handler, setOn401Handler } from '@/api/fetchClient';
 import type { CryptoModule } from '@/providers/CryptoProvider';
 import {
   fetchJson,
@@ -286,5 +287,74 @@ describe('signed device API', () => {
       })
     );
     expect(result).toEqual(responseBody);
+  });
+});
+
+describe('global 401 handler', () => {
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn());
+  });
+
+  afterEach(() => {
+    clearOn401Handler();
+    vi.restoreAllMocks();
+  });
+
+  function make401Response() {
+    return {
+      ok: false,
+      status: 401,
+      statusText: 'Unauthorized',
+      json: vi.fn().mockResolvedValue({ error: 'Unauthorized' }),
+    };
+  }
+
+  test('invokes registered handler on 401 from a non-auth endpoint', async () => {
+    const handler = vi.fn();
+    setOn401Handler(handler);
+    (fetch as unknown as Mock).mockResolvedValue(make401Response());
+
+    await expect(fetchJson('/rooms/1')).rejects.toThrow();
+    expect(handler).toHaveBeenCalledOnce();
+  });
+
+  test('does not invoke handler when no handler is registered', async () => {
+    (fetch as unknown as Mock).mockResolvedValue(make401Response());
+    // Should throw but not crash from missing handler
+    await expect(fetchJson('/rooms/1')).rejects.toThrow();
+  });
+
+  test('does not invoke handler on 401 from /auth/login', async () => {
+    const handler = vi.fn();
+    setOn401Handler(handler);
+    (fetch as unknown as Mock).mockResolvedValue(make401Response());
+
+    await expect(fetchJson('/auth/login', { method: 'POST' })).rejects.toThrow();
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  test('does not invoke handler on 401 from /auth/signup', async () => {
+    const handler = vi.fn();
+    setOn401Handler(handler);
+    (fetch as unknown as Mock).mockResolvedValue(make401Response());
+
+    await expect(fetchJson('/auth/signup', { method: 'POST' })).rejects.toThrow();
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  test('does not invoke handler on 401 from /auth/backup/ prefix', async () => {
+    const handler = vi.fn();
+    setOn401Handler(handler);
+    (fetch as unknown as Mock).mockResolvedValue(make401Response());
+
+    await expect(fetchJson('/auth/backup/alice')).rejects.toThrow();
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  test('still throws after invoking the 401 handler', async () => {
+    setOn401Handler(vi.fn());
+    (fetch as unknown as Mock).mockResolvedValue(make401Response());
+
+    await expect(fetchJson('/rooms/1')).rejects.toThrow('Unauthorized');
   });
 });
