@@ -152,8 +152,13 @@ async fn reset_database(config: &DatabaseConfig) -> Result<(), anyhow::Error> {
 
     // Database identifiers cannot be parameterized — use quoting to prevent
     // injection. The name comes from our own config, not user input.
+    //
+    // TEMPLATE template0 avoids collation version mismatches that break
+    // CREATE DATABASE after a major Postgres upgrade (e.g. PG 17→18).
+    // template1 inherits stale collation metadata from the old data dir;
+    // template0 is always safe.
     let drop_sql = format!("DROP DATABASE IF EXISTS \"{db_name}\"");
-    let create_sql = format!("CREATE DATABASE \"{db_name}\"");
+    let create_sql = format!("CREATE DATABASE \"{db_name}\" TEMPLATE template0");
 
     warn!(database = %db_name, "Dropping database");
     sqlx::query(&drop_sql)
