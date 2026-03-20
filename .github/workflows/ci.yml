@@ -770,7 +770,7 @@ jobs:
 
       - name: Run Trivy vulnerability scanner
         if: steps.should-scan.outputs.changed != 'false'
-        uses: aquasecurity/trivy-action@0.34.0
+        uses: aquasecurity/trivy-action@0.35.0
         env:
           TRIVY_INSECURE: ${{ runner.environment == 'self-hosted' && 'true' || 'false' }}
         with:
