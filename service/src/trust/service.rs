@@ -8,8 +8,6 @@ use uuid::Uuid;
 
 use crate::reputation::repo::ReputationRepo;
 use crate::trust::repo::{TrustRepo, TrustRepoError};
-use crate::trust::worker::ActionType;
-
 /// Demo endorsement slot limit per user (k=3).
 pub const ENDORSEMENT_SLOT_LIMIT: u32 = 3;
 /// Permanent denouncement budget per user (d=2, ADR-020).
@@ -18,6 +16,25 @@ pub const DENOUNCEMENT_SLOT_LIMIT: u32 = 2;
 pub const DAILY_ACTION_QUOTA: i64 = 5;
 /// Maximum byte length of a denouncement reason (matches migration CHECK constraint).
 pub const DENOUNCEMENT_REASON_MAX_LEN: usize = 500;
+
+/// The canonical set of trust action types, shared between the service (write) and
+/// the worker (read/parse).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ActionType {
+    Endorse,
+    Revoke,
+    Denounce,
+}
+
+impl ActionType {
+    pub(crate) const fn as_str(self) -> &'static str {
+        match self {
+            Self::Endorse => "endorse",
+            Self::Revoke => "revoke",
+            Self::Denounce => "denounce",
+        }
+    }
+}
 
 /// Errors returned by [`TrustService`] operations.
 #[derive(Debug, thiserror::Error)]

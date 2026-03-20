@@ -13,7 +13,7 @@ use crate::reputation::repo::ReputationRepo;
 use crate::trust::engine::TrustEngine;
 use crate::trust::engine::TrustEngineError;
 use crate::trust::repo::{ActionRecord, TrustRepo, TrustRepoError};
-use crate::trust::service::DENOUNCEMENT_REASON_MAX_LEN;
+use crate::trust::service::{ActionType, DENOUNCEMENT_REASON_MAX_LEN};
 
 /// Errors that can occur while processing a single trust action.
 #[derive(Debug, thiserror::Error)]
@@ -41,24 +41,6 @@ pub enum TrustActionError {
     /// The pgmq queue read failed.
     #[error("queue read failed: {0}")]
     Queue(sqlx::Error),
-}
-
-/// Parsed representation of the `action_type` column values stored in the action log.
-#[derive(Debug)]
-pub(crate) enum ActionType {
-    Endorse,
-    Revoke,
-    Denounce,
-}
-
-impl ActionType {
-    pub(crate) const fn as_str(&self) -> &'static str {
-        match self {
-            Self::Endorse => "endorse",
-            Self::Revoke => "revoke",
-            Self::Denounce => "denounce",
-        }
-    }
 }
 
 impl TryFrom<&str> for ActionType {
