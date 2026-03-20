@@ -7,7 +7,7 @@ metadata:
     {{- include "app.labels" . | nindent 4 }}
     app.kubernetes.io/component: demo-verifier
 data:
-  DEMO_VERIFIER_API_URL: {{ .Values.demoVerifier.apiUrl | quote }}
+  DEMO_VERIFIER_API_URL: {{ required "demoVerifier.apiUrl is required when demoVerifier is enabled" .Values.demoVerifier.apiUrl | quote }}
   DEMO_VERIFIER_ALLOWED_CALLBACK: {{ .Values.demoVerifier.allowedCallback | quote }}
   DEMO_VERIFIER_LISTEN_ADDR: {{ .Values.demoVerifier.listenAddr | quote }}
   DEMO_VERIFIER_LOG_LEVEL: {{ .Values.demoVerifier.logLevel | quote }}
