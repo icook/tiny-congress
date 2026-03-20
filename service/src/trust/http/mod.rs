@@ -236,13 +236,20 @@ async fn revoke_handler(
         .revoke_endorsement(auth.account_id, body.subject_id)
         .await
     {
-        Ok(()) => (
-            StatusCode::ACCEPTED,
-            Json(MessageResponse {
-                message: "revocation queued".to_string(),
-            }),
-        )
-            .into_response(),
+        Ok(()) => {
+            tracing::info!(
+                actor_id = %auth.account_id,
+                subject_id = %body.subject_id,
+                "Revocation queued"
+            );
+            (
+                StatusCode::ACCEPTED,
+                Json(MessageResponse {
+                    message: "revocation queued".to_string(),
+                }),
+            )
+                .into_response()
+        }
         Err(ref e) => trust_service_error_response(e),
     }
 }
