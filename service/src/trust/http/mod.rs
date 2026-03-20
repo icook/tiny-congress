@@ -18,7 +18,9 @@ use super::service::{
     TrustService, TrustServiceError, DENOUNCEMENT_REASON_MAX_LEN, DENOUNCEMENT_SLOT_LIMIT,
     ENDORSEMENT_SLOT_LIMIT,
 };
-use super::weight::compute_endorsement_weight;
+use super::weight::{
+    compute_endorsement_weight, VALID_DELIVERY_METHODS, VALID_RELATIONSHIP_DEPTHS,
+};
 use crate::http::{bad_request, conflict, internal_error, not_found, too_many_requests};
 use crate::identity::http::auth::AuthenticatedDevice;
 use crate::reputation::repo::ReputationRepo;
@@ -275,11 +277,6 @@ async fn scores_me_handler(
         Err(ref e) => trust_repo_error_response(e),
     }
 }
-
-/// Valid delivery methods for invites (must match migration 18 CHECK constraint).
-const VALID_DELIVERY_METHODS: &[&str] = &["qr", "email", "video", "text", "messaging"];
-/// Valid relationship depths for invites (must match migration 18 CHECK constraint).
-const VALID_RELATIONSHIP_DEPTHS: &[&str] = &["years", "months", "acquaintance"];
 
 async fn budget_handler(
     Extension(reputation_repo): Extension<Arc<dyn ReputationRepo>>,
