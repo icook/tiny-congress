@@ -3,6 +3,12 @@
 //! Final weight = `base_weight(delivery_method)` × `depth_multiplier(relationship_depth)`,
 //! clamped to (0, 1.0].
 
+/// Valid delivery method strings (must match the `trust_invites.delivery_method` DB check constraint).
+pub const VALID_DELIVERY_METHODS: &[&str] = &["qr", "email", "video", "text", "messaging"];
+
+/// Valid relationship depth strings (must match the `trust_invites.relationship_depth` DB check constraint).
+pub const VALID_RELATIONSHIP_DEPTHS: &[&str] = &["years", "months", "acquaintance"];
+
 /// Base weight for each delivery method (ADR-023).
 ///
 /// # Panics
