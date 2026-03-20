@@ -37,6 +37,10 @@ pub enum TrustActionError {
     /// The action type is not recognised.
     #[error("unknown action type: {0}")]
     UnknownActionType(String),
+
+    /// The pgmq queue read failed.
+    #[error("queue read failed: {0}")]
+    Queue(sqlx::Error),
 }
 
 const QUEUE_NAME: &str = "trust__actions";
@@ -114,11 +118,11 @@ impl TrustWorker {
     /// # Errors
     ///
     /// Returns an error only if `pgmq::read` itself fails.
-    pub async fn process_one(&self) -> Result<bool, anyhow::Error> {
+    pub async fn process_one(&self) -> Result<bool, TrustActionError> {
         let msg = match pgmq::read(&self.pool, QUEUE_NAME, VISIBILITY_TIMEOUT_SECS).await {
             Ok(Some(m)) => m,
             Ok(None) => return Ok(false),
-            Err(e) => return Err(anyhow::anyhow!("pgmq::read failed: {e}")),
+            Err(e) => return Err(TrustActionError::Queue(e)),
         };
 
         let msg_id = msg.msg_id;
