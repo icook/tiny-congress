@@ -61,7 +61,7 @@ pub struct VerifierConfig {
     pub public_key: String,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 pub struct DatabaseConfig {
     /// Database host.
     #[serde(default = "default_db_host")]
@@ -96,6 +96,24 @@ pub struct DatabaseConfig {
     /// demo environment. Default: false.
     #[serde(default)]
     pub auto_reset_on_migration_failure: bool,
+}
+
+impl std::fmt::Debug for DatabaseConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("DatabaseConfig")
+            .field("host", &self.host)
+            .field("port", &self.port)
+            .field("name", &self.name)
+            .field("user", &self.user)
+            .field("password", &"[REDACTED]")
+            .field("max_connections", &self.max_connections)
+            .field("migrations_dir", &self.migrations_dir)
+            .field(
+                "auto_reset_on_migration_failure",
+                &self.auto_reset_on_migration_failure,
+            )
+            .finish()
+    }
 }
 
 impl DatabaseConfig {
@@ -323,7 +341,7 @@ pub struct GraphQLConfig {
 /// But if any `TC_IDME__*` variable is set, all required fields must be present.
 ///
 /// Set via `TC_IDME__*` environment variables or `idme.*` in config.yaml.
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 pub struct IdMeConfig {
     /// OAuth client ID from ID.me application registration.
     pub client_id: String,
@@ -344,6 +362,21 @@ pub struct IdMeConfig {
     /// Frontend URL to redirect to after callback processing.
     /// The result (success/error) is appended as query parameters.
     pub frontend_callback_url: String,
+}
+
+impl std::fmt::Debug for IdMeConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("IdMeConfig")
+            .field("client_id", &self.client_id)
+            .field("client_secret", &"[REDACTED]")
+            .field("authorize_url", &self.authorize_url)
+            .field("token_url", &self.token_url)
+            .field("userinfo_url", &self.userinfo_url)
+            .field("redirect_uri", &self.redirect_uri)
+            .field("state_secret", &"[REDACTED]")
+            .field("frontend_callback_url", &self.frontend_callback_url)
+            .finish()
+    }
 }
 
 fn default_idme_authorize_url() -> String {
@@ -846,5 +879,63 @@ mod tests {
             let result = config.validate();
             assert_eq!(result.is_ok(), should_pass, "case '{}': {:?}", desc, result);
         }
+    }
+
+    #[test]
+    fn database_config_debug_redacts_password() {
+        let config = DatabaseConfig {
+            host: "localhost".into(),
+            port: 5432,
+            name: "testdb".into(),
+            user: "admin".into(),
+            password: "super-secret".into(),
+            max_connections: 10,
+            migrations_dir: None,
+            auto_reset_on_migration_failure: false,
+        };
+        let debug = format!("{config:?}");
+        assert!(
+            !debug.contains("super-secret"),
+            "password must not appear in Debug output"
+        );
+        assert!(
+            debug.contains("[REDACTED]"),
+            "password field must show [REDACTED]"
+        );
+        assert!(
+            debug.contains("admin"),
+            "non-secret fields must still appear"
+        );
+    }
+
+    #[test]
+    fn idme_config_debug_redacts_client_secret_and_state_secret() {
+        let config = IdMeConfig {
+            client_id: "client123".into(),
+            client_secret: "secret456".into(),
+            authorize_url: "https://example.com/auth".into(),
+            token_url: "https://example.com/token".into(),
+            userinfo_url: "https://example.com/userinfo".into(),
+            redirect_uri: "https://example.com/callback".into(),
+            state_secret: "a-state-secret-that-is-at-least-32-bytes!!".into(),
+            frontend_callback_url: "https://example.com/verify".into(),
+        };
+        let debug = format!("{config:?}");
+        assert!(
+            !debug.contains("secret456"),
+            "client_secret must not appear in Debug output"
+        );
+        assert!(
+            !debug.contains("a-state-secret"),
+            "state_secret must not appear in Debug output"
+        );
+        assert!(
+            debug.matches("[REDACTED]").count() == 2,
+            "exactly two fields must be redacted"
+        );
+        assert!(
+            debug.contains("client123"),
+            "non-secret client_id must still appear"
+        );
     }
 }

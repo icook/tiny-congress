@@ -15,7 +15,7 @@ use axum::{
 };
 use hmac::{Hmac, Mac};
 use serde::{Deserialize, Serialize};
-use sha2::Sha256;
+use sha2::{Digest, Sha256};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
@@ -316,8 +316,9 @@ async fn link_identity_if_new(
     {
         Ok(existing) => {
             if existing.account_id != account_id {
+                let sub_hash = format!("{:.8x}", Sha256::digest(idme_sub.as_bytes()));
                 tracing::warn!(
-                    idme_sub = %idme_sub,
+                    idme_sub_hash = %sub_hash,
                     existing_account = %existing.account_id,
                     requesting_account = %account_id,
                     "Sybil attempt: ID.me identity already linked to different account"
@@ -357,7 +358,8 @@ async fn create_verification_endorsement(
         .await
     {
         Ok(_) => {
-            tracing::info!(account_id = %account_id, idme_sub = %idme_sub, "ID.me verification successful");
+            let sub_hash = format!("{:.8x}", Sha256::digest(idme_sub.as_bytes()));
+            tracing::info!(account_id = %account_id, idme_sub_hash = %sub_hash, "ID.me verification successful");
             Ok(())
         }
         Err(e) => {
