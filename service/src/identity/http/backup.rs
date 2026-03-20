@@ -11,7 +11,8 @@
 
 use std::sync::Arc;
 
-use axum::{extract::Extension, extract::Path, http::StatusCode, response::IntoResponse, Json};
+use crate::http::Path;
+use axum::{extract::Extension, http::StatusCode, response::IntoResponse, Json};
 use hmac::{Hmac, Mac};
 use serde::Serialize;
 use sha2::Sha256;

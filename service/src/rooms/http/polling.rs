@@ -4,16 +4,11 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use axum::{
-    extract::{Extension, Path},
-    http::StatusCode,
-    response::IntoResponse,
-    Json,
-};
+use axum::{extract::Extension, http::StatusCode, response::IntoResponse, Json};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::http::{internal_error, not_found, ErrorResponse};
+use crate::http::{internal_error, not_found, ErrorResponse, Path};
 use crate::identity::http::auth::AuthenticatedDevice;
 use crate::rooms::service::{
     CastVoteRequest, CreateEvidenceItem, PollError, PollingService, VoteError,

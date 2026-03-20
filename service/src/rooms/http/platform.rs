@@ -3,13 +3,8 @@
 
 use std::sync::Arc;
 
-use crate::http::{bad_request, internal_error, not_found};
-use axum::{
-    extract::{Extension, Path},
-    http::StatusCode,
-    response::IntoResponse,
-    Json,
-};
+use crate::http::{bad_request, internal_error, not_found, Path};
+use axum::{extract::Extension, http::StatusCode, response::IntoResponse, Json};
 use sqlx::PgPool;
 use tc_engine_api::engine::{EngineContext, EngineRegistry};
 use uuid::Uuid;

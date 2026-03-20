@@ -22,7 +22,7 @@ use super::service::{validate_username, IdentityService, RootPubkey, SignupError
 // Re-export shared error helpers so submodules and external callers can use them.
 use crate::config::RateLimitConfig;
 use crate::http::rate_limit::make_governor_layer;
-pub use crate::http::{bad_request, internal_error, not_found, unauthorized, ErrorResponse};
+pub use crate::http::{bad_request, internal_error, not_found, unauthorized, ErrorResponse, Path};
 pub(crate) use crate::http::{conflict, forbidden};
 use crate::identity::http::auth::AuthenticatedDevice;
 use crate::identity::repo::{AccountRecord, AccountRepoError, DeviceKeyRepoError, IdentityRepo};

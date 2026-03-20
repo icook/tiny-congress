@@ -4,7 +4,7 @@
 use std::sync::Arc;
 
 use axum::{
-    extract::{Extension, Path},
+    extract::Extension,
     http::StatusCode,
     response::IntoResponse,
     routing::{get, post},
@@ -23,7 +23,7 @@ use super::service::{
 use super::weight::{
     compute_endorsement_weight, VALID_DELIVERY_METHODS, VALID_RELATIONSHIP_DEPTHS,
 };
-use crate::http::{bad_request, conflict, internal_error, not_found, too_many_requests};
+use crate::http::{bad_request, conflict, internal_error, not_found, too_many_requests, Path};
 use crate::identity::http::auth::AuthenticatedDevice;
 use crate::reputation::repo::ReputationRepo;
 
