@@ -148,11 +148,23 @@ GROUP BY account_id
         &self,
         anchor_id: Uuid,
     ) -> Result<Vec<(Uuid, i32)>, sqlx::Error> {
-        // Step 1: collect all reachable user IDs (the anchor is included in the distance results).
+        // Collect all reachable user IDs (the anchor is included in the distance results).
         let distances = self.compute_distances_from(anchor_id).await?;
         let reachable: Vec<Uuid> = distances.iter().map(|s| s.account_id).collect();
+        self.diversity_from_reachable(anchor_id, &reachable).await
+    }
 
-        // Step 2: build a stable index map Uuid → usize for the reachable set.
+    /// Compute vertex connectivity given a pre-computed set of reachable node IDs.
+    ///
+    /// Used by both [`compute_diversity_from`] (which computes the reachable set itself)
+    /// and [`recompute_from_anchor`] (which passes the already-computed set to avoid a
+    /// redundant database query).
+    async fn diversity_from_reachable(
+        &self,
+        anchor_id: Uuid,
+        reachable: &[Uuid],
+    ) -> Result<Vec<(Uuid, i32)>, sqlx::Error> {
+        // Step 1: build a stable index map Uuid → usize for the reachable set.
         let index_map: HashMap<Uuid, usize> = reachable
             .iter()
             .enumerate()
@@ -160,7 +172,7 @@ GROUP BY account_id
             .collect();
         let n = reachable.len();
 
-        // Step 3: load all edges within the reachable subgraph.
+        // Step 2: load all edges within the reachable subgraph.
         let edges: Vec<EdgeRow> = sqlx::query_as(
             r"
 SELECT endorser_id, subject_id
@@ -173,11 +185,11 @@ WHERE revoked_at IS NULL
   AND subject_id = ANY($1)
             ",
         )
-        .bind(&reachable)
+        .bind(reachable)
         .fetch_all(&self.pool)
         .await?;
 
-        // Step 4: build the FlowGraph from the edge list.
+        // Step 3: build the FlowGraph from the edge list.
         let mut graph = FlowGraph::new(n);
         for edge in &edges {
             if let (Some(&from), Some(&to)) = (
@@ -188,11 +200,11 @@ WHERE revoked_at IS NULL
             }
         }
 
-        // Step 5: the anchor index in the reachable list (always index 0 since
+        // Step 4: the anchor index in the reachable list (always index 0 since
         // compute_distances_from inserts it first).
         let anchor_index = index_map.get(&anchor_id).copied().unwrap_or(0);
 
-        // Step 6: for each reachable node except the anchor, compute vertex connectivity.
+        // Step 5: for each reachable node except the anchor, compute vertex connectivity.
         let results = reachable
             .iter()
             .enumerate()
@@ -219,8 +231,9 @@ WHERE revoked_at IS NULL
         trust_repo: &dyn TrustRepo,
     ) -> Result<usize, TrustEngineError> {
         let distances = self.compute_distances_from(anchor_id).await?;
+        let reachable: Vec<Uuid> = distances.iter().map(|s| s.account_id).collect();
         let diversities: HashMap<Uuid, i32> = self
-            .compute_diversity_from(anchor_id)
+            .diversity_from_reachable(anchor_id, &reachable)
             .await?
             .into_iter()
             .collect();
