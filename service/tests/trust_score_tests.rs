@@ -169,7 +169,71 @@ async fn test_get_all_scores_returns_multiple_contexts() {
 }
 
 // ---------------------------------------------------------------------------
-// Test 6: graph reader — negative path_diversity treated as no score
+// Test 6: upsert_score with context — conflict path updates existing row
+// ---------------------------------------------------------------------------
+#[shared_runtime_test]
+async fn test_upsert_score_with_context_updates_on_conflict() {
+    let db = isolated_db().await;
+    let pool = db.pool().clone();
+
+    let user = AccountFactory::new()
+        .with_seed(79)
+        .create(&pool)
+        .await
+        .expect("create user");
+
+    let ctx = AccountFactory::new()
+        .with_seed(80)
+        .create(&pool)
+        .await
+        .expect("create context user");
+
+    let repo = PgTrustRepo::new(pool);
+
+    // First upsert
+    repo.upsert_score(user.id, Some(ctx.id), Some(1.0), Some(2), Some(0.3))
+        .await
+        .expect("first upsert with context");
+
+    // Second upsert — same (user_id, context_user_id) key, different values
+    repo.upsert_score(user.id, Some(ctx.id), Some(5.0), Some(7), Some(0.9))
+        .await
+        .expect("second upsert with context");
+
+    let score = repo
+        .get_score(user.id, Some(ctx.id))
+        .await
+        .expect("get_score")
+        .expect("score should exist");
+
+    assert!(
+        (score.trust_distance.unwrap() - 5.0).abs() < f32::EPSILON,
+        "trust_distance should be updated to 5.0, got {:?}",
+        score.trust_distance
+    );
+    assert_eq!(score.path_diversity, Some(7));
+    assert!(
+        (score.eigenvector_centrality.unwrap() - 0.9).abs() < 1e-5,
+        "eigenvector_centrality should be updated to 0.9"
+    );
+
+    // Verify no duplicate row was inserted
+    let count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM trust__score_snapshots WHERE user_id = $1 AND context_user_id = $2",
+    )
+    .bind(user.id)
+    .bind(ctx.id)
+    .fetch_one(db.pool())
+    .await
+    .expect("count rows");
+    assert_eq!(
+        count, 1,
+        "ON CONFLICT should update, not insert a second row"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Test 7: graph reader — negative path_diversity treated as no score
 // ---------------------------------------------------------------------------
 #[shared_runtime_test]
 async fn test_graph_reader_treats_negative_path_diversity_as_no_score() {
