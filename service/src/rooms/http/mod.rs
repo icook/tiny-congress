@@ -4,14 +4,15 @@
 //! - `platform` — room CRUD handlers (engine-agnostic)
 //! - `polling` — poll, dimension, vote, and evidence handlers (polling-engine-specific)
 
-mod platform;
-mod polling;
+pub(crate) mod platform;
+pub(crate) mod polling;
 
 use axum::{
     routing::{delete, get, patch, post},
     Router,
 };
 use serde::Deserialize;
+use utoipa::ToSchema;
 
 // Re-export response/request types that external code depends on
 pub use polling::{
@@ -23,7 +24,7 @@ pub use polling::{
 
 // ─── Request types (platform-level) ───────────────────────────────────────
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct CreateRoomRequest {
     pub name: String,
     pub description: Option<String>,
@@ -54,8 +55,9 @@ fn default_constraint_type() -> String {
 
 // ─── Response types (platform-level) ──────────────────────────────────────
 
-#[derive(Debug, serde::Serialize)]
+#[derive(Debug, serde::Serialize, ToSchema)]
 pub struct RoomResponse {
+    #[schema(value_type = String, format = "uuid")]
     pub id: uuid::Uuid,
     pub name: String,
     pub description: Option<String>,
@@ -65,13 +67,14 @@ pub struct RoomResponse {
     pub created_at: String,
     pub engine_type: String,
     pub engine_config: serde_json::Value,
+    #[schema(value_type = Option<String>, format = "uuid")]
     pub owner_id: Option<uuid::Uuid>,
     pub constraint_type: String,
 }
 
 // ─── Capabilities response ────────────────────────────────────────────────
 
-#[derive(Debug, serde::Serialize)]
+#[derive(Debug, serde::Serialize, ToSchema)]
 pub struct MyCapabilitiesResponse {
     pub role: String,
     pub can_vote: bool,
@@ -82,35 +85,43 @@ pub struct MyCapabilitiesResponse {
 
 // ─── Role assignment types ────────────────────────────────────────────────
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct AssignRoleRequest {
+    #[schema(value_type = String, format = "uuid")]
     pub account_id: uuid::Uuid,
     pub role: String,
 }
 
-#[derive(Debug, serde::Serialize)]
+#[derive(Debug, serde::Serialize, ToSchema)]
 pub struct AssignRoleResponse {
+    #[schema(value_type = String, format = "uuid")]
     pub room_id: uuid::Uuid,
+    #[schema(value_type = String, format = "uuid")]
     pub account_id: uuid::Uuid,
     pub role: String,
 }
 
 // ─── Suggestion types ────────────────────────────────────────────────────
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct CreateSuggestionRequest {
     pub suggestion_text: String,
 }
 
-#[derive(Debug, serde::Serialize)]
+#[derive(Debug, serde::Serialize, ToSchema)]
 pub struct SuggestionResponse {
+    #[schema(value_type = String, format = "uuid")]
     pub id: uuid::Uuid,
+    #[schema(value_type = String, format = "uuid")]
     pub room_id: uuid::Uuid,
+    #[schema(value_type = String, format = "uuid")]
     pub poll_id: uuid::Uuid,
+    #[schema(value_type = String, format = "uuid")]
     pub account_id: uuid::Uuid,
     pub suggestion_text: String,
     pub status: String,
     pub filter_reason: Option<String>,
+    #[schema(value_type = Vec<String>)]
     pub evidence_ids: Vec<uuid::Uuid>,
     pub created_at: String,
     pub processed_at: Option<String>,

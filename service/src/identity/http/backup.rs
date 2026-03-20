@@ -16,6 +16,7 @@ use hmac::{Hmac, Mac};
 use serde::Serialize;
 use sha2::Sha256;
 use tc_crypto::Kid;
+use utoipa::ToSchema;
 
 use crate::identity::repo::{AccountRepoError, BackupRepoError, IdentityRepo};
 use crate::identity::service::validate_username;
@@ -59,9 +60,11 @@ impl SyntheticBackupKey {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct BackupResponse {
+    /// Base64url-encoded encrypted backup envelope
     pub encrypted_backup: String,
+    #[schema(value_type = String)]
     pub root_kid: Kid,
 }
 
@@ -142,6 +145,19 @@ fn synthetic_backup_response(username: &str, hmac_key: &[u8]) -> axum::response:
 ///
 /// To mitigate timing side-channels, both the account lookup and backup
 /// lookup are always performed regardless of whether the account exists.
+#[utoipa::path(
+    get,
+    path = "/auth/backup/{username}",
+    tag = "Identity",
+    params(
+        ("username" = String, Path, description = "Username to fetch backup for")
+    ),
+    responses(
+        (status = 200, description = "Encrypted backup (real or synthetic)", body = BackupResponse),
+        (status = 400, description = "Invalid username"),
+        (status = 500, description = "Internal server error")
+    )
+)]
 pub async fn get_backup(
     Extension(repo): Extension<Arc<dyn IdentityRepo>>,
     Extension(hmac_key): Extension<SyntheticBackupKey>,

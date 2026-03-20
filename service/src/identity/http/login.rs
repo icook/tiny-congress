@@ -18,6 +18,7 @@ use std::sync::Arc;
 use axum::{extract::Extension, http::StatusCode, response::IntoResponse, Json};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::identity::repo::{AccountRepoError, DeviceKeyRepoError, IdentityRepo, NonceRepoError};
@@ -25,15 +26,16 @@ use crate::identity::service::{validate_username, CertificateSignature, DeviceNa
 use tc_crypto::{verify_ed25519, Kid};
 
 /// Login request payload
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct LoginRequest {
     pub username: String,
+    /// Unix timestamp (seconds) — must be within ±300s of server time
     pub timestamp: i64,
     pub device: LoginDevice,
 }
 
 /// Device data for login
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct LoginDevice {
     /// Base64url-encoded Ed25519 public key
     pub pubkey: String,
@@ -44,10 +46,13 @@ pub struct LoginDevice {
 }
 
 /// Login response
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct LoginResponse {
+    #[schema(value_type = String, format = "uuid")]
     pub account_id: Uuid,
+    #[schema(value_type = String)]
     pub root_kid: Kid,
+    #[schema(value_type = String)]
     pub device_kid: Kid,
 }
 
@@ -97,6 +102,20 @@ fn validate_login_device(
 }
 
 /// POST /auth/login -- authenticate and register a device key
+#[utoipa::path(
+    post,
+    path = "/auth/login",
+    tag = "Identity",
+    request_body = LoginRequest,
+    responses(
+        (status = 201, description = "Login successful", body = LoginResponse),
+        (status = 400, description = "Validation error or replay detected"),
+        (status = 401, description = "Invalid credentials"),
+        (status = 409, description = "Device key already registered"),
+        (status = 422, description = "Maximum device limit reached"),
+        (status = 500, description = "Internal server error")
+    )
+)]
 pub async fn login(
     Extension(repo): Extension<Arc<dyn IdentityRepo>>,
     Json(req): Json<LoginRequest>,

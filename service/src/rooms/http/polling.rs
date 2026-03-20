@@ -11,6 +11,7 @@ use axum::{
     Json,
 };
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::http::{internal_error, not_found, ErrorResponse};
@@ -21,9 +22,11 @@ use crate::rooms::service::{
 
 // ─── Response types ────────────────────────────────────────────────────────
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct PollResponse {
+    #[schema(value_type = String, format = "uuid")]
     pub id: Uuid,
+    #[schema(value_type = String, format = "uuid")]
     pub room_id: Uuid,
     pub question: String,
     pub description: Option<String>,
@@ -33,8 +36,9 @@ pub struct PollResponse {
     pub created_at: String,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct DimensionResponse {
+    #[schema(value_type = String, format = "uuid")]
     pub id: Uuid,
     pub name: String,
     pub description: Option<String>,
@@ -45,7 +49,7 @@ pub struct DimensionResponse {
     pub max_label: Option<String>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct EvidenceResponse {
     pub id: String,
     pub stance: String,
@@ -53,8 +57,9 @@ pub struct EvidenceResponse {
     pub source: Option<String>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct DimensionDetailResponse {
+    #[schema(value_type = String, format = "uuid")]
     pub id: Uuid,
     pub name: String,
     pub description: Option<String>,
@@ -66,15 +71,16 @@ pub struct DimensionDetailResponse {
     pub evidence: Vec<EvidenceResponse>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct PollResultsResponse {
     pub poll: PollResponse,
     pub dimensions: Vec<DimensionStatsResponse>,
     pub voter_count: i64,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct DimensionStatsResponse {
+    #[schema(value_type = String, format = "uuid")]
     pub dimension_id: Uuid,
     pub dimension_name: String,
     pub count: i64,
@@ -85,32 +91,34 @@ pub struct DimensionStatsResponse {
     pub max: f64,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct BucketResponse {
     pub label: String,
     pub count: i64,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct DimensionDistributionResponse {
+    #[schema(value_type = String, format = "uuid")]
     pub dimension_id: Uuid,
     pub dimension_name: String,
     pub buckets: Vec<BucketResponse>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct PollDistributionResponse {
     pub dimensions: Vec<DimensionDistributionResponse>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct VoteResponse {
+    #[schema(value_type = String, format = "uuid")]
     pub dimension_id: Uuid,
     pub value: f32,
     pub updated_at: String,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct BotTraceResponse {
     pub id: String,
     pub task: String,
@@ -125,13 +133,13 @@ pub struct BotTraceResponse {
 
 // ─── Request types ─────────────────────────────────────────────────────────
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct CreatePollRequest {
     pub question: String,
     pub description: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct CreateDimensionRequest {
     pub name: String,
     pub description: Option<String>,
@@ -149,24 +157,24 @@ const fn default_max_value() -> f32 {
     1.0
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum PollStatusTransition {
     Active,
     Closed,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct PollStatusRequest {
     pub status: PollStatusTransition,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct CreateEvidenceBody {
     pub evidence: Vec<EvidenceItem>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct EvidenceItem {
     pub stance: String,
     pub claim: String,
@@ -175,6 +183,17 @@ pub struct EvidenceItem {
 
 // ─── Poll handlers ─────────────────────────────────────────────────────────
 
+#[utoipa::path(
+    get,
+    path = "/rooms/{room_id}/agenda",
+    tag = "Polls",
+    params(("room_id" = String, Path, description = "Room ID")),
+    responses(
+        (status = 200, description = "Poll agenda", body = Vec<PollResponse>),
+        (status = 404, description = "Room not found"),
+        (status = 500, description = "Internal server error")
+    )
+)]
 pub async fn get_agenda(
     Extension(polling): Extension<Arc<dyn PollingService>>,
     Path(room_id): Path<Uuid>,
@@ -188,6 +207,17 @@ pub async fn get_agenda(
     }
 }
 
+#[utoipa::path(
+    get,
+    path = "/rooms/{room_id}/polls",
+    tag = "Polls",
+    params(("room_id" = String, Path, description = "Room ID")),
+    responses(
+        (status = 200, description = "List of polls", body = Vec<PollResponse>),
+        (status = 404, description = "Room not found"),
+        (status = 500, description = "Internal server error")
+    )
+)]
 pub async fn list_polls(
     Extension(polling): Extension<Arc<dyn PollingService>>,
     Path(room_id): Path<Uuid>,
@@ -201,6 +231,20 @@ pub async fn list_polls(
     }
 }
 
+#[utoipa::path(
+    get,
+    path = "/rooms/{room_id}/polls/{poll_id}",
+    tag = "Polls",
+    params(
+        ("room_id" = String, Path, description = "Room ID"),
+        ("poll_id" = String, Path, description = "Poll ID")
+    ),
+    responses(
+        (status = 200, description = "Poll detail with dimensions and evidence", body = PollDetailResponse),
+        (status = 404, description = "Poll not found"),
+        (status = 500, description = "Internal server error")
+    )
+)]
 pub async fn get_poll_detail(
     Extension(polling): Extension<Arc<dyn PollingService>>,
     Path((_room_id, poll_id)): Path<(Uuid, Uuid)>,
@@ -256,12 +300,25 @@ pub async fn get_poll_detail(
     (StatusCode::OK, Json(response)).into_response()
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 struct PollDetailResponse {
     poll: PollResponse,
     dimensions: Vec<DimensionDetailResponse>,
 }
 
+#[utoipa::path(
+    post,
+    path = "/rooms/{room_id}/polls",
+    tag = "Polls",
+    request_body = CreatePollRequest,
+    params(("room_id" = String, Path, description = "Room ID")),
+    responses(
+        (status = 201, description = "Poll created", body = PollResponse),
+        (status = 400, description = "Validation error"),
+        (status = 401, description = "Unauthorized"),
+        (status = 500, description = "Internal server error")
+    )
+)]
 pub async fn create_poll(
     Extension(polling): Extension<Arc<dyn PollingService>>,
     Path(room_id): Path<Uuid>,
@@ -280,6 +337,23 @@ pub async fn create_poll(
     }
 }
 
+#[utoipa::path(
+    post,
+    path = "/rooms/{room_id}/polls/{poll_id}/status",
+    tag = "Polls",
+    request_body = PollStatusRequest,
+    params(
+        ("room_id" = String, Path, description = "Room ID"),
+        ("poll_id" = String, Path, description = "Poll ID")
+    ),
+    responses(
+        (status = 204, description = "Status updated"),
+        (status = 400, description = "Validation error"),
+        (status = 401, description = "Unauthorized"),
+        (status = 404, description = "Poll not found"),
+        (status = 500, description = "Internal server error")
+    )
+)]
 pub async fn update_poll_status(
     Extension(polling): Extension<Arc<dyn PollingService>>,
     Path((_room_id, poll_id)): Path<(Uuid, Uuid)>,
@@ -299,6 +373,22 @@ pub async fn update_poll_status(
     }
 }
 
+#[utoipa::path(
+    post,
+    path = "/rooms/{room_id}/polls/{poll_id}/dimensions",
+    tag = "Polls",
+    request_body = CreateDimensionRequest,
+    params(
+        ("room_id" = String, Path, description = "Room ID"),
+        ("poll_id" = String, Path, description = "Poll ID")
+    ),
+    responses(
+        (status = 201, description = "Dimension added", body = DimensionResponse),
+        (status = 400, description = "Validation error"),
+        (status = 401, description = "Unauthorized"),
+        (status = 500, description = "Internal server error")
+    )
+)]
 pub async fn add_dimension(
     Extension(polling): Extension<Arc<dyn PollingService>>,
     Path((_room_id, poll_id)): Path<(Uuid, Uuid)>,
@@ -328,6 +418,22 @@ pub async fn add_dimension(
 
 // ─── Evidence handlers ─────────────────────────────────────────────────────
 
+#[utoipa::path(
+    post,
+    path = "/rooms/{room_id}/polls/{poll_id}/dimensions/{dimension_id}/evidence",
+    tag = "Polls",
+    request_body = CreateEvidenceBody,
+    params(
+        ("room_id" = String, Path, description = "Room ID"),
+        ("poll_id" = String, Path, description = "Poll ID"),
+        ("dimension_id" = String, Path, description = "Dimension ID")
+    ),
+    responses(
+        (status = 201, description = "Evidence created"),
+        (status = 404, description = "Dimension not found"),
+        (status = 500, description = "Internal server error")
+    )
+)]
 pub async fn create_evidence(
     Extension(polling): Extension<Arc<dyn PollingService>>,
     Path((_room_id, poll_id, dimension_id)): Path<(Uuid, Uuid, Uuid)>,
@@ -354,6 +460,19 @@ pub async fn create_evidence(
     }
 }
 
+#[utoipa::path(
+    delete,
+    path = "/rooms/{room_id}/polls/{poll_id}/evidence",
+    tag = "Polls",
+    params(
+        ("room_id" = String, Path, description = "Room ID"),
+        ("poll_id" = String, Path, description = "Poll ID")
+    ),
+    responses(
+        (status = 200, description = "Evidence deleted"),
+        (status = 500, description = "Internal server error")
+    )
+)]
 pub async fn delete_evidence(
     Extension(polling): Extension<Arc<dyn PollingService>>,
     Path((_room_id, poll_id)): Path<(Uuid, Uuid)>,
@@ -370,6 +489,20 @@ pub async fn delete_evidence(
 
 /// Sim-only: reset a poll back to draft status, clearing all timing fields.
 /// Used by the ring buffer refill logic to recycle polls for a new cycle.
+#[utoipa::path(
+    patch,
+    path = "/rooms/{room_id}/polls/{poll_id}/reset",
+    tag = "Polls",
+    params(
+        ("room_id" = String, Path, description = "Room ID"),
+        ("poll_id" = String, Path, description = "Poll ID")
+    ),
+    responses(
+        (status = 200, description = "Poll reset to draft"),
+        (status = 404, description = "Poll not found"),
+        (status = 500, description = "Internal server error")
+    )
+)]
 pub async fn reset_poll(
     Extension(polling): Extension<Arc<dyn PollingService>>,
     Path((room_id, poll_id)): Path<(Uuid, Uuid)>,
@@ -383,6 +516,24 @@ pub async fn reset_poll(
 
 // ─── Vote handlers ─────────────────────────────────────────────────────────
 
+#[utoipa::path(
+    post,
+    path = "/rooms/{room_id}/polls/{poll_id}/vote",
+    tag = "Polls",
+    params(
+        ("room_id" = String, Path, description = "Room ID"),
+        ("poll_id" = String, Path, description = "Poll ID")
+    ),
+    responses(
+        (status = 200, description = "Vote recorded", body = Vec<VoteResponse>),
+        (status = 400, description = "Validation error"),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Not eligible to vote"),
+        (status = 404, description = "Poll not found"),
+        (status = 409, description = "Poll not active"),
+        (status = 500, description = "Internal server error")
+    )
+)]
 pub async fn cast_vote(
     Extension(polling): Extension<Arc<dyn PollingService>>,
     Path((_room_id, poll_id)): Path<(Uuid, Uuid)>,
@@ -411,6 +562,20 @@ pub async fn cast_vote(
     }
 }
 
+#[utoipa::path(
+    get,
+    path = "/rooms/{room_id}/polls/{poll_id}/results",
+    tag = "Polls",
+    params(
+        ("room_id" = String, Path, description = "Room ID"),
+        ("poll_id" = String, Path, description = "Poll ID")
+    ),
+    responses(
+        (status = 200, description = "Poll results", body = PollResultsResponse),
+        (status = 404, description = "Poll not found"),
+        (status = 500, description = "Internal server error")
+    )
+)]
 pub async fn get_results(
     Extension(polling): Extension<Arc<dyn PollingService>>,
     Path((_room_id, poll_id)): Path<(Uuid, Uuid)>,
@@ -441,6 +606,20 @@ pub async fn get_results(
     }
 }
 
+#[utoipa::path(
+    get,
+    path = "/rooms/{room_id}/polls/{poll_id}/results/distribution",
+    tag = "Polls",
+    params(
+        ("room_id" = String, Path, description = "Room ID"),
+        ("poll_id" = String, Path, description = "Poll ID")
+    ),
+    responses(
+        (status = 200, description = "Vote distribution", body = PollDistributionResponse),
+        (status = 404, description = "Poll not found"),
+        (status = 500, description = "Internal server error")
+    )
+)]
 pub async fn get_distribution(
     Extension(polling): Extension<Arc<dyn PollingService>>,
     Path((_room_id, poll_id)): Path<(Uuid, Uuid)>,
@@ -477,6 +656,21 @@ pub async fn get_distribution(
     }
 }
 
+#[utoipa::path(
+    get,
+    path = "/rooms/{room_id}/polls/{poll_id}/my-votes",
+    tag = "Polls",
+    params(
+        ("room_id" = String, Path, description = "Room ID"),
+        ("poll_id" = String, Path, description = "Poll ID")
+    ),
+    responses(
+        (status = 200, description = "User's votes for this poll", body = Vec<VoteResponse>),
+        (status = 401, description = "Unauthorized"),
+        (status = 404, description = "Poll not found"),
+        (status = 500, description = "Internal server error")
+    )
+)]
 pub async fn my_votes(
     Extension(polling): Extension<Arc<dyn PollingService>>,
     Path((_room_id, poll_id)): Path<(Uuid, Uuid)>,
@@ -500,6 +694,19 @@ pub async fn my_votes(
 
 // ─── Bot trace handlers ────────────────────────────────────────────────────
 
+#[utoipa::path(
+    get,
+    path = "/rooms/{room_id}/polls/{poll_id}/traces",
+    tag = "Polls",
+    params(
+        ("room_id" = String, Path, description = "Room ID"),
+        ("poll_id" = String, Path, description = "Poll ID")
+    ),
+    responses(
+        (status = 200, description = "Bot traces for this poll", body = Vec<BotTraceResponse>),
+        (status = 500, description = "Internal server error")
+    )
+)]
 pub async fn get_poll_traces(
     Extension(polling): Extension<Arc<dyn PollingService>>,
     Path((_room_id, poll_id)): Path<(Uuid, Uuid)>,

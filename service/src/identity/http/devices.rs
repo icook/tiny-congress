@@ -13,6 +13,7 @@ use axum::{
     Json,
 };
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 use uuid::Uuid;
 
 use super::auth::AuthenticatedDevice;
@@ -22,8 +23,9 @@ use crate::identity::service::{CertificateSignature, DeviceName, DevicePubkey};
 use tc_crypto::{verify_ed25519, Kid};
 
 /// Device info returned in API responses (omits certificate and raw pubkey)
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct DeviceInfo {
+    #[schema(value_type = String)]
     pub device_kid: Kid,
     pub device_name: String,
     pub created_at: String,
@@ -43,30 +45,43 @@ impl From<DeviceKeyRecord> for DeviceInfo {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct DeviceListResponse {
     pub devices: Vec<DeviceInfo>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct AddDeviceRequest {
+    /// Base64url-encoded Ed25519 public key
     pub pubkey: String,
     pub name: String,
+    /// Base64url-encoded certificate (root key's signature over device pubkey)
     pub certificate: String,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct AddDeviceResponse {
+    #[schema(value_type = String)]
     pub device_kid: Kid,
     pub created_at: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct RenameDeviceRequest {
     pub name: String,
 }
 
 /// GET /auth/devices — list all devices for the authenticated account
+#[utoipa::path(
+    get,
+    path = "/auth/devices",
+    tag = "Identity",
+    responses(
+        (status = 200, description = "Device list", body = DeviceListResponse),
+        (status = 401, description = "Unauthorized"),
+        (status = 500, description = "Internal server error")
+    )
+)]
 pub async fn list_devices(
     Extension(repo): Extension<Arc<dyn IdentityRepo>>,
     auth: AuthenticatedDevice,
@@ -84,6 +99,20 @@ pub async fn list_devices(
 }
 
 /// POST /auth/devices — add a new device key
+#[utoipa::path(
+    post,
+    path = "/auth/devices",
+    tag = "Identity",
+    request_body = AddDeviceRequest,
+    responses(
+        (status = 201, description = "Device added", body = AddDeviceResponse),
+        (status = 400, description = "Invalid request"),
+        (status = 401, description = "Unauthorized"),
+        (status = 409, description = "Device key already registered"),
+        (status = 422, description = "Maximum device limit reached"),
+        (status = 500, description = "Internal server error")
+    )
+)]
 pub async fn add_device(
     Extension(repo): Extension<Arc<dyn IdentityRepo>>,
     auth: AuthenticatedDevice,
@@ -178,6 +207,23 @@ async fn validate_add_device_request(
 }
 
 /// DELETE /auth/devices/:kid — revoke a device key
+#[utoipa::path(
+    delete,
+    path = "/auth/devices/{kid}",
+    tag = "Identity",
+    params(
+        ("kid" = String, Path, description = "Key identifier of the device to revoke")
+    ),
+    responses(
+        (status = 204, description = "Device revoked"),
+        (status = 400, description = "Invalid KID"),
+        (status = 401, description = "Unauthorized"),
+        (status = 404, description = "Device not found"),
+        (status = 409, description = "Device already revoked"),
+        (status = 422, description = "Cannot revoke the device making this request"),
+        (status = 500, description = "Internal server error")
+    )
+)]
 pub async fn revoke_device(
     Extension(repo): Extension<Arc<dyn IdentityRepo>>,
     Path(kid_str): Path<String>,
@@ -207,6 +253,23 @@ pub async fn revoke_device(
 }
 
 /// PATCH /auth/devices/:kid — rename a device
+#[utoipa::path(
+    patch,
+    path = "/auth/devices/{kid}",
+    tag = "Identity",
+    request_body = RenameDeviceRequest,
+    params(
+        ("kid" = String, Path, description = "Key identifier of the device to rename")
+    ),
+    responses(
+        (status = 204, description = "Device renamed"),
+        (status = 400, description = "Invalid request"),
+        (status = 401, description = "Unauthorized"),
+        (status = 404, description = "Device not found"),
+        (status = 409, description = "Cannot rename a revoked device"),
+        (status = 500, description = "Internal server error")
+    )
+)]
 pub async fn rename_device(
     Extension(repo): Extension<Arc<dyn IdentityRepo>>,
     Path(kid_str): Path<String>,
