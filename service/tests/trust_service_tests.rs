@@ -215,6 +215,29 @@ async fn test_denounce_slots_exhausted() {
 }
 
 #[shared_runtime_test]
+async fn test_self_revoke_rejected() {
+    let db = isolated_db().await;
+    let pool = db.pool().clone();
+
+    let user = AccountFactory::new()
+        .with_seed(217)
+        .create(&pool)
+        .await
+        .expect("create user");
+
+    let rep_repo = Arc::new(PgReputationRepo::new(pool.clone())) as Arc<dyn ReputationRepo>;
+    let repo = Arc::new(PgTrustRepo::new(pool));
+    let service = DefaultTrustService::new(repo, rep_repo);
+
+    let result = service.revoke_endorsement(user.id, user.id).await;
+
+    assert!(
+        matches!(result, Err(TrustServiceError::SelfAction)),
+        "expected SelfAction, got: {result:?}"
+    );
+}
+
+#[shared_runtime_test]
 async fn test_revoke_enqueues_action() {
     let db = isolated_db().await;
     let pool = db.pool().clone();
