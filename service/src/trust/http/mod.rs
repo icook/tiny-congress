@@ -17,8 +17,8 @@ use uuid::Uuid;
 
 use super::repo::{TrustRepo, TrustRepoError};
 use super::service::{
-    TrustService, TrustServiceError, DENOUNCEMENT_REASON_MAX_LEN, DENOUNCEMENT_SLOT_LIMIT,
-    ENDORSEMENT_SLOT_LIMIT,
+    is_valid_denouncement_reason, is_valid_endorsement_weight, TrustService, TrustServiceError,
+    DENOUNCEMENT_SLOT_LIMIT, ENDORSEMENT_SLOT_LIMIT,
 };
 use super::weight::{
     compute_endorsement_weight, VALID_DELIVERY_METHODS, VALID_RELATIONSHIP_DEPTHS,
@@ -180,7 +180,7 @@ async fn endorse_handler(
         Err(e) => return e,
     };
 
-    if !body.weight.is_finite() || body.weight <= 0.0 || body.weight > 1.0 {
+    if !is_valid_endorsement_weight(body.weight) {
         return bad_request("weight must be in range (0.0, 1.0]");
     }
 
@@ -261,7 +261,7 @@ async fn denounce_handler(
         Err(e) => return e,
     };
 
-    if body.reason.is_empty() || body.reason.len() > DENOUNCEMENT_REASON_MAX_LEN {
+    if !is_valid_denouncement_reason(&body.reason) {
         return bad_request("reason must be between 1 and 500 characters");
     }
 
@@ -450,7 +450,7 @@ async fn create_invite_handler(
     let weight = body.weight.unwrap_or_else(|| {
         compute_endorsement_weight(&body.delivery_method, body.relationship_depth.as_deref())
     });
-    if !weight.is_finite() || weight <= 0.0 || weight > 1.0 {
+    if !is_valid_endorsement_weight(weight) {
         return bad_request("weight must be in range (0.0, 1.0]");
     }
 
@@ -586,10 +586,10 @@ async fn accept_invite_handler(
 
 fn trust_service_error_response(e: &TrustServiceError) -> axum::response::Response {
     match e {
+        TrustServiceError::InvalidWeight => bad_request("weight must be in range (0.0, 1.0]"),
         TrustServiceError::InvalidReason { max } => {
             bad_request(&format!("reason must be between 1 and {max} characters"))
         }
-        TrustServiceError::InvalidWeight => bad_request("weight must be in range (0.0, 1.0]"),
         TrustServiceError::SelfAction => bad_request("Cannot target yourself"),
         TrustServiceError::QuotaExceeded => too_many_requests("Daily action quota exceeded"),
         TrustServiceError::DenouncementSlotsExhausted { max } => {

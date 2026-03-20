@@ -13,7 +13,10 @@ use crate::reputation::repo::ReputationRepo;
 use crate::trust::engine::TrustEngine;
 use crate::trust::engine::TrustEngineError;
 use crate::trust::repo::{ActionRecord, TrustRepo, TrustRepoError};
-use crate::trust::service::{ActionType, DENOUNCEMENT_REASON_MAX_LEN};
+use crate::trust::service::{
+    is_valid_denouncement_reason, is_valid_endorsement_weight, ActionType,
+    DENOUNCEMENT_REASON_MAX_LEN,
+};
 
 /// Errors that can occur while processing a single trust action.
 #[derive(Debug, thiserror::Error)]
@@ -250,7 +253,7 @@ impl TrustWorker {
                 let weight = action.payload["weight"].as_f64().ok_or_else(|| {
                     TrustActionError::InvalidPayload("endorse payload missing 'weight'".to_string())
                 })? as f32;
-                if !weight.is_finite() || weight <= 0.0 || weight > 1.0 {
+                if !is_valid_endorsement_weight(weight) {
                     return Err(TrustActionError::InvalidPayload(format!(
                         "endorse payload 'weight' out of range (0.0, 1.0]: {weight}"
                     )));
@@ -303,7 +306,7 @@ impl TrustWorker {
                         )
                     })?
                     .to_string();
-                if reason.is_empty() || reason.len() > DENOUNCEMENT_REASON_MAX_LEN {
+                if !is_valid_denouncement_reason(&reason) {
                     return Err(TrustActionError::InvalidPayload(format!(
                         "denounce payload 'reason' length out of range [1, {}]: {}",
                         DENOUNCEMENT_REASON_MAX_LEN,
