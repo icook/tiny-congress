@@ -1759,6 +1759,67 @@ async fn revoke_returns_429_when_quota_exceeded() {
 
 // ─── Denounce quota ───────────────────────────────────────────────────────────
 
+/// Denouncing a user who was already denounced returns 409 Conflict.
+/// This exercises the `AlreadyDenounced` service error path through the HTTP layer.
+#[shared_runtime_test]
+async fn denounce_returns_409_when_already_denounced() {
+    let db = isolated_db().await;
+    let pool = db.pool().clone();
+    let (app, keys, account_id) = signup_and_get_account("alreadydenouncer", db.pool()).await;
+
+    // Sign up a target user.
+    let (json2, _) = valid_signup_with_keys("alreadydenounced");
+    let resp2 = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/auth/signup")
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(json2))
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+    let body2 = axum::body::to_bytes(resp2.into_body(), 1024 * 1024)
+        .await
+        .expect("body2");
+    let j2: Value = serde_json::from_slice(&body2).expect("json2");
+    let target_id: uuid::Uuid = j2["account_id"]
+        .as_str()
+        .expect("account_id")
+        .parse()
+        .expect("uuid");
+
+    // Seed an active denouncement directly (bypasses daily quota).
+    sqlx::query(
+        "INSERT INTO trust__denouncements (accuser_id, target_id, reason) VALUES ($1, $2, $3)",
+    )
+    .bind(account_id)
+    .bind(target_id)
+    .bind("initial reason")
+    .execute(&pool)
+    .await
+    .expect("seed denouncement");
+
+    // Attempt a second denouncement via HTTP — must return 409 Conflict.
+    let body = serde_json::json!({
+        "target_id": target_id,
+        "reason": "trying again"
+    })
+    .to_string();
+    let request = build_authed_request(
+        Method::POST,
+        "/trust/denounce",
+        &body,
+        &keys.device_signing_key,
+        &keys.device_kid,
+    );
+
+    let response = app.oneshot(request).await.expect("response");
+    assert_eq!(response.status(), StatusCode::CONFLICT);
+}
+
 // ─── Budget with out-of-slot endorsements ────────────────────────────────────
 
 /// Verify that `slots_used` only counts in-slot endorsements and `out_of_slot_count`
