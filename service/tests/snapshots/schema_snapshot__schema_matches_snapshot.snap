@@ -1,5 +1,6 @@
 ---
 source: service/tests/schema_snapshot.rs
+assertion_line: 188
 expression: current_schema
 ---
 -- Schema Snapshot
@@ -68,13 +69,6 @@ CREATE TABLE rooms__bot_traces (
     error TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     completed_at TIMESTAMPTZ);
-
-CREATE TABLE rooms__lifecycle_queue (
-    id INT8 NOT NULL DEFAULT nextval('rooms__lifecycle_queue_id_seq'::regclass),
-    message_type TEXT NOT NULL,
-    payload JSONB NOT NULL,
-    visible_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now());
 
 CREATE TABLE rooms__poll_dimensions (
     id UUID NOT NULL DEFAULT gen_random_uuid(),
@@ -151,7 +145,7 @@ CREATE TABLE rooms__votes (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now());
 
-CREATE TABLE trust__action_queue (
+CREATE TABLE trust__action_log (
     id UUID NOT NULL DEFAULT gen_random_uuid(),
     actor_id UUID NOT NULL,
     action_type TEXT NOT NULL,
@@ -276,12 +270,6 @@ CREATE INDEX idx_bot_traces_status ON public.rooms__bot_traces USING btree (stat
 -- rooms__bot_traces.rooms__bot_traces_pkey
 CREATE UNIQUE INDEX rooms__bot_traces_pkey ON public.rooms__bot_traces USING btree (id)
 
--- rooms__lifecycle_queue.idx_lifecycle_queue_visible
-CREATE INDEX idx_lifecycle_queue_visible ON public.rooms__lifecycle_queue USING btree (visible_at, id)
-
--- rooms__lifecycle_queue.rooms__lifecycle_queue_pkey
-CREATE UNIQUE INDEX rooms__lifecycle_queue_pkey ON public.rooms__lifecycle_queue USING btree (id)
-
 -- rooms__poll_dimensions.idx_poll_dimensions_poll
 CREATE INDEX idx_poll_dimensions_poll ON public.rooms__poll_dimensions USING btree (poll_id)
 
@@ -339,14 +327,14 @@ CREATE UNIQUE INDEX rooms__votes_pkey ON public.rooms__votes USING btree (id)
 -- rooms__votes.uq_votes_poll_dimension_user
 CREATE UNIQUE INDEX uq_votes_poll_dimension_user ON public.rooms__votes USING btree (poll_id, dimension_id, user_id)
 
--- trust__action_queue.idx_action_queue_actor_date
-CREATE INDEX idx_action_queue_actor_date ON public.trust__action_queue USING btree (actor_id, quota_date)
+-- trust__action_log.idx_action_log_actor_date
+CREATE INDEX idx_action_log_actor_date ON public.trust__action_log USING btree (actor_id, quota_date)
 
--- trust__action_queue.idx_action_queue_pending
-CREATE INDEX idx_action_queue_pending ON public.trust__action_queue USING btree (status) WHERE (status = 'pending'::text)
+-- trust__action_log.idx_action_log_pending
+CREATE INDEX idx_action_log_pending ON public.trust__action_log USING btree (status) WHERE (status = 'pending'::text)
 
--- trust__action_queue.trust__action_queue_pkey
-CREATE UNIQUE INDEX trust__action_queue_pkey ON public.trust__action_queue USING btree (id)
+-- trust__action_log.trust__action_queue_pkey
+CREATE UNIQUE INDEX trust__action_queue_pkey ON public.trust__action_log USING btree (id)
 
 -- trust__denouncements.idx_denouncements_target
 CREATE INDEX idx_denouncements_target ON public.trust__denouncements USING btree (target_id)
@@ -396,7 +384,7 @@ CREATE UNIQUE INDEX trust__user_influence_pkey ON public.trust__user_influence U
 -- rooms__votes.dimension_id -> rooms__poll_dimensions.id (ON UPDATE NO ACTION, ON DELETE CASCADE)
 -- rooms__votes.poll_id -> rooms__polls.id (ON UPDATE NO ACTION, ON DELETE CASCADE)
 -- rooms__votes.user_id -> accounts.id (ON UPDATE NO ACTION, ON DELETE CASCADE)
--- trust__action_queue.actor_id -> accounts.id (ON UPDATE NO ACTION, ON DELETE CASCADE)
+-- trust__action_log.actor_id -> accounts.id (ON UPDATE NO ACTION, ON DELETE CASCADE)
 -- trust__denouncements.accuser_id -> accounts.id (ON UPDATE NO ACTION, ON DELETE CASCADE)
 -- trust__denouncements.target_id -> accounts.id (ON UPDATE NO ACTION, ON DELETE CASCADE)
 -- trust__invites.accepted_by -> accounts.id (ON UPDATE NO ACTION, ON DELETE NO ACTION)
@@ -460,13 +448,6 @@ CREATE UNIQUE INDEX trust__user_influence_pkey ON public.trust__user_influence U
 -- rooms__bot_traces: rooms__bot_traces_steps_not_null (CHECK)
 -- rooms__bot_traces: rooms__bot_traces_task_not_null (CHECK)
 -- rooms__bot_traces: rooms__bot_traces_total_cost_usd_not_null (CHECK)
--- rooms__lifecycle_queue: rooms__lifecycle_queue_created_at_not_null (CHECK)
--- rooms__lifecycle_queue: rooms__lifecycle_queue_id_not_null (CHECK)
--- rooms__lifecycle_queue: rooms__lifecycle_queue_message_type_check (CHECK)
--- rooms__lifecycle_queue: rooms__lifecycle_queue_message_type_not_null (CHECK)
--- rooms__lifecycle_queue: rooms__lifecycle_queue_payload_not_null (CHECK)
--- rooms__lifecycle_queue: rooms__lifecycle_queue_pkey (PRIMARY KEY)
--- rooms__lifecycle_queue: rooms__lifecycle_queue_visible_at_not_null (CHECK)
 -- rooms__poll_dimensions: rooms__poll_dimensions_id_not_null (CHECK)
 -- rooms__poll_dimensions: rooms__poll_dimensions_max_value_not_null (CHECK)
 -- rooms__poll_dimensions: rooms__poll_dimensions_min_value_not_null (CHECK)
@@ -527,16 +508,16 @@ CREATE UNIQUE INDEX trust__user_influence_pkey ON public.trust__user_influence U
 -- rooms__votes: rooms__votes_user_id_not_null (CHECK)
 -- rooms__votes: rooms__votes_value_not_null (CHECK)
 -- rooms__votes: uq_votes_poll_dimension_user (UNIQUE)
--- trust__action_queue: trust__action_queue_action_type_check (CHECK)
--- trust__action_queue: trust__action_queue_action_type_not_null (CHECK)
--- trust__action_queue: trust__action_queue_actor_id_not_null (CHECK)
--- trust__action_queue: trust__action_queue_created_at_not_null (CHECK)
--- trust__action_queue: trust__action_queue_id_not_null (CHECK)
--- trust__action_queue: trust__action_queue_payload_not_null (CHECK)
--- trust__action_queue: trust__action_queue_pkey (PRIMARY KEY)
--- trust__action_queue: trust__action_queue_quota_date_not_null (CHECK)
--- trust__action_queue: trust__action_queue_status_check (CHECK)
--- trust__action_queue: trust__action_queue_status_not_null (CHECK)
+-- trust__action_log: trust__action_queue_action_type_check (CHECK)
+-- trust__action_log: trust__action_queue_action_type_not_null (CHECK)
+-- trust__action_log: trust__action_queue_actor_id_not_null (CHECK)
+-- trust__action_log: trust__action_queue_created_at_not_null (CHECK)
+-- trust__action_log: trust__action_queue_id_not_null (CHECK)
+-- trust__action_log: trust__action_queue_payload_not_null (CHECK)
+-- trust__action_log: trust__action_queue_pkey (PRIMARY KEY)
+-- trust__action_log: trust__action_queue_quota_date_not_null (CHECK)
+-- trust__action_log: trust__action_queue_status_check (CHECK)
+-- trust__action_log: trust__action_queue_status_not_null (CHECK)
 -- trust__denouncements: chk_denouncement_not_self (CHECK)
 -- trust__denouncements: trust__denouncements_accuser_id_not_null (CHECK)
 -- trust__denouncements: trust__denouncements_created_at_not_null (CHECK)
