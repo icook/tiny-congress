@@ -5,10 +5,45 @@ use std::time::Duration;
 
 use uuid::Uuid;
 
-use crate::reputation::repo::ReputationRepo;
+use crate::reputation::repo::EndorsementRepoError;
 use crate::trust::engine::TrustEngine;
-use crate::trust::repo::{ActionRecord, TrustRepo};
+use crate::trust::engine::TrustEngineError;
+use crate::trust::repo::{ActionRecord, TrustRepo, TrustRepoError};
 use crate::trust::service::DENOUNCEMENT_REASON_MAX_LEN;
+
+/// Errors that can occur while processing the trust action queue.
+#[derive(Debug, thiserror::Error)]
+pub enum TrustWorkerError {
+    /// Claiming the next batch of pending actions failed.
+    #[error("claim_pending_actions failed: {0}")]
+    ClaimActions(#[from] TrustRepoError),
+}
+
+/// Errors that can occur while processing a single trust action.
+#[derive(Debug, thiserror::Error)]
+pub enum TrustActionError {
+    /// The action payload is missing a required field or contains an invalid value.
+    #[error("invalid payload: {0}")]
+    InvalidPayload(String),
+
+    /// A reputation repository operation failed.
+    #[error("reputation repo error: {0}")]
+    ReputationRepo(#[from] EndorsementRepoError),
+
+    /// A trust repository operation failed.
+    #[error("trust repo error: {0}")]
+    TrustRepo(#[from] TrustRepoError),
+
+    /// Trust score recomputation failed.
+    #[error("engine error: {0}")]
+    Engine(#[from] TrustEngineError),
+
+    /// The action type is not recognised.
+    #[error("unknown action type: {0}")]
+    UnknownActionType(String),
+}
+
+use crate::reputation::repo::ReputationRepo;
 
 /// Background worker that claims and processes trust action queue batches.
 pub struct TrustWorker {
@@ -48,12 +83,11 @@ impl TrustWorker {
     /// # Errors
     ///
     /// Returns an error only if claiming actions from the queue fails.
-    pub async fn process_batch(&self) -> Result<usize, anyhow::Error> {
+    pub async fn process_batch(&self) -> Result<usize, TrustWorkerError> {
         let actions = self
             .trust_repo
             .claim_pending_actions(self.batch_size)
-            .await
-            .map_err(|e| anyhow::anyhow!("claim_pending_actions failed: {e}"))?;
+            .await?;
 
         let count = actions.len();
 
@@ -86,26 +120,27 @@ impl TrustWorker {
         Ok(count)
     }
 
-    async fn process_action(&self, action: &ActionRecord) -> Result<(), anyhow::Error> {
+    async fn process_action(&self, action: &ActionRecord) -> Result<(), TrustActionError> {
         match action.action_type.as_str() {
             "endorse" => {
                 let subject_id = parse_uuid(&action.payload, "subject_id")?;
                 #[allow(clippy::cast_possible_truncation)]
-                let weight = action.payload["weight"]
-                    .as_f64()
-                    .ok_or_else(|| anyhow::anyhow!("endorse payload missing 'weight'"))?
-                    as f32;
+                let weight = action.payload["weight"].as_f64().ok_or_else(|| {
+                    TrustActionError::InvalidPayload("endorse payload missing 'weight'".to_string())
+                })? as f32;
                 if !weight.is_finite() || weight <= 0.0 || weight > 1.0 {
-                    return Err(anyhow::anyhow!(
+                    return Err(TrustActionError::InvalidPayload(format!(
                         "endorse payload 'weight' out of range (0.0, 1.0]: {weight}"
-                    ));
+                    )));
                 }
                 let attestation = match &action.payload["attestation"] {
                     serde_json::Value::Null => None,
                     v => Some(v.clone()),
                 };
                 let in_slot = action.payload["in_slot"].as_bool().ok_or_else(|| {
-                    anyhow::anyhow!("endorse payload missing or invalid 'in_slot'")
+                    TrustActionError::InvalidPayload(
+                        "endorse payload missing or invalid 'in_slot'".to_string(),
+                    )
                 })?;
 
                 self.reputation_repo
@@ -118,8 +153,7 @@ impl TrustWorker {
                         attestation.as_ref(),
                         in_slot,
                     )
-                    .await
-                    .map_err(|e| anyhow::anyhow!("create_endorsement failed: {e}"))?;
+                    .await?;
 
                 self.trust_engine
                     .recompute_from_anchor(action.actor_id, self.trust_repo.as_ref())
@@ -130,8 +164,7 @@ impl TrustWorker {
                 let subject_id = parse_uuid(&action.payload, "subject_id")?;
                 self.reputation_repo
                     .revoke_endorsement(action.actor_id, subject_id, "trust")
-                    .await
-                    .map_err(|e| anyhow::anyhow!("revoke_endorsement failed: {e}"))?;
+                    .await?;
 
                 self.trust_engine
                     .recompute_from_anchor(action.actor_id, self.trust_repo.as_ref())
@@ -142,14 +175,18 @@ impl TrustWorker {
                 let target_id = parse_uuid(&action.payload, "target_id")?;
                 let reason = action.payload["reason"]
                     .as_str()
-                    .ok_or_else(|| anyhow::anyhow!("denounce payload missing 'reason'"))?
+                    .ok_or_else(|| {
+                        TrustActionError::InvalidPayload(
+                            "denounce payload missing 'reason'".to_string(),
+                        )
+                    })?
                     .to_string();
                 if reason.is_empty() || reason.len() > DENOUNCEMENT_REASON_MAX_LEN {
-                    return Err(anyhow::anyhow!(
+                    return Err(TrustActionError::InvalidPayload(format!(
                         "denounce payload 'reason' length out of range [1, {}]: {}",
                         DENOUNCEMENT_REASON_MAX_LEN,
                         reason.len()
-                    ));
+                    )));
                 }
 
                 // Both operations run inside a single transaction: if the endorsement
@@ -157,8 +194,7 @@ impl TrustWorker {
                 // rolls back, preventing the unique-constraint error on retry.
                 self.trust_repo
                     .create_denouncement_and_revoke_endorsement(action.actor_id, target_id, &reason)
-                    .await
-                    .map_err(|e| anyhow::anyhow!("denounce_and_revoke failed: {e}"))?;
+                    .await?;
 
                 self.trust_engine
                     .recompute_from_anchor(action.actor_id, self.trust_repo.as_ref())
@@ -166,7 +202,7 @@ impl TrustWorker {
             }
 
             other => {
-                return Err(anyhow::anyhow!("unknown action type: {other}"));
+                return Err(TrustActionError::UnknownActionType(other.to_string()));
             }
         }
 
@@ -185,10 +221,11 @@ impl TrustWorker {
     }
 }
 
-fn parse_uuid(payload: &serde_json::Value, key: &str) -> Result<Uuid, anyhow::Error> {
+fn parse_uuid(payload: &serde_json::Value, key: &str) -> Result<Uuid, TrustActionError> {
     let raw = payload[key]
         .as_str()
-        .ok_or_else(|| anyhow::anyhow!("payload missing '{key}'"))?;
-    raw.parse::<Uuid>()
-        .map_err(|e| anyhow::anyhow!("payload '{key}' is not a valid UUID: {e}"))
+        .ok_or_else(|| TrustActionError::InvalidPayload(format!("payload missing '{key}'")))?;
+    raw.parse::<Uuid>().map_err(|e| {
+        TrustActionError::InvalidPayload(format!("payload '{key}' is not a valid UUID: {e}"))
+    })
 }

@@ -30,7 +30,7 @@ impl TrustGraphReader for TrustRepoGraphReader {
             .trust_repo
             .get_score(subject, anchor)
             .await
-            .map_err(|e| anyhow::anyhow!("{e}"))?;
+            .map_err(anyhow::Error::new)?;
 
         let mapped = snapshot.and_then(|s| {
             let raw = s.path_diversity.unwrap_or(0);
@@ -64,6 +64,6 @@ impl TrustGraphReader for TrustRepoGraphReader {
         self.trust_repo
             .has_identity_endorsement(subject, verifier_ids, topic)
             .await
-            .map_err(|e| anyhow::anyhow!("{e}"))
+            .map_err(anyhow::Error::new)
     }
 }
