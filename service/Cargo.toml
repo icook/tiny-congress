@@ -62,6 +62,9 @@ serde_json = "1.0"
 thiserror = "2.0"
 uuid = { version = "1.16", features = ["v4", "serde"] }
 
+# CLI
+clap = { version = "4", features = ["derive"] }
+
 # HTTP client (OAuth flows)
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 urlencoding = "2"
@@ -107,6 +110,10 @@ path = "src/bin/sim.rs"
 [[bin]]
 name = "demo_verifier"
 path = "src/bin/demo_verifier.rs"
+
+[[bin]]
+name = "tc-ops"
+path = "src/bin/tc_ops.rs"
 
 # cargo-machete false positives (used via derive macros or wired in follow-up tasks)
 [package.metadata.cargo-machete]
