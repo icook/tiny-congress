@@ -66,6 +66,11 @@ jobs:
         if: needs.detect-changes.outputs.api == 'true' || needs.detect-changes.outputs.ci == 'true'
         run: just lint-backend
 
+      - name: Check anti-patterns
+        if: needs.detect-changes.outputs.api == 'true' || needs.detect-changes.outputs.ci == 'true'
+        continue-on-error: true
+        run: just lint-patterns
+
       # ── Codegen check ──
       - name: Install frontend dependencies
         run: just _ensure-frontend-deps
@@ -86,7 +91,10 @@ jobs:
       # cargo-deny and cargo-machete are pre-installed in the ARC runner image.
       # To upgrade, bump versions in .github/tool-versions and rebuild.
       - name: Install cargo-deny
-        if: needs.detect-changes.outputs.api == 'true' || needs.detect-changes.outputs.ci == 'true'
+        if: >-
+          needs.detect-changes.outputs.api == 'true' ||
+          needs.detect-changes.outputs.ui == 'true' ||
+          needs.detect-changes.outputs.ci == 'true'
         run: |
           source .github/tool-versions
           if ! cargo-deny --version 2>/dev/null | grep -q "${CARGO_DENY_VERSION}"; then
@@ -96,7 +104,10 @@ jobs:
           fi
 
       - name: Install cargo-machete
-        if: needs.detect-changes.outputs.api == 'true' || needs.detect-changes.outputs.ci == 'true'
+        if: >-
+          needs.detect-changes.outputs.api == 'true' ||
+          needs.detect-changes.outputs.ui == 'true' ||
+          needs.detect-changes.outputs.ci == 'true'
         run: |
           source .github/tool-versions
           if ! cargo-machete --version 2>/dev/null | grep -q "${CARGO_MACHETE_VERSION#v}"; then
@@ -106,11 +117,17 @@ jobs:
           fi
 
       - name: Run dependency audit
-        if: needs.detect-changes.outputs.api == 'true' || needs.detect-changes.outputs.ci == 'true'
+        if: >-
+          needs.detect-changes.outputs.api == 'true' ||
+          needs.detect-changes.outputs.ui == 'true' ||
+          needs.detect-changes.outputs.ci == 'true'
         run: just audit-deps
 
       - name: Check for unused dependencies
-        if: needs.detect-changes.outputs.api == 'true' || needs.detect-changes.outputs.ci == 'true'
+        if: >-
+          needs.detect-changes.outputs.api == 'true' ||
+          needs.detect-changes.outputs.ui == 'true' ||
+          needs.detect-changes.outputs.ci == 'true'
         run: just audit-unused
 
   # ── Lint Kubernetes manifests ─────────────────────────────
@@ -297,6 +314,27 @@ jobs:
 
       - name: Run static analysis
         run: just lint-static
+
+      - name: Cache gitleaks
+        id: cache-gitleaks
+        uses: runs-on/cache@v4
+        with:
+          path: ~/.local/bin/gitleaks
+          key: gitleaks-${{ runner.os }}-${{ runner.arch }}
+
+      - name: Install gitleaks
+        if: steps.cache-gitleaks.outputs.cache-hit != 'true'
+        run: |
+          source .github/tool-versions
+          mkdir -p ~/.local/bin
+          curl -fsSL "https://github.com/gitleaks/gitleaks/releases/download/${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION#v}_linux_x64.tar.gz" \
+            | tar xz -C ~/.local/bin gitleaks
+
+      - name: Add gitleaks to PATH
+        run: echo "${HOME}/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Scan for secrets
+        run: just audit-secrets
 
   # ── Build API documentation ──────────────────────────────
   build-docs:
