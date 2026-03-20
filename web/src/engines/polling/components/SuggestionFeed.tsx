@@ -20,13 +20,14 @@ const STATUS_COLOR: Record<string, string> = {
 
 interface SuggestionFeedProps {
   roomId: string;
+  pollId: string;
 }
 
-export function SuggestionFeed({ roomId }: SuggestionFeedProps) {
+export function SuggestionFeed({ roomId, pollId }: SuggestionFeedProps) {
   const { deviceKid, privateKey } = useDevice();
   const { crypto } = useCrypto();
-  const suggestionsQuery = useSuggestions(roomId);
-  const createMutation = useCreateSuggestion(roomId, deviceKid, privateKey, crypto);
+  const suggestionsQuery = useSuggestions(roomId, pollId);
+  const createMutation = useCreateSuggestion(roomId, pollId, deviceKid, privateKey, crypto);
   const [text, setText] = useState('');
 
   const handleSubmit = () => {
