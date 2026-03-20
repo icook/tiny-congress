@@ -549,6 +549,11 @@ pub async fn cast_vote(
         .await
     {
         Ok(votes) => {
+            tracing::info!(
+                account_id = %auth.account_id,
+                poll_id = %poll_id,
+                "Vote cast"
+            );
             let votes: Vec<_> = votes
                 .into_iter()
                 .map(|v| VoteResponse {
