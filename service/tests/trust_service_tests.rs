@@ -615,3 +615,37 @@ async fn test_denounce_rejects_oversized_reason() {
         "expected InvalidReason, got: {result:?}"
     );
 }
+
+#[shared_runtime_test]
+async fn test_endorse_rejected_after_denouncement() {
+    let db = isolated_db().await;
+    let pool = db.pool().clone();
+
+    let accuser = AccountFactory::new()
+        .with_seed(247)
+        .create(&pool)
+        .await
+        .expect("create accuser");
+
+    let target = AccountFactory::new()
+        .with_seed(248)
+        .create(&pool)
+        .await
+        .expect("create target");
+
+    let rep_repo = Arc::new(PgReputationRepo::new(pool.clone())) as Arc<dyn ReputationRepo>;
+    let repo = Arc::new(PgTrustRepo::new(pool.clone()));
+
+    // Insert a denouncement directly so has_active_denouncement returns true
+    repo.create_denouncement(accuser.id, target.id, "prior misbehavior")
+        .await
+        .expect("create denouncement");
+
+    let service = DefaultTrustService::new(repo, rep_repo);
+    let result = service.endorse(accuser.id, target.id, 1.0, None).await;
+
+    assert!(
+        matches!(result, Err(TrustServiceError::DenouncementConflict)),
+        "expected DenouncementConflict, got: {result:?}"
+    );
+}
