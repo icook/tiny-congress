@@ -8,6 +8,7 @@ use uuid::Uuid;
 
 use crate::reputation::repo::ReputationRepo;
 use crate::trust::repo::{TrustRepo, TrustRepoError};
+use crate::trust::worker::ActionType;
 
 /// Demo endorsement slot limit per user (k=3).
 pub const ENDORSEMENT_SLOT_LIMIT: u32 = 3;
@@ -158,7 +159,7 @@ impl TrustService for DefaultTrustService {
             "in_slot": in_slot,
         });
         self.trust_repo
-            .enqueue_action(endorser_id, "endorse", &payload)
+            .enqueue_action(endorser_id, ActionType::Endorse.as_str(), &payload)
             .await?;
 
         Ok(())
@@ -180,7 +181,7 @@ impl TrustService for DefaultTrustService {
 
         let payload = json!({ "subject_id": subject_id });
         self.trust_repo
-            .enqueue_action(endorser_id, "revoke", &payload)
+            .enqueue_action(endorser_id, ActionType::Revoke.as_str(), &payload)
             .await?;
 
         Ok(())
@@ -222,7 +223,7 @@ impl TrustService for DefaultTrustService {
             "reason": reason,
         });
         self.trust_repo
-            .enqueue_action(accuser_id, "denounce", &payload)
+            .enqueue_action(accuser_id, ActionType::Denounce.as_str(), &payload)
             .await?;
 
         Ok(())
