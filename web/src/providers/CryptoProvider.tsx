@@ -22,7 +22,7 @@ interface CryptoContextValue {
   error: Error | null;
 }
 
-const CryptoContext = createContext<CryptoContextValue>({
+export const CryptoContext = createContext<CryptoContextValue>({
   crypto: null,
   isLoading: true,
   error: null,
