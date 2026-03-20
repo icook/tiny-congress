@@ -12,8 +12,6 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use tc_engine_polling::repo::bot_traces;
-
 use crate::http::{internal_error, not_found, ErrorResponse};
 use crate::identity::http::auth::AuthenticatedDevice;
 use crate::rooms::service::{
@@ -502,10 +500,10 @@ pub async fn my_votes(
 // ─── Bot trace handlers ────────────────────────────────────────────────────
 
 pub async fn get_poll_traces(
-    Extension(pool): Extension<PgPool>,
+    Extension(polling): Extension<Arc<dyn PollingService>>,
     Path((_room_id, poll_id)): Path<(Uuid, Uuid)>,
 ) -> impl IntoResponse {
-    match bot_traces::get_traces_for_poll(&pool, poll_id).await {
+    match polling.get_poll_traces(poll_id).await {
         Ok(traces) => {
             let response: Vec<BotTraceResponse> = traces
                 .into_iter()
