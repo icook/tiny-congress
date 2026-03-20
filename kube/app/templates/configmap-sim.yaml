@@ -7,7 +7,7 @@ metadata:
     {{- include "app.labels" . | nindent 4 }}
     app.kubernetes.io/component: sim
 data:
-  SIM_API_URL: {{ .Values.sim.apiUrl | quote }}
+  SIM_API_URL: {{ required "sim.apiUrl is required when sim is enabled" .Values.sim.apiUrl | quote }}
   SIM_OPENROUTER_MODEL: {{ .Values.sim.openrouterModel | quote }}
   SIM_TARGET_ROOMS: {{ .Values.sim.targetRooms | quote }}
   SIM_VOTES_PER_POLL: {{ .Values.sim.votesPerPoll | quote }}

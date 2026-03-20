@@ -61,7 +61,7 @@ pub struct VerifierConfig {
     pub public_key: String,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 pub struct DatabaseConfig {
     /// Database host.
     #[serde(default = "default_db_host")]
@@ -96,6 +96,24 @@ pub struct DatabaseConfig {
     /// demo environment. Default: false.
     #[serde(default)]
     pub auto_reset_on_migration_failure: bool,
+}
+
+impl std::fmt::Debug for DatabaseConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("DatabaseConfig")
+            .field("host", &self.host)
+            .field("port", &self.port)
+            .field("name", &self.name)
+            .field("user", &self.user)
+            .field("password", &"[REDACTED]")
+            .field("max_connections", &self.max_connections)
+            .field("migrations_dir", &self.migrations_dir)
+            .field(
+                "auto_reset_on_migration_failure",
+                &self.auto_reset_on_migration_failure,
+            )
+            .finish()
+    }
 }
 
 impl DatabaseConfig {
@@ -323,7 +341,7 @@ pub struct GraphQLConfig {
 /// But if any `TC_IDME__*` variable is set, all required fields must be present.
 ///
 /// Set via `TC_IDME__*` environment variables or `idme.*` in config.yaml.
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 pub struct IdMeConfig {
     /// OAuth client ID from ID.me application registration.
     pub client_id: String,
@@ -344,6 +362,21 @@ pub struct IdMeConfig {
     /// Frontend URL to redirect to after callback processing.
     /// The result (success/error) is appended as query parameters.
     pub frontend_callback_url: String,
+}
+
+impl std::fmt::Debug for IdMeConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("IdMeConfig")
+            .field("client_id", &self.client_id)
+            .field("client_secret", &"[REDACTED]")
+            .field("authorize_url", &self.authorize_url)
+            .field("token_url", &self.token_url)
+            .field("userinfo_url", &self.userinfo_url)
+            .field("redirect_uri", &self.redirect_uri)
+            .field("state_secret", &"[REDACTED]")
+            .field("frontend_callback_url", &self.frontend_callback_url)
+            .finish()
+    }
 }
 
 fn default_idme_authorize_url() -> String {
@@ -572,6 +605,37 @@ impl Config {
             return Err(ConfigError::Validation(
                 "TC_SYNTHETIC_BACKUP_KEY must be at least 32 bytes".into(),
             ));
+        }
+
+        // If IdMe is configured, validate all required fields
+        if let Some(ref idme) = self.idme {
+            if idme.client_id.is_empty() {
+                return Err(ConfigError::Validation(
+                    "idme.client_id is required when IdMe is enabled. Set TC_IDME__CLIENT_ID."
+                        .into(),
+                ));
+            }
+            if idme.client_secret.is_empty() {
+                return Err(ConfigError::Validation(
+                    "idme.client_secret is required when IdMe is enabled. Set TC_IDME__CLIENT_SECRET.".into(),
+                ));
+            }
+            if idme.redirect_uri.is_empty() {
+                return Err(ConfigError::Validation(
+                    "idme.redirect_uri is required when IdMe is enabled. Set TC_IDME__REDIRECT_URI.".into(),
+                ));
+            }
+            if idme.frontend_callback_url.is_empty() {
+                return Err(ConfigError::Validation(
+                    "idme.frontend_callback_url is required when IdMe is enabled. Set TC_IDME__FRONTEND_CALLBACK_URL.".into(),
+                ));
+            }
+            if idme.state_secret.len() < 32 {
+                return Err(ConfigError::Validation(
+                    "idme.state_secret must be at least 32 bytes. Set TC_IDME__STATE_SECRET."
+                        .into(),
+                ));
+            }
         }
 
         Ok(())
@@ -846,5 +910,139 @@ mod tests {
             let result = config.validate();
             assert_eq!(result.is_ok(), should_pass, "case '{}': {:?}", desc, result);
         }
+    }
+
+    fn valid_idme_config() -> IdMeConfig {
+        IdMeConfig {
+            client_id: "client123".into(),
+            client_secret: "secret456".into(),
+            authorize_url: default_idme_authorize_url(),
+            token_url: default_idme_token_url(),
+            userinfo_url: default_idme_userinfo_url(),
+            redirect_uri: "https://example.com/callback".into(),
+            state_secret: "a-state-secret-that-is-at-least-32-bytes!!".into(),
+            frontend_callback_url: "https://example.com/verify".into(),
+        }
+    }
+
+    #[test]
+    fn test_idme_absent_passes_validation() {
+        let config = valid_config();
+        assert!(config.idme.is_none());
+        assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn test_idme_fully_valid_passes_validation() {
+        let mut config = valid_config();
+        config.idme = Some(valid_idme_config());
+        assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn idme_field_boundaries() {
+        // Each case: (field description, how to corrupt it, expected error substring)
+        let cases: &[(&str, fn(&mut IdMeConfig), &str)] = &[
+            (
+                "empty client_id",
+                |c| c.client_id = "".into(),
+                "idme.client_id",
+            ),
+            (
+                "empty client_secret",
+                |c| c.client_secret = "".into(),
+                "idme.client_secret",
+            ),
+            (
+                "empty redirect_uri",
+                |c| c.redirect_uri = "".into(),
+                "idme.redirect_uri",
+            ),
+            (
+                "empty frontend_callback_url",
+                |c| c.frontend_callback_url = "".into(),
+                "idme.frontend_callback_url",
+            ),
+            (
+                "state_secret too short (31 bytes)",
+                |c| c.state_secret = "a".repeat(31),
+                "idme.state_secret",
+            ),
+        ];
+
+        for (desc, corrupt, expected_msg) in cases {
+            let mut config = valid_config();
+            let mut idme = valid_idme_config();
+            corrupt(&mut idme);
+            config.idme = Some(idme);
+            let result = config.validate();
+            assert!(result.is_err(), "case '{}' should fail validation", desc);
+            let err = result.unwrap_err().to_string();
+            assert!(
+                err.contains(expected_msg),
+                "case '{}': expected error containing '{}', got: {}",
+                desc,
+                expected_msg,
+                err
+            );
+        }
+    }
+
+    #[test]
+    fn test_idme_state_secret_exactly_32_bytes_passes() {
+        let mut config = valid_config();
+        let mut idme = valid_idme_config();
+        idme.state_secret = "a".repeat(32);
+        config.idme = Some(idme);
+        assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn database_config_debug_redacts_password() {
+        let config = DatabaseConfig {
+            host: "localhost".into(),
+            port: 5432,
+            name: "testdb".into(),
+            user: "admin".into(),
+            password: "super-secret".into(),
+            max_connections: 10,
+            migrations_dir: None,
+            auto_reset_on_migration_failure: false,
+        };
+        let debug = format!("{config:?}");
+        assert!(
+            !debug.contains("super-secret"),
+            "password must not appear in Debug output"
+        );
+        assert!(
+            debug.contains("[REDACTED]"),
+            "password field must show [REDACTED]"
+        );
+        assert!(
+            debug.contains("admin"),
+            "non-secret fields must still appear"
+        );
+    }
+
+    #[test]
+    fn idme_config_debug_redacts_client_secret_and_state_secret() {
+        let config = valid_idme_config();
+        let debug = format!("{config:?}");
+        assert!(
+            !debug.contains("secret456"),
+            "client_secret must not appear in Debug output"
+        );
+        assert!(
+            !debug.contains("a-state-secret"),
+            "state_secret must not appear in Debug output"
+        );
+        assert!(
+            debug.matches("[REDACTED]").count() == 2,
+            "exactly two fields must be redacted"
+        );
+        assert!(
+            debug.contains("client123"),
+            "non-secret client_id must still appear"
+        );
     }
 }
