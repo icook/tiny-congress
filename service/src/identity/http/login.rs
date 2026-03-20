@@ -1,3 +1,4 @@
+// lint-patterns:allow-no-utoipa — tracked by #906
 //! Login HTTP handler
 //!
 //! Authenticates an existing user by verifying a certificate signed by their

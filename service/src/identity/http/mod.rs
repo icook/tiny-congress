@@ -1,3 +1,4 @@
+// lint-patterns:allow-no-utoipa — tracked by #906
 //! HTTP handlers for identity system
 
 pub mod auth;

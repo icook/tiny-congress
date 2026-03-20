@@ -1,3 +1,4 @@
+// lint-patterns:allow-no-utoipa — OAuth redirects, not JSON API endpoints
 //! ID.me OAuth 2.0 verification flow
 //!
 //! Handles the authorize redirect and callback for ID.me identity verification.

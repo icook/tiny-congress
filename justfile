@@ -385,6 +385,34 @@ lint-patterns:
         FAIL=1
     fi
 
+    # 4. HTTP handler files missing utoipa OpenAPI annotations
+    #    Every handler file must have #[utoipa::path] annotations so that
+    #    `just codegen` generates TypeScript types. Without this, frontend
+    #    types drift from backend (see #861).
+    HANDLER_FILES=$(rg 'impl IntoResponse' service/src/ \
+         --glob '**/http/**/*.rs' \
+         --glob '!**/tests/**' \
+         --glob '!**/test*' \
+         --glob '!service/src/http/mod.rs' \
+         --glob '!service/src/http/security.rs' \
+         --glob '!service/src/http/rate_limit.rs' \
+         -l 2>/dev/null || true)
+    for f in $HANDLER_FILES; do
+        if ! grep -q '#\[utoipa::path' "$f" 2>/dev/null; then
+            if ! grep -q 'lint-patterns:allow-no-utoipa' "$f" 2>/dev/null; then
+                echo "  $f"
+                UTOIPA_FAIL=1
+            fi
+        fi
+    done
+    if [ "${UTOIPA_FAIL:-0}" -eq 1 ]; then
+        echo "FAIL: HTTP handler file missing #[utoipa::path] annotations."
+        echo "  Add utoipa annotations and register in ApiDoc (service/src/rest.rs)."
+        echo "  Then run 'just codegen' to regenerate frontend types."
+        echo "  Suppress with '// lint-patterns:allow-no-utoipa' + tracking issue."
+        FAIL=1
+    fi
+
     if [ "$FAIL" -eq 0 ]; then
         echo "✓ No anti-patterns found"
     else

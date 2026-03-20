@@ -1,3 +1,4 @@
+// lint-patterns:allow-no-utoipa — tracked by #907
 //! HTTP handlers for poll-specific operations (polls, dimensions, votes, evidence)
 
 use std::collections::HashMap;

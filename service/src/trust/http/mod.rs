@@ -1,3 +1,4 @@
+// lint-patterns:allow-no-utoipa — tracked by #861 (PR #905)
 //! HTTP handlers for trust system — endorsements, denouncements, invites, scores, budget.
 
 use std::sync::Arc;

@@ -1,3 +1,4 @@
+// lint-patterns:allow-no-utoipa — tracked by #906
 //! Backup retrieval endpoint for login/recovery flow.
 //!
 //! Returns the encrypted backup envelope for a given username. To prevent
