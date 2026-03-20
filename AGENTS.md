@@ -87,7 +87,7 @@ When writing HTTP handlers, use the shared helpers. Do NOT construct `(StatusCod
 
 | Need | Import from | NOT |
 |------|------------|-----|
-| Error responses (`bad_request`, `not_found`, `unauthorized`, `internal_error`) | `crate::http` | Inline `(StatusCode::BAD_REQUEST, Json(ErrorResponse {...}))` |
+| Error responses (`bad_request`, `not_found`, `unauthorized`, `internal_error`, `conflict`, `forbidden`, `too_many_requests`) | `crate::http` | Inline `(StatusCode::*, Json(ErrorResponse {...}))` |
 | `ErrorResponse` struct | `crate::http::ErrorResponse` | `serde_json::json!({"error": ...})` |
 | Auth extractor | `crate::identity::http::auth::AuthenticatedDevice` | — |
 | Database access in handlers | `Extension<Arc<dyn *Repo>>` or `Extension<Arc<dyn *Service>>` | `Extension<PgPool>` in HTTP handlers |
