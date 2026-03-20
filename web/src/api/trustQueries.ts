@@ -1,8 +1,11 @@
 /**
- * Endorsement query hooks — delegate to shared @/api layer.
+ * TanStack Query hooks for trust and endorsement data shared across features.
  *
- * Query keys use the trust naming convention ('trust-*') so all features share
- * the same cache entries and avoid stale-cache bugs.
+ * Lives in @/api so both the trust and endorsements features can import it
+ * without violating the no-cross-feature-import ESLint boundary rule.
+ *
+ * Query keys use the 'trust-*' naming convention so all features share the
+ * same cache entries and avoid stale-cache bugs.
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { getMyEndorsements } from '@/api/endorsements';
