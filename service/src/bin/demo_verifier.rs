@@ -561,6 +561,7 @@ async fn main() -> Result<(), anyhow::Error> {
     // 3. Create HTTP client and derive verifier identity
     let http = reqwest::Client::builder()
         .connect_timeout(std::time::Duration::from_secs(5))
+        .timeout(std::time::Duration::from_secs(30))
         .build()
         .context("failed to build HTTP client")?;
     let client = SimClient::new(http, config.api_url.clone());
