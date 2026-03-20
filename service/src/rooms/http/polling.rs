@@ -571,7 +571,10 @@ fn poll_error_response(e: PollError) -> axum::response::Response {
             (StatusCode::BAD_REQUEST, Json(ErrorResponse { error: msg })).into_response()
         }
         PollError::PollNotFound => not_found("Poll not found"),
-        PollError::Internal(_) => internal_error(),
+        PollError::Internal(inner) => {
+            tracing::error!("Poll service internal error: {inner}");
+            internal_error()
+        }
     }
 }
 
@@ -583,6 +586,9 @@ fn vote_error_response(e: VoteError) -> axum::response::Response {
         VoteError::NotEligible(msg) => crate::http::forbidden(&msg),
         VoteError::PollNotFound => not_found("Poll not found"),
         VoteError::PollNotActive => crate::http::conflict("Poll is not currently active"),
-        VoteError::Internal(_) => internal_error(),
+        VoteError::Internal(inner) => {
+            tracing::error!("Vote service internal error: {inner}");
+            internal_error()
+        }
     }
 }
