@@ -15,6 +15,8 @@ pub const ENDORSEMENT_SLOT_LIMIT: u32 = 3;
 pub const DENOUNCEMENT_SLOT_LIMIT: u32 = 2;
 /// Max trust actions per user per day (resets at midnight UTC).
 pub const DAILY_ACTION_QUOTA: i64 = 5;
+/// Maximum byte length of a denouncement reason (matches migration CHECK constraint).
+pub const DENOUNCEMENT_REASON_MAX_LEN: usize = 500;
 
 /// Errors returned by [`TrustService`] operations.
 #[derive(Debug, thiserror::Error)]

@@ -15,7 +15,8 @@ use uuid::Uuid;
 
 use super::repo::{TrustRepo, TrustRepoError};
 use super::service::{
-    TrustService, TrustServiceError, DENOUNCEMENT_SLOT_LIMIT, ENDORSEMENT_SLOT_LIMIT,
+    TrustService, TrustServiceError, DENOUNCEMENT_REASON_MAX_LEN, DENOUNCEMENT_SLOT_LIMIT,
+    ENDORSEMENT_SLOT_LIMIT,
 };
 use super::weight::compute_endorsement_weight;
 use crate::http::{bad_request, conflict, internal_error, not_found, too_many_requests};
@@ -209,7 +210,7 @@ async fn denounce_handler(
         Err(e) => return e,
     };
 
-    if body.reason.is_empty() || body.reason.len() > 500 {
+    if body.reason.is_empty() || body.reason.len() > DENOUNCEMENT_REASON_MAX_LEN {
         return bad_request("reason must be between 1 and 500 characters");
     }
 

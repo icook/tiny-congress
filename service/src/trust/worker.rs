@@ -8,6 +8,7 @@ use uuid::Uuid;
 use crate::reputation::repo::ReputationRepo;
 use crate::trust::engine::TrustEngine;
 use crate::trust::repo::{ActionRecord, TrustRepo};
+use crate::trust::service::DENOUNCEMENT_REASON_MAX_LEN;
 
 /// Background worker that claims and processes trust action queue batches.
 pub struct TrustWorker {
@@ -143,9 +144,10 @@ impl TrustWorker {
                     .as_str()
                     .ok_or_else(|| anyhow::anyhow!("denounce payload missing 'reason'"))?
                     .to_string();
-                if reason.is_empty() || reason.len() > 500 {
+                if reason.is_empty() || reason.len() > DENOUNCEMENT_REASON_MAX_LEN {
                     return Err(anyhow::anyhow!(
-                        "denounce payload 'reason' length out of range [1, 500]: {}",
+                        "denounce payload 'reason' length out of range [1, {}]: {}",
+                        DENOUNCEMENT_REASON_MAX_LEN,
                         reason.len()
                     ));
                 }
