@@ -178,7 +178,8 @@ describe('BotTraceViewer', () => {
     const showButtons = screen.getAllByText('Show output');
     expect(showButtons.length).toBeGreaterThan(0);
 
-    await user.click(showButtons[showButtons.length - 1]);
+    // eslint narrowing: getAllByText guarantees length >= 1 and expect above confirms
+    await user.click(showButtons[showButtons.length - 1] ?? showButtons[0]);
 
     expect(screen.getByText('Generated 4 evidence items for Apple Inc.')).toBeInTheDocument();
   });
@@ -190,7 +191,7 @@ describe('BotTraceViewer', () => {
     await user.click(screen.getByText('Bot generated'));
 
     const showButtons = screen.getAllByText('Show output');
-    await user.click(showButtons[showButtons.length - 1]);
+    await user.click(showButtons[showButtons.length - 1] ?? showButtons[0]);
 
     expect(screen.getByText('Hide output')).toBeInTheDocument();
     await user.click(screen.getByText('Hide output'));
