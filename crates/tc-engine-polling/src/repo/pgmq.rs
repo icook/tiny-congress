@@ -61,7 +61,109 @@ impl From<PgmqRow> for PgmqMessage {
     }
 }
 
-// ─── Queue operations ───────────────────────────────────────────────────────
+// ─── Generic queue operations ────────────────────────────────────────────────
+
+/// Enqueue a raw JSON payload onto any named queue and return the message ID.
+///
+/// # Errors
+///
+/// Returns `sqlx::Error` on connection error.
+pub async fn send(
+    pool: &PgPool,
+    queue_name: &str,
+    payload: &serde_json::Value,
+) -> Result<i64, sqlx::Error> {
+    let row: (i64,) = sqlx::query_as("SELECT * FROM pgmq.send($1, $2)")
+        .bind(queue_name)
+        .bind(payload)
+        .fetch_one(pool)
+        .await?;
+
+    Ok(row.0)
+}
+
+/// Enqueue a raw JSON payload with a visibility delay and return the message ID.
+///
+/// The message will not be visible for reading until `delay_secs` seconds
+/// have elapsed.
+///
+/// # Errors
+///
+/// Returns `sqlx::Error` on connection error.
+pub async fn send_delayed(
+    pool: &PgPool,
+    queue_name: &str,
+    payload: &serde_json::Value,
+    delay_secs: i32,
+) -> Result<i64, sqlx::Error> {
+    let row: (i64,) = sqlx::query_as("SELECT * FROM pgmq.send($1, $2, $3)")
+        .bind(queue_name)
+        .bind(payload)
+        .bind(delay_secs)
+        .fetch_one(pool)
+        .await?;
+
+    Ok(row.0)
+}
+
+/// Read one message from a named queue, hiding it for `visibility_timeout_secs` seconds.
+///
+/// Returns `None` when the queue is empty. The message remains hidden from
+/// other consumers until the visibility timeout elapses or it is
+/// deleted/archived.
+///
+/// # Errors
+///
+/// Returns `sqlx::Error` on connection failure.
+pub async fn read(
+    pool: &PgPool,
+    queue_name: &str,
+    visibility_timeout_secs: i32,
+) -> Result<Option<PgmqMessage>, sqlx::Error> {
+    let row = sqlx::query_as::<_, PgmqRow>(
+        "SELECT msg_id, read_ct, enqueued_at, vt, message FROM pgmq.read($1, $2, 1)",
+    )
+    .bind(queue_name)
+    .bind(visibility_timeout_secs)
+    .fetch_optional(pool)
+    .await?;
+
+    Ok(row.map(PgmqMessage::from))
+}
+
+/// Delete a message from a named queue after successful processing.
+///
+/// # Errors
+///
+/// Returns `sqlx::Error` on connection failure.
+pub async fn delete(pool: &PgPool, queue_name: &str, msg_id: i64) -> Result<(), sqlx::Error> {
+    sqlx::query("SELECT pgmq.delete($1, $2)")
+        .bind(queue_name)
+        .bind(msg_id)
+        .execute(pool)
+        .await?;
+
+    Ok(())
+}
+
+/// Archive a message from a named queue for audit trail retention.
+///
+/// Moves the message to the pgmq archive table instead of deleting it.
+///
+/// # Errors
+///
+/// Returns `sqlx::Error` on connection failure.
+pub async fn archive(pool: &PgPool, queue_name: &str, msg_id: i64) -> Result<(), sqlx::Error> {
+    sqlx::query("SELECT pgmq.archive($1, $2)")
+        .bind(queue_name)
+        .bind(msg_id)
+        .execute(pool)
+        .await?;
+
+    Ok(())
+}
+
+// ─── BotTask convenience wrappers ────────────────────────────────────────────
 
 /// Enqueue a bot task and return the assigned message ID.
 ///
@@ -72,13 +174,7 @@ pub async fn send_task(pool: &PgPool, task: &BotTask) -> Result<i64, sqlx::Error
     let payload = serde_json::to_value(task)
         .map_err(|e| sqlx::Error::Protocol(format!("failed to serialize BotTask: {e}")))?;
 
-    let row: (i64,) = sqlx::query_as("SELECT * FROM pgmq.send($1, $2)")
-        .bind(QUEUE_NAME)
-        .bind(payload)
-        .fetch_one(pool)
-        .await?;
-
-    Ok(row.0)
+    send(pool, QUEUE_NAME, &payload).await
 }
 
 /// Enqueue a bot task with a visibility delay and return the assigned message ID.
@@ -97,17 +193,10 @@ pub async fn send_task_delayed(
     let payload = serde_json::to_value(task)
         .map_err(|e| sqlx::Error::Protocol(format!("failed to serialize BotTask: {e}")))?;
 
-    let row: (i64,) = sqlx::query_as("SELECT * FROM pgmq.send($1, $2, $3)")
-        .bind(QUEUE_NAME)
-        .bind(payload)
-        .bind(delay_secs)
-        .fetch_one(pool)
-        .await?;
-
-    Ok(row.0)
+    send_delayed(pool, QUEUE_NAME, &payload, delay_secs).await
 }
 
-/// Read one message from the bot task queue, hiding it for `vt_secs` seconds.
+/// Read one message from the bot task queue, hiding it for `visibility_timeout_secs` seconds.
 ///
 /// Returns `None` when the queue is empty. The message remains hidden from
 /// other consumers until the visibility timeout elapses or it is
@@ -120,33 +209,19 @@ pub async fn read_task(
     pool: &PgPool,
     visibility_timeout_secs: i32,
 ) -> Result<Option<PgmqMessage>, sqlx::Error> {
-    let row = sqlx::query_as::<_, PgmqRow>(
-        "SELECT msg_id, read_ct, enqueued_at, vt, message FROM pgmq.read($1, $2, 1)",
-    )
-    .bind(QUEUE_NAME)
-    .bind(visibility_timeout_secs)
-    .fetch_optional(pool)
-    .await?;
-
-    Ok(row.map(PgmqMessage::from))
+    read(pool, QUEUE_NAME, visibility_timeout_secs).await
 }
 
-/// Delete a message from the queue after successful processing.
+/// Delete a message from the bot task queue after successful processing.
 ///
 /// # Errors
 ///
 /// Returns `sqlx::Error` on connection failure.
 pub async fn delete_task(pool: &PgPool, msg_id: i64) -> Result<(), sqlx::Error> {
-    sqlx::query("SELECT pgmq.delete($1, $2)")
-        .bind(QUEUE_NAME)
-        .bind(msg_id)
-        .execute(pool)
-        .await?;
-
-    Ok(())
+    delete(pool, QUEUE_NAME, msg_id).await
 }
 
-/// Archive a message for audit trail retention.
+/// Archive a bot task message for audit trail retention.
 ///
 /// Moves the message to the pgmq archive table instead of deleting it.
 ///
@@ -154,13 +229,7 @@ pub async fn delete_task(pool: &PgPool, msg_id: i64) -> Result<(), sqlx::Error> 
 ///
 /// Returns `sqlx::Error` on connection failure.
 pub async fn archive_task(pool: &PgPool, msg_id: i64) -> Result<(), sqlx::Error> {
-    sqlx::query("SELECT pgmq.archive($1, $2)")
-        .bind(QUEUE_NAME)
-        .bind(msg_id)
-        .execute(pool)
-        .await?;
-
-    Ok(())
+    archive(pool, QUEUE_NAME, msg_id).await
 }
 
 // ─── Tests ──────────────────────────────────────────────────────────────────

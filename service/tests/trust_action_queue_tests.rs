@@ -1,4 +1,4 @@
-//! Integration tests for trust action queue repository operations.
+//! Integration tests for trust action log repository operations.
 
 mod common;
 
@@ -66,7 +66,7 @@ async fn test_count_daily_actions() {
 }
 
 #[shared_runtime_test]
-async fn test_claim_pending_actions() {
+async fn test_get_action() {
     let db = isolated_db().await;
     let pool = db.pool().clone();
 
@@ -79,49 +79,17 @@ async fn test_claim_pending_actions() {
     let repo = PgTrustRepo::new(pool);
     let payload = serde_json::json!({});
 
-    repo.enqueue_action(account.id, "endorse", &payload)
-        .await
-        .expect("enqueue 1");
-    repo.enqueue_action(account.id, "revoke", &payload)
-        .await
-        .expect("enqueue 2");
-
-    let claimed = repo
-        .claim_pending_actions(10)
-        .await
-        .expect("claim_pending_actions");
-
-    assert_eq!(claimed.len(), 2);
-    for record in &claimed {
-        assert_eq!(record.status, "processing");
-    }
-}
-
-#[shared_runtime_test]
-async fn test_claim_skips_already_processing() {
-    let db = isolated_db().await;
-    let pool = db.pool().clone();
-
-    let account = AccountFactory::new()
-        .with_seed(103)
-        .create(&pool)
-        .await
-        .expect("create account");
-
-    let repo = PgTrustRepo::new(pool);
-    let payload = serde_json::json!({});
-
-    repo.enqueue_action(account.id, "endorse", &payload)
+    let enqueued = repo
+        .enqueue_action(account.id, "endorse", &payload)
         .await
         .expect("enqueue");
 
-    // First claim transitions to 'processing'
-    let first = repo.claim_pending_actions(10).await.expect("first claim");
-    assert_eq!(first.len(), 1);
+    let fetched = repo.get_action(enqueued.id).await.expect("get_action");
 
-    // Second claim should return nothing — already processing
-    let second = repo.claim_pending_actions(10).await.expect("second claim");
-    assert_eq!(second.len(), 0);
+    assert_eq!(fetched.id, enqueued.id);
+    assert_eq!(fetched.actor_id, account.id);
+    assert_eq!(fetched.action_type, "endorse");
+    assert_eq!(fetched.status, "pending");
 }
 
 #[shared_runtime_test]
@@ -135,7 +103,7 @@ async fn test_complete_action() {
         .await
         .expect("create account");
 
-    let repo = PgTrustRepo::new(pool);
+    let repo = PgTrustRepo::new(pool.clone());
     let payload = serde_json::json!({});
 
     let record = repo
@@ -143,15 +111,13 @@ async fn test_complete_action() {
         .await
         .expect("enqueue");
 
-    repo.claim_pending_actions(10).await.expect("claim");
-
     repo.complete_action(record.id)
         .await
         .expect("complete_action");
 
     // Verify via a direct query that status='completed' and processed_at is set
     let row = sqlx::query_as::<_, (String, Option<chrono::DateTime<chrono::Utc>>)>(
-        "SELECT status, processed_at FROM trust__action_queue WHERE id = $1",
+        "SELECT status, processed_at FROM trust__action_log WHERE id = $1",
     )
     .bind(record.id)
     .fetch_one(db.pool())
@@ -181,60 +147,26 @@ async fn test_fail_action_with_message() {
         .await
         .expect("enqueue");
 
-    repo.claim_pending_actions(10).await.expect("claim");
-
     let error_msg = "target account not found";
     repo.fail_action(record.id, error_msg)
         .await
         .expect("fail_action");
 
-    let row = sqlx::query_as::<
-        _,
-        (
-            String,
-            Option<String>,
-            Option<chrono::DateTime<chrono::Utc>>,
-        ),
-    >(
-        "SELECT status, error_message, processed_at FROM trust__action_queue WHERE id = $1"
-    )
-    .bind(record.id)
-    .fetch_one(db.pool())
-    .await
-    .expect("fetch row");
+    let row =
+        sqlx::query_as::<
+            _,
+            (
+                String,
+                Option<String>,
+                Option<chrono::DateTime<chrono::Utc>>,
+            ),
+        >("SELECT status, error_message, processed_at FROM trust__action_log WHERE id = $1")
+        .bind(record.id)
+        .fetch_one(db.pool())
+        .await
+        .expect("fetch row");
 
     assert_eq!(row.0, "failed");
     assert_eq!(row.1.as_deref(), Some(error_msg));
     assert!(row.2.is_some());
-}
-
-#[shared_runtime_test]
-async fn test_claim_respects_limit() {
-    let db = isolated_db().await;
-    let pool = db.pool().clone();
-
-    let account = AccountFactory::new()
-        .with_seed(106)
-        .create(&pool)
-        .await
-        .expect("create account");
-
-    let repo = PgTrustRepo::new(pool);
-    let payload = serde_json::json!({});
-
-    for _ in 0..5 {
-        repo.enqueue_action(account.id, "endorse", &payload)
-            .await
-            .expect("enqueue");
-    }
-
-    let claimed = repo
-        .claim_pending_actions(2)
-        .await
-        .expect("claim with limit 2");
-
-    assert_eq!(claimed.len(), 2);
-    for record in &claimed {
-        assert_eq!(record.status, "processing");
-    }
 }

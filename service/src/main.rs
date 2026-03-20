@@ -336,11 +336,10 @@ async fn build_app(
 
     // Spawn trust background worker
     let trust_worker = Arc::new(TrustWorker::new(
+        pool.clone(),
         trust_repo_for_worker,
         reputation_repo_for_worker,
         trust_engine,
-        config.trust.batch_size,
-        config.trust.batch_interval_secs,
     ));
     tokio::spawn(async move { trust_worker.run().await });
 

@@ -1,23 +1,19 @@
-//! Batch worker — processes trust action queue and recomputes scores.
+//! pgmq-backed worker — processes trust action log entries one message at a time.
 
 use std::sync::Arc;
 use std::time::Duration;
 
+use sqlx::PgPool;
 use uuid::Uuid;
 
+use tc_engine_polling::repo::pgmq;
+
 use crate::reputation::repo::EndorsementRepoError;
+use crate::reputation::repo::ReputationRepo;
 use crate::trust::engine::TrustEngine;
 use crate::trust::engine::TrustEngineError;
 use crate::trust::repo::{ActionRecord, TrustRepo, TrustRepoError};
 use crate::trust::service::DENOUNCEMENT_REASON_MAX_LEN;
-
-/// Errors that can occur while processing the trust action queue.
-#[derive(Debug, thiserror::Error)]
-pub enum TrustWorkerError {
-    /// Claiming the next batch of pending actions failed.
-    #[error("claim_pending_actions failed: {0}")]
-    ClaimActions(#[from] TrustRepoError),
-}
 
 /// Errors that can occur while processing a single trust action.
 #[derive(Debug, thiserror::Error)]
@@ -43,81 +39,189 @@ pub enum TrustActionError {
     UnknownActionType(String),
 }
 
-use crate::reputation::repo::ReputationRepo;
+const QUEUE_NAME: &str = "trust__actions";
+const MAX_RETRIES: i32 = 3;
+const VISIBILITY_TIMEOUT_SECS: i32 = 120;
+const POLL_INTERVAL: Duration = Duration::from_secs(5);
 
-/// Background worker that claims and processes trust action queue batches.
+/// Background worker that reads trust action messages from pgmq and processes them.
 pub struct TrustWorker {
+    pool: PgPool,
     trust_repo: Arc<dyn TrustRepo>,
     reputation_repo: Arc<dyn ReputationRepo>,
     trust_engine: Arc<TrustEngine>,
-    batch_size: i64,
-    batch_interval_secs: u64,
 }
 
 impl TrustWorker {
     /// Create a new `TrustWorker`.
     #[must_use]
     pub fn new(
+        pool: PgPool,
         trust_repo: Arc<dyn TrustRepo>,
         reputation_repo: Arc<dyn ReputationRepo>,
         trust_engine: Arc<TrustEngine>,
-        batch_size: i64,
-        batch_interval_secs: u64,
     ) -> Self {
         Self {
+            pool,
             trust_repo,
             reputation_repo,
             trust_engine,
-            batch_size,
-            batch_interval_secs,
         }
     }
 
-    /// Claim and process a batch of pending actions.
+    /// Enqueue pgmq messages for any pre-migration `status = 'pending'` rows.
     ///
-    /// Each action is processed individually; per-action errors are logged and
-    /// recorded as `failed` in the queue without aborting the rest of the batch.
+    /// Run once at startup to recover actions that were inserted before the
+    /// pgmq queue existed.
+    async fn drain_legacy_pending(&self) {
+        let rows: Vec<(Uuid,)> = match sqlx::query_as(
+            "SELECT id FROM trust__action_log WHERE status = 'pending' ORDER BY created_at ASC",
+        )
+        .fetch_all(&self.pool)
+        .await
+        {
+            Ok(r) => r,
+            Err(e) => {
+                tracing::error!("drain_legacy_pending: failed to query pending rows: {e}");
+                return;
+            }
+        };
+
+        for (id,) in &rows {
+            let payload = serde_json::json!({ "log_id": id.to_string() });
+            if let Err(e) = pgmq::send(&self.pool, QUEUE_NAME, &payload).await {
+                tracing::error!(action_id = %id, "drain_legacy_pending: failed to enqueue: {e}");
+            }
+        }
+
+        if !rows.is_empty() {
+            tracing::info!(
+                count = rows.len(),
+                "drain_legacy_pending: enqueued legacy pending actions"
+            );
+        }
+    }
+
+    /// Read and process one message from the pgmq queue.
     ///
-    /// Returns the count of actions processed (regardless of success/failure).
+    /// Returns `true` if a message was found and processed (regardless of
+    /// success or failure), `false` if the queue was empty.
+    ///
+    /// This is the single-message unit used by the run loop; exposed for
+    /// integration tests so they can drive the worker step-by-step without
+    /// spinning up the infinite loop.
     ///
     /// # Errors
     ///
-    /// Returns an error only if claiming actions from the queue fails.
-    pub async fn process_batch(&self) -> Result<usize, TrustWorkerError> {
-        let actions = self
-            .trust_repo
-            .claim_pending_actions(self.batch_size)
-            .await?;
+    /// Returns an error only if `pgmq::read` itself fails.
+    pub async fn process_one(&self) -> Result<bool, anyhow::Error> {
+        let msg = match pgmq::read(&self.pool, QUEUE_NAME, VISIBILITY_TIMEOUT_SECS).await {
+            Ok(Some(m)) => m,
+            Ok(None) => return Ok(false),
+            Err(e) => return Err(anyhow::anyhow!("pgmq::read failed: {e}")),
+        };
 
-        let count = actions.len();
+        let msg_id = msg.msg_id;
 
-        for action in &actions {
-            match self.process_action(action).await {
-                Ok(()) => {
-                    if let Err(e) = self.trust_repo.complete_action(action.id).await {
-                        tracing::error!(
-                            action_id = %action.id,
-                            "failed to mark action complete: {e}"
-                        );
-                    }
+        // Poison-message guard
+        if msg.read_ct > MAX_RETRIES {
+            tracing::warn!(
+                msg_id,
+                read_ct = msg.read_ct,
+                "trust worker: poison message detected, marking failed and archiving"
+            );
+            if let Some(log_id) = extract_log_id(&msg.message) {
+                if let Err(e) = self
+                    .trust_repo
+                    .fail_action(log_id, "poison message: exceeded max retries")
+                    .await
+                {
+                    tracing::error!(msg_id, "trust worker: fail_action for poison msg: {e}");
                 }
-                Err(e) => {
+            }
+            if let Err(e) = pgmq::archive(&self.pool, QUEUE_NAME, msg_id).await {
+                tracing::error!(msg_id, "trust worker: archive poison msg failed: {e}");
+            }
+            return Ok(true);
+        }
+
+        let Some(log_id) = extract_log_id(&msg.message) else {
+            tracing::error!(
+                msg_id,
+                message = ?msg.message,
+                "trust worker: missing or invalid log_id in message"
+            );
+            if let Err(e) = pgmq::archive(&self.pool, QUEUE_NAME, msg_id).await {
+                tracing::error!(msg_id, "trust worker: archive bad-payload msg failed: {e}");
+            }
+            return Ok(true);
+        };
+
+        let action = match self.trust_repo.get_action(log_id).await {
+            Ok(a) => a,
+            Err(e) => {
+                tracing::error!(msg_id, %log_id, "trust worker: get_action failed: {e}");
+                // Leave in queue so visibility timeout re-exposes it for retry
+                return Ok(true);
+            }
+        };
+
+        match self.process_action(&action).await {
+            Ok(()) => {
+                if let Err(e) = self.trust_repo.complete_action(action.id).await {
                     tracing::error!(
                         action_id = %action.id,
-                        action_type = %action.action_type,
-                        "action processing error: {e}"
+                        "trust worker: failed to mark action complete: {e}"
                     );
-                    if let Err(fe) = self.trust_repo.fail_action(action.id, &e.to_string()).await {
-                        tracing::error!(
-                            action_id = %action.id,
-                            "failed to mark action failed: {fe}"
-                        );
-                    }
+                }
+                if let Err(e) = pgmq::archive(&self.pool, QUEUE_NAME, msg_id).await {
+                    tracing::error!(msg_id, "trust worker: archive after complete failed: {e}");
+                }
+            }
+            Err(e) => {
+                tracing::error!(
+                    action_id = %action.id,
+                    action_type = %action.action_type,
+                    "trust worker: action processing error: {e}"
+                );
+                if let Err(fe) = self.trust_repo.fail_action(action.id, &e.to_string()).await {
+                    tracing::error!(
+                        action_id = %action.id,
+                        "trust worker: failed to mark action failed: {fe}"
+                    );
+                }
+                if let Err(ae) = pgmq::archive(&self.pool, QUEUE_NAME, msg_id).await {
+                    tracing::error!(msg_id, "trust worker: archive after fail failed: {ae}");
                 }
             }
         }
 
-        Ok(count)
+        Ok(true)
+    }
+
+    /// Run the worker loop indefinitely.
+    ///
+    /// Drains any pre-migration pending rows once on startup, then polls
+    /// pgmq for new messages in a tight loop, sleeping `POLL_INTERVAL` when
+    /// the queue is empty.
+    pub async fn run(self: Arc<Self>) {
+        self.drain_legacy_pending().await;
+
+        loop {
+            match self.process_one().await {
+                Ok(true) => {
+                    // message was processed; immediately try for the next one
+                }
+                Ok(false) => {
+                    // queue was empty; back off before polling again
+                    tokio::time::sleep(POLL_INTERVAL).await;
+                }
+                Err(e) => {
+                    tracing::error!("trust worker: pgmq::read error: {e}");
+                    tokio::time::sleep(POLL_INTERVAL).await;
+                }
+            }
+        }
     }
 
     async fn process_action(&self, action: &ActionRecord) -> Result<(), TrustActionError> {
@@ -208,17 +312,12 @@ impl TrustWorker {
 
         Ok(())
     }
+}
 
-    /// Run the worker loop indefinitely, processing a batch immediately on startup
-    /// then sleeping for `batch_interval_secs` between runs.
-    pub async fn run(self: Arc<Self>) {
-        loop {
-            if let Err(e) = self.process_batch().await {
-                tracing::error!("trust worker batch error: {e}");
-            }
-            tokio::time::sleep(Duration::from_secs(self.batch_interval_secs)).await;
-        }
-    }
+fn extract_log_id(message: &serde_json::Value) -> Option<Uuid> {
+    message["log_id"]
+        .as_str()
+        .and_then(|s| s.parse::<Uuid>().ok())
 }
 
 fn parse_uuid(payload: &serde_json::Value, key: &str) -> Result<Uuid, TrustActionError> {

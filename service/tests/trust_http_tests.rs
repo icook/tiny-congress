@@ -503,12 +503,13 @@ async fn test_accept_invite_auto_enqueues_endorsement() {
     );
 
     // Assert a pending endorsement action exists for the endorser
-    use tinycongress_api::trust::repo::{PgTrustRepo, TrustRepo};
-    let trust_repo = PgTrustRepo::new(pool);
-    let pending = trust_repo
-        .claim_pending_actions(10)
-        .await
-        .expect("claim_pending_actions");
+    use tinycongress_api::trust::repo::ActionRecord;
+    let pending = sqlx::query_as::<_, ActionRecord>(
+        "SELECT * FROM trust__action_log WHERE status = 'pending' ORDER BY created_at",
+    )
+    .fetch_all(&pool)
+    .await
+    .expect("query pending actions");
 
     let endorse_action = pending.iter().find(|a| {
         a.actor_id == endorser_id
@@ -1370,7 +1371,6 @@ async fn denounce_returns_429_when_budget_exhausted() {
 #[shared_runtime_test]
 async fn accept_invite_succeeds_even_when_endorser_slots_exhausted() {
     use common::factories::{insert_endorsement, AccountFactory};
-    use tinycongress_api::trust::repo::{PgTrustRepo, TrustRepo};
 
     let db = isolated_db().await;
     let pool = db.pool().clone();
@@ -1445,11 +1445,12 @@ async fn accept_invite_succeeds_even_when_endorser_slots_exhausted() {
     assert_eq!(accept_resp.status(), StatusCode::OK);
 
     // An out-of-slot endorsement action should have been queued.
-    let trust_repo = PgTrustRepo::new(pool);
-    let pending = trust_repo
-        .claim_pending_actions(10)
-        .await
-        .expect("claim_pending_actions");
+    let pending = sqlx::query_as::<_, tinycongress_api::trust::repo::ActionRecord>(
+        "SELECT * FROM trust__action_log WHERE status = 'pending' ORDER BY created_at",
+    )
+    .fetch_all(&pool)
+    .await
+    .expect("query pending actions");
     let endorse_action = pending
         .iter()
         .find(|a| a.actor_id == endorser_id && a.action_type == "endorse");

@@ -152,9 +152,14 @@ async fn test_demo_day_flow() {
     // Step 8: Process the batch via TrustWorker
     let reputation_repo = Arc::new(PgReputationRepo::new(pool.clone()));
     let engine_arc = Arc::new(TrustEngine::new(pool.clone()));
-    let worker = TrustWorker::new(trust_repo.clone(), reputation_repo, engine_arc, 50, 30);
-    let processed = worker.process_batch().await.expect("process_batch");
-    assert_eq!(processed, 1, "Worker should process 1 action");
+    let worker = TrustWorker::new(
+        pool.clone(),
+        trust_repo.clone(),
+        reputation_repo,
+        engine_arc,
+    );
+    let processed = worker.process_one().await.expect("process_one");
+    assert!(processed, "Worker should process 1 action");
 
     // Step 9: Verify action was processed (still counted toward quota, now completed)
     let action_count_after = trust_repo
@@ -168,7 +173,7 @@ async fn test_demo_day_flow() {
 
     // Verify the action was marked completed (not just counted)
     let status: String = sqlx::query_scalar(
-        "SELECT status FROM trust__action_queue \
+        "SELECT status FROM trust__action_log \
          WHERE actor_id = $1 ORDER BY created_at DESC LIMIT 1",
     )
     .bind(alice.id)
