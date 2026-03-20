@@ -805,3 +805,53 @@ async fn test_process_batch_revoke_no_endorsement_is_no_op() {
     .expect("count endorsements");
     assert_eq!(count, 0, "revoke should not create any endorsement rows");
 }
+
+// ---------------------------------------------------------------------------
+// Test: action with a subject_id that is a string but not a valid UUID fails
+// ---------------------------------------------------------------------------
+
+/// `parse_uuid` has two error branches: key absent (tested elsewhere) and key
+/// present as a non-UUID string. This test covers the second branch, confirming
+/// the action is marked failed with an error message that names the bad field.
+#[shared_runtime_test]
+async fn test_process_batch_invalid_uuid_string_fails() {
+    let db = isolated_db().await;
+    let pool = db.pool().clone();
+
+    let actor = AccountFactory::new()
+        .with_seed(1)
+        .create(&pool)
+        .await
+        .expect("create actor");
+
+    // Enqueue a 'revoke' action with subject_id present as a non-UUID string.
+    let trust_repo = PgTrustRepo::new(pool.clone());
+    trust_repo
+        .enqueue_action(
+            actor.id,
+            "revoke",
+            &json!({ "subject_id": "not-a-valid-uuid" }),
+        )
+        .await
+        .expect("enqueue action");
+
+    let worker = make_worker(pool.clone());
+    let processed = worker.process_one().await.expect("process_one");
+    assert!(processed, "expected a message to be processed");
+
+    let (status, error_message): (String, Option<String>) =
+        sqlx::query_as("SELECT status, error_message FROM trust__action_log WHERE actor_id = $1")
+            .bind(actor.id)
+            .fetch_one(&pool)
+            .await
+            .expect("fetch action");
+
+    assert_eq!(status, "failed");
+    assert!(
+        error_message
+            .as_deref()
+            .unwrap_or("")
+            .contains("subject_id"),
+        "error_message should name the bad field, got: {error_message:?}"
+    );
+}
