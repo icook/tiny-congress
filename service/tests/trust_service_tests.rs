@@ -522,13 +522,13 @@ async fn test_endorse_rejects_invalid_weight() {
     let pool = db.pool().clone();
 
     let endorser = AccountFactory::new()
-        .with_seed(260)
+        .with_seed(200)
         .create(&pool)
         .await
         .expect("create endorser");
 
     let subject = AccountFactory::new()
-        .with_seed(261)
+        .with_seed(201)
         .create(&pool)
         .await
         .expect("create subject");
