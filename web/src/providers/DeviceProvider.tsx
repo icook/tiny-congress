@@ -31,7 +31,7 @@ interface StoredDevice {
   username?: string;
 }
 
-interface DeviceContextValue {
+export interface DeviceContextValue {
   /** Current device KID, or null if not authenticated */
   deviceKid: string | null;
   /** Non-extractable CryptoKey for signing, or null if not authenticated */
@@ -49,7 +49,7 @@ interface DeviceContextValue {
 // eslint-disable-next-line @typescript-eslint/no-empty-function -- context defaults are never called
 const noop = () => {};
 
-const DeviceContext = createContext<DeviceContextValue>({
+export const DeviceContext = createContext<DeviceContextValue>({
   deviceKid: null,
   privateKey: null,
   username: null,
