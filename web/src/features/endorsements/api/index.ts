@@ -5,4 +5,4 @@ export {
   useCreateInvite,
   useAcceptInvite,
   useRevokeEndorsement,
-} from './queries';
+} from '@/api/trustQueries';

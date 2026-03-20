@@ -50,7 +50,7 @@ export function usePolls(roomId: string) {
 
 export function usePollDetail(roomId: string, pollId: string) {
   return useQuery<PollDetail>({
-    queryKey: ['poll-detail', pollId],
+    queryKey: ['poll-detail', roomId, pollId],
     queryFn: () => getPollDetail(roomId, pollId),
     enabled: Boolean(roomId && pollId),
     refetchInterval: 20_000,
@@ -68,7 +68,7 @@ export function useAgenda(roomId: string) {
 
 export function usePollResults(roomId: string, pollId: string) {
   return useQuery<PollResults>({
-    queryKey: ['poll-results', pollId],
+    queryKey: ['poll-results', roomId, pollId],
     queryFn: () => getPollResults(roomId, pollId),
     enabled: Boolean(roomId && pollId),
     refetchInterval: 20_000,
@@ -77,7 +77,7 @@ export function usePollResults(roomId: string, pollId: string) {
 
 export function usePollDistribution(roomId: string, pollId: string) {
   return useQuery<PollDistribution>({
-    queryKey: ['poll-distribution', pollId],
+    queryKey: ['poll-distribution', roomId, pollId],
     queryFn: () => getPollDistribution(roomId, pollId),
     enabled: Boolean(roomId && pollId),
     refetchInterval: 20_000,
@@ -139,8 +139,8 @@ export function useCastVote(
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['my-votes', pollId] });
-      void queryClient.invalidateQueries({ queryKey: ['poll-results', pollId] });
-      void queryClient.invalidateQueries({ queryKey: ['poll-distribution', pollId] });
+      void queryClient.invalidateQueries({ queryKey: ['poll-results', roomId, pollId] });
+      void queryClient.invalidateQueries({ queryKey: ['poll-distribution', roomId, pollId] });
     },
   });
 }

@@ -1,25 +1,33 @@
 /**
- * TanStack Query hooks for trust API
+ * TanStack Query hooks for trust API.
+ *
+ * Shared hooks (useTrustBudget, useMyEndorsementsList, useMyInvites,
+ * useCreateInvite, useAcceptInvite, useRevokeEndorsement) are re-exported
+ * from @/api/trustQueries so the endorsements feature can import them too
+ * without violating the no-cross-feature-import ESLint boundary rule.
  */
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { CryptoModule } from '@/providers/CryptoProvider';
 import {
-  acceptInvite,
-  createInvite,
   denounce,
   endorse,
-  getMyBudget,
-  getMyEndorsements,
   getMyScores,
   listMyDenouncements,
-  listMyInvites,
   lookupAccount,
-  revokeEndorsement,
-  type CreateInvitePayload,
   type DenouncementPayload,
   type EndorsePayload,
 } from './client';
+
+// Re-export shared hooks so feature consumers only need to import from trust.
+export {
+  useTrustBudget,
+  useMyEndorsementsList,
+  useMyInvites,
+  useCreateInvite,
+  useAcceptInvite,
+  useRevokeEndorsement,
+} from '@/api/trustQueries';
 
 export function useTrustScores(
   deviceKid: string | null,
@@ -36,93 +44,6 @@ export function useTrustScores(
     },
     enabled: Boolean(deviceKid && privateKey && wasmCrypto),
     staleTime: 30_000,
-  });
-}
-
-export function useTrustBudget(
-  deviceKid: string | null,
-  privateKey: CryptoKey | null,
-  wasmCrypto: CryptoModule | null
-) {
-  return useQuery({
-    queryKey: ['trust-budget', deviceKid],
-    queryFn: async () => {
-      if (!deviceKid || !privateKey || !wasmCrypto) {
-        throw new Error('Not authenticated');
-      }
-      return getMyBudget(deviceKid, privateKey, wasmCrypto);
-    },
-    enabled: Boolean(deviceKid && privateKey && wasmCrypto),
-    staleTime: 30_000,
-  });
-}
-
-export function useMyEndorsementsList(
-  deviceKid: string | null,
-  privateKey: CryptoKey | null,
-  wasmCrypto: CryptoModule | null
-) {
-  return useQuery({
-    queryKey: ['trust-endorsements', deviceKid],
-    queryFn: async () => {
-      if (!deviceKid || !privateKey || !wasmCrypto) {
-        throw new Error('Not authenticated');
-      }
-      return getMyEndorsements(deviceKid, privateKey, wasmCrypto);
-    },
-    enabled: Boolean(deviceKid && privateKey && wasmCrypto),
-    staleTime: 30_000,
-  });
-}
-
-export function useMyInvites(
-  deviceKid: string | null,
-  privateKey: CryptoKey | null,
-  wasmCrypto: CryptoModule | null
-) {
-  return useQuery({
-    queryKey: ['trust-invites', deviceKid],
-    queryFn: async () => {
-      if (!deviceKid || !privateKey || !wasmCrypto) {
-        throw new Error('Not authenticated');
-      }
-      return listMyInvites(deviceKid, privateKey, wasmCrypto);
-    },
-    enabled: Boolean(deviceKid && privateKey && wasmCrypto),
-    staleTime: 30_000,
-  });
-}
-
-export function useCreateInvite(
-  deviceKid: string,
-  privateKey: CryptoKey,
-  wasmCrypto: CryptoModule
-) {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (payload: CreateInvitePayload) =>
-      createInvite(deviceKid, privateKey, wasmCrypto, payload),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['trust-invites'] });
-    },
-  });
-}
-
-export function useAcceptInvite(
-  deviceKid: string,
-  privateKey: CryptoKey,
-  wasmCrypto: CryptoModule
-) {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (inviteId: string) => acceptInvite(deviceKid, privateKey, wasmCrypto, inviteId),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['trust-scores'] });
-      void queryClient.invalidateQueries({ queryKey: ['trust-invites'] });
-      void queryClient.invalidateQueries({ queryKey: ['trust-budget'] });
-      void queryClient.invalidateQueries({ queryKey: ['trust-endorsements'] });
-      void queryClient.invalidateQueries({ queryKey: ['verification-status'] });
-    },
   });
 }
 
@@ -185,22 +106,5 @@ export function useLookupAccount(
     enabled: Boolean(deviceKid && privateKey && wasmCrypto && username.trim()),
     staleTime: 60_000,
     retry: false,
-  });
-}
-
-export function useRevokeEndorsement(
-  deviceKid: string,
-  privateKey: CryptoKey,
-  wasmCrypto: CryptoModule
-) {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (subjectId: string) =>
-      revokeEndorsement(deviceKid, privateKey, wasmCrypto, subjectId),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['trust-budget'] });
-      void queryClient.invalidateQueries({ queryKey: ['trust-scores'] });
-      void queryClient.invalidateQueries({ queryKey: ['trust-endorsements'] });
-    },
   });
 }
