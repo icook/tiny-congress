@@ -307,7 +307,7 @@ const DAILY_SUGGESTION_LIMIT: i64 = 3;
 pub async fn create_suggestion(
     Extension(pool): Extension<PgPool>,
     Extension(content_filter): Extension<Arc<dyn ContentFilter>>,
-    Path(room_id): Path<Uuid>,
+    Path((room_id, poll_id)): Path<(Uuid, Uuid)>,
     auth: AuthenticatedDevice,
 ) -> impl IntoResponse {
     let req: super::CreateSuggestionRequest = match auth.json() {
@@ -320,7 +320,7 @@ pub async fn create_suggestion(
         return bad_request("Suggestion must be 1-500 characters");
     }
 
-    // Rate limit check
+    // Rate limit check (room-scoped)
     let daily_count =
         match suggestions::count_user_suggestions_today(&pool, room_id, auth.account_id).await {
             Ok(c) => c,
@@ -343,8 +343,7 @@ pub async fn create_suggestion(
     match suggestions::create_suggestion(
         &pool,
         room_id,
-        // TODO(#852 Task 3): replace with poll_id from route parameter
-        Uuid::nil(),
+        poll_id,
         auth.account_id,
         &text,
         status,
@@ -362,9 +361,9 @@ pub async fn create_suggestion(
 
 pub async fn list_suggestions(
     Extension(pool): Extension<PgPool>,
-    Path(room_id): Path<Uuid>,
+    Path((_room_id, poll_id)): Path<(Uuid, Uuid)>,
 ) -> impl IntoResponse {
-    match suggestions::list_suggestions(&pool, room_id).await {
+    match suggestions::list_suggestions(&pool, poll_id).await {
         Ok(suggestion_list) => {
             let resp: Vec<_> = suggestion_list
                 .into_iter()
@@ -373,7 +372,7 @@ pub async fn list_suggestions(
             (StatusCode::OK, Json(resp)).into_response()
         }
         Err(e) => {
-            tracing::error!(room_id = %room_id, "list suggestions failed: {e}");
+            tracing::error!(poll_id = %poll_id, "list suggestions failed: {e}");
             internal_error()
         }
     }
@@ -383,6 +382,7 @@ fn suggestion_to_response(s: suggestions::SuggestionRecord) -> super::Suggestion
     super::SuggestionResponse {
         id: s.id,
         room_id: s.room_id,
+        poll_id: s.poll_id,
         account_id: s.account_id,
         suggestion_text: s.suggestion_text,
         status: s.status,
