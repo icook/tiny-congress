@@ -9,6 +9,7 @@
 
 use async_graphql::{EmptySubscription, Schema};
 use axum::{
+    extract::DefaultBodyLimit,
     http::{header::HeaderValue, Method, StatusCode},
     middleware,
     response::IntoResponse,
@@ -331,6 +332,14 @@ async fn build_app(
             .allow_headers(Any)
             .allow_origin(allow_origin),
     );
+
+    // Apply a global body size cap before any route handler reads the body.
+    // Unauthenticated endpoints (signup, login, GraphQL) previously had no
+    // limit, making them vulnerable to large-payload memory exhaustion.
+    // 1 MiB accommodates signup (backup envelope + device cert + attestation)
+    // while blocking arbitrarily large streams. Authenticated routes still
+    // apply the tighter 64 KiB cap inside AuthenticatedDevice::from_request.
+    let app = app.layer(DefaultBodyLimit::max(1024 * 1024));
 
     let app = app.layer(prometheus_layer);
 
