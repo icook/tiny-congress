@@ -9,6 +9,13 @@ use uuid::Uuid;
 use crate::reputation::repo::ReputationRepo;
 use crate::trust::repo::{TrustRepo, TrustRepoError};
 
+/// Demo endorsement slot limit per user (k=3).
+pub const ENDORSEMENT_SLOT_LIMIT: u32 = 3;
+/// Permanent denouncement budget per user (d=2, ADR-020).
+pub const DENOUNCEMENT_SLOT_LIMIT: u32 = 2;
+/// Max trust actions per user per day (resets at midnight UTC).
+pub const DAILY_ACTION_QUOTA: i64 = 5;
+
 /// Errors returned by [`TrustService`] operations.
 #[derive(Debug, thiserror::Error)]
 pub enum TrustServiceError {
@@ -81,9 +88,9 @@ impl DefaultTrustService {
         Self {
             trust_repo,
             reputation_repo,
-            endorsement_slots: 3,
-            max_denouncement_slots: 2,
-            daily_quota: 5,
+            endorsement_slots: ENDORSEMENT_SLOT_LIMIT,
+            max_denouncement_slots: DENOUNCEMENT_SLOT_LIMIT,
+            daily_quota: DAILY_ACTION_QUOTA,
         }
     }
 }
