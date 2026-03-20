@@ -15,8 +15,10 @@ const MOBILE = { width: 390, height: 844 };
 // When baselines are committed, capture() asserts pixel-level consistency.
 // When missing (first run or baselines not yet generated), only gallery
 // screenshots are saved — no regression failure.
+// CI passes GENERATE_BASELINES=true with --update-snapshots to create initial baselines.
 const BASELINES_DIR = path.join(__dirname, 'screenshots.spec.ts-snapshots');
-const hasBaselines = existsSync(BASELINES_DIR);
+const generateBaselines = process.env.GENERATE_BASELINES === 'true';
+const hasBaselines = existsSync(BASELINES_DIR) || generateBaselines;
 
 if (!existsSync(SCREENSHOTS_DIR)) {
   mkdirSync(SCREENSHOTS_DIR, { recursive: true });
