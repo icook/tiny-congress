@@ -45,10 +45,20 @@ pub enum TrustActionError {
 
 /// Parsed representation of the `action_type` column values stored in the action log.
 #[derive(Debug)]
-enum ActionType {
+pub(crate) enum ActionType {
     Endorse,
     Revoke,
     Denounce,
+}
+
+impl ActionType {
+    pub(crate) const fn as_str(&self) -> &'static str {
+        match self {
+            Self::Endorse => "endorse",
+            Self::Revoke => "revoke",
+            Self::Denounce => "denounce",
+        }
+    }
 }
 
 impl TryFrom<&str> for ActionType {
