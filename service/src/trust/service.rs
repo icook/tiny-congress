@@ -222,6 +222,37 @@ mod tests {
             "501 multi-byte characters should be rejected"
         );
     }
+
+    #[test]
+    fn action_type_round_trips_all_variants() {
+        // Every variant's as_str() must be accepted by from_str_opt().
+        // This catches the case where a new variant is added to ActionType
+        // but from_str_opt() is not updated to match.
+        for variant in [
+            ActionType::Endorse,
+            ActionType::Revoke,
+            ActionType::Denounce,
+        ] {
+            assert_eq!(
+                ActionType::from_str_opt(variant.as_str()),
+                Some(variant),
+                "{variant:?}.as_str() did not round-trip through from_str_opt"
+            );
+        }
+    }
+
+    #[test]
+    fn action_type_from_str_opt_rejects_unknown() {
+        assert_eq!(ActionType::from_str_opt("unknown"), None);
+        assert_eq!(ActionType::from_str_opt(""), None);
+    }
+
+    #[test]
+    fn action_type_from_str_opt_is_case_sensitive() {
+        assert_eq!(ActionType::from_str_opt("Endorse"), None);
+        assert_eq!(ActionType::from_str_opt("REVOKE"), None);
+        assert_eq!(ActionType::from_str_opt("Denounce"), None);
+    }
 }
 
 impl DefaultTrustService {
