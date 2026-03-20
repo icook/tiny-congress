@@ -34,6 +34,17 @@ impl ActionType {
             Self::Denounce => "denounce",
         }
     }
+
+    /// Parse an action type from its string representation, returning `None`
+    /// for unrecognised values.
+    pub(crate) fn from_str_opt(s: &str) -> Option<Self> {
+        match s {
+            "endorse" => Some(Self::Endorse),
+            "revoke" => Some(Self::Revoke),
+            "denounce" => Some(Self::Denounce),
+            _ => None,
+        }
+    }
 }
 
 /// Returns `true` if `weight` is a valid endorsement weight: finite and in (0.0, 1.0].

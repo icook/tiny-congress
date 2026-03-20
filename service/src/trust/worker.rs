@@ -46,19 +46,6 @@ pub enum TrustActionError {
     Queue(sqlx::Error),
 }
 
-impl TryFrom<&str> for ActionType {
-    type Error = TrustActionError;
-
-    fn try_from(s: &str) -> Result<Self, Self::Error> {
-        match s {
-            "endorse" => Ok(Self::Endorse),
-            "revoke" => Ok(Self::Revoke),
-            "denounce" => Ok(Self::Denounce),
-            other => Err(TrustActionError::UnknownActionType(other.to_string())),
-        }
-    }
-}
-
 const QUEUE_NAME: &str = "trust__actions";
 const MAX_RETRIES: i32 = 3;
 const VISIBILITY_TIMEOUT_SECS: i32 = 120;
@@ -245,7 +232,8 @@ impl TrustWorker {
     }
 
     async fn process_action(&self, action: &ActionRecord) -> Result<(), TrustActionError> {
-        let action_type = ActionType::try_from(action.action_type.as_str())?;
+        let action_type = ActionType::from_str_opt(action.action_type.as_str())
+            .ok_or_else(|| TrustActionError::UnknownActionType(action.action_type.clone()))?;
         match action_type {
             ActionType::Endorse => {
                 let subject_id = parse_uuid(&action.payload, "subject_id")?;
