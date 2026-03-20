@@ -8,9 +8,10 @@ use std::fmt::Write as _;
 use std::time::Instant;
 
 use anyhow::Context as _;
-use serde::Deserialize;
 use sqlx::PgPool;
 use uuid::Uuid;
+
+use tc_llm::{build_synthesis_messages, CompanyEvidence, DIMENSIONS};
 
 use crate::repo::bot_traces::TraceStep;
 use crate::repo::evidence::NewEvidence;
@@ -19,35 +20,6 @@ use crate::repo::{bot_traces, evidence as evidence_repo, polls};
 use super::config::BotConfig;
 use super::worker::BotWorkerConfig;
 use crate::repo::pgmq::BotTask;
-
-// ─── Constants ───────────────────────────────────────────────────────────────
-
-/// Fixed ethical dimensions for brand ethics polls.
-const DIMENSIONS: &[(&str, &str, &str)] = &[
-    ("Labor Practices", "Exploitative", "Exemplary"),
-    ("Environmental Impact", "Destructive", "Regenerative"),
-    ("Consumer Trust", "Deceptive", "Transparent"),
-    ("Community Impact", "Extractive", "Invested"),
-    ("Corporate Governance", "Self-Serving", "Accountable"),
-];
-
-const EXA_SYNTHESIS_SYSTEM: &str = r"You are a balanced research analyst extracting structured evidence from search results. For each of the 5 ethical dimensions, extract 2-3 specific, factual pro and con claims directly supported by the search results provided. Each claim must be one sentence and grounded in the sources — do not fabricate claims. If a dimension has weak search coverage, provide fewer claims rather than speculating.";
-
-// ─── Local LLM response types ────────────────────────────────────────────────
-
-/// Top-level LLM response for company evidence synthesis.
-#[derive(Debug, Deserialize)]
-struct CompanyEvidence {
-    relevance_hook: String,
-    dimensions: HashMap<String, DimensionEvidence>,
-}
-
-/// Pro/con evidence for a single ethical dimension.
-#[derive(Debug, Deserialize)]
-struct DimensionEvidence {
-    pro: Vec<String>,
-    con: Vec<String>,
-}
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -67,58 +39,6 @@ fn resolve_model(bot_config: Option<&BotConfig>, worker_config: &BotWorkerConfig
     bot_config
         .and_then(|bc| bc.model.clone())
         .unwrap_or_else(|| worker_config.default_model.clone())
-}
-
-/// Build the synthesis messages for the LLM, same pattern as the sim.
-fn build_synthesis_messages(
-    company_name: &str,
-    ticker: &str,
-    search_context: &str,
-) -> Vec<tc_llm::ChatMessage> {
-    let user_content = format!(
-        r#"Below are search results about {company_name} ({ticker}) organized by ethical dimension.
-Extract structured evidence cards from these results.
-
-{search_context}
-
-Respond with ONLY valid JSON matching this schema:
-{{
-  "relevance_hook": "One sentence explaining how this company affects daily life.",
-  "dimensions": {{
-    "Labor Practices": {{
-      "pro": ["Factual positive claim with source detail."],
-      "con": ["Factual negative claim with source detail."]
-    }},
-    "Environmental Impact": {{
-      "pro": ["Factual positive claim."],
-      "con": ["Factual negative claim."]
-    }},
-    "Consumer Trust": {{
-      "pro": ["Factual positive claim."],
-      "con": ["Factual negative claim."]
-    }},
-    "Community Impact": {{
-      "pro": ["Factual positive claim."],
-      "con": ["Factual negative claim."]
-    }},
-    "Corporate Governance": {{
-      "pro": ["Factual positive claim."],
-      "con": ["Factual negative claim."]
-    }}
-  }}
-}}"#
-    );
-
-    vec![
-        tc_llm::ChatMessage {
-            role: "system".to_string(),
-            content: EXA_SYNTHESIS_SYSTEM.to_string(),
-        },
-        tc_llm::ChatMessage {
-            role: "user".to_string(),
-            content: user_content,
-        },
-    ]
 }
 
 /// Run parallel Exa searches for all 5 dimensions and return a formatted
@@ -237,7 +157,7 @@ async fn synthesize_evidence(
     search_context: &str,
     trace_id: Uuid,
 ) -> anyhow::Result<CompanyEvidence> {
-    let messages = build_synthesis_messages(company_name, ticker, search_context);
+    let messages = build_synthesis_messages(company_name, ticker, search_context, None);
 
     let start = Instant::now();
     let completion = tc_llm::chat_completion(
