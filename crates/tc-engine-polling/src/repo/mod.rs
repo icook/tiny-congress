@@ -12,7 +12,8 @@ pub mod votes;
 
 pub use evidence::{EvidenceRecord, NewEvidence};
 pub use lifecycle_queue::{
-    enqueue_lifecycle_event, read_lifecycle_event, LifecycleMessage, LifecyclePayload,
+    archive_lifecycle_event, enqueue_lifecycle_event, is_poison, read_lifecycle_event,
+    LifecycleMessage, LifecyclePayload,
 };
 pub use polls::{DimensionRecord, PollRecord, PollRepoError};
 pub use votes::{BucketCount, DimensionDistribution, DimensionStats, VoteRecord, VoteRepoError};
