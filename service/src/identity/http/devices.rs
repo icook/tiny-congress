@@ -6,17 +6,12 @@
 
 use std::sync::Arc;
 
-use axum::{
-    extract::{Extension, Path},
-    http::StatusCode,
-    response::IntoResponse,
-    Json,
-};
+use axum::{extract::Extension, http::StatusCode, response::IntoResponse, Json};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use super::auth::AuthenticatedDevice;
-use super::ErrorResponse;
+use super::{ErrorResponse, Path};
 use crate::identity::repo::{AccountRepoError, DeviceKeyRecord, DeviceKeyRepoError, IdentityRepo};
 use crate::identity::service::{CertificateSignature, DeviceName, DevicePubkey};
 use tc_crypto::{verify_ed25519, Kid};
@@ -512,8 +507,8 @@ mod tests {
     #[tokio::test]
     async fn test_revoke_device_invalid_kid_format_returns_bad_request() {
         use axum::body::to_bytes;
+        use axum::extract::Extension;
         use axum::response::IntoResponse;
-        use axum::{extract::Extension, extract::Path};
 
         let account_id = Uuid::new_v4();
         let auth_kid = Kid::derive(&[0xAAu8; 32]);
@@ -543,8 +538,8 @@ mod tests {
     #[tokio::test]
     async fn test_revoke_device_self_revoke_returns_unprocessable() {
         use axum::body::to_bytes;
+        use axum::extract::Extension;
         use axum::response::IntoResponse;
-        use axum::{extract::Extension, extract::Path};
 
         let account_id = Uuid::new_v4();
         let auth_kid = Kid::derive(&[0xAAu8; 32]);
@@ -587,7 +582,7 @@ mod tests {
     #[tokio::test]
     async fn test_revoke_device_already_revoked_returns_conflict() {
         use axum::response::IntoResponse;
-        use axum::{body::to_bytes, extract::Extension, extract::Path};
+        use axum::{body::to_bytes, extract::Extension};
 
         let account_id = Uuid::new_v4();
         let target_kid = Kid::derive(&[0xBBu8; 32]);
@@ -610,8 +605,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_revoke_device_db_error_returns_internal() {
+        use axum::extract::Extension;
         use axum::response::IntoResponse;
-        use axum::{extract::Extension, extract::Path};
 
         let account_id = Uuid::new_v4();
         let target_kid = Kid::derive(&[0xBBu8; 32]);
@@ -635,8 +630,8 @@ mod tests {
     /// (device absent, already deleted, or belongs to a different account).
     #[tokio::test]
     async fn test_revoke_device_not_found_returns_404() {
+        use axum::extract::Extension;
         use axum::response::IntoResponse;
-        use axum::{extract::Extension, extract::Path};
 
         let account_id = Uuid::new_v4();
         let target_kid = Kid::derive(&[0xBBu8; 32]);
@@ -664,7 +659,7 @@ mod tests {
     #[tokio::test]
     async fn test_rename_device_empty_name_returns_bad_request() {
         use axum::response::IntoResponse;
-        use axum::{body::to_bytes, extract::Extension, extract::Path};
+        use axum::{body::to_bytes, extract::Extension};
 
         let account_id = Uuid::new_v4();
         let auth_kid = Kid::derive(&[0xAAu8; 32]);
@@ -699,7 +694,7 @@ mod tests {
     #[tokio::test]
     async fn test_rename_device_invalid_kid_format_returns_bad_request() {
         use axum::response::IntoResponse;
-        use axum::{body::to_bytes, extract::Extension, extract::Path};
+        use axum::{body::to_bytes, extract::Extension};
 
         let account_id = Uuid::new_v4();
         let auth_kid = Kid::derive(&[0xAAu8; 32]);
@@ -737,7 +732,7 @@ mod tests {
     #[tokio::test]
     async fn test_rename_device_already_revoked_returns_conflict() {
         use axum::response::IntoResponse;
-        use axum::{body::to_bytes, extract::Extension, extract::Path};
+        use axum::{body::to_bytes, extract::Extension};
 
         let account_id = Uuid::new_v4();
         let target_kid = Kid::derive(&[0xCCu8; 32]);
@@ -763,8 +758,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_rename_device_db_error_returns_internal() {
+        use axum::extract::Extension;
         use axum::response::IntoResponse;
-        use axum::{extract::Extension, extract::Path};
 
         let account_id = Uuid::new_v4();
         let target_kid = Kid::derive(&[0xCCu8; 32]);
@@ -788,8 +783,8 @@ mod tests {
     /// (device absent, already deleted, or belongs to a different account).
     #[tokio::test]
     async fn test_rename_device_not_found_returns_404() {
+        use axum::extract::Extension;
         use axum::response::IntoResponse;
-        use axum::{extract::Extension, extract::Path};
 
         let account_id = Uuid::new_v4();
         let target_kid = Kid::derive(&[0xCCu8; 32]);
