@@ -137,6 +137,7 @@ playwright/.launches/
 .playwright/
 test-results/
 reports/
+screenshots/
 
 # Storybook build output
 storybook-static

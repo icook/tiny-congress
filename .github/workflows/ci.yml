@@ -1268,6 +1268,15 @@ jobs:
             web/reports/playwright-results.json
             web/playwright-report
 
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: screenshots
+          if-no-files-found: ignore
+          path: web/screenshots/
+          retention-days: 30
+
       - name: Analyze Playwright flakiness
         if: always()
         working-directory: web
@@ -1553,6 +1562,13 @@ jobs:
           path: artifacts/playwright
         continue-on-error: true
 
+      - name: Download screenshots
+        uses: actions/download-artifact@v7
+        with:
+          name: screenshots
+          path: artifacts/screenshots
+        continue-on-error: true
+
       - name: Download docs
         uses: actions/download-artifact@v7
         with:
@@ -1590,7 +1606,24 @@ jobs:
           if [ -d artifacts/playwright/playwright-report ]; then mv artifacts/playwright/playwright-report site/playwright; fi
           if [ -d artifacts/docs/target/doc ]; then mv artifacts/docs/target/doc site/rust-docs; fi
           if [ -d artifacts/docs/web/docs ]; then mv artifacts/docs/web/docs site/ts-docs; fi
+          if [ -d artifacts/screenshots ]; then
+            mkdir -p site/screenshots
+            mv artifacts/screenshots/*.png site/screenshots/ 2>/dev/null || true
+          fi
           rm -rf artifacts
+
+      - name: Build screenshot gallery
+        run: |
+          if [ -d site/screenshots ] && ls site/screenshots/*.png 1>/dev/null 2>&1; then
+            node scripts/build-screenshot-gallery.mjs \
+              --input site/screenshots \
+              --output site/screenshots/index.html \
+              --sha "$GITHUB_SHA" \
+              --branch "$GITHUB_REF_NAME" \
+              --date "$(date -u +"%Y-%m-%d %H:%M UTC")"
+          else
+            echo "No screenshots found, skipping gallery"
+          fi
 
       - name: Generate landing page
         env:
@@ -1705,6 +1738,6 @@ jobs:
             | | |
             |---|---|
             | 📊 [Coverage](https://reports.ibcook.com/${{ github.sha }}/coverage/index.html) | 📚 [Storybook](https://reports.ibcook.com/${{ github.sha }}/storybook/index.html) |
-            | 🎭 [Playwright](https://reports.ibcook.com/${{ github.sha }}/playwright/index.html) | |
+            | 🎭 [Playwright](https://reports.ibcook.com/${{ github.sha }}/playwright/index.html) | 📸 [Screenshots](https://reports.ibcook.com/${{ github.sha }}/screenshots/index.html) |
 
             <sub>🤖 Generated from commit ${{ github.sha }}</sub>
