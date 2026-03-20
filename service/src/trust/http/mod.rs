@@ -14,7 +14,9 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use super::repo::{TrustRepo, TrustRepoError};
-use super::service::{TrustService, TrustServiceError};
+use super::service::{
+    TrustService, TrustServiceError, DENOUNCEMENT_SLOT_LIMIT, ENDORSEMENT_SLOT_LIMIT,
+};
 use super::weight::compute_endorsement_weight;
 use crate::http::{bad_request, conflict, internal_error, not_found, too_many_requests};
 use crate::identity::http::auth::AuthenticatedDevice;
@@ -273,10 +275,6 @@ async fn scores_me_handler(
     }
 }
 
-/// Demo endorsement slot count (k=3).
-const ENDORSEMENT_SLOTS: u32 = 3;
-/// Permanent denouncement budget per user (d=2, ADR-020).
-const DENOUNCEMENT_SLOTS: u32 = 2;
 /// Valid delivery methods for invites (must match migration 18 CHECK constraint).
 const VALID_DELIVERY_METHODS: &[&str] = &["qr", "email", "video", "text", "messaging"];
 /// Valid relationship depths for invites (must match migration 18 CHECK constraint).
@@ -324,13 +322,13 @@ async fn budget_handler(
     (
         StatusCode::OK,
         Json(BudgetResponse {
-            slots_total: ENDORSEMENT_SLOTS,
+            slots_total: ENDORSEMENT_SLOT_LIMIT,
             slots_used: endorsements_used,
-            slots_available: i64::from(ENDORSEMENT_SLOTS) - endorsements_used,
+            slots_available: i64::from(ENDORSEMENT_SLOT_LIMIT) - endorsements_used,
             out_of_slot_count,
-            denouncements_total: DENOUNCEMENT_SLOTS,
+            denouncements_total: DENOUNCEMENT_SLOT_LIMIT,
             denouncements_used,
-            denouncements_available: i64::from(DENOUNCEMENT_SLOTS) - denouncements_used,
+            denouncements_available: i64::from(DENOUNCEMENT_SLOT_LIMIT) - denouncements_used,
         }),
     )
         .into_response()
