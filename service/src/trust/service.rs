@@ -159,6 +159,10 @@ impl TrustService for DefaultTrustService {
         endorser_id: Uuid,
         subject_id: Uuid,
     ) -> Result<(), TrustServiceError> {
+        if endorser_id == subject_id {
+            return Err(TrustServiceError::SelfAction);
+        }
+
         let daily_count = self.trust_repo.count_daily_actions(endorser_id).await?;
         if daily_count >= self.daily_quota {
             return Err(TrustServiceError::QuotaExceeded);
