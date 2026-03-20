@@ -21,9 +21,6 @@ pub const DENOUNCEMENT_REASON_MAX_LEN: usize = 500;
 /// Errors returned by [`TrustService`] operations.
 #[derive(Debug, thiserror::Error)]
 pub enum TrustServiceError {
-    #[error("endorsement slots exhausted (max {max})")]
-    EndorsementSlotsExhausted { max: u32 },
-
     #[error("denouncement slots exhausted (max {max})")]
     DenouncementSlotsExhausted { max: u32 },
 
