@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
-import { Center, Loader } from '@mantine/core';
+import { IconAlertTriangle } from '@tabler/icons-react';
+import { Alert, Center, List, Loader, Stack, Text } from '@mantine/core';
 
 /**
  * Interface for the crypto module functions exposed by WASM
@@ -95,8 +96,34 @@ export function CryptoProvider({ children }: CryptoProviderProps) {
   }
 
   if (state.error) {
-    // Let ErrorBoundary handle it or show inline error
-    throw state.error;
+    return (
+      <Center h="100vh" p="xl">
+        <Stack maw={500} gap="md">
+          <Alert
+            icon={<IconAlertTriangle size={20} />}
+            title="Browser not supported"
+            color="red"
+            variant="filled"
+          >
+            Failed to load the cryptography module. Your browser may not support the features
+            TinyCongress requires.
+          </Alert>
+          <Text size="sm">
+            TinyCongress uses Ed25519 public-key cryptography compiled to WebAssembly. Please
+            upgrade to a supported browser.
+          </Text>
+          <Text size="sm" fw={600}>
+            Minimum supported versions:
+          </Text>
+          <List size="sm" withPadding>
+            <List.Item>Chrome 113+</List.Item>
+            <List.Item>Firefox 130+</List.Item>
+            <List.Item>Safari 17+</List.Item>
+            <List.Item>Edge 113+</List.Item>
+          </List>
+        </Stack>
+      </Center>
+    );
   }
 
   return <CryptoContext.Provider value={state}>{children}</CryptoContext.Provider>;
