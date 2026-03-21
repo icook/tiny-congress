@@ -667,6 +667,39 @@ async fn create_invite_rejects_empty_envelope() {
 }
 
 #[shared_runtime_test]
+async fn create_invite_rejects_oversized_attestation() {
+    let db = isolated_db().await;
+    let (app, keys, _account_id) = signup_and_get_account("inviteattest", db.pool()).await;
+
+    let envelope_b64 = tc_crypto::encode_base64url(b"dummy");
+    // A string value of 4097 'x' chars produces a JSON serialization well above 4096 bytes.
+    let large_value = "x".repeat(4097);
+    let body = serde_json::json!({
+        "envelope": envelope_b64,
+        "delivery_method": "qr",
+        "attestation": { "data": large_value }
+    })
+    .to_string();
+
+    let request = build_authed_request(
+        Method::POST,
+        "/trust/invites",
+        &body,
+        &keys.device_signing_key,
+        &keys.device_kid,
+    );
+
+    let response = app.oneshot(request).await.expect("response");
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let json = json_body(response).await;
+    assert!(
+        json["error"].as_str().unwrap_or("").contains("attestation"),
+        "error should mention attestation, got: {}",
+        json["error"]
+    );
+}
+
+#[shared_runtime_test]
 async fn create_invite_rejects_invalid_delivery_method() {
     let db = isolated_db().await;
     let (app, keys, _account_id) = signup_and_get_account("invitedelivery", db.pool()).await;
