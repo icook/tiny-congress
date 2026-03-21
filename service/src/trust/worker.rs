@@ -449,6 +449,20 @@ mod tests {
     }
 
     #[test]
+    fn parse_endorse_payload_errors_when_subject_id_is_missing() {
+        let payload = json!({
+            "weight": 0.5,
+            "attestation": null,
+            "in_slot": true,
+        });
+        let err = parse_endorse_payload(&payload).unwrap_err();
+        assert!(
+            matches!(err, TrustActionError::InvalidPayload(ref msg) if msg.contains("subject_id")),
+            "expected InvalidPayload mentioning 'subject_id', got: {err}"
+        );
+    }
+
+    #[test]
     fn parse_endorse_payload_errors_when_weight_is_missing() {
         let subject_id = Uuid::new_v4();
         let payload = json!({
@@ -538,6 +552,16 @@ mod tests {
         let (tid, reason) = parse_denounce_payload(&payload).unwrap();
         assert_eq!(tid, target_id);
         assert_eq!(reason, "harmful conduct");
+    }
+
+    #[test]
+    fn parse_denounce_payload_errors_when_target_id_is_missing() {
+        let payload = json!({ "reason": "harmful conduct" });
+        let err = parse_denounce_payload(&payload).unwrap_err();
+        assert!(
+            matches!(err, TrustActionError::InvalidPayload(ref msg) if msg.contains("target_id")),
+            "expected InvalidPayload mentioning 'target_id', got: {err}"
+        );
     }
 
     #[test]
