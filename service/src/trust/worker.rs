@@ -256,7 +256,7 @@ impl TrustWorker {
             }
 
             ActionType::Revoke => {
-                let subject_id = parse_uuid(&action.payload, "subject_id")?;
+                let subject_id = parse_revoke_payload(&action.payload)?;
                 self.reputation_repo
                     .revoke_endorsement(action.actor_id, subject_id, "trust")
                     .await?;
@@ -299,6 +299,11 @@ fn parse_uuid(payload: &serde_json::Value, key: &str) -> Result<Uuid, TrustActio
     raw.parse::<Uuid>().map_err(|e| {
         TrustActionError::InvalidPayload(format!("payload '{key}' is not a valid UUID: {e}"))
     })
+}
+
+/// Extract and validate all fields from a `revoke` action payload.
+fn parse_revoke_payload(payload: &serde_json::Value) -> Result<Uuid, TrustActionError> {
+    parse_uuid(payload, "subject_id")
 }
 
 /// Extract and validate all fields from an `endorse` action payload.
@@ -413,6 +418,46 @@ mod tests {
             matches!(err, TrustActionError::InvalidPayload(ref msg)
                 if msg.contains("subject_id") && msg.contains("not a valid UUID")),
             "expected InvalidPayload mentioning key and 'not a valid UUID', got: {err}"
+        );
+    }
+
+    // --- parse_revoke_payload ---
+
+    #[test]
+    fn parse_revoke_payload_returns_uuid_for_valid_payload() {
+        let subject_id = Uuid::new_v4();
+        let payload = json!({ "subject_id": subject_id.to_string() });
+        assert_eq!(parse_revoke_payload(&payload).unwrap(), subject_id);
+    }
+
+    #[test]
+    fn parse_revoke_payload_errors_when_subject_id_is_missing() {
+        let payload = json!({});
+        let err = parse_revoke_payload(&payload).unwrap_err();
+        assert!(
+            matches!(err, TrustActionError::InvalidPayload(ref msg) if msg.contains("subject_id")),
+            "got: {err}"
+        );
+    }
+
+    #[test]
+    fn parse_revoke_payload_errors_when_subject_id_is_not_a_string() {
+        let payload = json!({ "subject_id": 42 });
+        let err = parse_revoke_payload(&payload).unwrap_err();
+        assert!(
+            matches!(err, TrustActionError::InvalidPayload(ref msg) if msg.contains("subject_id")),
+            "got: {err}"
+        );
+    }
+
+    #[test]
+    fn parse_revoke_payload_errors_when_subject_id_is_invalid_uuid() {
+        let payload = json!({ "subject_id": "not-a-uuid" });
+        let err = parse_revoke_payload(&payload).unwrap_err();
+        assert!(
+            matches!(err, TrustActionError::InvalidPayload(ref msg)
+                if msg.contains("subject_id") && msg.contains("not a valid UUID")),
+            "got: {err}"
         );
     }
 
