@@ -505,7 +505,7 @@ async fn test_congress_eligible() {
         .expect("create user");
 
     let repo = PgTrustRepo::new(pool.clone());
-    repo.upsert_score(user.id, Some(anchor.id), None, Some(4), None)
+    repo.upsert_score(user.id, Some(anchor.id), Some(2.0), Some(4), None)
         .await
         .expect("upsert_score");
 
