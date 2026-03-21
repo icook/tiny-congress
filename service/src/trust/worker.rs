@@ -235,25 +235,8 @@ impl TrustWorker {
             .ok_or_else(|| TrustActionError::UnknownActionType(action.action_type.clone()))?;
         match action_type {
             ActionType::Endorse => {
-                let subject_id = parse_uuid(&action.payload, "subject_id")?;
-                #[allow(clippy::cast_possible_truncation)]
-                let weight = action.payload["weight"].as_f64().ok_or_else(|| {
-                    TrustActionError::InvalidPayload("endorse payload missing 'weight'".to_string())
-                })? as f32;
-                if !is_valid_endorsement_weight(weight) {
-                    return Err(TrustActionError::InvalidPayload(format!(
-                        "endorse payload 'weight' out of range (0.0, 1.0]: {weight}"
-                    )));
-                }
-                let attestation = match &action.payload["attestation"] {
-                    serde_json::Value::Null => None,
-                    v => Some(v.clone()),
-                };
-                let in_slot = action.payload["in_slot"].as_bool().ok_or_else(|| {
-                    TrustActionError::InvalidPayload(
-                        "endorse payload missing or invalid 'in_slot'".to_string(),
-                    )
-                })?;
+                let (subject_id, weight, attestation, in_slot) =
+                    parse_endorse_payload(&action.payload)?;
 
                 self.reputation_repo
                     .create_endorsement(
@@ -284,22 +267,7 @@ impl TrustWorker {
             }
 
             ActionType::Denounce => {
-                let target_id = parse_uuid(&action.payload, "target_id")?;
-                let reason = action.payload["reason"]
-                    .as_str()
-                    .ok_or_else(|| {
-                        TrustActionError::InvalidPayload(
-                            "denounce payload missing 'reason'".to_string(),
-                        )
-                    })?
-                    .to_string();
-                if !is_valid_reason(&reason) {
-                    return Err(TrustActionError::InvalidPayload(format!(
-                        "denounce payload 'reason' length out of range [1, {}]: {}",
-                        DENOUNCEMENT_REASON_MAX_LEN,
-                        reason.chars().count()
-                    )));
-                }
+                let (target_id, reason) = parse_denounce_payload(&action.payload)?;
 
                 // Both operations run inside a single transaction: if the endorsement
                 // revocation fails after the denouncement is inserted, the whole thing
@@ -331,6 +299,49 @@ fn parse_uuid(payload: &serde_json::Value, key: &str) -> Result<Uuid, TrustActio
     raw.parse::<Uuid>().map_err(|e| {
         TrustActionError::InvalidPayload(format!("payload '{key}' is not a valid UUID: {e}"))
     })
+}
+
+/// Extract and validate all fields from an `endorse` action payload.
+fn parse_endorse_payload(
+    payload: &serde_json::Value,
+) -> Result<(Uuid, f32, Option<serde_json::Value>, bool), TrustActionError> {
+    let subject_id = parse_uuid(payload, "subject_id")?;
+    #[allow(clippy::cast_possible_truncation)]
+    let weight = payload["weight"].as_f64().ok_or_else(|| {
+        TrustActionError::InvalidPayload("endorse payload missing 'weight'".to_string())
+    })? as f32;
+    if !is_valid_endorsement_weight(weight) {
+        return Err(TrustActionError::InvalidPayload(format!(
+            "endorse payload 'weight' out of range (0.0, 1.0]: {weight}"
+        )));
+    }
+    let attestation = match &payload["attestation"] {
+        serde_json::Value::Null => None,
+        v => Some(v.clone()),
+    };
+    let in_slot = payload["in_slot"].as_bool().ok_or_else(|| {
+        TrustActionError::InvalidPayload("endorse payload missing or invalid 'in_slot'".to_string())
+    })?;
+    Ok((subject_id, weight, attestation, in_slot))
+}
+
+/// Extract and validate all fields from a `denounce` action payload.
+fn parse_denounce_payload(payload: &serde_json::Value) -> Result<(Uuid, String), TrustActionError> {
+    let target_id = parse_uuid(payload, "target_id")?;
+    let reason = payload["reason"]
+        .as_str()
+        .ok_or_else(|| {
+            TrustActionError::InvalidPayload("denounce payload missing 'reason'".to_string())
+        })?
+        .to_string();
+    if !is_valid_reason(&reason) {
+        return Err(TrustActionError::InvalidPayload(format!(
+            "denounce payload 'reason' length out of range [1, {}]: {}",
+            DENOUNCEMENT_REASON_MAX_LEN,
+            reason.chars().count()
+        )));
+    }
+    Ok((target_id, reason))
 }
 
 #[cfg(test)]
@@ -402,6 +413,170 @@ mod tests {
             matches!(err, TrustActionError::InvalidPayload(ref msg)
                 if msg.contains("subject_id") && msg.contains("not a valid UUID")),
             "expected InvalidPayload mentioning key and 'not a valid UUID', got: {err}"
+        );
+    }
+
+    // --- parse_endorse_payload ---
+
+    #[test]
+    fn parse_endorse_payload_returns_fields_for_valid_payload() {
+        let subject_id = Uuid::new_v4();
+        let payload = json!({
+            "subject_id": subject_id.to_string(),
+            "weight": 0.8,
+            "attestation": null,
+            "in_slot": true,
+        });
+        let (sid, weight, attestation, in_slot) = parse_endorse_payload(&payload).unwrap();
+        assert_eq!(sid, subject_id);
+        assert!((weight - 0.8).abs() < f32::EPSILON);
+        assert!(attestation.is_none());
+        assert!(in_slot);
+    }
+
+    #[test]
+    fn parse_endorse_payload_captures_non_null_attestation() {
+        let subject_id = Uuid::new_v4();
+        let payload = json!({
+            "subject_id": subject_id.to_string(),
+            "weight": 1.0,
+            "attestation": { "key": "value" },
+            "in_slot": false,
+        });
+        let (_, _, attestation, in_slot) = parse_endorse_payload(&payload).unwrap();
+        assert!(attestation.is_some());
+        assert!(!in_slot);
+    }
+
+    #[test]
+    fn parse_endorse_payload_errors_when_weight_is_missing() {
+        let subject_id = Uuid::new_v4();
+        let payload = json!({
+            "subject_id": subject_id.to_string(),
+            "attestation": null,
+            "in_slot": true,
+        });
+        let err = parse_endorse_payload(&payload).unwrap_err();
+        assert!(
+            matches!(err, TrustActionError::InvalidPayload(ref msg) if msg.contains("missing 'weight'")),
+            "got: {err}"
+        );
+    }
+
+    #[test]
+    fn parse_endorse_payload_errors_when_weight_is_not_a_number() {
+        let subject_id = Uuid::new_v4();
+        let payload = json!({
+            "subject_id": subject_id.to_string(),
+            "weight": "high",
+            "attestation": null,
+            "in_slot": true,
+        });
+        let err = parse_endorse_payload(&payload).unwrap_err();
+        assert!(
+            matches!(err, TrustActionError::InvalidPayload(ref msg) if msg.contains("missing 'weight'")),
+            "got: {err}"
+        );
+    }
+
+    #[test]
+    fn parse_endorse_payload_errors_when_weight_is_out_of_range() {
+        let subject_id = Uuid::new_v4();
+        let payload = json!({
+            "subject_id": subject_id.to_string(),
+            "weight": 0.0,
+            "attestation": null,
+            "in_slot": true,
+        });
+        let err = parse_endorse_payload(&payload).unwrap_err();
+        assert!(
+            matches!(err, TrustActionError::InvalidPayload(ref msg) if msg.contains("out of range")),
+            "got: {err}"
+        );
+    }
+
+    #[test]
+    fn parse_endorse_payload_errors_when_in_slot_is_missing() {
+        let subject_id = Uuid::new_v4();
+        let payload = json!({
+            "subject_id": subject_id.to_string(),
+            "weight": 0.5,
+            "attestation": null,
+        });
+        let err = parse_endorse_payload(&payload).unwrap_err();
+        assert!(
+            matches!(err, TrustActionError::InvalidPayload(ref msg) if msg.contains("in_slot")),
+            "got: {err}"
+        );
+    }
+
+    // --- parse_denounce_payload ---
+
+    #[test]
+    fn parse_denounce_payload_returns_fields_for_valid_payload() {
+        let target_id = Uuid::new_v4();
+        let payload = json!({
+            "target_id": target_id.to_string(),
+            "reason": "harmful conduct",
+        });
+        let (tid, reason) = parse_denounce_payload(&payload).unwrap();
+        assert_eq!(tid, target_id);
+        assert_eq!(reason, "harmful conduct");
+    }
+
+    #[test]
+    fn parse_denounce_payload_errors_when_reason_is_missing() {
+        let target_id = Uuid::new_v4();
+        let payload = json!({ "target_id": target_id.to_string() });
+        let err = parse_denounce_payload(&payload).unwrap_err();
+        assert!(
+            matches!(err, TrustActionError::InvalidPayload(ref msg) if msg.contains("missing 'reason'")),
+            "got: {err}"
+        );
+    }
+
+    #[test]
+    fn parse_denounce_payload_errors_when_reason_is_not_a_string() {
+        let target_id = Uuid::new_v4();
+        let payload = json!({ "target_id": target_id.to_string(), "reason": 42 });
+        let err = parse_denounce_payload(&payload).unwrap_err();
+        assert!(
+            matches!(err, TrustActionError::InvalidPayload(ref msg) if msg.contains("missing 'reason'")),
+            "got: {err}"
+        );
+    }
+
+    #[test]
+    fn parse_denounce_payload_errors_when_reason_is_empty() {
+        let target_id = Uuid::new_v4();
+        let payload = json!({ "target_id": target_id.to_string(), "reason": "" });
+        let err = parse_denounce_payload(&payload).unwrap_err();
+        assert!(
+            matches!(err, TrustActionError::InvalidPayload(ref msg) if msg.contains("out of range")),
+            "got: {err}"
+        );
+    }
+
+    #[test]
+    fn parse_denounce_payload_errors_when_reason_is_whitespace_only() {
+        let target_id = Uuid::new_v4();
+        let payload = json!({ "target_id": target_id.to_string(), "reason": "   " });
+        let err = parse_denounce_payload(&payload).unwrap_err();
+        assert!(
+            matches!(err, TrustActionError::InvalidPayload(ref msg) if msg.contains("out of range")),
+            "got: {err}"
+        );
+    }
+
+    #[test]
+    fn parse_denounce_payload_errors_when_reason_exceeds_max_len() {
+        let target_id = Uuid::new_v4();
+        let long_reason = "x".repeat(DENOUNCEMENT_REASON_MAX_LEN + 1);
+        let payload = json!({ "target_id": target_id.to_string(), "reason": long_reason });
+        let err = parse_denounce_payload(&payload).unwrap_err();
+        assert!(
+            matches!(err, TrustActionError::InvalidPayload(ref msg) if msg.contains("out of range")),
+            "got: {err}"
         );
     }
 }
