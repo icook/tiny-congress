@@ -2,14 +2,15 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use super::{InviteRecord, TrustRepoError};
+use crate::trust::weight::{DeliveryMethod, RelationshipDepth};
 
 #[allow(clippy::too_many_arguments)]
 pub(super) async fn create_invite(
     pool: &PgPool,
     endorser_id: Uuid,
     envelope: &[u8],
-    delivery_method: &str,
-    relationship_depth: Option<&str>,
+    delivery_method: DeliveryMethod,
+    relationship_depth: Option<RelationshipDepth>,
     weight: f32,
     attestation: &serde_json::Value,
     expires_at: chrono::DateTime<chrono::Utc>,
@@ -22,8 +23,8 @@ pub(super) async fn create_invite(
     )
     .bind(endorser_id)
     .bind(envelope)
-    .bind(delivery_method)
-    .bind(relationship_depth)
+    .bind(delivery_method.as_str())
+    .bind(relationship_depth.map(RelationshipDepth::as_str))
     .bind(weight)
     .bind(attestation)
     .bind(expires_at)
