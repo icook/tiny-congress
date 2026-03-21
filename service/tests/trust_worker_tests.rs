@@ -12,6 +12,7 @@ use tc_test_macros::shared_runtime_test;
 use tinycongress_api::reputation::repo::PgReputationRepo;
 use tinycongress_api::trust::engine::TrustEngine;
 use tinycongress_api::trust::repo::{PgTrustRepo, TrustRepo};
+use tinycongress_api::trust::service::ActionType;
 use tinycongress_api::trust::worker::TrustWorker;
 
 /// Build a worker against the given pool.
@@ -47,7 +48,7 @@ async fn test_process_batch_endorse_action() {
     trust_repo
         .enqueue_action(
             actor.id,
-            "endorse",
+            ActionType::Endorse,
             &json!({ "subject_id": subject.id, "weight": 0.8, "attestation": null, "in_slot": true }),
         )
         .await
@@ -128,7 +129,11 @@ async fn test_process_batch_revoke_action() {
     // Enqueue a 'revoke' action
     let trust_repo = PgTrustRepo::new(pool.clone());
     trust_repo
-        .enqueue_action(actor.id, "revoke", &json!({ "subject_id": subject.id }))
+        .enqueue_action(
+            actor.id,
+            ActionType::Revoke,
+            &json!({ "subject_id": subject.id }),
+        )
         .await
         .expect("enqueue revoke action");
 
@@ -196,7 +201,7 @@ async fn test_process_batch_denounce_action() {
     trust_repo
         .enqueue_action(
             actor.id,
-            "denounce",
+            ActionType::Denounce,
             &json!({ "target_id": target.id, "reason": "spam", "influence_cost": 1.0 }),
         )
         .await
@@ -247,7 +252,11 @@ async fn test_process_batch_invalid_payload_fails() {
     // Enqueue a 'revoke' action with an invalid payload (missing subject_id)
     let trust_repo = PgTrustRepo::new(pool.clone());
     trust_repo
-        .enqueue_action(actor.id, "revoke", &json!({ "not_subject_id": "garbage" }))
+        .enqueue_action(
+            actor.id,
+            ActionType::Revoke,
+            &json!({ "not_subject_id": "garbage" }),
+        )
         .await
         .expect("enqueue bad action");
 
@@ -295,7 +304,7 @@ async fn test_process_batch_endorse_invalid_weight_fails() {
     trust_repo
         .enqueue_action(
             actor.id,
-            "endorse",
+            ActionType::Endorse,
             &json!({ "subject_id": subject.id, "weight": 1.5, "attestation": null, "in_slot": true }),
         )
         .await
@@ -345,7 +354,7 @@ async fn test_process_batch_endorse_missing_in_slot_fails() {
     trust_repo
         .enqueue_action(
             actor.id,
-            "endorse",
+            ActionType::Endorse,
             &json!({ "subject_id": subject.id, "weight": 0.5, "attestation": null }),
         )
         .await
@@ -395,7 +404,7 @@ async fn test_process_batch_denounce_reason_too_long_fails() {
     trust_repo
         .enqueue_action(
             actor.id,
-            "denounce",
+            ActionType::Denounce,
             &json!({ "target_id": target.id, "reason": "a".repeat(501) }),
         )
         .await
@@ -455,7 +464,7 @@ async fn test_process_one_poison_message_marks_action_failed() {
     // the payload is inspected, so the content doesn't need to be valid.
     let trust_repo = PgTrustRepo::new(pool.clone());
     trust_repo
-        .enqueue_action(actor.id, "endorse", &json!({}))
+        .enqueue_action(actor.id, ActionType::Endorse, &json!({}))
         .await
         .expect("enqueue action");
 
@@ -589,7 +598,7 @@ async fn test_process_batch_denounce_revokes_existing_endorsement() {
     trust_repo
         .enqueue_action(
             actor.id,
-            "denounce",
+            ActionType::Denounce,
             &json!({ "target_id": target.id, "reason": "spam" }),
         )
         .await
@@ -657,7 +666,7 @@ async fn test_process_batch_denounce_empty_reason_fails() {
     trust_repo
         .enqueue_action(
             actor.id,
-            "denounce",
+            ActionType::Denounce,
             &json!({ "target_id": target.id, "reason": "" }),
         )
         .await
@@ -704,7 +713,7 @@ async fn test_process_one_orphaned_message_leaves_queue_and_continues() {
     // Enqueue an action — inserts into trust__action_log AND sends a pgmq message.
     let trust_repo = PgTrustRepo::new(pool.clone());
     let record = trust_repo
-        .enqueue_action(actor.id, "endorse", &json!({}))
+        .enqueue_action(actor.id, ActionType::Endorse, &json!({}))
         .await
         .expect("enqueue action");
 
@@ -767,7 +776,11 @@ async fn test_process_batch_denounce_missing_reason_field_fails() {
     // Enqueue a 'denounce' action without the required 'reason' key
     let trust_repo = PgTrustRepo::new(pool.clone());
     trust_repo
-        .enqueue_action(actor.id, "denounce", &json!({ "target_id": target.id }))
+        .enqueue_action(
+            actor.id,
+            ActionType::Denounce,
+            &json!({ "target_id": target.id }),
+        )
         .await
         .expect("enqueue action");
 
@@ -820,7 +833,7 @@ async fn test_process_batch_denounce_whitespace_only_reason_fails() {
     trust_repo
         .enqueue_action(
             actor.id,
-            "denounce",
+            ActionType::Denounce,
             &json!({ "target_id": target.id, "reason": "   " }),
         )
         .await
@@ -874,7 +887,11 @@ async fn test_process_batch_revoke_no_endorsement_is_no_op() {
     // Enqueue a revoke action without seeding any prior endorsement.
     let trust_repo = PgTrustRepo::new(pool.clone());
     trust_repo
-        .enqueue_action(actor.id, "revoke", &json!({ "subject_id": subject.id }))
+        .enqueue_action(
+            actor.id,
+            ActionType::Revoke,
+            &json!({ "subject_id": subject.id }),
+        )
         .await
         .expect("enqueue revoke action");
 
@@ -950,7 +967,7 @@ async fn test_process_batch_denounce_duplicate_denouncement_marks_action_failed(
     trust_repo
         .enqueue_action(
             actor.id,
-            "denounce",
+            ActionType::Denounce,
             &json!({ "target_id": target.id, "reason": "duplicate reason" }),
         )
         .await
@@ -1009,7 +1026,7 @@ async fn test_process_batch_invalid_uuid_string_fails() {
     trust_repo
         .enqueue_action(
             actor.id,
-            "revoke",
+            ActionType::Revoke,
             &json!({ "subject_id": "not-a-valid-uuid" }),
         )
         .await
@@ -1074,7 +1091,7 @@ async fn test_process_denounce_action_fails_when_denouncement_already_exists() {
     PgTrustRepo::new(pool.clone())
         .enqueue_action(
             actor.id,
-            "denounce",
+            ActionType::Denounce,
             &json!({ "target_id": target.id, "reason": "second reason" }),
         )
         .await

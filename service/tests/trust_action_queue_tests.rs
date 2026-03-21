@@ -6,6 +6,7 @@ use common::factories::AccountFactory;
 use common::test_db::isolated_db;
 use tc_test_macros::shared_runtime_test;
 use tinycongress_api::trust::repo::{PgTrustRepo, TrustRepo};
+use tinycongress_api::trust::service::ActionType;
 
 #[shared_runtime_test]
 async fn test_enqueue_action_creates_pending() {
@@ -21,7 +22,7 @@ async fn test_enqueue_action_creates_pending() {
     let repo = PgTrustRepo::new(pool);
     let payload = serde_json::json!({"target_id": "some-uuid"});
     let record = repo
-        .enqueue_action(account.id, "endorse", &payload)
+        .enqueue_action(account.id, ActionType::Endorse, &payload)
         .await
         .expect("enqueue_action");
 
@@ -47,13 +48,13 @@ async fn test_count_daily_actions() {
     let repo = PgTrustRepo::new(pool);
     let payload = serde_json::json!({});
 
-    repo.enqueue_action(account.id, "endorse", &payload)
+    repo.enqueue_action(account.id, ActionType::Endorse, &payload)
         .await
         .expect("enqueue 1");
-    repo.enqueue_action(account.id, "revoke", &payload)
+    repo.enqueue_action(account.id, ActionType::Revoke, &payload)
         .await
         .expect("enqueue 2");
-    repo.enqueue_action(account.id, "denounce", &payload)
+    repo.enqueue_action(account.id, ActionType::Denounce, &payload)
         .await
         .expect("enqueue 3");
 
@@ -80,7 +81,7 @@ async fn test_get_action() {
     let payload = serde_json::json!({});
 
     let enqueued = repo
-        .enqueue_action(account.id, "endorse", &payload)
+        .enqueue_action(account.id, ActionType::Endorse, &payload)
         .await
         .expect("enqueue");
 
@@ -107,7 +108,7 @@ async fn test_complete_action() {
     let payload = serde_json::json!({});
 
     let record = repo
-        .enqueue_action(account.id, "endorse", &payload)
+        .enqueue_action(account.id, ActionType::Endorse, &payload)
         .await
         .expect("enqueue");
 
@@ -143,7 +144,7 @@ async fn test_fail_action_with_message() {
     let payload = serde_json::json!({});
 
     let record = repo
-        .enqueue_action(account.id, "endorse", &payload)
+        .enqueue_action(account.id, ActionType::Endorse, &payload)
         .await
         .expect("enqueue");
 

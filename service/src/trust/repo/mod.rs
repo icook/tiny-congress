@@ -10,6 +10,7 @@ use async_trait::async_trait;
 use sqlx::PgPool;
 use uuid::Uuid;
 
+use super::service::ActionType;
 use super::weight::{DeliveryMethod, RelationshipDepth};
 
 /// Error type for trust repository operations.
@@ -113,7 +114,7 @@ pub trait TrustRepo: Send + Sync {
     async fn enqueue_action(
         &self,
         actor_id: Uuid,
-        action_type: &str,
+        action_type: ActionType,
         payload: &serde_json::Value,
     ) -> Result<ActionRecord, TrustRepoError>;
 
@@ -257,7 +258,7 @@ impl TrustRepo for PgTrustRepo {
     async fn enqueue_action(
         &self,
         actor_id: Uuid,
-        action_type: &str,
+        action_type: ActionType,
         payload: &serde_json::Value,
     ) -> Result<ActionRecord, TrustRepoError> {
         action_queue::enqueue_action(&self.pool, actor_id, action_type, payload).await

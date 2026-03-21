@@ -9,7 +9,9 @@ use common::test_db::isolated_db;
 use tc_test_macros::shared_runtime_test;
 use tinycongress_api::reputation::repo::{PgReputationRepo, ReputationRepo};
 use tinycongress_api::trust::repo::{PgTrustRepo, TrustRepo};
-use tinycongress_api::trust::service::{DefaultTrustService, TrustService, TrustServiceError};
+use tinycongress_api::trust::service::{
+    ActionType, DefaultTrustService, TrustService, TrustServiceError,
+};
 
 #[shared_runtime_test]
 async fn test_endorse_enqueues_action() {
@@ -91,7 +93,7 @@ async fn test_daily_quota_exceeded() {
 
     // Enqueue 5 actions directly to hit the daily quota
     for _ in 0..5 {
-        repo.enqueue_action(endorser.id, "endorse", &payload)
+        repo.enqueue_action(endorser.id, ActionType::Endorse, &payload)
             .await
             .expect("enqueue action");
     }
@@ -753,7 +755,7 @@ async fn test_revoke_quota_exceeded() {
 
     // Enqueue 5 actions directly to hit the daily quota
     for _ in 0..5 {
-        repo.enqueue_action(endorser.id, "revoke", &payload)
+        repo.enqueue_action(endorser.id, ActionType::Revoke, &payload)
             .await
             .expect("enqueue action");
     }
@@ -824,7 +826,7 @@ async fn test_denounce_quota_exceeded() {
 
     // Enqueue 5 actions directly to hit the daily quota
     for _ in 0..5 {
-        repo.enqueue_action(accuser.id, "denounce", &payload)
+        repo.enqueue_action(accuser.id, ActionType::Denounce, &payload)
             .await
             .expect("enqueue action");
     }

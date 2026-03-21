@@ -11,7 +11,9 @@ use tc_test_macros::shared_runtime_test;
 use tinycongress_api::reputation::repo::{PgReputationRepo, ReputationRepo};
 use tinycongress_api::trust::engine::TrustEngine;
 use tinycongress_api::trust::repo::{PgTrustRepo, TrustRepo, TrustRepoError};
-use tinycongress_api::trust::service::{DefaultTrustService, TrustService, TrustServiceError};
+use tinycongress_api::trust::service::{
+    ActionType, DefaultTrustService, TrustService, TrustServiceError,
+};
 use tinycongress_api::trust::worker::TrustWorker;
 
 #[shared_runtime_test]
@@ -241,7 +243,7 @@ async fn denouncement_revokes_endorsement_edge() {
     PgTrustRepo::new(pool.clone())
         .enqueue_action(
             actor.id,
-            "denounce",
+            ActionType::Denounce,
             &json!({ "target_id": target.id, "reason": "bad actor" }),
         )
         .await
@@ -316,7 +318,7 @@ async fn denouncement_without_endorsement_succeeds() {
     PgTrustRepo::new(pool.clone())
         .enqueue_action(
             actor.id,
-            "denounce",
+            ActionType::Denounce,
             &json!({ "target_id": target.id, "reason": "suspicious" }),
         )
         .await
