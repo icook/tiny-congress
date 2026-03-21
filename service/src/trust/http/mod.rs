@@ -20,6 +20,15 @@ use super::service::{
     is_valid_endorsement_weight, is_valid_reason, TrustService, TrustServiceError,
     DENOUNCEMENT_REASON_MAX_LEN, DENOUNCEMENT_SLOT_LIMIT, ENDORSEMENT_SLOT_LIMIT,
 };
+
+/// Returns `true` if `att` fits within the 4096-byte serialized limit.
+///
+/// Applied to both the endorse and create-invite handlers to bound attestation
+/// storage. Uses serialized byte length (`to_string`) because the attestation is
+/// stored as a JSON value.
+fn is_attestation_within_size_limit(att: &serde_json::Value) -> bool {
+    att.to_string().len() <= 4096
+}
 use super::weight::{compute_endorsement_weight, DeliveryMethod, RelationshipDepth};
 use crate::http::{bad_request, conflict, internal_error, not_found, too_many_requests, Path};
 use crate::identity::http::auth::AuthenticatedDevice;
@@ -185,7 +194,7 @@ async fn endorse_handler(
     }
 
     if let Some(ref att) = body.attestation {
-        if att.to_string().len() > 4096 {
+        if !is_attestation_within_size_limit(att) {
             return bad_request("attestation must not exceed 4096 bytes");
         }
     }
@@ -465,7 +474,7 @@ async fn create_invite_handler(
         return bad_request("envelope must be between 1 and 4096 bytes");
     }
 
-    if body.attestation.to_string().len() > 4096 {
+    if !is_attestation_within_size_limit(&body.attestation) {
         return bad_request("attestation must not exceed 4096 bytes");
     }
 
@@ -658,19 +667,28 @@ mod tests {
         trust_repo_error_response(e).status()
     }
 
-    // ─── endorse_handler input validation ────────────────────────────────────
+    // ─── is_attestation_within_size_limit ────────────────────────────────────
 
     #[test]
-    fn endorse_attestation_size_limit_is_4096_chars() {
-        // Serialize a JSON string value longer than 4096 bytes and confirm the
-        // validation rejects it. The string itself is 4097 chars; with JSON
-        // string delimiters the serialized form exceeds 4096 bytes.
-        let large_value = serde_json::Value::String("a".repeat(4097));
-        assert!(large_value.to_string().len() > 4096);
+    fn attestation_at_exactly_4096_bytes_is_within_limit() {
+        // 4094 content chars + 2 JSON string delimiters ("…") = exactly 4096 bytes.
+        let att = serde_json::Value::String("a".repeat(4094));
+        assert_eq!(att.to_string().len(), 4096, "test data sanity check");
+        assert!(
+            is_attestation_within_size_limit(&att),
+            "attestation at exactly the limit must be accepted"
+        );
+    }
 
-        // A value at exactly 4096 serialized bytes must be accepted.
-        let ok_value = serde_json::Value::String("a".repeat(4094)); // 4094 chars + 2 quotes = 4096
-        assert_eq!(ok_value.to_string().len(), 4096);
+    #[test]
+    fn attestation_over_4096_bytes_exceeds_limit() {
+        // 4095 content chars + 2 JSON string delimiters = 4097 bytes.
+        let att = serde_json::Value::String("a".repeat(4095));
+        assert_eq!(att.to_string().len(), 4097, "test data sanity check");
+        assert!(
+            !is_attestation_within_size_limit(&att),
+            "attestation exceeding the limit must be rejected"
+        );
     }
 
     // ─── trust_service_error_response ────────────────────────────────────────
