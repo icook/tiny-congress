@@ -284,22 +284,7 @@ impl TrustWorker {
             }
 
             ActionType::Denounce => {
-                let target_id = parse_uuid(&action.payload, "target_id")?;
-                let reason = action.payload["reason"]
-                    .as_str()
-                    .ok_or_else(|| {
-                        TrustActionError::InvalidPayload(
-                            "denounce payload missing 'reason'".to_string(),
-                        )
-                    })?
-                    .to_string();
-                if !is_valid_reason(&reason) {
-                    return Err(TrustActionError::InvalidPayload(format!(
-                        "denounce payload 'reason' length out of range [1, {}]: {}",
-                        DENOUNCEMENT_REASON_MAX_LEN,
-                        reason.chars().count()
-                    )));
-                }
+                let (target_id, reason) = parse_denounce_payload(&action.payload)?;
 
                 // Both operations run inside a single transaction: if the endorsement
                 // revocation fails after the denouncement is inserted, the whole thing
@@ -331,6 +316,24 @@ fn parse_uuid(payload: &serde_json::Value, key: &str) -> Result<Uuid, TrustActio
     raw.parse::<Uuid>().map_err(|e| {
         TrustActionError::InvalidPayload(format!("payload '{key}' is not a valid UUID: {e}"))
     })
+}
+
+fn parse_denounce_payload(payload: &serde_json::Value) -> Result<(Uuid, String), TrustActionError> {
+    let target_id = parse_uuid(payload, "target_id")?;
+    let reason = payload["reason"]
+        .as_str()
+        .ok_or_else(|| {
+            TrustActionError::InvalidPayload("denounce payload missing 'reason'".to_string())
+        })?
+        .to_string();
+    if !is_valid_reason(&reason) {
+        return Err(TrustActionError::InvalidPayload(format!(
+            "denounce payload 'reason' length out of range [1, {}]: {}",
+            DENOUNCEMENT_REASON_MAX_LEN,
+            reason.chars().count()
+        )));
+    }
+    Ok((target_id, reason))
 }
 
 #[cfg(test)]
@@ -402,6 +405,51 @@ mod tests {
             matches!(err, TrustActionError::InvalidPayload(ref msg)
                 if msg.contains("subject_id") && msg.contains("not a valid UUID")),
             "expected InvalidPayload mentioning key and 'not a valid UUID', got: {err}"
+        );
+    }
+
+    // --- parse_denounce_payload ---
+
+    #[test]
+    fn parse_denounce_payload_returns_target_and_reason_for_valid_payload() {
+        let target_id = Uuid::new_v4();
+        let payload = json!({ "target_id": target_id.to_string(), "reason": "legitimate concern" });
+        let (got_target, got_reason) = parse_denounce_payload(&payload).unwrap();
+        assert_eq!(got_target, target_id);
+        assert_eq!(got_reason, "legitimate concern");
+    }
+
+    #[test]
+    fn parse_denounce_payload_errors_when_reason_missing() {
+        let target_id = Uuid::new_v4();
+        let payload = json!({ "target_id": target_id.to_string() });
+        let err = parse_denounce_payload(&payload).unwrap_err();
+        assert!(
+            matches!(err, TrustActionError::InvalidPayload(ref msg) if msg.contains("missing 'reason'")),
+            "expected InvalidPayload mentioning missing reason, got: {err}"
+        );
+    }
+
+    #[test]
+    fn parse_denounce_payload_errors_when_reason_is_empty() {
+        let target_id = Uuid::new_v4();
+        let payload = json!({ "target_id": target_id.to_string(), "reason": "" });
+        let err = parse_denounce_payload(&payload).unwrap_err();
+        assert!(
+            matches!(err, TrustActionError::InvalidPayload(ref msg) if msg.contains("length out of range")),
+            "expected InvalidPayload about length out of range, got: {err}"
+        );
+    }
+
+    #[test]
+    fn parse_denounce_payload_errors_when_reason_exceeds_max_len() {
+        let target_id = Uuid::new_v4();
+        let long_reason = "a".repeat(DENOUNCEMENT_REASON_MAX_LEN + 1);
+        let payload = json!({ "target_id": target_id.to_string(), "reason": long_reason });
+        let err = parse_denounce_payload(&payload).unwrap_err();
+        assert!(
+            matches!(err, TrustActionError::InvalidPayload(ref msg) if msg.contains("length out of range")),
+            "expected InvalidPayload mentioning length out of range, got: {err}"
         );
     }
 }
