@@ -861,6 +861,85 @@ async fn test_process_batch_revoke_no_endorsement_is_no_op() {
 }
 
 // ---------------------------------------------------------------------------
+// Test: denounce action when denouncement already exists fails the action
+// ---------------------------------------------------------------------------
+
+/// If a denouncement already exists for the (accuser, target) pair when the
+/// worker processes the action — a race condition where two concurrent HTTP
+/// requests both pass the `has_active_denouncement` guard before either writes —
+/// the unique constraint fires, the action is marked failed, and the
+/// pre-existing denouncement is left unchanged.
+#[shared_runtime_test]
+async fn test_process_batch_denounce_duplicate_denouncement_marks_action_failed() {
+    let db = isolated_db().await;
+    let pool = db.pool().clone();
+
+    let actor = AccountFactory::new()
+        .with_seed(20)
+        .create(&pool)
+        .await
+        .expect("create actor");
+
+    let target = AccountFactory::new()
+        .with_seed(21)
+        .create(&pool)
+        .await
+        .expect("create target");
+
+    // Pre-seed a denouncement so the unique constraint fires when the worker runs.
+    sqlx::query(
+        "INSERT INTO trust__denouncements (accuser_id, target_id, reason) VALUES ($1, $2, $3)",
+    )
+    .bind(actor.id)
+    .bind(target.id)
+    .bind("prior reason")
+    .execute(&pool)
+    .await
+    .expect("seed denouncement");
+
+    // Enqueue a denounce action for the same pair — simulates the second
+    // concurrent request that also passed the service's has_active_denouncement check.
+    let trust_repo = PgTrustRepo::new(pool.clone());
+    trust_repo
+        .enqueue_action(
+            actor.id,
+            "denounce",
+            &json!({ "target_id": target.id, "reason": "duplicate reason" }),
+        )
+        .await
+        .expect("enqueue denounce action");
+
+    let worker = make_worker(pool.clone());
+    let processed = worker.process_one().await.expect("process_one");
+    assert!(processed, "expected a message to be processed");
+
+    // Action should be marked failed — the unique constraint fired.
+    let (status, error_message): (String, Option<String>) =
+        sqlx::query_as("SELECT status, error_message FROM trust__action_log WHERE actor_id = $1")
+            .bind(actor.id)
+            .fetch_one(&pool)
+            .await
+            .expect("fetch action");
+
+    assert_eq!(status, "failed");
+    assert!(
+        error_message.is_some(),
+        "error_message should be set when the unique constraint fires"
+    );
+
+    // The pre-seeded denouncement should still be the only one — the duplicate was rejected.
+    let count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM trust__denouncements WHERE accuser_id = $1 AND target_id = $2",
+    )
+    .bind(actor.id)
+    .bind(target.id)
+    .fetch_one(&pool)
+    .await
+    .expect("count denouncements");
+    assert_eq!(count, 1, "only the pre-seeded denouncement should exist");
+}
+
+// ---------------------------------------------------------------------------
 // Test: action with a subject_id that is a string but not a valid UUID fails
 // ---------------------------------------------------------------------------
 
