@@ -159,6 +159,13 @@ GROUP BY account_id
     /// Used by both [`compute_diversity_from`] (which computes the reachable set itself)
     /// and [`recompute_from_anchor`] (which passes the already-computed set to avoid a
     /// redundant database query).
+    ///
+    /// # Panics
+    ///
+    /// Panics if `anchor_id` is not present in `reachable`. Both callers guarantee this
+    /// by deriving `reachable` from [`compute_distances_from`], which always inserts the
+    /// anchor. A violated invariant must not produce silently wrong diversity scores.
+    #[allow(clippy::expect_used)] // invariant: anchor is always in reachable (see doc)
     async fn diversity_from_reachable(
         &self,
         anchor_id: Uuid,
@@ -201,8 +208,13 @@ WHERE revoked_at IS NULL
         }
 
         // Step 4: the anchor index in the reachable list (always index 0 since
-        // compute_distances_from inserts it first).
-        let anchor_index = index_map.get(&anchor_id).copied().unwrap_or(0);
+        // compute_distances_from inserts it first). If the invariant is violated
+        // (anchor absent from reachable), we must panic rather than silently use
+        // vertex 0 — a wrong anchor produces incorrect diversity scores for every
+        // other node.
+        let anchor_index = index_map.get(&anchor_id).copied().expect(
+            "anchor_id must be present in reachable; compute_distances_from always inserts it",
+        );
 
         // Step 5: for each reachable node except the anchor, compute vertex connectivity.
         let results = reachable
