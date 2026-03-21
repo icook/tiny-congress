@@ -568,6 +568,41 @@ async fn endorse_rejects_weight_above_one() {
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 }
 
+// ─── Endorse attestation size validation ─────────────────────────────────────
+
+#[shared_runtime_test]
+async fn endorse_rejects_oversized_attestation() {
+    let db = isolated_db().await;
+    let (app, keys, _account_id) = signup_and_get_account("endorseoversizedatt", db.pool()).await;
+
+    // Use any UUID — attestation size validation fires before any DB call.
+    let subject_id = uuid::Uuid::new_v4();
+    // A string value of 4097 'x' chars produces a JSON serialization well above 4096 bytes.
+    let large_value = "x".repeat(4097);
+    let body = serde_json::json!({
+        "subject_id": subject_id,
+        "attestation": { "data": large_value }
+    })
+    .to_string();
+
+    let request = build_authed_request(
+        Method::POST,
+        "/trust/endorse",
+        &body,
+        &keys.device_signing_key,
+        &keys.device_kid,
+    );
+
+    let response = app.oneshot(request).await.expect("response");
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let json = json_body(response).await;
+    assert!(
+        json["error"].as_str().unwrap_or("").contains("attestation"),
+        "error should mention attestation, got: {}",
+        json["error"]
+    );
+}
+
 // ─── Create invite validation ─────────────────────────────────────────────────
 
 #[shared_runtime_test]
