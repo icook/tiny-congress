@@ -837,3 +837,83 @@ async fn test_denounce_quota_exceeded() {
         "expected QuotaExceeded for denounce, got: {result:?}"
     );
 }
+
+/// Verifier accounts are exempt from endorsement slot limits and their
+/// endorsements should always be queued with `in_slot=true`, even when
+/// all k=3 slots are already occupied.
+///
+/// `test_verifier_bypasses_endorsement_slots` already checks the service
+/// doesn't error; this test pins the payload value so a logic inversion
+/// (accidentally setting `in_slot=false` for verifiers) fails loudly.
+#[shared_runtime_test]
+async fn test_verifier_endorse_beyond_slots_queues_in_slot_true() {
+    let db = isolated_db().await;
+    let pool = db.pool().clone();
+
+    let verifier = AccountFactory::new()
+        .with_seed(235)
+        .create(&pool)
+        .await
+        .expect("create verifier");
+
+    // Grant the authorized_verifier endorsement (genesis — no endorser_id).
+    sqlx::query(
+        "INSERT INTO reputation__endorsements (subject_id, topic, weight) \
+         VALUES ($1, 'authorized_verifier', 1.0)",
+    )
+    .bind(verifier.id)
+    .execute(&pool)
+    .await
+    .expect("seed verifier endorsement");
+
+    // Fill all k=3 slots with in-slot endorsements.
+    for seed in 56u8..59 {
+        let s = AccountFactory::new()
+            .with_seed(seed)
+            .create(&pool)
+            .await
+            .expect("create subject");
+        sqlx::query(
+            "INSERT INTO reputation__endorsements \
+             (endorser_id, subject_id, topic, weight, in_slot) \
+             VALUES ($1, $2, 'trust', 1.0, true)",
+        )
+        .bind(verifier.id)
+        .bind(s.id)
+        .execute(&pool)
+        .await
+        .expect("seed in-slot endorsement");
+    }
+
+    let extra_subject = AccountFactory::new()
+        .with_seed(59)
+        .create(&pool)
+        .await
+        .expect("create extra subject");
+
+    let rep_repo = Arc::new(PgReputationRepo::new(pool.clone())) as Arc<dyn ReputationRepo>;
+    let repo = Arc::new(PgTrustRepo::new(pool.clone()));
+    let service = DefaultTrustService::new(repo, rep_repo);
+
+    service
+        .endorse(verifier.id, extra_subject.id, 1.0, None)
+        .await
+        .expect("verifier should bypass slot limit");
+
+    // Retrieve the queued action and assert in_slot=true.
+    let row: (serde_json::Value,) = sqlx::query_as(
+        "SELECT payload FROM trust__action_log \
+         WHERE actor_id = $1 AND action_type = 'endorse' \
+         ORDER BY created_at DESC LIMIT 1",
+    )
+    .bind(verifier.id)
+    .fetch_one(&pool)
+    .await
+    .expect("action should exist");
+
+    assert_eq!(
+        row.0["in_slot"].as_bool(),
+        Some(true),
+        "verifier endorsement beyond slot limit must queue in_slot=true"
+    );
+}
