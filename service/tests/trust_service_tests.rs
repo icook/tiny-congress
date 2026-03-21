@@ -919,3 +919,72 @@ async fn test_verifier_endorse_beyond_slots_queues_in_slot_true() {
         "verifier endorsement beyond slot limit must queue in_slot=true"
     );
 }
+
+/// Non-verifier accounts with all k=3 slots occupied must queue the action
+/// with `in_slot=false`, so the endorsement does NOT count in the trust graph.
+///
+/// This mirrors `test_verifier_endorse_beyond_slots_queues_in_slot_true` and
+/// pins the opposite branch: a logic inversion (setting `in_slot=true` for a
+/// non-verifier out-of-slot endorsement) would silently inflate trust scores.
+#[shared_runtime_test]
+async fn test_non_verifier_endorse_beyond_slots_queues_in_slot_false() {
+    let db = isolated_db().await;
+    let pool = db.pool().clone();
+
+    let endorser = AccountFactory::new()
+        .with_seed(62)
+        .create(&pool)
+        .await
+        .expect("create endorser");
+
+    // Fill all k=3 slots with in-slot endorsements (no authorized_verifier grant).
+    for seed in 63u8..66 {
+        let s = AccountFactory::new()
+            .with_seed(seed)
+            .create(&pool)
+            .await
+            .expect("create subject");
+        sqlx::query(
+            "INSERT INTO reputation__endorsements \
+             (endorser_id, subject_id, topic, weight, in_slot) \
+             VALUES ($1, $2, 'trust', 1.0, true)",
+        )
+        .bind(endorser.id)
+        .bind(s.id)
+        .execute(&pool)
+        .await
+        .expect("seed in-slot endorsement");
+    }
+
+    let extra_subject = AccountFactory::new()
+        .with_seed(66)
+        .create(&pool)
+        .await
+        .expect("create extra subject");
+
+    let rep_repo = Arc::new(PgReputationRepo::new(pool.clone())) as Arc<dyn ReputationRepo>;
+    let repo = Arc::new(PgTrustRepo::new(pool.clone()));
+    let service = DefaultTrustService::new(repo, rep_repo);
+
+    service
+        .endorse(endorser.id, extra_subject.id, 1.0, None)
+        .await
+        .expect("4th endorsement should succeed as out-of-slot");
+
+    // Retrieve the queued action and assert in_slot=false.
+    let row: (serde_json::Value,) = sqlx::query_as(
+        "SELECT payload FROM trust__action_log \
+         WHERE actor_id = $1 AND action_type = 'endorse' \
+         ORDER BY created_at DESC LIMIT 1",
+    )
+    .bind(endorser.id)
+    .fetch_one(&pool)
+    .await
+    .expect("action should exist");
+
+    assert_eq!(
+        row.0["in_slot"].as_bool(),
+        Some(false),
+        "non-verifier endorsement beyond slot limit must queue in_slot=false"
+    );
+}
