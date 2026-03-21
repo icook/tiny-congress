@@ -739,4 +739,12 @@ mod tests {
             StatusCode::CONFLICT
         );
     }
+
+    #[test]
+    fn repo_database_error_maps_to_500() {
+        assert_eq!(
+            repo_status(&TrustRepoError::Database(sqlx::Error::RowNotFound)),
+            StatusCode::INTERNAL_SERVER_ERROR
+        );
+    }
 }
