@@ -206,6 +206,28 @@ mod tests {
     }
 
     #[test]
+    fn source_equals_target_returns_zero() {
+        let mut g = FlowGraph::new(3);
+        g.add_edge(0, 1);
+        g.add_edge(1, 2);
+        assert_eq!(g.vertex_connectivity(1, 1), 0);
+    }
+
+    #[test]
+    fn source_out_of_bounds_returns_zero() {
+        let g = FlowGraph::new(3);
+        assert_eq!(g.vertex_connectivity(3, 0), 0);
+        assert_eq!(g.vertex_connectivity(100, 0), 0);
+    }
+
+    #[test]
+    fn target_out_of_bounds_returns_zero() {
+        let g = FlowGraph::new(3);
+        assert_eq!(g.vertex_connectivity(0, 3), 0);
+        assert_eq!(g.vertex_connectivity(0, 100), 0);
+    }
+
+    #[test]
     fn three_independent_paths() {
         // s→a→t, s→b→t, s→c→t — three disjoint paths
         let mut g = FlowGraph::new(5);
