@@ -173,4 +173,31 @@ mod tests {
         assert_eq!(RelationshipDepth::Months.as_str(), "months");
         assert_eq!(RelationshipDepth::Acquaintance.as_str(), "acquaintance");
     }
+
+    /// Pin the exact base weights for Text and Messaging (ADR-023).
+    ///
+    /// Both methods share the same 0.4 base weight. If someone differentiates
+    /// them or changes the value, the `result_is_always_positive` test would
+    /// not catch it (it only checks > 0 and <= 1.0).
+    #[test]
+    fn text_no_depth_is_0_4() {
+        let w = compute_endorsement_weight(DeliveryMethod::Text, None);
+        assert!((w - 0.4).abs() < 0.001, "expected ~0.4, got {w}");
+    }
+
+    #[test]
+    fn messaging_no_depth_is_0_4() {
+        let w = compute_endorsement_weight(DeliveryMethod::Messaging, None);
+        assert!((w - 0.4).abs() < 0.001, "expected ~0.4, got {w}");
+    }
+
+    #[test]
+    fn text_and_messaging_have_equal_base_weight() {
+        let w_text = compute_endorsement_weight(DeliveryMethod::Text, None);
+        let w_msg = compute_endorsement_weight(DeliveryMethod::Messaging, None);
+        assert_eq!(
+            w_text, w_msg,
+            "Text and Messaging must share the same base weight per ADR-023"
+        );
+    }
 }
