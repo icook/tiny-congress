@@ -457,6 +457,10 @@ async fn create_invite_handler(
         return bad_request("envelope must be between 1 and 4096 bytes");
     }
 
+    if body.attestation.to_string().len() > 4096 {
+        return bad_request("attestation must not exceed 4096 bytes");
+    }
+
     // Use the client-supplied weight if present; otherwise compute from method + depth.
     let weight = body.weight.unwrap_or_else(|| {
         compute_endorsement_weight(body.delivery_method, body.relationship_depth)
