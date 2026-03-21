@@ -234,9 +234,16 @@ WHERE revoked_at IS NULL
     ///
     /// Returns the number of user scores written.
     ///
+    /// # Panics
+    ///
+    /// Panics if a non-anchor node from `distances` is absent from the `diversities` map.
+    /// This is a bug: both maps are derived from the same reachable set, so every non-anchor
+    /// node must appear in both.
+    ///
     /// # Errors
     ///
     /// Returns an error if any database query or upsert fails.
+    #[allow(clippy::expect_used)] // invariant: all non-anchor reachable nodes are in diversities (see doc)
     pub async fn recompute_from_anchor(
         &self,
         anchor_id: Uuid,
@@ -258,7 +265,10 @@ WHERE revoked_at IS NULL
             let diversity = if score.account_id == anchor_id {
                 i32::MAX
             } else {
-                diversities.get(&score.account_id).copied().unwrap_or(0)
+                diversities.get(&score.account_id).copied().expect(
+                    "all non-anchor reachable nodes must be present in diversities; \
+                     diversity_from_reachable is called with the same reachable set",
+                )
             };
             trust_repo
                 .upsert_score(
