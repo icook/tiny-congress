@@ -16,6 +16,8 @@ pub const DENOUNCEMENT_SLOT_LIMIT: u32 = 2;
 pub const DAILY_ACTION_QUOTA: i64 = 5;
 /// Maximum character count of a denouncement reason (matches the user-facing "500 characters" limit).
 pub const DENOUNCEMENT_REASON_MAX_LEN: usize = 500;
+/// Maximum serialized byte length of an attestation JSON value.
+pub const ATTESTATION_MAX_BYTES: usize = 4096;
 
 /// Returns `true` if `reason` is a valid denouncement reason: non-empty, not whitespace-only,
 /// and within the max length.
@@ -62,6 +64,13 @@ impl ActionType {
     }
 }
 
+/// Returns `true` if `att` fits within the [`ATTESTATION_MAX_BYTES`] serialized limit.
+///
+/// Uses serialized byte length (`to_string`) because the attestation is stored as a JSON value.
+pub(crate) fn is_valid_attestation_size(att: &serde_json::Value) -> bool {
+    att.to_string().len() <= ATTESTATION_MAX_BYTES
+}
+
 /// Returns `true` if `weight` is a valid endorsement weight: finite and in (0.0, 1.0].
 #[allow(clippy::missing_const_for_fn)]
 pub(crate) fn is_valid_endorsement_weight(weight: f32) -> bool {
@@ -88,6 +97,9 @@ pub enum TrustServiceError {
 
     #[error("weight must be in range (0.0, 1.0]")]
     InvalidWeight,
+
+    #[error("attestation must not exceed {max} bytes")]
+    AttestationTooLarge { max: usize },
 
     #[error("reason must be between 1 and {max} characters")]
     InvalidReason { max: usize },
@@ -186,6 +198,22 @@ mod tests {
     #[test]
     fn is_valid_weight_rejects_negative_infinity() {
         assert!(!is_valid_endorsement_weight(f32::NEG_INFINITY));
+    }
+
+    #[test]
+    fn is_valid_attestation_size_accepts_exactly_4096_bytes() {
+        // 4094 content chars + 2 JSON string delimiters = exactly 4096 bytes.
+        let att = serde_json::Value::String("a".repeat(4094));
+        assert_eq!(att.to_string().len(), 4096, "test data sanity check");
+        assert!(is_valid_attestation_size(&att));
+    }
+
+    #[test]
+    fn is_valid_attestation_size_rejects_4097_bytes() {
+        // 4095 content chars + 2 JSON string delimiters = 4097 bytes.
+        let att = serde_json::Value::String("a".repeat(4095));
+        assert_eq!(att.to_string().len(), 4097, "test data sanity check");
+        assert!(!is_valid_attestation_size(&att));
     }
 
     #[test]
@@ -650,6 +678,22 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn endorse_returns_attestation_too_large_for_oversized_attestation() {
+        let a = Uuid::new_v4();
+        let b = Uuid::new_v4();
+        // 4095 content chars + 2 JSON string delimiters = 4097 bytes (over limit).
+        let oversized = serde_json::Value::String("a".repeat(4095));
+        let err = make_service()
+            .endorse(a, b, 1.0, Some(oversized))
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(err, TrustServiceError::AttestationTooLarge { .. }),
+            "expected AttestationTooLarge, got: {err}"
+        );
+    }
+
+    #[tokio::test]
     async fn revoke_endorsement_returns_self_action_when_ids_match() {
         let id = Uuid::new_v4();
         let err = make_service().revoke_endorsement(id, id).await.unwrap_err();
@@ -872,6 +916,14 @@ impl TrustService for DefaultTrustService {
 
         if !is_valid_endorsement_weight(weight) {
             return Err(TrustServiceError::InvalidWeight);
+        }
+
+        if let Some(ref att) = attestation {
+            if !is_valid_attestation_size(att) {
+                return Err(TrustServiceError::AttestationTooLarge {
+                    max: ATTESTATION_MAX_BYTES,
+                });
+            }
         }
 
         let daily_count = self.trust_repo.count_daily_actions(endorser_id).await?;

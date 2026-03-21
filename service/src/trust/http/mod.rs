@@ -17,18 +17,10 @@ use uuid::Uuid;
 
 use super::repo::{TrustRepo, TrustRepoError};
 use super::service::{
-    is_valid_endorsement_weight, is_valid_reason, TrustService, TrustServiceError,
-    DENOUNCEMENT_REASON_MAX_LEN, DENOUNCEMENT_SLOT_LIMIT, ENDORSEMENT_SLOT_LIMIT,
+    is_valid_attestation_size, is_valid_endorsement_weight, is_valid_reason, TrustService,
+    TrustServiceError, ATTESTATION_MAX_BYTES, DENOUNCEMENT_REASON_MAX_LEN, DENOUNCEMENT_SLOT_LIMIT,
+    ENDORSEMENT_SLOT_LIMIT,
 };
-
-/// Returns `true` if `att` fits within the 4096-byte serialized limit.
-///
-/// Applied to both the endorse and create-invite handlers to bound attestation
-/// storage. Uses serialized byte length (`to_string`) because the attestation is
-/// stored as a JSON value.
-fn is_attestation_within_size_limit(att: &serde_json::Value) -> bool {
-    att.to_string().len() <= 4096
-}
 use super::weight::{compute_endorsement_weight, DeliveryMethod, RelationshipDepth};
 use crate::http::{bad_request, conflict, internal_error, not_found, too_many_requests, Path};
 use crate::identity::http::auth::AuthenticatedDevice;
@@ -194,8 +186,10 @@ async fn endorse_handler(
     }
 
     if let Some(ref att) = body.attestation {
-        if !is_attestation_within_size_limit(att) {
-            return bad_request("attestation must not exceed 4096 bytes");
+        if !is_valid_attestation_size(att) {
+            return bad_request(&format!(
+                "attestation must not exceed {ATTESTATION_MAX_BYTES} bytes"
+            ));
         }
     }
 
@@ -474,8 +468,10 @@ async fn create_invite_handler(
         return bad_request("envelope must be between 1 and 4096 bytes");
     }
 
-    if !is_attestation_within_size_limit(&body.attestation) {
-        return bad_request("attestation must not exceed 4096 bytes");
+    if !is_valid_attestation_size(&body.attestation) {
+        return bad_request(&format!(
+            "attestation must not exceed {ATTESTATION_MAX_BYTES} bytes"
+        ));
     }
 
     // Use the client-supplied weight if present; otherwise compute from method + depth.
@@ -619,6 +615,9 @@ async fn accept_invite_handler(
 fn trust_service_error_response(e: &TrustServiceError) -> axum::response::Response {
     match e {
         TrustServiceError::InvalidWeight => bad_request("weight must be in range (0.0, 1.0]"),
+        TrustServiceError::AttestationTooLarge { max } => {
+            bad_request(&format!("attestation must not exceed {max} bytes"))
+        }
         TrustServiceError::InvalidReason { max } => {
             bad_request(&format!("reason must be between 1 and {max} characters"))
         }
@@ -667,36 +666,20 @@ mod tests {
         trust_repo_error_response(e).status()
     }
 
-    // ─── is_attestation_within_size_limit ────────────────────────────────────
-
-    #[test]
-    fn attestation_at_exactly_4096_bytes_is_within_limit() {
-        // 4094 content chars + 2 JSON string delimiters ("…") = exactly 4096 bytes.
-        let att = serde_json::Value::String("a".repeat(4094));
-        assert_eq!(att.to_string().len(), 4096, "test data sanity check");
-        assert!(
-            is_attestation_within_size_limit(&att),
-            "attestation at exactly the limit must be accepted"
-        );
-    }
-
-    #[test]
-    fn attestation_over_4096_bytes_exceeds_limit() {
-        // 4095 content chars + 2 JSON string delimiters = 4097 bytes.
-        let att = serde_json::Value::String("a".repeat(4095));
-        assert_eq!(att.to_string().len(), 4097, "test data sanity check");
-        assert!(
-            !is_attestation_within_size_limit(&att),
-            "attestation exceeding the limit must be rejected"
-        );
-    }
-
     // ─── trust_service_error_response ────────────────────────────────────────
 
     #[test]
     fn invalid_weight_maps_to_400() {
         assert_eq!(
             service_status(&TrustServiceError::InvalidWeight),
+            StatusCode::BAD_REQUEST
+        );
+    }
+
+    #[test]
+    fn attestation_too_large_maps_to_400() {
+        assert_eq!(
+            service_status(&TrustServiceError::AttestationTooLarge { max: 4096 }),
             StatusCode::BAD_REQUEST
         );
     }
