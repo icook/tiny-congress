@@ -496,6 +496,22 @@ mod tests {
     }
 
     #[test]
+    fn parse_endorse_payload_errors_when_weight_exceeds_one() {
+        let subject_id = Uuid::new_v4();
+        let payload = json!({
+            "subject_id": subject_id.to_string(),
+            "weight": 1.1,
+            "attestation": null,
+            "in_slot": true,
+        });
+        let err = parse_endorse_payload(&payload).unwrap_err();
+        assert!(
+            matches!(err, TrustActionError::InvalidPayload(ref msg) if msg.contains("out of range")),
+            "got: {err}"
+        );
+    }
+
+    #[test]
     fn parse_endorse_payload_errors_when_in_slot_is_missing() {
         let subject_id = Uuid::new_v4();
         let payload = json!({
