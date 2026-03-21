@@ -214,3 +214,60 @@ async fn test_fail_action_truncates_long_error_message() {
         "stored error message must be truncated to ERROR_MESSAGE_MAX_LEN characters"
     );
 }
+
+/// Verify that `fail_action` truncates at a character boundary for multibyte strings.
+///
+/// The truncation code uses `char_indices().nth(ERROR_MESSAGE_MAX_LEN)` which is
+/// character-count-based, not byte-count-based. A string of multibyte characters
+/// (e.g. CJK ideographs, 3 bytes each) must still be truncated to exactly
+/// ERROR_MESSAGE_MAX_LEN characters, not ERROR_MESSAGE_MAX_LEN bytes — and the
+/// slice must not fall in the middle of a code point.
+#[shared_runtime_test]
+async fn test_fail_action_truncates_multibyte_error_message_at_char_boundary() {
+    let db = isolated_db().await;
+    let pool = db.pool().clone();
+
+    let account = AccountFactory::new()
+        .with_seed(107)
+        .create(&pool)
+        .await
+        .expect("create account");
+
+    let repo = PgTrustRepo::new(pool);
+    let payload = serde_json::json!({});
+
+    let record = repo
+        .enqueue_action(account.id, ActionType::Endorse, &payload)
+        .await
+        .expect("enqueue");
+
+    // Each '中' is 3 bytes; ERROR_MESSAGE_MAX_LEN + 100 characters = well over
+    // ERROR_MESSAGE_MAX_LEN bytes. The truncation must produce exactly
+    // ERROR_MESSAGE_MAX_LEN characters (not bytes) without splitting a code point.
+    let long_error: String = "中".repeat(ERROR_MESSAGE_MAX_LEN + 100);
+    repo.fail_action(record.id, &long_error)
+        .await
+        .expect("fail_action");
+
+    let row = sqlx::query_as::<_, (String, Option<String>)>(
+        "SELECT status, error_message FROM trust__action_log WHERE id = $1",
+    )
+    .bind(record.id)
+    .fetch_one(db.pool())
+    .await
+    .expect("fetch row");
+
+    assert_eq!(row.0, "failed");
+    let stored = row.1.expect("error_message should be set");
+    assert_eq!(
+        stored.chars().count(),
+        ERROR_MESSAGE_MAX_LEN,
+        "multibyte truncation must produce exactly ERROR_MESSAGE_MAX_LEN characters"
+    );
+    // Byte length should be 3× char count for pure CJK input.
+    assert_eq!(
+        stored.len(),
+        ERROR_MESSAGE_MAX_LEN * 3,
+        "each '中' is 3 bytes; byte length must equal 3 * char count"
+    );
+}
