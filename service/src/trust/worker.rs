@@ -585,6 +585,24 @@ mod tests {
         );
     }
 
+    #[test]
+    fn parse_endorse_payload_errors_when_in_slot_is_not_a_boolean() {
+        // `as_bool()` returns None for non-boolean JSON values (numbers, strings,
+        // objects). The error message covers both the missing and invalid cases.
+        let subject_id = Uuid::new_v4();
+        let payload = json!({
+            "subject_id": subject_id.to_string(),
+            "weight": 0.5,
+            "attestation": null,
+            "in_slot": 1,
+        });
+        let err = parse_endorse_payload(&payload).unwrap_err();
+        assert!(
+            matches!(err, TrustActionError::InvalidPayload(ref msg) if msg.contains("in_slot")),
+            "expected InvalidPayload mentioning 'in_slot' for non-boolean value, got: {err}"
+        );
+    }
+
     // --- parse_denounce_payload ---
 
     #[test]
