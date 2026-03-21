@@ -631,3 +631,112 @@ fn trust_repo_error_response(e: &TrustRepoError) -> axum::response::Response {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use crate::reputation::repo::EndorsementRepoError;
+
+    fn service_status(e: &TrustServiceError) -> StatusCode {
+        trust_service_error_response(e).status()
+    }
+
+    fn repo_status(e: &TrustRepoError) -> StatusCode {
+        trust_repo_error_response(e).status()
+    }
+
+    // ─── trust_service_error_response ────────────────────────────────────────
+
+    #[test]
+    fn invalid_weight_maps_to_400() {
+        assert_eq!(
+            service_status(&TrustServiceError::InvalidWeight),
+            StatusCode::BAD_REQUEST
+        );
+    }
+
+    #[test]
+    fn invalid_reason_maps_to_400() {
+        assert_eq!(
+            service_status(&TrustServiceError::InvalidReason { max: 500 }),
+            StatusCode::BAD_REQUEST
+        );
+    }
+
+    #[test]
+    fn self_action_maps_to_400() {
+        assert_eq!(
+            service_status(&TrustServiceError::SelfAction),
+            StatusCode::BAD_REQUEST
+        );
+    }
+
+    #[test]
+    fn quota_exceeded_maps_to_429() {
+        assert_eq!(
+            service_status(&TrustServiceError::QuotaExceeded),
+            StatusCode::TOO_MANY_REQUESTS
+        );
+    }
+
+    #[test]
+    fn denouncement_slots_exhausted_maps_to_429() {
+        assert_eq!(
+            service_status(&TrustServiceError::DenouncementSlotsExhausted { max: 2 }),
+            StatusCode::TOO_MANY_REQUESTS
+        );
+    }
+
+    #[test]
+    fn denouncement_conflict_maps_to_409() {
+        assert_eq!(
+            service_status(&TrustServiceError::DenouncementConflict),
+            StatusCode::CONFLICT
+        );
+    }
+
+    #[test]
+    fn already_denounced_maps_to_409() {
+        assert_eq!(
+            service_status(&TrustServiceError::AlreadyDenounced),
+            StatusCode::CONFLICT
+        );
+    }
+
+    #[test]
+    fn service_repo_error_maps_to_500() {
+        assert_eq!(
+            service_status(&TrustServiceError::Repo(TrustRepoError::NotFound)),
+            StatusCode::INTERNAL_SERVER_ERROR
+        );
+    }
+
+    #[test]
+    fn service_endorsement_repo_error_maps_to_500() {
+        assert_eq!(
+            service_status(&TrustServiceError::EndorsementRepo(
+                EndorsementRepoError::NotFound
+            )),
+            StatusCode::INTERNAL_SERVER_ERROR
+        );
+    }
+
+    // ─── trust_repo_error_response ───────────────────────────────────────────
+
+    #[test]
+    fn repo_not_found_maps_to_404() {
+        assert_eq!(
+            repo_status(&TrustRepoError::NotFound),
+            StatusCode::NOT_FOUND
+        );
+    }
+
+    #[test]
+    fn repo_duplicate_maps_to_409() {
+        assert_eq!(
+            repo_status(&TrustRepoError::Duplicate),
+            StatusCode::CONFLICT
+        );
+    }
+}
