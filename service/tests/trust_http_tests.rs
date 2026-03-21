@@ -1937,3 +1937,96 @@ async fn denounce_returns_429_when_quota_exceeded() {
     let response = app.oneshot(request).await.expect("response");
     assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
 }
+
+/// When the endorser has exhausted their daily action quota between invite
+/// creation and acceptance, `accept_invite` returns 200 OK (the invite IS
+/// consumed) but the auto-endorse step silently fails with `QuotaExceeded`.
+/// This documents the fire-and-forget contract so any future change that
+/// propagates the error is caught by a test failure.
+#[shared_runtime_test]
+async fn accept_invite_succeeds_even_when_endorser_quota_exceeded() {
+    let db = isolated_db().await;
+    let pool = db.pool().clone();
+    let (app, endorser_keys, endorser_id) =
+        signup_and_get_account("quotaexhaustedendorser", db.pool()).await;
+
+    // Exhaust the endorser's daily action quota (5 actions) directly so the
+    // invite-creation API call below doesn't count against it.
+    use tinycongress_api::trust::repo::{PgTrustRepo, TrustRepo};
+    let trust_repo = PgTrustRepo::new(pool.clone());
+    for _ in 0..5 {
+        trust_repo
+            .enqueue_action(endorser_id, "endorse", &serde_json::json!({}))
+            .await
+            .expect("enqueue quota filler");
+    }
+
+    // Endorser creates an invite (using the HTTP API; the invite-creation path
+    // does not check the daily action quota, so this succeeds).
+    let envelope_b64 = tc_crypto::encode_base64url(b"signed-invite-envelope");
+    let invite_body = serde_json::json!({
+        "envelope": envelope_b64,
+        "delivery_method": "qr",
+        "attestation": {}
+    })
+    .to_string();
+    let create_req = build_authed_request(
+        Method::POST,
+        "/trust/invites",
+        &invite_body,
+        &endorser_keys.device_signing_key,
+        &endorser_keys.device_kid,
+    );
+    let create_resp = app.clone().oneshot(create_req).await.expect("create");
+    assert_eq!(create_resp.status(), StatusCode::CREATED);
+    let invite_id = json_body(create_resp).await;
+    let invite_id = invite_id["id"].as_str().expect("invite id");
+
+    // Sign up the acceptor.
+    let (json2, acceptor_keys) = valid_signup_with_keys("quotaexhaustedacceptor");
+    let resp2 = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/auth/signup")
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(json2))
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+    assert_eq!(resp2.status(), StatusCode::CREATED);
+
+    // Acceptor accepts the invite — 200 OK even though auto-endorse fails with QuotaExceeded.
+    let accept_uri = format!("/trust/invites/{invite_id}/accept");
+    let accept_req = build_authed_request(
+        Method::POST,
+        &accept_uri,
+        "",
+        &acceptor_keys.device_signing_key,
+        &acceptor_keys.device_kid,
+    );
+    let accept_resp = app.clone().oneshot(accept_req).await.expect("accept");
+    assert_eq!(accept_resp.status(), StatusCode::OK);
+
+    // No additional endorse action should have been queued — the quota check
+    // prevents it.  The only actions in the log are the 5 quota-filler rows.
+    let pending = sqlx::query_as::<_, tinycongress_api::trust::repo::ActionRecord>(
+        "SELECT * FROM trust__action_log WHERE status = 'pending' ORDER BY created_at",
+    )
+    .fetch_all(&pool)
+    .await
+    .expect("query pending actions");
+    let real_endorse_action = pending.iter().find(|a| {
+        a.actor_id == endorser_id
+            && a.action_type == "endorse"
+            && a.payload != serde_json::json!({})
+    });
+    assert!(
+        real_endorse_action.is_none(),
+        "expected no real endorse action when endorser quota is exhausted, found: {pending:?}"
+    );
+
+    let _ = (endorser_keys, acceptor_keys);
+}
