@@ -332,3 +332,76 @@ fn parse_uuid(payload: &serde_json::Value, key: &str) -> Result<Uuid, TrustActio
         TrustActionError::InvalidPayload(format!("payload '{key}' is not a valid UUID: {e}"))
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    // --- extract_log_id ---
+
+    #[test]
+    fn extract_log_id_returns_uuid_for_valid_string() {
+        let id = Uuid::new_v4();
+        let msg = json!({ "log_id": id.to_string() });
+        assert_eq!(extract_log_id(&msg), Some(id));
+    }
+
+    #[test]
+    fn extract_log_id_returns_none_for_missing_key() {
+        let msg = json!({});
+        assert_eq!(extract_log_id(&msg), None);
+    }
+
+    #[test]
+    fn extract_log_id_returns_none_for_non_string_value() {
+        let msg = json!({ "log_id": 12345 });
+        assert_eq!(extract_log_id(&msg), None);
+    }
+
+    #[test]
+    fn extract_log_id_returns_none_for_invalid_uuid_string() {
+        let msg = json!({ "log_id": "not-a-uuid" });
+        assert_eq!(extract_log_id(&msg), None);
+    }
+
+    // --- parse_uuid ---
+
+    #[test]
+    fn parse_uuid_returns_uuid_for_valid_string() {
+        let id = Uuid::new_v4();
+        let payload = json!({ "subject_id": id.to_string() });
+        assert_eq!(parse_uuid(&payload, "subject_id").unwrap(), id);
+    }
+
+    #[test]
+    fn parse_uuid_errors_when_key_is_missing() {
+        let payload = json!({});
+        let err = parse_uuid(&payload, "subject_id").unwrap_err();
+        assert!(
+            matches!(err, TrustActionError::InvalidPayload(ref msg) if msg.contains("subject_id")),
+            "expected InvalidPayload mentioning the key, got: {err}"
+        );
+    }
+
+    #[test]
+    fn parse_uuid_errors_when_value_is_not_a_string() {
+        let payload = json!({ "subject_id": 42 });
+        let err = parse_uuid(&payload, "subject_id").unwrap_err();
+        assert!(
+            matches!(err, TrustActionError::InvalidPayload(ref msg) if msg.contains("subject_id")),
+            "expected InvalidPayload mentioning the key, got: {err}"
+        );
+    }
+
+    #[test]
+    fn parse_uuid_errors_when_value_is_invalid_uuid() {
+        let payload = json!({ "subject_id": "not-a-uuid" });
+        let err = parse_uuid(&payload, "subject_id").unwrap_err();
+        assert!(
+            matches!(err, TrustActionError::InvalidPayload(ref msg)
+                if msg.contains("subject_id") && msg.contains("not a valid UUID")),
+            "expected InvalidPayload mentioning key and 'not a valid UUID', got: {err}"
+        );
+    }
+}
