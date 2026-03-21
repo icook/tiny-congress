@@ -17,12 +17,17 @@ pub const DAILY_ACTION_QUOTA: i64 = 5;
 /// Maximum character count of a denouncement reason (matches the user-facing "500 characters" limit).
 pub const DENOUNCEMENT_REASON_MAX_LEN: usize = 500;
 
-/// Returns `true` if `reason` is a valid denouncement reason: non-empty and within the max length.
+/// Returns `true` if `reason` is a valid denouncement reason: non-empty, not whitespace-only,
+/// and within the max length.
 ///
 /// Uses Unicode scalar value (character) count, not byte count, so that multi-byte scripts
 /// (e.g. Chinese, Arabic) are measured the same way as the user-facing error message.
+///
+/// Whitespace-only strings are rejected (consistent with device name and username validation
+/// elsewhere in the codebase). Per the "reject, don't sanitize" principle, trimming is not
+/// applied — callers must submit meaningful content.
 pub(crate) fn is_valid_reason(reason: &str) -> bool {
-    !reason.is_empty() && reason.chars().count() <= DENOUNCEMENT_REASON_MAX_LEN
+    !reason.trim().is_empty() && reason.chars().count() <= DENOUNCEMENT_REASON_MAX_LEN
 }
 
 /// The canonical set of trust action types, shared between the service (write) and
@@ -189,6 +194,14 @@ mod tests {
     #[test]
     fn is_valid_reason_rejects_empty() {
         assert!(!is_valid_reason(""));
+    }
+
+    #[test]
+    fn is_valid_reason_rejects_whitespace_only() {
+        assert!(!is_valid_reason(" "));
+        assert!(!is_valid_reason("   "));
+        assert!(!is_valid_reason("\t"));
+        assert!(!is_valid_reason("\n"));
     }
 
     #[test]
