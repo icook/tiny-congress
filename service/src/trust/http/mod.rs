@@ -29,6 +29,12 @@ use super::service::{
 fn is_attestation_within_size_limit(att: &serde_json::Value) -> bool {
     att.to_string().len() <= 4096
 }
+
+/// Returns `true` if `bytes` is a valid envelope: non-empty and within the
+/// 4096-byte limit.
+const fn is_envelope_within_size_limit(bytes: &[u8]) -> bool {
+    !bytes.is_empty() && bytes.len() <= 4096
+}
 use super::weight::{compute_endorsement_weight, DeliveryMethod, RelationshipDepth};
 use crate::http::{bad_request, conflict, internal_error, not_found, too_many_requests, Path};
 use crate::identity::http::auth::AuthenticatedDevice;
@@ -470,7 +476,7 @@ async fn create_invite_handler(
         return bad_request("Invalid base64url encoding for envelope");
     };
 
-    if envelope_bytes.is_empty() || envelope_bytes.len() > 4096 {
+    if !is_envelope_within_size_limit(&envelope_bytes) {
         return bad_request("envelope must be between 1 and 4096 bytes");
     }
 
@@ -665,6 +671,35 @@ mod tests {
 
     fn repo_status(e: &TrustRepoError) -> StatusCode {
         trust_repo_error_response(e).status()
+    }
+
+    // ─── is_envelope_within_size_limit ───────────────────────────────────────
+
+    #[test]
+    fn envelope_at_exactly_4096_bytes_is_within_limit() {
+        let bytes = vec![0u8; 4096];
+        assert_eq!(bytes.len(), 4096, "test data sanity check");
+        assert!(
+            is_envelope_within_size_limit(&bytes),
+            "envelope at exactly the limit must be accepted"
+        );
+    }
+
+    #[test]
+    fn envelope_over_4096_bytes_exceeds_limit() {
+        let bytes = vec![0u8; 4097];
+        assert!(
+            !is_envelope_within_size_limit(&bytes),
+            "envelope exceeding the limit must be rejected"
+        );
+    }
+
+    #[test]
+    fn empty_envelope_is_rejected() {
+        assert!(
+            !is_envelope_within_size_limit(&[]),
+            "empty envelope must be rejected"
+        );
     }
 
     // ─── is_attestation_within_size_limit ────────────────────────────────────
