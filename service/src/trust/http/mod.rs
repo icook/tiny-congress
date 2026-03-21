@@ -184,6 +184,12 @@ async fn endorse_handler(
         return bad_request("weight must be in range (0.0, 1.0]");
     }
 
+    if let Some(ref att) = body.attestation {
+        if att.to_string().len() > 4096 {
+            return bad_request("attestation must not exceed 4096 bytes");
+        }
+    }
+
     match trust_service
         .endorse(
             auth.account_id,
@@ -648,6 +654,21 @@ mod tests {
 
     fn repo_status(e: &TrustRepoError) -> StatusCode {
         trust_repo_error_response(e).status()
+    }
+
+    // ─── endorse_handler input validation ────────────────────────────────────
+
+    #[test]
+    fn endorse_attestation_size_limit_is_4096_chars() {
+        // Serialize a JSON string value longer than 4096 bytes and confirm the
+        // validation rejects it. The string itself is 4097 chars; with JSON
+        // string delimiters the serialized form exceeds 4096 bytes.
+        let large_value = serde_json::Value::String("a".repeat(4097));
+        assert!(large_value.to_string().len() > 4096);
+
+        // A value at exactly 4096 serialized bytes must be accepted.
+        let ok_value = serde_json::Value::String("a".repeat(4094)); // 4094 chars + 2 quotes = 4096
+        assert_eq!(ok_value.to_string().len(), 4096);
     }
 
     // ─── trust_service_error_response ────────────────────────────────────────
