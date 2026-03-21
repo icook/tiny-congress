@@ -276,7 +276,7 @@ mod tests {
     // a test failure instantly surfaces if the guard is missing or out of order.
 
     use async_trait::async_trait;
-    use std::sync::Arc;
+    use std::sync::{Arc, Mutex};
     use uuid::Uuid;
 
     use crate::reputation::repo::{
@@ -986,6 +986,276 @@ mod tests {
         assert!(
             matches!(err, TrustServiceError::QuotaExceeded),
             "expected QuotaExceeded, got: {err}"
+        );
+    }
+
+    // ─── in_slot computation tests ───────────────────────────────────────────
+    //
+    // Every test above stops before `has_endorsement` because the guard it is
+    // testing fires first.  These tests let all guards pass and verify the
+    // `in_slot` flag written into the enqueued payload:
+    //   - verifier accounts always receive `in_slot = true`, regardless of how
+    //     many active endorsements they have (the exemption).
+    //   - non-verifier accounts at the slot limit receive `in_slot = false` but
+    //     the action is still queued — slots full is NOT an error.
+
+    /// A [`TrustRepo`] stub that passes the two pre-enqueue guards (quota and
+    /// denouncement checks) and captures the `enqueue_action` payload for
+    /// inspection.
+    struct CapturingEnqueueRepo {
+        captured: Arc<Mutex<Option<serde_json::Value>>>,
+    }
+
+    #[async_trait]
+    impl TrustRepo for CapturingEnqueueRepo {
+        async fn count_daily_actions(&self, _: Uuid) -> Result<i64, TrustRepoError> {
+            Ok(0) // below quota
+        }
+        async fn has_active_denouncement(&self, _: Uuid, _: Uuid) -> Result<bool, TrustRepoError> {
+            Ok(false) // no conflict
+        }
+        async fn enqueue_action(
+            &self,
+            actor_id: Uuid,
+            action_type: ActionType,
+            payload: &serde_json::Value,
+        ) -> Result<ActionRecord, TrustRepoError> {
+            *self.captured.lock().unwrap() = Some(payload.clone());
+            Ok(ActionRecord {
+                id: Uuid::new_v4(),
+                actor_id,
+                action_type: action_type.as_str().to_string(),
+                payload: payload.clone(),
+                status: "pending".to_string(),
+                quota_date: chrono::Utc::now().date_naive(),
+                error_message: None,
+                created_at: chrono::Utc::now(),
+                processed_at: None,
+            })
+        }
+        async fn get_or_create_influence(
+            &self,
+            _: Uuid,
+        ) -> Result<InfluenceRecord, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn get_action(&self, _: Uuid) -> Result<ActionRecord, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn complete_action(&self, _: Uuid) -> Result<(), TrustRepoError> {
+            unimplemented!()
+        }
+        async fn fail_action(&self, _: Uuid, _: &str) -> Result<(), TrustRepoError> {
+            unimplemented!()
+        }
+        async fn create_denouncement(
+            &self,
+            _: Uuid,
+            _: Uuid,
+            _: &str,
+        ) -> Result<DenouncementRecord, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn create_denouncement_and_revoke_endorsement(
+            &self,
+            _: Uuid,
+            _: Uuid,
+            _: &str,
+        ) -> Result<DenouncementRecord, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn list_denouncements_against(
+            &self,
+            _: Uuid,
+        ) -> Result<Vec<DenouncementRecord>, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn list_denouncements_by(
+            &self,
+            _: Uuid,
+        ) -> Result<Vec<DenouncementRecord>, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn list_denouncements_by_with_username(
+            &self,
+            _: Uuid,
+        ) -> Result<Vec<DenouncementWithUsername>, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn count_total_denouncements_by(&self, _: Uuid) -> Result<i64, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn create_invite(
+            &self,
+            _: Uuid,
+            _: &[u8],
+            _: DeliveryMethod,
+            _: Option<RelationshipDepth>,
+            _: f32,
+            _: &serde_json::Value,
+            _: chrono::DateTime<chrono::Utc>,
+        ) -> Result<InviteRecord, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn get_invite(&self, _: Uuid) -> Result<InviteRecord, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn accept_invite(&self, _: Uuid, _: Uuid) -> Result<InviteRecord, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn list_invites_by_endorser(
+            &self,
+            _: Uuid,
+        ) -> Result<Vec<InviteRecord>, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn upsert_score(
+            &self,
+            _: Uuid,
+            _: Option<Uuid>,
+            _: Option<f32>,
+            _: Option<i32>,
+            _: Option<f32>,
+        ) -> Result<(), TrustRepoError> {
+            unimplemented!()
+        }
+        async fn get_score(
+            &self,
+            _: Uuid,
+            _: Option<Uuid>,
+        ) -> Result<Option<ScoreSnapshot>, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn get_all_scores(&self, _: Uuid) -> Result<Vec<ScoreSnapshot>, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn has_identity_endorsement(
+            &self,
+            _: Uuid,
+            _: &[Uuid],
+            _: &str,
+        ) -> Result<bool, TrustRepoError> {
+            unimplemented!()
+        }
+    }
+
+    /// A [`ReputationRepo`] stub with configurable verifier and active-endorsement
+    /// values, used to drive the `in_slot` computation in [`DefaultTrustService::endorse`].
+    struct StubReputationRepo {
+        is_verifier: bool,
+        active_endorsements: i64,
+    }
+
+    #[async_trait]
+    impl ReputationRepo for StubReputationRepo {
+        async fn has_endorsement(&self, _: Uuid, _: &str) -> Result<bool, EndorsementRepoError> {
+            Ok(self.is_verifier)
+        }
+        async fn count_active_trust_endorsements_by(
+            &self,
+            _: Uuid,
+        ) -> Result<i64, EndorsementRepoError> {
+            Ok(self.active_endorsements)
+        }
+        async fn create_endorsement(
+            &self,
+            _: Uuid,
+            _: &str,
+            _: Option<Uuid>,
+            _: Option<&serde_json::Value>,
+            _: f32,
+            _: Option<&serde_json::Value>,
+            _: bool,
+        ) -> Result<CreatedEndorsement, EndorsementRepoError> {
+            unimplemented!()
+        }
+        async fn count_all_active_trust_endorsements_by(
+            &self,
+            _: Uuid,
+        ) -> Result<i64, EndorsementRepoError> {
+            unimplemented!()
+        }
+        async fn list_endorsements_by_subject(
+            &self,
+            _: Uuid,
+        ) -> Result<Vec<EndorsementRecord>, EndorsementRepoError> {
+            unimplemented!()
+        }
+        async fn revoke_endorsement(
+            &self,
+            _: Uuid,
+            _: Uuid,
+            _: &str,
+        ) -> Result<(), EndorsementRepoError> {
+            unimplemented!()
+        }
+        async fn link_external_identity(
+            &self,
+            _: Uuid,
+            _: &str,
+            _: &str,
+        ) -> Result<ExternalIdentityRecord, ExternalIdentityRepoError> {
+            unimplemented!()
+        }
+        async fn get_external_identity_by_provider(
+            &self,
+            _: &str,
+            _: &str,
+        ) -> Result<ExternalIdentityRecord, ExternalIdentityRepoError> {
+            unimplemented!()
+        }
+    }
+
+    #[tokio::test]
+    async fn endorse_queues_with_in_slot_true_for_verifier() {
+        // Verifier accounts are exempt from the k=3 endorsement slot limit.
+        // Even with active_endorsements == ENDORSEMENT_SLOT_LIMIT, the queued
+        // payload must carry `in_slot = true`.
+        let captured = Arc::new(Mutex::new(None));
+        let svc = DefaultTrustService::new(
+            Arc::new(CapturingEnqueueRepo {
+                captured: captured.clone(),
+            }),
+            Arc::new(StubReputationRepo {
+                is_verifier: true,
+                active_endorsements: i64::from(ENDORSEMENT_SLOT_LIMIT), // slots "full"
+            }),
+        );
+        let a = Uuid::new_v4();
+        let b = Uuid::new_v4();
+        svc.endorse(a, b, 0.5, None).await.unwrap();
+        let payload = captured.lock().unwrap().clone().unwrap();
+        assert_eq!(
+            payload["in_slot"],
+            serde_json::Value::Bool(true),
+            "verifier endorsement must always be in-slot regardless of active count"
+        );
+    }
+
+    #[tokio::test]
+    async fn endorse_queues_with_in_slot_false_when_non_verifier_slots_full() {
+        // When a non-verifier has exhausted their k=3 endorsement slots, the
+        // action is still queued (no error) but with `in_slot = false`.  The
+        // endorsement does not count toward the slot quota.
+        let captured = Arc::new(Mutex::new(None));
+        let svc = DefaultTrustService::new(
+            Arc::new(CapturingEnqueueRepo {
+                captured: captured.clone(),
+            }),
+            Arc::new(StubReputationRepo {
+                is_verifier: false,
+                active_endorsements: i64::from(ENDORSEMENT_SLOT_LIMIT), // at slot limit
+            }),
+        );
+        let a = Uuid::new_v4();
+        let b = Uuid::new_v4();
+        // Must succeed — full slots do NOT block the endorsement.
+        svc.endorse(a, b, 0.5, None).await.unwrap();
+        let payload = captured.lock().unwrap().clone().unwrap();
+        assert_eq!(
+            payload["in_slot"],
+            serde_json::Value::Bool(false),
+            "non-verifier with full slots must be queued as out-of-slot, not rejected"
         );
     }
 }
