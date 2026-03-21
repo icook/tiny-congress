@@ -744,6 +744,60 @@ async fn test_process_batch_denounce_missing_reason_field_fails() {
 }
 
 // ---------------------------------------------------------------------------
+// Test: denounce action with whitespace-only reason fails the action
+// ---------------------------------------------------------------------------
+
+/// `is_valid_reason` rejects whitespace-only strings in addition to empty ones.
+/// This test confirms the rejection flows end-to-end through the worker so that
+/// a payload that bypasses the service layer (e.g. injected directly via
+/// `enqueue_action`) cannot persist a denouncement with a blank reason.
+#[shared_runtime_test]
+async fn test_process_batch_denounce_whitespace_only_reason_fails() {
+    let db = isolated_db().await;
+    let pool = db.pool().clone();
+
+    let actor = AccountFactory::new()
+        .with_seed(1)
+        .create(&pool)
+        .await
+        .expect("create actor");
+
+    let target = AccountFactory::new()
+        .with_seed(2)
+        .create(&pool)
+        .await
+        .expect("create target");
+
+    // Enqueue a 'denounce' action with a whitespace-only reason.
+    let trust_repo = PgTrustRepo::new(pool.clone());
+    trust_repo
+        .enqueue_action(
+            actor.id,
+            "denounce",
+            &json!({ "target_id": target.id, "reason": "   " }),
+        )
+        .await
+        .expect("enqueue action");
+
+    let worker = make_worker(pool.clone());
+    let processed = worker.process_one().await.expect("process_one");
+    assert!(processed, "expected a message to be processed");
+
+    let (status, error_message): (String, Option<String>) =
+        sqlx::query_as("SELECT status, error_message FROM trust__action_log WHERE actor_id = $1")
+            .bind(actor.id)
+            .fetch_one(&pool)
+            .await
+            .expect("fetch action");
+
+    assert_eq!(status, "failed");
+    assert!(
+        error_message.as_deref().unwrap_or("").contains("reason"),
+        "error_message should mention 'reason', got: {error_message:?}"
+    );
+}
+
+// ---------------------------------------------------------------------------
 // Test: revoke action with no existing endorsement — completes as no-op
 // ---------------------------------------------------------------------------
 
