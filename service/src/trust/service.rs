@@ -1258,6 +1258,33 @@ mod tests {
             "non-verifier with full slots must be queued as out-of-slot, not rejected"
         );
     }
+
+    #[tokio::test]
+    async fn endorse_queues_with_in_slot_true_when_non_verifier_has_available_slots() {
+        // A non-verifier with fewer active endorsements than the slot limit must
+        // receive `in_slot = true` in the queued payload. This tests the `<`
+        // boundary in `active_count < endorsement_slots` — the complement of the
+        // slot-full test above.
+        let captured = Arc::new(Mutex::new(None));
+        let svc = DefaultTrustService::new(
+            Arc::new(CapturingEnqueueRepo {
+                captured: captured.clone(),
+            }),
+            Arc::new(StubReputationRepo {
+                is_verifier: false,
+                active_endorsements: i64::from(ENDORSEMENT_SLOT_LIMIT) - 1, // one slot free
+            }),
+        );
+        let a = Uuid::new_v4();
+        let b = Uuid::new_v4();
+        svc.endorse(a, b, 0.5, None).await.unwrap();
+        let payload = captured.lock().unwrap().clone().unwrap();
+        assert_eq!(
+            payload["in_slot"],
+            serde_json::Value::Bool(true),
+            "non-verifier with available slots must be queued as in-slot"
+        );
+    }
 }
 
 impl DefaultTrustService {
