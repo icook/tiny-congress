@@ -174,13 +174,13 @@ mod tests {
         }
         async fn create_invite(
             &self,
-            _: Uuid,
-            _: &[u8],
-            _: &str,
-            _: Option<&str>,
-            _: f32,
-            _: &serde_json::Value,
-            _: chrono::DateTime<chrono::Utc>,
+            _endorser_id: Uuid,
+            _envelope: &[u8],
+            _delivery_method: &str,
+            _relationship_depth: Option<&str>,
+            _weight: f32,
+            _attestation: &serde_json::Value,
+            _expires_at: chrono::DateTime<chrono::Utc>,
         ) -> Result<InviteRecord, TrustRepoError> {
             unimplemented!()
         }
