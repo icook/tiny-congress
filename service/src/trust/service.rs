@@ -531,6 +531,165 @@ mod tests {
         let err = make_service().denounce(a, b, "   ").await.unwrap_err();
         assert!(matches!(err, TrustServiceError::InvalidReason { .. }));
     }
+
+    // ─── QuotaExceeded guard ──────────────────────────────────────────────────
+    //
+    // A stub that returns `DAILY_ACTION_QUOTA` from count_daily_actions and
+    // panics on every other method, so a test failure surfaces immediately if
+    // any later repo call is reached.
+
+    struct QuotaExhaustedTrustRepo;
+
+    #[async_trait]
+    impl TrustRepo for QuotaExhaustedTrustRepo {
+        async fn get_or_create_influence(
+            &self,
+            _: Uuid,
+        ) -> Result<InfluenceRecord, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn enqueue_action(
+            &self,
+            _: Uuid,
+            _: &str,
+            _: &serde_json::Value,
+        ) -> Result<ActionRecord, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn count_daily_actions(&self, _: Uuid) -> Result<i64, TrustRepoError> {
+            Ok(DAILY_ACTION_QUOTA)
+        }
+        async fn get_action(&self, _: Uuid) -> Result<ActionRecord, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn complete_action(&self, _: Uuid) -> Result<(), TrustRepoError> {
+            unimplemented!()
+        }
+        async fn fail_action(&self, _: Uuid, _: &str) -> Result<(), TrustRepoError> {
+            unimplemented!()
+        }
+        async fn create_denouncement(
+            &self,
+            _: Uuid,
+            _: Uuid,
+            _: &str,
+        ) -> Result<DenouncementRecord, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn create_denouncement_and_revoke_endorsement(
+            &self,
+            _: Uuid,
+            _: Uuid,
+            _: &str,
+        ) -> Result<DenouncementRecord, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn list_denouncements_against(
+            &self,
+            _: Uuid,
+        ) -> Result<Vec<DenouncementRecord>, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn list_denouncements_by(
+            &self,
+            _: Uuid,
+        ) -> Result<Vec<DenouncementRecord>, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn list_denouncements_by_with_username(
+            &self,
+            _: Uuid,
+        ) -> Result<Vec<DenouncementWithUsername>, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn count_total_denouncements_by(&self, _: Uuid) -> Result<i64, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn has_active_denouncement(&self, _: Uuid, _: Uuid) -> Result<bool, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn create_invite(
+            &self,
+            _: Uuid,
+            _: &[u8],
+            _: DeliveryMethod,
+            _: Option<RelationshipDepth>,
+            _: f32,
+            _: &serde_json::Value,
+            _: chrono::DateTime<chrono::Utc>,
+        ) -> Result<InviteRecord, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn get_invite(&self, _: Uuid) -> Result<InviteRecord, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn accept_invite(&self, _: Uuid, _: Uuid) -> Result<InviteRecord, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn list_invites_by_endorser(
+            &self,
+            _: Uuid,
+        ) -> Result<Vec<InviteRecord>, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn upsert_score(
+            &self,
+            _: Uuid,
+            _: Option<Uuid>,
+            _: Option<f32>,
+            _: Option<i32>,
+            _: Option<f32>,
+        ) -> Result<(), TrustRepoError> {
+            unimplemented!()
+        }
+        async fn get_score(
+            &self,
+            _: Uuid,
+            _: Option<Uuid>,
+        ) -> Result<Option<ScoreSnapshot>, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn get_all_scores(&self, _: Uuid) -> Result<Vec<ScoreSnapshot>, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn has_identity_endorsement(
+            &self,
+            _: Uuid,
+            _: &[Uuid],
+            _: &str,
+        ) -> Result<bool, TrustRepoError> {
+            unimplemented!()
+        }
+    }
+
+    fn make_quota_exhausted_service() -> DefaultTrustService {
+        DefaultTrustService::new(
+            Arc::new(QuotaExhaustedTrustRepo),
+            Arc::new(PanicReputationRepo),
+        )
+    }
+
+    #[tokio::test]
+    async fn endorse_returns_quota_exceeded_when_daily_limit_reached() {
+        let a = Uuid::new_v4();
+        let b = Uuid::new_v4();
+        let err = make_quota_exhausted_service()
+            .endorse(a, b, 0.5, None)
+            .await
+            .unwrap_err();
+        assert!(matches!(err, TrustServiceError::QuotaExceeded));
+    }
+
+    #[tokio::test]
+    async fn revoke_endorsement_returns_quota_exceeded_when_daily_limit_reached() {
+        let a = Uuid::new_v4();
+        let b = Uuid::new_v4();
+        let err = make_quota_exhausted_service()
+            .revoke_endorsement(a, b)
+            .await
+            .unwrap_err();
+        assert!(matches!(err, TrustServiceError::QuotaExceeded));
+    }
 }
 
 impl DefaultTrustService {
