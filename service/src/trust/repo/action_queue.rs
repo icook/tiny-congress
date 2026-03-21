@@ -10,6 +10,13 @@ use super::{ActionRecord, TrustRepoError};
 /// pgmq queue name for trust actions.
 pub const QUEUE_NAME: &str = "trust__actions";
 
+/// Maximum length (in Unicode scalar values) stored in the `error_message` column.
+///
+/// Error strings sourced from `sqlx::Error` or nested engine errors can include full
+/// query text and driver context, easily exceeding kilobytes.  Truncating here keeps
+/// rows bounded without a schema migration.
+pub const ERROR_MESSAGE_MAX_LEN: usize = 1024;
+
 pub(super) async fn enqueue_action(
     pool: &PgPool,
     actor_id: Uuid,
@@ -79,6 +86,15 @@ pub(super) async fn fail_action(
     action_id: Uuid,
     error: &str,
 ) -> Result<(), TrustRepoError> {
+    // Truncate at a character boundary so nested sqlx/engine errors don't produce
+    // unbounded rows.  Byte length may exceed ERROR_MESSAGE_MAX_LEN for multibyte
+    // chars, but character count is always bounded.
+    let byte_end = error
+        .char_indices()
+        .nth(ERROR_MESSAGE_MAX_LEN)
+        .map_or(error.len(), |(i, _)| i);
+    let error = &error[..byte_end];
+
     sqlx::query(
         "UPDATE trust__action_log \
          SET status = 'failed', error_message = $2, processed_at = now() \

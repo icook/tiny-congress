@@ -5,6 +5,7 @@ mod common;
 use common::factories::AccountFactory;
 use common::test_db::isolated_db;
 use tc_test_macros::shared_runtime_test;
+use tinycongress_api::trust::repo::action_queue::ERROR_MESSAGE_MAX_LEN;
 use tinycongress_api::trust::repo::{PgTrustRepo, TrustRepo};
 use tinycongress_api::trust::service::ActionType;
 
@@ -170,4 +171,46 @@ async fn test_fail_action_with_message() {
     assert_eq!(row.0, "failed");
     assert_eq!(row.1.as_deref(), Some(error_msg));
     assert!(row.2.is_some());
+}
+
+#[shared_runtime_test]
+async fn test_fail_action_truncates_long_error_message() {
+    let db = isolated_db().await;
+    let pool = db.pool().clone();
+
+    let account = AccountFactory::new()
+        .with_seed(106)
+        .create(&pool)
+        .await
+        .expect("create account");
+
+    let repo = PgTrustRepo::new(pool);
+    let payload = serde_json::json!({});
+
+    let record = repo
+        .enqueue_action(account.id, ActionType::Endorse, &payload)
+        .await
+        .expect("enqueue");
+
+    // Construct an error message that exceeds the cap.
+    let long_error: String = "e".repeat(ERROR_MESSAGE_MAX_LEN + 500);
+    repo.fail_action(record.id, &long_error)
+        .await
+        .expect("fail_action");
+
+    let row = sqlx::query_as::<_, (String, Option<String>)>(
+        "SELECT status, error_message FROM trust__action_log WHERE id = $1",
+    )
+    .bind(record.id)
+    .fetch_one(db.pool())
+    .await
+    .expect("fetch row");
+
+    assert_eq!(row.0, "failed");
+    let stored = row.1.expect("error_message should be set");
+    assert_eq!(
+        stored.chars().count(),
+        ERROR_MESSAGE_MAX_LEN,
+        "stored error message must be truncated to ERROR_MESSAGE_MAX_LEN characters"
+    );
 }
