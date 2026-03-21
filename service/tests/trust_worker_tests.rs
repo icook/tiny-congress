@@ -7,6 +7,7 @@ use std::sync::Arc;
 use common::factories::AccountFactory;
 use common::test_db::isolated_db;
 use serde_json::json;
+use tc_engine_polling::repo::pgmq;
 use tc_test_macros::shared_runtime_test;
 use tinycongress_api::reputation::repo::PgReputationRepo;
 use tinycongress_api::trust::engine::TrustEngine;
@@ -493,6 +494,52 @@ async fn test_process_one_poison_message_marks_action_failed() {
     assert_eq!(
         queue_count, 0,
         "pgmq queue should be empty after poison message archived"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Test: poison message with invalid log_id — archived without fail_action call
+// ---------------------------------------------------------------------------
+
+/// When a poison message (read_ct > MAX_RETRIES) contains an invalid or missing
+/// log_id, `extract_log_id` returns `None` and `fail_action` is skipped — there
+/// is no action record to update. The message must still be archived so it does
+/// not become visible again and loop indefinitely.
+///
+/// This covers the `None` arm of the `if let Some(log_id) = extract_log_id(...)`
+/// guard inside the poison-message branch of `process_one`.
+#[shared_runtime_test]
+async fn test_process_one_poison_message_with_invalid_log_id_is_archived() {
+    let db = isolated_db().await;
+    let pool = db.pool().clone();
+
+    // Send a message with an invalid log_id directly — no trust__action_log entry
+    // exists. This simulates a corrupt or manually-injected pgmq message.
+    pgmq::send(&pool, "trust__actions", &json!({ "log_id": "not-a-uuid" }))
+        .await
+        .expect("send bad message");
+
+    // Simulate repeated delivery failures: bump read_ct so the worker sees
+    // read_ct = 11 > MAX_RETRIES (3) and takes the poison-message path.
+    sqlx::query("UPDATE pgmq.q_trust__actions SET read_ct = 10")
+        .execute(&pool)
+        .await
+        .expect("bump read_ct past MAX_RETRIES");
+
+    let worker = make_worker(pool.clone());
+    let processed = worker.process_one().await.expect("process_one");
+    assert!(processed, "expected poison message to be processed");
+
+    // The message must be archived — the active queue is now empty.
+    // fail_action was not called (no valid log_id to reference), but the
+    // worker must not panic or leave the message visible.
+    let queue_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM pgmq.q_trust__actions")
+        .fetch_one(&pool)
+        .await
+        .expect("count active queue");
+    assert_eq!(
+        queue_count, 0,
+        "pgmq queue should be empty after corrupt poison message archived"
     );
 }
 
