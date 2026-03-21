@@ -129,10 +129,11 @@ async fn test_endorse_quota_exceeded_returns_429() {
 
     // Seed 5 actions (daily quota) directly in the DB
     use tinycongress_api::trust::repo::{PgTrustRepo, TrustRepo};
+    use tinycongress_api::trust::service::ActionType;
     let trust_repo = PgTrustRepo::new(db.pool().clone());
     for _ in 0..5 {
         trust_repo
-            .enqueue_action(account_id, "endorse", &serde_json::json!({}))
+            .enqueue_action(account_id, ActionType::Endorse, &serde_json::json!({}))
             .await
             .expect("enqueue");
     }
@@ -269,6 +270,7 @@ async fn test_scores_me_returns_200() {
 
     // Seed a trust score snapshot
     use tinycongress_api::trust::repo::{PgTrustRepo, TrustRepo};
+    use tinycongress_api::trust::service::ActionType;
     let trust_repo = PgTrustRepo::new(db.pool().clone());
     trust_repo
         .upsert_score(account_id, None, Some(1.0), Some(2), Some(0.5))
@@ -1794,10 +1796,11 @@ async fn revoke_returns_429_when_quota_exceeded() {
 
     // Seed 5 actions (daily quota) directly so we don't consume real API budget.
     use tinycongress_api::trust::repo::{PgTrustRepo, TrustRepo};
+    use tinycongress_api::trust::service::ActionType;
     let trust_repo = PgTrustRepo::new(db.pool().clone());
     for _ in 0..5 {
         trust_repo
-            .enqueue_action(account_id, "endorse", &serde_json::json!({}))
+            .enqueue_action(account_id, ActionType::Endorse, &serde_json::json!({}))
             .await
             .expect("enqueue");
     }
@@ -1973,10 +1976,11 @@ async fn denounce_returns_429_when_quota_exceeded() {
 
     // Seed 5 actions (daily quota) directly so we don't consume real API budget.
     use tinycongress_api::trust::repo::{PgTrustRepo, TrustRepo};
+    use tinycongress_api::trust::service::ActionType;
     let trust_repo = PgTrustRepo::new(db.pool().clone());
     for _ in 0..5 {
         trust_repo
-            .enqueue_action(account_id, "endorse", &serde_json::json!({}))
+            .enqueue_action(account_id, ActionType::Endorse, &serde_json::json!({}))
             .await
             .expect("enqueue");
     }
@@ -2029,10 +2033,11 @@ async fn accept_invite_succeeds_even_when_endorser_quota_exceeded() {
     // Exhaust the endorser's daily action quota (5 actions) directly so the
     // invite-creation API call below doesn't count against it.
     use tinycongress_api::trust::repo::{PgTrustRepo, TrustRepo};
+    use tinycongress_api::trust::service::ActionType;
     let trust_repo = PgTrustRepo::new(pool.clone());
     for _ in 0..5 {
         trust_repo
-            .enqueue_action(endorser_id, "endorse", &serde_json::json!({}))
+            .enqueue_action(endorser_id, ActionType::Endorse, &serde_json::json!({}))
             .await
             .expect("enqueue quota filler");
     }

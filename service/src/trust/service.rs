@@ -33,14 +33,15 @@ pub(crate) fn is_valid_reason(reason: &str) -> bool {
 /// The canonical set of trust action types, shared between the service (write) and
 /// the worker (read/parse).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum ActionType {
+pub enum ActionType {
     Endorse,
     Revoke,
     Denounce,
 }
 
 impl ActionType {
-    pub(crate) const fn as_str(self) -> &'static str {
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
         match self {
             Self::Endorse => "endorse",
             Self::Revoke => "revoke",
@@ -50,7 +51,8 @@ impl ActionType {
 
     /// Parse an action type from its string representation, returning `None`
     /// for unrecognised values.
-    pub(crate) fn from_str_opt(s: &str) -> Option<Self> {
+    #[must_use]
+    pub fn from_str_opt(s: &str) -> Option<Self> {
         match s {
             "endorse" => Some(Self::Endorse),
             "revoke" => Some(Self::Revoke),
@@ -301,7 +303,7 @@ mod tests {
         async fn enqueue_action(
             &self,
             _: Uuid,
-            _: &str,
+            _: ActionType,
             _: &serde_json::Value,
         ) -> Result<ActionRecord, TrustRepoError> {
             unimplemented!()
@@ -602,7 +604,7 @@ impl TrustService for DefaultTrustService {
             "in_slot": in_slot,
         });
         self.trust_repo
-            .enqueue_action(endorser_id, ActionType::Endorse.as_str(), &payload)
+            .enqueue_action(endorser_id, ActionType::Endorse, &payload)
             .await?;
 
         Ok(())
@@ -624,7 +626,7 @@ impl TrustService for DefaultTrustService {
 
         let payload = json!({ "subject_id": subject_id });
         self.trust_repo
-            .enqueue_action(endorser_id, ActionType::Revoke.as_str(), &payload)
+            .enqueue_action(endorser_id, ActionType::Revoke, &payload)
             .await?;
 
         Ok(())
@@ -677,7 +679,7 @@ impl TrustService for DefaultTrustService {
             "reason": reason,
         });
         self.trust_repo
-            .enqueue_action(accuser_id, ActionType::Denounce.as_str(), &payload)
+            .enqueue_action(accuser_id, ActionType::Denounce, &payload)
             .await?;
 
         Ok(())

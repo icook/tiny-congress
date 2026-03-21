@@ -4,6 +4,7 @@ use uuid::Uuid;
 
 use tc_engine_polling::repo::pgmq;
 
+use super::super::service::ActionType;
 use super::{ActionRecord, TrustRepoError};
 
 /// pgmq queue name for trust actions.
@@ -12,7 +13,7 @@ pub const QUEUE_NAME: &str = "trust__actions";
 pub(super) async fn enqueue_action(
     pool: &PgPool,
     actor_id: Uuid,
-    action_type: &str,
+    action_type: ActionType,
     payload: &serde_json::Value,
 ) -> Result<ActionRecord, TrustRepoError> {
     let record = sqlx::query_as::<_, ActionRecord>(
@@ -21,7 +22,7 @@ pub(super) async fn enqueue_action(
          RETURNING *",
     )
     .bind(actor_id)
-    .bind(action_type)
+    .bind(action_type.as_str())
     .bind(payload)
     .fetch_one(pool)
     .await?;
