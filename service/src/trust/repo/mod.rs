@@ -10,6 +10,8 @@ use async_trait::async_trait;
 use sqlx::PgPool;
 use uuid::Uuid;
 
+use super::weight::{DeliveryMethod, RelationshipDepth};
+
 /// Error type for trust repository operations.
 #[derive(Debug, thiserror::Error)]
 pub enum TrustRepoError {
@@ -179,8 +181,8 @@ pub trait TrustRepo: Send + Sync {
         &self,
         endorser_id: Uuid,
         envelope: &[u8],
-        delivery_method: &str,
-        relationship_depth: Option<&str>,
+        delivery_method: DeliveryMethod,
+        relationship_depth: Option<RelationshipDepth>,
         weight: f32,
         attestation: &serde_json::Value,
         expires_at: chrono::DateTime<chrono::Utc>,
@@ -335,8 +337,8 @@ impl TrustRepo for PgTrustRepo {
         &self,
         endorser_id: Uuid,
         envelope: &[u8],
-        delivery_method: &str,
-        relationship_depth: Option<&str>,
+        delivery_method: DeliveryMethod,
+        relationship_depth: Option<RelationshipDepth>,
         weight: f32,
         attestation: &serde_json::Value,
         expires_at: chrono::DateTime<chrono::Utc>,

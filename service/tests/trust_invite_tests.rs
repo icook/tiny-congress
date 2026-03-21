@@ -7,6 +7,7 @@ use common::factories::AccountFactory;
 use common::test_db::isolated_db;
 use tc_test_macros::shared_runtime_test;
 use tinycongress_api::trust::repo::{PgTrustRepo, TrustRepo, TrustRepoError};
+use tinycongress_api::trust::weight::{DeliveryMethod, RelationshipDepth};
 
 #[shared_runtime_test]
 async fn test_create_and_get_invite() {
@@ -28,7 +29,7 @@ async fn test_create_and_get_invite() {
         .create_invite(
             endorser.id,
             &envelope,
-            "qr",
+            DeliveryMethod::Qr,
             None,
             1.0,
             &attestation,
@@ -75,7 +76,7 @@ async fn test_accept_invite() {
         .create_invite(
             endorser.id,
             &[0u8],
-            "email",
+            DeliveryMethod::Email,
             None,
             1.0,
             &attestation,
@@ -124,7 +125,7 @@ async fn test_accept_already_accepted_invite_rejected() {
         .create_invite(
             endorser.id,
             &[0u8],
-            "qr",
+            DeliveryMethod::Qr,
             None,
             1.0,
             &attestation,
@@ -171,7 +172,7 @@ async fn test_accept_expired_invite_rejected() {
         .create_invite(
             endorser.id,
             &[0u8],
-            "qr",
+            DeliveryMethod::Qr,
             None,
             1.0,
             &attestation,
@@ -206,7 +207,7 @@ async fn test_list_invites_by_endorser() {
     repo.create_invite(
         endorser.id,
         &[1u8],
-        "qr",
+        DeliveryMethod::Qr,
         None,
         1.0,
         &attestation,
@@ -217,7 +218,7 @@ async fn test_list_invites_by_endorser() {
     repo.create_invite(
         endorser.id,
         &[2u8],
-        "email",
+        DeliveryMethod::Email,
         None,
         1.0,
         &attestation,
@@ -255,8 +256,8 @@ async fn test_invite_stores_weight_and_relationship_depth() {
         .create_invite(
             endorser.id,
             &[0u8],
-            "video",
-            Some("months"),
+            DeliveryMethod::Video,
+            Some(RelationshipDepth::Months),
             0.49,
             &attestation,
             expires_at,
@@ -292,7 +293,7 @@ async fn test_invite_weight_defaults_to_one() {
         .create_invite(
             endorser.id,
             &[0u8],
-            "qr",
+            DeliveryMethod::Qr,
             None,
             1.0,
             &attestation,

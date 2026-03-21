@@ -471,8 +471,8 @@ async fn create_invite_handler(
         .create_invite(
             auth.account_id,
             &envelope_bytes,
-            body.delivery_method.as_str(),
-            body.relationship_depth.map(RelationshipDepth::as_str),
+            body.delivery_method,
+            body.relationship_depth,
             weight,
             &body.attestation,
             expires_at,
