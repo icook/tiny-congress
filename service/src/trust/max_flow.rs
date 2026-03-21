@@ -29,7 +29,21 @@ impl FlowGraph {
     }
 
     /// Add a directed edge from `from` to `to`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `from >= n` or `to >= n`.
     pub fn add_edge(&mut self, from: usize, to: usize) {
+        assert!(
+            from < self.n,
+            "add_edge: from={from} is out of bounds for n={}",
+            self.n
+        );
+        assert!(
+            to < self.n,
+            "add_edge: to={to} is out of bounds for n={}",
+            self.n
+        );
         self.edges.push((from, to));
     }
 
@@ -225,6 +239,20 @@ mod tests {
         let g = FlowGraph::new(3);
         assert_eq!(g.vertex_connectivity(0, 3), 0);
         assert_eq!(g.vertex_connectivity(0, 100), 0);
+    }
+
+    #[test]
+    #[should_panic(expected = "add_edge: from=3 is out of bounds")]
+    fn add_edge_panics_on_from_out_of_bounds() {
+        let mut g = FlowGraph::new(3);
+        g.add_edge(3, 0);
+    }
+
+    #[test]
+    #[should_panic(expected = "add_edge: to=3 is out of bounds")]
+    fn add_edge_panics_on_to_out_of_bounds() {
+        let mut g = FlowGraph::new(3);
+        g.add_edge(0, 3);
     }
 
     #[test]
