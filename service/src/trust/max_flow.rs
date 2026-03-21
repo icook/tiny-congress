@@ -218,4 +218,30 @@ mod tests {
         g.add_edge(3, 4);
         assert_eq!(g.vertex_connectivity(0, 4), 3);
     }
+
+    #[test]
+    fn source_equals_target_returns_zero() {
+        // Connectivity from a node to itself is not meaningful — guard returns 0.
+        let mut g = FlowGraph::new(3);
+        g.add_edge(0, 1);
+        g.add_edge(1, 2);
+        assert_eq!(g.vertex_connectivity(0, 0), 0);
+        assert_eq!(g.vertex_connectivity(2, 2), 0);
+    }
+
+    #[test]
+    fn out_of_bounds_source_returns_zero() {
+        // An index >= n is not a valid node; guard returns 0.
+        let mut g = FlowGraph::new(3);
+        g.add_edge(0, 1);
+        assert_eq!(g.vertex_connectivity(5, 1), 0);
+    }
+
+    #[test]
+    fn out_of_bounds_target_returns_zero() {
+        // An index >= n is not a valid node; guard returns 0.
+        let mut g = FlowGraph::new(3);
+        g.add_edge(0, 1);
+        assert_eq!(g.vertex_connectivity(0, 5), 0);
+    }
 }
