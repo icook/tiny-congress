@@ -266,6 +266,271 @@ mod tests {
         assert_eq!(ActionType::from_str_opt("REVOKE"), None);
         assert_eq!(ActionType::from_str_opt("Denounce"), None);
     }
+
+    // ─── DefaultTrustService early-exit validation tests ─────────────────────
+    //
+    // These tests cover the validation guards in endorse/revoke/denounce that
+    // fire BEFORE any repository call. Stub repos panic on every method so that
+    // a test failure instantly surfaces if the guard is missing or out of order.
+
+    use async_trait::async_trait;
+    use std::sync::Arc;
+    use uuid::Uuid;
+
+    use crate::reputation::repo::{
+        CreatedEndorsement, EndorsementRecord, EndorsementRepoError, ExternalIdentityRecord,
+        ExternalIdentityRepoError, ReputationRepo,
+    };
+    use crate::trust::repo::{
+        ActionRecord, DenouncementRecord, DenouncementWithUsername, InfluenceRecord, InviteRecord,
+        ScoreSnapshot, TrustRepo, TrustRepoError,
+    };
+    use crate::trust::weight::{DeliveryMethod, RelationshipDepth};
+
+    struct PanicTrustRepo;
+    struct PanicReputationRepo;
+
+    #[async_trait]
+    impl TrustRepo for PanicTrustRepo {
+        async fn get_or_create_influence(
+            &self,
+            _: Uuid,
+        ) -> Result<InfluenceRecord, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn enqueue_action(
+            &self,
+            _: Uuid,
+            _: &str,
+            _: &serde_json::Value,
+        ) -> Result<ActionRecord, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn count_daily_actions(&self, _: Uuid) -> Result<i64, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn get_action(&self, _: Uuid) -> Result<ActionRecord, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn complete_action(&self, _: Uuid) -> Result<(), TrustRepoError> {
+            unimplemented!()
+        }
+        async fn fail_action(&self, _: Uuid, _: &str) -> Result<(), TrustRepoError> {
+            unimplemented!()
+        }
+        async fn create_denouncement(
+            &self,
+            _: Uuid,
+            _: Uuid,
+            _: &str,
+        ) -> Result<DenouncementRecord, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn create_denouncement_and_revoke_endorsement(
+            &self,
+            _: Uuid,
+            _: Uuid,
+            _: &str,
+        ) -> Result<DenouncementRecord, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn list_denouncements_against(
+            &self,
+            _: Uuid,
+        ) -> Result<Vec<DenouncementRecord>, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn list_denouncements_by(
+            &self,
+            _: Uuid,
+        ) -> Result<Vec<DenouncementRecord>, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn list_denouncements_by_with_username(
+            &self,
+            _: Uuid,
+        ) -> Result<Vec<DenouncementWithUsername>, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn count_total_denouncements_by(&self, _: Uuid) -> Result<i64, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn has_active_denouncement(&self, _: Uuid, _: Uuid) -> Result<bool, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn create_invite(
+            &self,
+            _: Uuid,
+            _: &[u8],
+            _: DeliveryMethod,
+            _: Option<RelationshipDepth>,
+            _: f32,
+            _: &serde_json::Value,
+            _: chrono::DateTime<chrono::Utc>,
+        ) -> Result<InviteRecord, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn get_invite(&self, _: Uuid) -> Result<InviteRecord, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn accept_invite(&self, _: Uuid, _: Uuid) -> Result<InviteRecord, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn list_invites_by_endorser(
+            &self,
+            _: Uuid,
+        ) -> Result<Vec<InviteRecord>, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn upsert_score(
+            &self,
+            _: Uuid,
+            _: Option<Uuid>,
+            _: Option<f32>,
+            _: Option<i32>,
+            _: Option<f32>,
+        ) -> Result<(), TrustRepoError> {
+            unimplemented!()
+        }
+        async fn get_score(
+            &self,
+            _: Uuid,
+            _: Option<Uuid>,
+        ) -> Result<Option<ScoreSnapshot>, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn get_all_scores(&self, _: Uuid) -> Result<Vec<ScoreSnapshot>, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn has_identity_endorsement(
+            &self,
+            _: Uuid,
+            _: &[Uuid],
+            _: &str,
+        ) -> Result<bool, TrustRepoError> {
+            unimplemented!()
+        }
+    }
+
+    #[async_trait]
+    impl ReputationRepo for PanicReputationRepo {
+        async fn create_endorsement(
+            &self,
+            _: Uuid,
+            _: &str,
+            _: Option<Uuid>,
+            _: Option<&serde_json::Value>,
+            _: f32,
+            _: Option<&serde_json::Value>,
+            _: bool,
+        ) -> Result<CreatedEndorsement, EndorsementRepoError> {
+            unimplemented!()
+        }
+        async fn count_all_active_trust_endorsements_by(
+            &self,
+            _: Uuid,
+        ) -> Result<i64, EndorsementRepoError> {
+            unimplemented!()
+        }
+        async fn has_endorsement(&self, _: Uuid, _: &str) -> Result<bool, EndorsementRepoError> {
+            unimplemented!()
+        }
+        async fn list_endorsements_by_subject(
+            &self,
+            _: Uuid,
+        ) -> Result<Vec<EndorsementRecord>, EndorsementRepoError> {
+            unimplemented!()
+        }
+        async fn revoke_endorsement(
+            &self,
+            _: Uuid,
+            _: Uuid,
+            _: &str,
+        ) -> Result<(), EndorsementRepoError> {
+            unimplemented!()
+        }
+        async fn count_active_trust_endorsements_by(
+            &self,
+            _: Uuid,
+        ) -> Result<i64, EndorsementRepoError> {
+            unimplemented!()
+        }
+        async fn link_external_identity(
+            &self,
+            _: Uuid,
+            _: &str,
+            _: &str,
+        ) -> Result<ExternalIdentityRecord, ExternalIdentityRepoError> {
+            unimplemented!()
+        }
+        async fn get_external_identity_by_provider(
+            &self,
+            _: &str,
+            _: &str,
+        ) -> Result<ExternalIdentityRecord, ExternalIdentityRepoError> {
+            unimplemented!()
+        }
+    }
+
+    fn make_service() -> DefaultTrustService {
+        DefaultTrustService::new(Arc::new(PanicTrustRepo), Arc::new(PanicReputationRepo))
+    }
+
+    #[tokio::test]
+    async fn endorse_returns_self_action_when_endorser_equals_subject() {
+        let id = Uuid::new_v4();
+        let err = make_service().endorse(id, id, 0.5, None).await.unwrap_err();
+        assert!(matches!(err, TrustServiceError::SelfAction));
+    }
+
+    #[tokio::test]
+    async fn endorse_returns_invalid_weight_for_zero() {
+        let a = Uuid::new_v4();
+        let b = Uuid::new_v4();
+        let err = make_service().endorse(a, b, 0.0, None).await.unwrap_err();
+        assert!(matches!(err, TrustServiceError::InvalidWeight));
+    }
+
+    #[tokio::test]
+    async fn endorse_returns_invalid_weight_for_nan() {
+        let a = Uuid::new_v4();
+        let b = Uuid::new_v4();
+        let err = make_service()
+            .endorse(a, b, f32::NAN, None)
+            .await
+            .unwrap_err();
+        assert!(matches!(err, TrustServiceError::InvalidWeight));
+    }
+
+    #[tokio::test]
+    async fn revoke_endorsement_returns_self_action_when_ids_match() {
+        let id = Uuid::new_v4();
+        let err = make_service().revoke_endorsement(id, id).await.unwrap_err();
+        assert!(matches!(err, TrustServiceError::SelfAction));
+    }
+
+    #[tokio::test]
+    async fn denounce_returns_self_action_when_accuser_equals_target() {
+        let id = Uuid::new_v4();
+        let err = make_service().denounce(id, id, "reason").await.unwrap_err();
+        assert!(matches!(err, TrustServiceError::SelfAction));
+    }
+
+    #[tokio::test]
+    async fn denounce_returns_invalid_reason_for_empty_string() {
+        let a = Uuid::new_v4();
+        let b = Uuid::new_v4();
+        let err = make_service().denounce(a, b, "").await.unwrap_err();
+        assert!(matches!(err, TrustServiceError::InvalidReason { .. }));
+    }
+
+    #[tokio::test]
+    async fn denounce_returns_invalid_reason_for_whitespace_only() {
+        let a = Uuid::new_v4();
+        let b = Uuid::new_v4();
+        let err = make_service().denounce(a, b, "   ").await.unwrap_err();
+        assert!(matches!(err, TrustServiceError::InvalidReason { .. }));
+    }
 }
 
 impl DefaultTrustService {
