@@ -149,4 +149,28 @@ mod tests {
             }
         }
     }
+
+    /// Verify the DB-facing string representation for each `DeliveryMethod` variant.
+    ///
+    /// These strings must match the `trust_invites.delivery_method` CHECK constraint.
+    /// If a variant is renamed or its `as_str()` value changes, this test catches it
+    /// before a migration is needed to fix a constraint violation.
+    #[test]
+    fn delivery_method_as_str_matches_db_constraint() {
+        assert_eq!(DeliveryMethod::Qr.as_str(), "qr");
+        assert_eq!(DeliveryMethod::Email.as_str(), "email");
+        assert_eq!(DeliveryMethod::Video.as_str(), "video");
+        assert_eq!(DeliveryMethod::Text.as_str(), "text");
+        assert_eq!(DeliveryMethod::Messaging.as_str(), "messaging");
+    }
+
+    /// Verify the DB-facing string representation for each `RelationshipDepth` variant.
+    ///
+    /// These strings must match the `trust_invites.relationship_depth` CHECK constraint.
+    #[test]
+    fn relationship_depth_as_str_matches_db_constraint() {
+        assert_eq!(RelationshipDepth::Years.as_str(), "years");
+        assert_eq!(RelationshipDepth::Months.as_str(), "months");
+        assert_eq!(RelationshipDepth::Acquaintance.as_str(), "acquaintance");
+    }
 }
