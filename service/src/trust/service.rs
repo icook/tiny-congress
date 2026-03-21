@@ -531,6 +531,21 @@ mod tests {
         let err = make_service().denounce(a, b, "   ").await.unwrap_err();
         assert!(matches!(err, TrustServiceError::InvalidReason { .. }));
     }
+
+    #[tokio::test]
+    async fn denounce_returns_invalid_reason_for_over_max_length() {
+        let a = Uuid::new_v4();
+        let b = Uuid::new_v4();
+        let long_reason = "x".repeat(DENOUNCEMENT_REASON_MAX_LEN + 1);
+        let err = make_service()
+            .denounce(a, b, &long_reason)
+            .await
+            .unwrap_err();
+        assert!(matches!(
+            err,
+            TrustServiceError::InvalidReason { max } if max == DENOUNCEMENT_REASON_MAX_LEN
+        ));
+    }
 }
 
 impl DefaultTrustService {
