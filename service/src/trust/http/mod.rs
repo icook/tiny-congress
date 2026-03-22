@@ -425,7 +425,9 @@ async fn budget_handler(
             return internal_error();
         }
     };
-    let out_of_slot_count = all_endorsements - endorsements_used;
+    // Clamp to zero: a concurrent revocation between the two count queries can
+    // produce all_endorsements < endorsements_used, making the difference negative.
+    let out_of_slot_count = (all_endorsements - endorsements_used).max(0);
 
     let denouncements_used = match trust_repo
         .count_total_denouncements_by(auth.account_id)
@@ -443,11 +445,14 @@ async fn budget_handler(
         Json(BudgetResponse {
             slots_total: ENDORSEMENT_SLOT_LIMIT,
             slots_used: endorsements_used,
-            slots_available: i64::from(ENDORSEMENT_SLOT_LIMIT) - endorsements_used,
+            // Clamp to zero: if the slot limit constant is reduced after rows are
+            // inserted the difference can be negative, which is nonsensical to clients.
+            slots_available: (i64::from(ENDORSEMENT_SLOT_LIMIT) - endorsements_used).max(0),
             out_of_slot_count,
             denouncements_total: DENOUNCEMENT_SLOT_LIMIT,
             denouncements_used,
-            denouncements_available: i64::from(DENOUNCEMENT_SLOT_LIMIT) - denouncements_used,
+            denouncements_available: (i64::from(DENOUNCEMENT_SLOT_LIMIT) - denouncements_used)
+                .max(0),
         }),
     )
         .into_response()
