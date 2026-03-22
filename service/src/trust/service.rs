@@ -1258,6 +1258,29 @@ mod tests {
             "non-verifier with full slots must be queued as out-of-slot, not rejected"
         );
     }
+
+    #[tokio::test]
+    async fn revoke_endorsement_enqueues_payload_with_subject_id() {
+        // Verify that revoke_endorsement succeeds when all guards pass and
+        // enqueues a payload containing the subject_id — matching the field name
+        // that parse_revoke_payload in the worker requires.
+        let captured = Arc::new(Mutex::new(None));
+        let svc = DefaultTrustService::new(
+            Arc::new(CapturingEnqueueRepo {
+                captured: captured.clone(),
+            }),
+            Arc::new(PanicReputationRepo),
+        );
+        let a = Uuid::new_v4();
+        let b = Uuid::new_v4();
+        svc.revoke_endorsement(a, b).await.unwrap();
+        let payload = captured.lock().unwrap().clone().unwrap();
+        assert_eq!(
+            payload["subject_id"],
+            serde_json::Value::String(b.to_string()),
+            "revoke payload must carry the subject_id that parse_revoke_payload expects"
+        );
+    }
 }
 
 impl DefaultTrustService {
