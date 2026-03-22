@@ -269,6 +269,20 @@ mod tests {
         assert_eq!(ActionType::from_str_opt("Denounce"), None);
     }
 
+    /// Verify the DB-facing string representation for each `ActionType` variant.
+    ///
+    /// These strings must match the `trust__action_log.action_type` CHECK constraint:
+    /// `action_type IN ('endorse', 'revoke', 'denounce')`.
+    /// If a variant is renamed or its `as_str()` value changes, the INSERT in
+    /// `action_queue::enqueue_action` will fail with a constraint violation at
+    /// runtime. This test catches the mismatch before it reaches the database.
+    #[test]
+    fn action_type_as_str_matches_db_constraint() {
+        assert_eq!(ActionType::Endorse.as_str(), "endorse");
+        assert_eq!(ActionType::Revoke.as_str(), "revoke");
+        assert_eq!(ActionType::Denounce.as_str(), "denounce");
+    }
+
     // ─── DefaultTrustService early-exit validation tests ─────────────────────
     //
     // These tests cover the validation guards in endorse/revoke/denounce that
