@@ -4,11 +4,18 @@
 
 mod common;
 
+use async_trait::async_trait;
 use common::factories::{insert_endorsement, insert_revoked_endorsement, AccountFactory};
 use common::test_db::isolated_db;
 use tc_test_macros::shared_runtime_test;
-use tinycongress_api::trust::engine::TrustEngine;
-use tinycongress_api::trust::repo::{PgTrustRepo, TrustRepo};
+use tinycongress_api::trust::engine::{TrustEngine, TrustEngineError};
+use tinycongress_api::trust::repo::{
+    ActionRecord, DenouncementRecord, DenouncementWithUsername, InfluenceRecord, InviteRecord,
+    PgTrustRepo, ScoreSnapshot, TrustRepo, TrustRepoError,
+};
+use tinycongress_api::trust::service::ActionType;
+use tinycongress_api::trust::weight::{DeliveryMethod, RelationshipDepth};
+use uuid::Uuid;
 
 // ---------------------------------------------------------------------------
 // TRD 6.1: Linear chain trust distance
@@ -536,5 +543,155 @@ async fn test_recompute_from_anchor_writes_anchor_score() {
         anchor_snap.path_diversity,
         Some(i32::MAX),
         "Anchor diversity should be sentinel high value"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Error propagation: recompute_from_anchor returns UpsertScore on repo failure
+// ---------------------------------------------------------------------------
+
+struct FailingUpsertRepo;
+
+#[async_trait]
+impl TrustRepo for FailingUpsertRepo {
+    async fn get_or_create_influence(&self, _: Uuid) -> Result<InfluenceRecord, TrustRepoError> {
+        unimplemented!()
+    }
+    async fn enqueue_action(
+        &self,
+        _: Uuid,
+        _: ActionType,
+        _: &serde_json::Value,
+    ) -> Result<ActionRecord, TrustRepoError> {
+        unimplemented!()
+    }
+    async fn count_daily_actions(&self, _: Uuid) -> Result<i64, TrustRepoError> {
+        unimplemented!()
+    }
+    async fn get_action(&self, _: Uuid) -> Result<ActionRecord, TrustRepoError> {
+        unimplemented!()
+    }
+    async fn complete_action(&self, _: Uuid) -> Result<(), TrustRepoError> {
+        unimplemented!()
+    }
+    async fn fail_action(&self, _: Uuid, _: &str) -> Result<(), TrustRepoError> {
+        unimplemented!()
+    }
+    async fn create_denouncement(
+        &self,
+        _: Uuid,
+        _: Uuid,
+        _: &str,
+    ) -> Result<DenouncementRecord, TrustRepoError> {
+        unimplemented!()
+    }
+    async fn create_denouncement_and_revoke_endorsement(
+        &self,
+        _: Uuid,
+        _: Uuid,
+        _: &str,
+    ) -> Result<DenouncementRecord, TrustRepoError> {
+        unimplemented!()
+    }
+    async fn list_denouncements_against(
+        &self,
+        _: Uuid,
+    ) -> Result<Vec<DenouncementRecord>, TrustRepoError> {
+        unimplemented!()
+    }
+    async fn list_denouncements_by(
+        &self,
+        _: Uuid,
+    ) -> Result<Vec<DenouncementRecord>, TrustRepoError> {
+        unimplemented!()
+    }
+    async fn list_denouncements_by_with_username(
+        &self,
+        _: Uuid,
+    ) -> Result<Vec<DenouncementWithUsername>, TrustRepoError> {
+        unimplemented!()
+    }
+    async fn count_total_denouncements_by(&self, _: Uuid) -> Result<i64, TrustRepoError> {
+        unimplemented!()
+    }
+    async fn has_active_denouncement(&self, _: Uuid, _: Uuid) -> Result<bool, TrustRepoError> {
+        unimplemented!()
+    }
+    async fn create_invite(
+        &self,
+        _: Uuid,
+        _: &[u8],
+        _: DeliveryMethod,
+        _: Option<RelationshipDepth>,
+        _: f32,
+        _: &serde_json::Value,
+        _: chrono::DateTime<chrono::Utc>,
+    ) -> Result<InviteRecord, TrustRepoError> {
+        unimplemented!()
+    }
+    async fn get_invite(&self, _: Uuid) -> Result<InviteRecord, TrustRepoError> {
+        unimplemented!()
+    }
+    async fn accept_invite(&self, _: Uuid, _: Uuid) -> Result<InviteRecord, TrustRepoError> {
+        unimplemented!()
+    }
+    async fn list_invites_by_endorser(&self, _: Uuid) -> Result<Vec<InviteRecord>, TrustRepoError> {
+        unimplemented!()
+    }
+    async fn upsert_score(
+        &self,
+        _: Uuid,
+        _: Option<Uuid>,
+        _: Option<f32>,
+        _: Option<i32>,
+        _: Option<f32>,
+    ) -> Result<(), TrustRepoError> {
+        Err(TrustRepoError::Database(sqlx::Error::RowNotFound))
+    }
+    async fn get_score(
+        &self,
+        _: Uuid,
+        _: Option<Uuid>,
+    ) -> Result<Option<ScoreSnapshot>, TrustRepoError> {
+        unimplemented!()
+    }
+    async fn get_all_scores(&self, _: Uuid) -> Result<Vec<ScoreSnapshot>, TrustRepoError> {
+        unimplemented!()
+    }
+    async fn has_identity_endorsement(
+        &self,
+        _: Uuid,
+        _: &[Uuid],
+        _: &str,
+    ) -> Result<bool, TrustRepoError> {
+        unimplemented!()
+    }
+}
+
+#[shared_runtime_test]
+async fn test_recompute_from_anchor_propagates_upsert_score_error() {
+    let db = isolated_db().await;
+    let pool = db.pool().clone();
+
+    let seed = AccountFactory::new()
+        .with_seed(1)
+        .create(&pool)
+        .await
+        .expect("create seed");
+    let a = AccountFactory::new()
+        .with_seed(2)
+        .create(&pool)
+        .await
+        .expect("create a");
+
+    insert_endorsement(&pool, seed.id, a.id, 1.0).await;
+
+    let engine = TrustEngine::new(pool);
+    let repo = FailingUpsertRepo;
+    let result = engine.recompute_from_anchor(seed.id, &repo).await;
+
+    assert!(
+        matches!(result, Err(TrustEngineError::UpsertScore(_))),
+        "Expected TrustEngineError::UpsertScore, got {result:?}"
     );
 }
