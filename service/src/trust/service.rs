@@ -1639,6 +1639,35 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn endorse_enqueues_payload_with_non_null_attestation() {
+        // Verifies that a non-null attestation value is forwarded verbatim into
+        // the enqueued payload. All other endorse tests pass `attestation = None`;
+        // a bug that always serialised `null` would pass every one of them but
+        // silently drop attestation data for every real endorsement that carries one.
+        let captured = Arc::new(Mutex::new(None));
+        let svc = DefaultTrustService::new(
+            Arc::new(CapturingEnqueueRepo {
+                captured: captured.clone(),
+            }),
+            Arc::new(StubReputationRepo {
+                is_verifier: false,
+                active_endorsements: 0,
+            }),
+        );
+        let endorser = Uuid::new_v4();
+        let subject = Uuid::new_v4();
+        let attestation = serde_json::json!({ "type": "selfie_verified", "confidence": 0.95 });
+        svc.endorse(endorser, subject, 0.5, Some(attestation.clone()))
+            .await
+            .unwrap();
+        let payload = captured.lock().unwrap().clone().unwrap();
+        assert_eq!(
+            payload["attestation"], attestation,
+            "payload must carry the verbatim attestation object"
+        );
+    }
+
     // ─── denounce payload content test ───────────────────────────────────────
 
     #[tokio::test]
