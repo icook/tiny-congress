@@ -989,6 +989,182 @@ mod tests {
         );
     }
 
+    // ─── denounce happy-path payload test ────────────────────────────────────
+    //
+    // Verifies that when all denounce guards pass, `enqueue_action` is called
+    // with a `Denounce` action type and a payload containing the correct
+    // `target_id` and `reason`.  Every other denounce test stops at one of the
+    // early-exit guards, so this is the only test that reaches `enqueue_action`.
+
+    /// A [`TrustRepo`] stub that passes all guards in [`DefaultTrustService::denounce`]
+    /// and captures the payload handed to `enqueue_action` for inspection.
+    struct CapturingDenouncerRepo {
+        captured: Arc<Mutex<Option<serde_json::Value>>>,
+    }
+
+    #[async_trait]
+    impl TrustRepo for CapturingDenouncerRepo {
+        async fn count_daily_actions(&self, _: Uuid) -> Result<i64, TrustRepoError> {
+            Ok(0) // below quota
+        }
+        async fn has_active_denouncement(&self, _: Uuid, _: Uuid) -> Result<bool, TrustRepoError> {
+            Ok(false) // no existing denouncement
+        }
+        async fn count_total_denouncements_by(&self, _: Uuid) -> Result<i64, TrustRepoError> {
+            Ok(0) // below slot limit
+        }
+        async fn enqueue_action(
+            &self,
+            actor_id: Uuid,
+            action_type: ActionType,
+            payload: &serde_json::Value,
+        ) -> Result<ActionRecord, TrustRepoError> {
+            *self.captured.lock().unwrap() = Some(payload.clone());
+            Ok(ActionRecord {
+                id: Uuid::new_v4(),
+                actor_id,
+                action_type: action_type.as_str().to_string(),
+                payload: payload.clone(),
+                status: "pending".to_string(),
+                quota_date: chrono::Utc::now().date_naive(),
+                error_message: None,
+                created_at: chrono::Utc::now(),
+                processed_at: None,
+            })
+        }
+        async fn get_or_create_influence(
+            &self,
+            _: Uuid,
+        ) -> Result<InfluenceRecord, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn get_action(&self, _: Uuid) -> Result<ActionRecord, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn complete_action(&self, _: Uuid) -> Result<(), TrustRepoError> {
+            unimplemented!()
+        }
+        async fn fail_action(&self, _: Uuid, _: &str) -> Result<(), TrustRepoError> {
+            unimplemented!()
+        }
+        async fn create_denouncement(
+            &self,
+            _: Uuid,
+            _: Uuid,
+            _: &str,
+        ) -> Result<DenouncementRecord, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn create_denouncement_and_revoke_endorsement(
+            &self,
+            _: Uuid,
+            _: Uuid,
+            _: &str,
+        ) -> Result<DenouncementRecord, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn list_denouncements_against(
+            &self,
+            _: Uuid,
+        ) -> Result<Vec<DenouncementRecord>, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn list_denouncements_by(
+            &self,
+            _: Uuid,
+        ) -> Result<Vec<DenouncementRecord>, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn list_denouncements_by_with_username(
+            &self,
+            _: Uuid,
+        ) -> Result<Vec<DenouncementWithUsername>, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn create_invite(
+            &self,
+            _: Uuid,
+            _: &[u8],
+            _: DeliveryMethod,
+            _: Option<RelationshipDepth>,
+            _: f32,
+            _: &serde_json::Value,
+            _: chrono::DateTime<chrono::Utc>,
+        ) -> Result<InviteRecord, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn get_invite(&self, _: Uuid) -> Result<InviteRecord, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn accept_invite(&self, _: Uuid, _: Uuid) -> Result<InviteRecord, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn list_invites_by_endorser(
+            &self,
+            _: Uuid,
+        ) -> Result<Vec<InviteRecord>, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn upsert_score(
+            &self,
+            _: Uuid,
+            _: Option<Uuid>,
+            _: Option<f32>,
+            _: Option<i32>,
+            _: Option<f32>,
+        ) -> Result<(), TrustRepoError> {
+            unimplemented!()
+        }
+        async fn get_score(
+            &self,
+            _: Uuid,
+            _: Option<Uuid>,
+        ) -> Result<Option<ScoreSnapshot>, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn get_all_scores(&self, _: Uuid) -> Result<Vec<ScoreSnapshot>, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn has_identity_endorsement(
+            &self,
+            _: Uuid,
+            _: &[Uuid],
+            _: &str,
+        ) -> Result<bool, TrustRepoError> {
+            unimplemented!()
+        }
+    }
+
+    #[tokio::test]
+    async fn denounce_enqueues_with_correct_target_id_and_reason() {
+        // When all guards pass, denounce must enqueue a Denounce action whose payload
+        // contains the correct target_id and reason.  This is the only test that
+        // reaches enqueue_action on the denounce path.
+        let captured = Arc::new(Mutex::new(None));
+        let svc = DefaultTrustService::new(
+            Arc::new(CapturingDenouncerRepo {
+                captured: captured.clone(),
+            }),
+            Arc::new(PanicReputationRepo),
+        );
+        let accuser = Uuid::new_v4();
+        let target = Uuid::new_v4();
+        svc.denounce(accuser, target, "harmful conduct")
+            .await
+            .unwrap();
+        let payload = captured.lock().unwrap().clone().unwrap();
+        assert_eq!(
+            payload["target_id"],
+            serde_json::Value::String(target.to_string()),
+            "denounce payload must contain the correct target_id"
+        );
+        assert_eq!(
+            payload["reason"],
+            serde_json::Value::String("harmful conduct".to_string()),
+            "denounce payload must contain the correct reason"
+        );
+    }
+
     // ─── in_slot computation tests ───────────────────────────────────────────
     //
     // Every test above stops before `has_endorsement` because the guard it is
