@@ -1906,9 +1906,11 @@ mod tests {
     // ─── enqueue_action error propagation tests ──────────────────────────────
 
     /// Stub [`TrustRepo`] that passes all pre-enqueue guards in
-    /// [`DefaultTrustService::revoke_endorsement`] (daily quota check) but
-    /// returns a database error from `enqueue_action`. Used to verify the
-    /// service propagates the error rather than silently succeeding.
+    /// [`DefaultTrustService::revoke_endorsement`] (daily quota check) and
+    /// [`DefaultTrustService::endorse`] (daily quota check and active
+    /// denouncement check) but returns a database error from `enqueue_action`.
+    /// Used to verify the service propagates the error rather than silently
+    /// succeeding.
     struct FailingEnqueueRepo;
 
     #[async_trait]
@@ -1977,7 +1979,7 @@ mod tests {
             unimplemented!()
         }
         async fn has_active_denouncement(&self, _: Uuid, _: Uuid) -> Result<bool, TrustRepoError> {
-            unimplemented!()
+            Ok(false) // no active denouncement — guard passes
         }
         async fn create_invite(
             &self,
@@ -2045,6 +2047,33 @@ mod tests {
         let a = Uuid::new_v4();
         let b = Uuid::new_v4();
         let err = svc.revoke_endorsement(a, b).await.unwrap_err();
+        assert!(
+            matches!(err, TrustServiceError::Repo(TrustRepoError::Database(_))),
+            "expected Repo(Database(...)), got: {err}"
+        );
+    }
+
+    #[tokio::test]
+    async fn endorse_propagates_repo_error_from_enqueue_action() {
+        // `enqueue_action` is the last repo call in `endorse` — all guards
+        // pass (self-action check, weight check, daily quota check, active
+        // denouncement check, and slot check). If the database fails at the
+        // enqueue step, the service must surface the error rather than
+        // silently succeeding. `FailingEnqueueRepo` returns `Ok(false)` for
+        // `has_active_denouncement` so the denouncement guard passes;
+        // `StubReputationRepo { is_verifier: false, active_endorsements: 0 }`
+        // produces `in_slot = true` (0 < slot limit). All other methods on
+        // `FailingEnqueueRepo` panic, so a stray call would fail loudly.
+        let svc = DefaultTrustService::new(
+            Arc::new(FailingEnqueueRepo),
+            Arc::new(StubReputationRepo {
+                is_verifier: false,
+                active_endorsements: 0,
+            }),
+        );
+        let a = Uuid::new_v4();
+        let b = Uuid::new_v4();
+        let err = svc.endorse(a, b, 0.5, None).await.unwrap_err();
         assert!(
             matches!(err, TrustServiceError::Repo(TrustRepoError::Database(_))),
             "expected Repo(Database(...)), got: {err}"
