@@ -528,6 +528,22 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn get_score_returns_none_when_path_diversity_is_negative() {
+        // Negative path_diversity (e.g. -1) cannot be represented as u32.
+        // This indicates data corruption (e.g. an i32 underflow written to the DB).
+        // The adapter must treat the snapshot as absent rather than clamping or
+        // silently accepting the value — fail closed per "reject, don't sanitize".
+        let mut snapshot = base_snapshot();
+        snapshot.path_diversity = Some(-1);
+        let reader = make_reader(Some(snapshot));
+        let result = reader.get_score(Uuid::new_v4(), None).await.unwrap();
+        assert!(
+            result.is_none(),
+            "negative path_diversity must map to no score (data corruption), not clamped"
+        );
+    }
+
+    #[tokio::test]
     async fn get_score_maps_null_path_diversity_as_zero() {
         // NULL path_diversity is treated as zero (no contributing paths observed yet),
         // which is a valid state — the snapshot is still returned.
