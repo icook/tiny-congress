@@ -8,6 +8,7 @@ use common::test_db::isolated_db;
 use tc_test_macros::shared_runtime_test;
 use tinycongress_api::trust::repo::{PgTrustRepo, TrustRepo, TrustRepoError};
 use tinycongress_api::trust::weight::{DeliveryMethod, RelationshipDepth};
+use uuid::Uuid;
 
 #[shared_runtime_test]
 async fn test_create_and_get_invite() {
@@ -271,6 +272,20 @@ async fn test_invite_stores_weight_and_relationship_depth() {
         (invite.weight - 0.49).abs() < 0.001,
         "expected weight ~0.49, got {}",
         invite.weight
+    );
+}
+
+#[shared_runtime_test]
+async fn test_get_invite_returns_notfound_for_unknown_id() {
+    let db = isolated_db().await;
+    let pool = db.pool().clone();
+
+    let repo = PgTrustRepo::new(pool);
+    let result = repo.get_invite(Uuid::new_v4()).await;
+
+    assert!(
+        matches!(result, Err(TrustRepoError::NotFound)),
+        "expected NotFound for unknown invite id, got: {result:?}"
     );
 }
 
