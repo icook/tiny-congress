@@ -2703,6 +2703,174 @@ mod tests {
             "denounce must pass ActionType::Denounce to enqueue_action"
         );
     }
+
+    // ─── denounce actor_id correctness ───────────────────────────────────────
+
+    /// Stub [`TrustRepo`] that passes all pre-enqueue guards in
+    /// [`DefaultTrustService::denounce`] and captures the `actor_id` argument
+    /// passed to `enqueue_action`. Used to verify that `denounce` passes
+    /// `accuser_id` (not `target_id`) as the actor.
+    struct DenounceActorCapturingRepo {
+        captured_actor: Arc<Mutex<Option<Uuid>>>,
+    }
+
+    #[async_trait]
+    impl TrustRepo for DenounceActorCapturingRepo {
+        async fn has_active_denouncement(&self, _: Uuid, _: Uuid) -> Result<bool, TrustRepoError> {
+            Ok(false) // no existing denouncement — guard passes
+        }
+        async fn count_daily_actions(&self, _: Uuid) -> Result<i64, TrustRepoError> {
+            Ok(0) // below quota — guard passes
+        }
+        async fn count_total_denouncements_by(&self, _: Uuid) -> Result<i64, TrustRepoError> {
+            Ok(0) // below slot limit — guard passes
+        }
+        async fn enqueue_action(
+            &self,
+            actor_id: Uuid,
+            action_type: ActionType,
+            payload: &serde_json::Value,
+        ) -> Result<ActionRecord, TrustRepoError> {
+            *self.captured_actor.lock().unwrap() = Some(actor_id);
+            Ok(ActionRecord {
+                id: Uuid::new_v4(),
+                actor_id,
+                action_type: action_type.as_str().to_string(),
+                payload: payload.clone(),
+                status: "pending".to_string(),
+                quota_date: chrono::Utc::now().date_naive(),
+                error_message: None,
+                created_at: chrono::Utc::now(),
+                processed_at: None,
+            })
+        }
+        async fn get_or_create_influence(
+            &self,
+            _: Uuid,
+        ) -> Result<InfluenceRecord, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn get_action(&self, _: Uuid) -> Result<ActionRecord, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn complete_action(&self, _: Uuid) -> Result<(), TrustRepoError> {
+            unimplemented!()
+        }
+        async fn fail_action(&self, _: Uuid, _: &str) -> Result<(), TrustRepoError> {
+            unimplemented!()
+        }
+        async fn create_denouncement(
+            &self,
+            _: Uuid,
+            _: Uuid,
+            _: &str,
+        ) -> Result<DenouncementRecord, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn create_denouncement_and_revoke_endorsement(
+            &self,
+            _: Uuid,
+            _: Uuid,
+            _: &str,
+        ) -> Result<DenouncementRecord, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn list_denouncements_against(
+            &self,
+            _: Uuid,
+        ) -> Result<Vec<DenouncementRecord>, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn list_denouncements_by(
+            &self,
+            _: Uuid,
+        ) -> Result<Vec<DenouncementRecord>, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn list_denouncements_by_with_username(
+            &self,
+            _: Uuid,
+        ) -> Result<Vec<DenouncementWithUsername>, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn create_invite(
+            &self,
+            _: Uuid,
+            _: &[u8],
+            _: DeliveryMethod,
+            _: Option<RelationshipDepth>,
+            _: f32,
+            _: &serde_json::Value,
+            _: chrono::DateTime<chrono::Utc>,
+        ) -> Result<InviteRecord, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn get_invite(&self, _: Uuid) -> Result<InviteRecord, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn accept_invite(&self, _: Uuid, _: Uuid) -> Result<InviteRecord, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn list_invites_by_endorser(
+            &self,
+            _: Uuid,
+        ) -> Result<Vec<InviteRecord>, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn upsert_score(
+            &self,
+            _: Uuid,
+            _: Option<Uuid>,
+            _: Option<f32>,
+            _: Option<i32>,
+            _: Option<f32>,
+        ) -> Result<(), TrustRepoError> {
+            unimplemented!()
+        }
+        async fn get_score(
+            &self,
+            _: Uuid,
+            _: Option<Uuid>,
+        ) -> Result<Option<ScoreSnapshot>, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn get_all_scores(&self, _: Uuid) -> Result<Vec<ScoreSnapshot>, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn has_identity_endorsement(
+            &self,
+            _: Uuid,
+            _: &[Uuid],
+            _: &str,
+        ) -> Result<bool, TrustRepoError> {
+            unimplemented!()
+        }
+    }
+
+    #[tokio::test]
+    async fn denounce_passes_accuser_as_actor_to_enqueue_action() {
+        // Verifies that denounce() passes accuser_id (not target_id) as the actor
+        // argument to enqueue_action. The payload-content test
+        // (denounce_enqueues_payload_with_target_id_and_reason) only checks the
+        // payload fields; a bug that swaps accuser_id/target_id in the actor
+        // position would silently pass all other tests but attribute the
+        // denouncement to the target's account in the action log.
+        let captured_actor = Arc::new(Mutex::new(None::<Uuid>));
+        let svc = DefaultTrustService::new(
+            Arc::new(DenounceActorCapturingRepo {
+                captured_actor: captured_actor.clone(),
+            }),
+            Arc::new(PanicReputationRepo),
+        );
+        let accuser = Uuid::new_v4();
+        let target = Uuid::new_v4();
+        svc.denounce(accuser, target, "valid reason").await.unwrap();
+        assert_eq!(
+            *captured_actor.lock().unwrap(),
+            Some(accuser),
+            "denounce must pass accuser_id as actor, not target_id"
+        );
+    }
 }
 
 impl DefaultTrustService {
