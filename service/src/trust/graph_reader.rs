@@ -527,6 +527,33 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn get_score_maps_null_path_diversity_as_zero() {
+        // NULL path_diversity is treated as zero (no contributing paths observed yet),
+        // which is a valid state — the snapshot is still returned.
+        let mut snapshot = base_snapshot();
+        snapshot.path_diversity = None;
+        let reader = make_reader(Some(snapshot));
+        let result = reader.get_score(Uuid::new_v4(), None).await.unwrap();
+        let score = result.expect("NULL path_diversity should still yield a score");
+        assert_eq!(score.path_diversity, 0);
+    }
+
+    #[tokio::test]
+    async fn get_score_maps_null_eigenvector_centrality_as_zero() {
+        // NULL eigenvector_centrality is treated as 0.0 (supplemental metric not yet
+        // computed), which is a valid state — the snapshot is still returned.
+        let mut snapshot = base_snapshot();
+        snapshot.eigenvector_centrality = None;
+        let reader = make_reader(Some(snapshot));
+        let result = reader.get_score(Uuid::new_v4(), None).await.unwrap();
+        let score = result.expect("NULL eigenvector_centrality should still yield a score");
+        assert!(
+            score.eigenvector_centrality.abs() < f64::EPSILON,
+            "NULL eigenvector_centrality must map to 0.0"
+        );
+    }
+
     // ─── has_endorsement ─────────────────────────────────────────────────────
 
     fn make_endorsement_reader(result: Result<bool, TrustRepoError>) -> TrustRepoGraphReader {
