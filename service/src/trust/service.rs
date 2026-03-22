@@ -2050,6 +2050,158 @@ mod tests {
             "expected Repo(Database(...)), got: {err}"
         );
     }
+
+    /// Stub [`TrustRepo`] that passes all pre-enqueue guards in
+    /// [`DefaultTrustService::endorse`] (denouncement conflict check, daily quota
+    /// check) but returns a database error from `enqueue_action`. Used to verify
+    /// the service propagates the error rather than silently succeeding.
+    struct FailingEnqueueForEndorseRepo;
+
+    #[async_trait]
+    impl TrustRepo for FailingEnqueueForEndorseRepo {
+        async fn has_active_denouncement(&self, _: Uuid, _: Uuid) -> Result<bool, TrustRepoError> {
+            Ok(false) // no conflict — denouncement guard passes
+        }
+        async fn count_daily_actions(&self, _: Uuid) -> Result<i64, TrustRepoError> {
+            Ok(0) // below quota — quota guard passes
+        }
+        async fn enqueue_action(
+            &self,
+            _: Uuid,
+            _: ActionType,
+            _: &serde_json::Value,
+        ) -> Result<ActionRecord, TrustRepoError> {
+            Err(TrustRepoError::Database(sqlx::Error::RowNotFound))
+        }
+        async fn get_or_create_influence(
+            &self,
+            _: Uuid,
+        ) -> Result<InfluenceRecord, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn get_action(&self, _: Uuid) -> Result<ActionRecord, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn complete_action(&self, _: Uuid) -> Result<(), TrustRepoError> {
+            unimplemented!()
+        }
+        async fn fail_action(&self, _: Uuid, _: &str) -> Result<(), TrustRepoError> {
+            unimplemented!()
+        }
+        async fn create_denouncement(
+            &self,
+            _: Uuid,
+            _: Uuid,
+            _: &str,
+        ) -> Result<DenouncementRecord, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn create_denouncement_and_revoke_endorsement(
+            &self,
+            _: Uuid,
+            _: Uuid,
+            _: &str,
+        ) -> Result<DenouncementRecord, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn list_denouncements_against(
+            &self,
+            _: Uuid,
+        ) -> Result<Vec<DenouncementRecord>, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn list_denouncements_by(
+            &self,
+            _: Uuid,
+        ) -> Result<Vec<DenouncementRecord>, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn list_denouncements_by_with_username(
+            &self,
+            _: Uuid,
+        ) -> Result<Vec<DenouncementWithUsername>, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn count_total_denouncements_by(&self, _: Uuid) -> Result<i64, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn create_invite(
+            &self,
+            _: Uuid,
+            _: &[u8],
+            _: DeliveryMethod,
+            _: Option<RelationshipDepth>,
+            _: f32,
+            _: &serde_json::Value,
+            _: chrono::DateTime<chrono::Utc>,
+        ) -> Result<InviteRecord, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn get_invite(&self, _: Uuid) -> Result<InviteRecord, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn accept_invite(&self, _: Uuid, _: Uuid) -> Result<InviteRecord, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn list_invites_by_endorser(
+            &self,
+            _: Uuid,
+        ) -> Result<Vec<InviteRecord>, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn upsert_score(
+            &self,
+            _: Uuid,
+            _: Option<Uuid>,
+            _: Option<f32>,
+            _: Option<i32>,
+            _: Option<f32>,
+        ) -> Result<(), TrustRepoError> {
+            unimplemented!()
+        }
+        async fn get_score(
+            &self,
+            _: Uuid,
+            _: Option<Uuid>,
+        ) -> Result<Option<ScoreSnapshot>, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn get_all_scores(&self, _: Uuid) -> Result<Vec<ScoreSnapshot>, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn has_identity_endorsement(
+            &self,
+            _: Uuid,
+            _: &[Uuid],
+            _: &str,
+        ) -> Result<bool, TrustRepoError> {
+            unimplemented!()
+        }
+    }
+
+    #[tokio::test]
+    async fn endorse_propagates_repo_error_from_enqueue_action() {
+        // `enqueue_action` is the last repo call in `endorse` — all guards pass
+        // (self-action check, weight check, daily quota, denouncement conflict,
+        // verifier check, slot count). If the database fails at the enqueue step,
+        // the service must surface the error rather than silently succeeding.
+        // `FailingEnqueueForEndorseRepo` panics on all other methods, so a stray
+        // call would cause the test to fail loudly.
+        let svc = DefaultTrustService::new(
+            Arc::new(FailingEnqueueForEndorseRepo),
+            Arc::new(StubReputationRepo {
+                is_verifier: false,
+                active_endorsements: 0,
+            }),
+        );
+        let a = Uuid::new_v4();
+        let b = Uuid::new_v4();
+        let err = svc.endorse(a, b, 0.5, None).await.unwrap_err();
+        assert!(
+            matches!(err, TrustServiceError::Repo(TrustRepoError::Database(_))),
+            "expected Repo(Database(...)), got: {err}"
+        );
+    }
 }
 
 impl DefaultTrustService {
