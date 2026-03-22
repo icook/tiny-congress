@@ -1903,6 +1903,105 @@ mod tests {
         );
     }
 
+    // ─── count_active_trust_endorsements_by error propagation ────────────────
+
+    /// A [`ReputationRepo`] stub whose `has_endorsement` returns `Ok(false)` (non-verifier)
+    /// and whose `count_active_trust_endorsements_by` always returns a database error.
+    /// Used to verify that `DefaultTrustService::endorse` propagates the error rather
+    /// than silently treating the slot count as zero and proceeding to enqueue.
+    struct ErrorCountActiveEndorsementsRepo;
+
+    #[async_trait]
+    impl ReputationRepo for ErrorCountActiveEndorsementsRepo {
+        async fn has_endorsement(&self, _: Uuid, _: &str) -> Result<bool, EndorsementRepoError> {
+            Ok(false) // non-verifier — routes into the slot-count branch
+        }
+        async fn count_active_trust_endorsements_by(
+            &self,
+            _: Uuid,
+        ) -> Result<i64, EndorsementRepoError> {
+            Err(EndorsementRepoError::Database(sqlx::Error::RowNotFound))
+        }
+        async fn create_endorsement(
+            &self,
+            _: Uuid,
+            _: &str,
+            _: Option<Uuid>,
+            _: Option<&serde_json::Value>,
+            _: f32,
+            _: Option<&serde_json::Value>,
+            _: bool,
+        ) -> Result<CreatedEndorsement, EndorsementRepoError> {
+            unimplemented!()
+        }
+        async fn count_all_active_trust_endorsements_by(
+            &self,
+            _: Uuid,
+        ) -> Result<i64, EndorsementRepoError> {
+            unimplemented!()
+        }
+        async fn list_endorsements_by_subject(
+            &self,
+            _: Uuid,
+        ) -> Result<Vec<EndorsementRecord>, EndorsementRepoError> {
+            unimplemented!()
+        }
+        async fn revoke_endorsement(
+            &self,
+            _: Uuid,
+            _: Uuid,
+            _: &str,
+        ) -> Result<(), EndorsementRepoError> {
+            unimplemented!()
+        }
+        async fn link_external_identity(
+            &self,
+            _: Uuid,
+            _: &str,
+            _: &str,
+        ) -> Result<ExternalIdentityRecord, ExternalIdentityRepoError> {
+            unimplemented!()
+        }
+        async fn get_external_identity_by_provider(
+            &self,
+            _: &str,
+            _: &str,
+        ) -> Result<ExternalIdentityRecord, ExternalIdentityRepoError> {
+            unimplemented!()
+        }
+    }
+
+    #[tokio::test]
+    async fn endorse_propagates_endorsement_repo_error_from_count_active_trust_endorsements_by() {
+        // `count_active_trust_endorsements_by` is called on the non-verifier path
+        // (when `has_endorsement` returns `Ok(false)`). If the database fails there,
+        // `endorse` must propagate it as `TrustServiceError::EndorsementRepo` rather
+        // than silently treating the slot count as zero and proceeding to enqueue.
+        //
+        // Uses `CapturingEnqueueRepo` as the TrustRepo stub so all upstream guards
+        // (quota, denouncement conflict) pass, and `ErrorCountActiveEndorsementsRepo`
+        // to inject the failure after the verifier check.
+        let captured = Arc::new(Mutex::new(None));
+        let svc = DefaultTrustService::new(
+            Arc::new(CapturingEnqueueRepo {
+                captured: captured.clone(),
+            }),
+            Arc::new(ErrorCountActiveEndorsementsRepo),
+        );
+        let a = Uuid::new_v4();
+        let b = Uuid::new_v4();
+        let err = svc.endorse(a, b, 0.5, None).await.unwrap_err();
+        assert!(
+            matches!(err, TrustServiceError::EndorsementRepo(_)),
+            "expected EndorsementRepo error when count_active_trust_endorsements_by fails, got: {err}"
+        );
+        // Payload must NOT have been captured — the error fires before enqueue_action.
+        assert!(
+            captured.lock().unwrap().is_none(),
+            "enqueue_action must not be called when count_active_trust_endorsements_by fails"
+        );
+    }
+
     // ─── enqueue_action error propagation tests ──────────────────────────────
 
     /// Stub [`TrustRepo`] that passes all pre-enqueue guards in
