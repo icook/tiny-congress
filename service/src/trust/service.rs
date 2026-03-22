@@ -1286,6 +1286,40 @@ mod tests {
         );
     }
 
+    // ─── endorse payload content test ────────────────────────────────────────
+
+    #[tokio::test]
+    async fn endorse_enqueues_payload_with_correct_subject_id_and_weight() {
+        // Verifies that endorse places the correct subject_id (not the endorser_id)
+        // and the verbatim weight into the enqueued payload.  A swap of
+        // endorser_id/subject_id would silently pass the in_slot tests above
+        // because those tests only inspect the `in_slot` field.
+        let captured = Arc::new(Mutex::new(None));
+        let svc = DefaultTrustService::new(
+            Arc::new(CapturingEnqueueRepo {
+                captured: captured.clone(),
+            }),
+            Arc::new(StubReputationRepo {
+                is_verifier: false,
+                active_endorsements: 0,
+            }),
+        );
+        let endorser = Uuid::new_v4();
+        let subject = Uuid::new_v4();
+        let weight = 0.6_f32;
+        svc.endorse(endorser, subject, weight, None).await.unwrap();
+        let payload = captured.lock().unwrap().clone().unwrap();
+        assert_eq!(
+            payload["subject_id"],
+            serde_json::Value::String(subject.to_string()),
+            "payload must carry subject_id, not endorser_id"
+        );
+        assert!(
+            (payload["weight"].as_f64().unwrap() as f32 - weight).abs() < f32::EPSILON,
+            "payload must carry the verbatim weight"
+        );
+    }
+
     // ─── denounce payload content test ───────────────────────────────────────
 
     #[tokio::test]
