@@ -1723,6 +1723,102 @@ mod tests {
         }
     }
 
+    // ─── count_active_trust_endorsements_by error propagation ────────────────
+
+    /// A [`ReputationRepo`] stub where `has_endorsement` identifies the caller as
+    /// a non-verifier (`Ok(false)`) but `count_active_trust_endorsements_by` fails
+    /// with a database error. Used to verify that `DefaultTrustService::endorse`
+    /// propagates the error rather than silently treating the active count as 0.
+    struct NonVerifierWithFailingActiveCountRepo;
+
+    #[async_trait]
+    impl ReputationRepo for NonVerifierWithFailingActiveCountRepo {
+        async fn has_endorsement(&self, _: Uuid, _: &str) -> Result<bool, EndorsementRepoError> {
+            Ok(false) // non-verifier — proceeds to count_active_trust_endorsements_by
+        }
+        async fn count_active_trust_endorsements_by(
+            &self,
+            _: Uuid,
+        ) -> Result<i64, EndorsementRepoError> {
+            Err(EndorsementRepoError::Database(sqlx::Error::RowNotFound))
+        }
+        async fn create_endorsement(
+            &self,
+            _: Uuid,
+            _: &str,
+            _: Option<Uuid>,
+            _: Option<&serde_json::Value>,
+            _: f32,
+            _: Option<&serde_json::Value>,
+            _: bool,
+        ) -> Result<CreatedEndorsement, EndorsementRepoError> {
+            unimplemented!()
+        }
+        async fn count_all_active_trust_endorsements_by(
+            &self,
+            _: Uuid,
+        ) -> Result<i64, EndorsementRepoError> {
+            unimplemented!()
+        }
+        async fn list_endorsements_by_subject(
+            &self,
+            _: Uuid,
+        ) -> Result<Vec<EndorsementRecord>, EndorsementRepoError> {
+            unimplemented!()
+        }
+        async fn revoke_endorsement(
+            &self,
+            _: Uuid,
+            _: Uuid,
+            _: &str,
+        ) -> Result<(), EndorsementRepoError> {
+            unimplemented!()
+        }
+        async fn link_external_identity(
+            &self,
+            _: Uuid,
+            _: &str,
+            _: &str,
+        ) -> Result<ExternalIdentityRecord, ExternalIdentityRepoError> {
+            unimplemented!()
+        }
+        async fn get_external_identity_by_provider(
+            &self,
+            _: &str,
+            _: &str,
+        ) -> Result<ExternalIdentityRecord, ExternalIdentityRepoError> {
+            unimplemented!()
+        }
+    }
+
+    #[tokio::test]
+    async fn endorse_propagates_endorsement_repo_error_when_active_count_check_fails() {
+        // When the caller is not a verifier (`has_endorsement` → Ok(false)),
+        // `endorse` calls `count_active_trust_endorsements_by` to determine the
+        // `in_slot` flag. If that call fails, the error must be propagated as
+        // `TrustServiceError::EndorsementRepo` rather than silently treating the
+        // count as 0 and proceeding to enqueue. `CapturingEnqueueRepo` panics on
+        // `enqueue_action`, so a missing `?` here would surface immediately.
+        let captured = Arc::new(Mutex::new(None));
+        let svc = DefaultTrustService::new(
+            Arc::new(CapturingEnqueueRepo {
+                captured: captured.clone(),
+            }),
+            Arc::new(NonVerifierWithFailingActiveCountRepo),
+        );
+        let a = Uuid::new_v4();
+        let b = Uuid::new_v4();
+        let err = svc.endorse(a, b, 0.5, None).await.unwrap_err();
+        assert!(
+            matches!(err, TrustServiceError::EndorsementRepo(_)),
+            "expected EndorsementRepo error when active-count check fails, got: {err}"
+        );
+        assert!(
+            captured.lock().unwrap().is_none(),
+            "enqueue_action must not be called when active-count check fails"
+        );
+    }
+
     // ─── denounce count_total_denouncements_by error propagation ─────────────
 
     /// Stub [`TrustRepo`] that passes `has_active_denouncement` and
