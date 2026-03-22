@@ -2465,6 +2465,215 @@ mod tests {
             "expected Repo(Database(...)), got: {err}"
         );
     }
+
+    // ─── action_type pinning tests ────────────────────────────────────────────
+
+    /// A [`TrustRepo`] stub that passes all pre-enqueue guards and captures
+    /// the `action_type` argument passed to `enqueue_action`. Used to verify
+    /// that each service method uses the correct [`ActionType`] discriminant —
+    /// a copy-paste error (e.g. endorse passing `ActionType::Revoke`) would
+    /// cause the worker to silently misprocess the queued action.
+    struct ActionTypeCapturingRepo {
+        captured_type: Arc<Mutex<Option<ActionType>>>,
+    }
+
+    #[async_trait]
+    impl TrustRepo for ActionTypeCapturingRepo {
+        async fn count_daily_actions(&self, _: Uuid) -> Result<i64, TrustRepoError> {
+            Ok(0) // below quota — all daily-quota guards pass
+        }
+        async fn has_active_denouncement(&self, _: Uuid, _: Uuid) -> Result<bool, TrustRepoError> {
+            Ok(false) // no conflict or duplicate
+        }
+        async fn count_total_denouncements_by(&self, _: Uuid) -> Result<i64, TrustRepoError> {
+            Ok(0) // below slot limit
+        }
+        async fn enqueue_action(
+            &self,
+            actor_id: Uuid,
+            action_type: ActionType,
+            payload: &serde_json::Value,
+        ) -> Result<ActionRecord, TrustRepoError> {
+            *self.captured_type.lock().unwrap() = Some(action_type);
+            Ok(ActionRecord {
+                id: Uuid::new_v4(),
+                actor_id,
+                action_type: action_type.as_str().to_string(),
+                payload: payload.clone(),
+                status: "pending".to_string(),
+                quota_date: chrono::Utc::now().date_naive(),
+                error_message: None,
+                created_at: chrono::Utc::now(),
+                processed_at: None,
+            })
+        }
+        async fn get_or_create_influence(
+            &self,
+            _: Uuid,
+        ) -> Result<InfluenceRecord, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn get_action(&self, _: Uuid) -> Result<ActionRecord, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn complete_action(&self, _: Uuid) -> Result<(), TrustRepoError> {
+            unimplemented!()
+        }
+        async fn fail_action(&self, _: Uuid, _: &str) -> Result<(), TrustRepoError> {
+            unimplemented!()
+        }
+        async fn create_denouncement(
+            &self,
+            _: Uuid,
+            _: Uuid,
+            _: &str,
+        ) -> Result<DenouncementRecord, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn create_denouncement_and_revoke_endorsement(
+            &self,
+            _: Uuid,
+            _: Uuid,
+            _: &str,
+        ) -> Result<DenouncementRecord, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn list_denouncements_against(
+            &self,
+            _: Uuid,
+        ) -> Result<Vec<DenouncementRecord>, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn list_denouncements_by(
+            &self,
+            _: Uuid,
+        ) -> Result<Vec<DenouncementRecord>, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn list_denouncements_by_with_username(
+            &self,
+            _: Uuid,
+        ) -> Result<Vec<DenouncementWithUsername>, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn create_invite(
+            &self,
+            _: Uuid,
+            _: &[u8],
+            _: DeliveryMethod,
+            _: Option<RelationshipDepth>,
+            _: f32,
+            _: &serde_json::Value,
+            _: chrono::DateTime<chrono::Utc>,
+        ) -> Result<InviteRecord, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn get_invite(&self, _: Uuid) -> Result<InviteRecord, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn accept_invite(&self, _: Uuid, _: Uuid) -> Result<InviteRecord, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn list_invites_by_endorser(
+            &self,
+            _: Uuid,
+        ) -> Result<Vec<InviteRecord>, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn upsert_score(
+            &self,
+            _: Uuid,
+            _: Option<Uuid>,
+            _: Option<f32>,
+            _: Option<i32>,
+            _: Option<f32>,
+        ) -> Result<(), TrustRepoError> {
+            unimplemented!()
+        }
+        async fn get_score(
+            &self,
+            _: Uuid,
+            _: Option<Uuid>,
+        ) -> Result<Option<ScoreSnapshot>, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn get_all_scores(&self, _: Uuid) -> Result<Vec<ScoreSnapshot>, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn has_identity_endorsement(
+            &self,
+            _: Uuid,
+            _: &[Uuid],
+            _: &str,
+        ) -> Result<bool, TrustRepoError> {
+            unimplemented!()
+        }
+    }
+
+    #[tokio::test]
+    async fn endorse_enqueues_action_type_endorse() {
+        // Verifies that endorse() passes ActionType::Endorse to enqueue_action.
+        // Without this pin, a copy-paste that uses ActionType::Revoke would compile,
+        // pass all other tests, and cause the worker to process endorsements as revokes.
+        let captured_type = Arc::new(Mutex::new(None));
+        let svc = DefaultTrustService::new(
+            Arc::new(ActionTypeCapturingRepo {
+                captured_type: captured_type.clone(),
+            }),
+            Arc::new(StubReputationRepo {
+                is_verifier: false,
+                active_endorsements: 0,
+            }),
+        );
+        let a = Uuid::new_v4();
+        let b = Uuid::new_v4();
+        svc.endorse(a, b, 0.5, None).await.unwrap();
+        assert_eq!(
+            *captured_type.lock().unwrap(),
+            Some(ActionType::Endorse),
+            "endorse must pass ActionType::Endorse to enqueue_action"
+        );
+    }
+
+    #[tokio::test]
+    async fn revoke_endorsement_enqueues_action_type_revoke() {
+        // Verifies that revoke_endorsement() passes ActionType::Revoke to enqueue_action.
+        let captured_type = Arc::new(Mutex::new(None));
+        let svc = DefaultTrustService::new(
+            Arc::new(ActionTypeCapturingRepo {
+                captured_type: captured_type.clone(),
+            }),
+            Arc::new(PanicReputationRepo),
+        );
+        let a = Uuid::new_v4();
+        let b = Uuid::new_v4();
+        svc.revoke_endorsement(a, b).await.unwrap();
+        assert_eq!(
+            *captured_type.lock().unwrap(),
+            Some(ActionType::Revoke),
+            "revoke_endorsement must pass ActionType::Revoke to enqueue_action"
+        );
+    }
+
+    #[tokio::test]
+    async fn denounce_enqueues_action_type_denounce() {
+        // Verifies that denounce() passes ActionType::Denounce to enqueue_action.
+        let captured_type = Arc::new(Mutex::new(None));
+        let svc = DefaultTrustService::new(
+            Arc::new(ActionTypeCapturingRepo {
+                captured_type: captured_type.clone(),
+            }),
+            Arc::new(PanicReputationRepo),
+        );
+        let a = Uuid::new_v4();
+        let b = Uuid::new_v4();
+        svc.denounce(a, b, "valid reason").await.unwrap();
+        assert_eq!(
+            *captured_type.lock().unwrap(),
+            Some(ActionType::Denounce),
+            "denounce must pass ActionType::Denounce to enqueue_action"
+        );
+    }
 }
 
 impl DefaultTrustService {
