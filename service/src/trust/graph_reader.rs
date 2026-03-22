@@ -527,6 +527,22 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn get_score_returns_some_with_zero_path_diversity_when_null() {
+        // NULL path_diversity is treated as 0 (no known independent paths), NOT as
+        // a missing score. This is intentionally asymmetric with trust_distance: a
+        // valid distance + no diversity data is still a useful score.
+        let mut snapshot = base_snapshot();
+        snapshot.path_diversity = None;
+        let reader = make_reader(Some(snapshot));
+        let result = reader.get_score(Uuid::new_v4(), None).await.unwrap();
+        let score = result.expect("NULL path_diversity must not suppress the score");
+        assert_eq!(
+            score.path_diversity, 0,
+            "NULL path_diversity must default to 0, not suppress the score"
+        );
+    }
+
     // ─── has_endorsement ─────────────────────────────────────────────────────
 
     fn make_endorsement_reader(result: Result<bool, TrustRepoError>) -> TrustRepoGraphReader {
