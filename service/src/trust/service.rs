@@ -650,6 +650,14 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn endorse_returns_invalid_weight_for_above_one() {
+        let a = Uuid::new_v4();
+        let b = Uuid::new_v4();
+        let err = make_service().endorse(a, b, 1.1, None).await.unwrap_err();
+        assert!(matches!(err, TrustServiceError::InvalidWeight));
+    }
+
+    #[tokio::test]
     async fn revoke_endorsement_returns_self_action_when_ids_match() {
         let id = Uuid::new_v4();
         let err = make_service().revoke_endorsement(id, id).await.unwrap_err();
