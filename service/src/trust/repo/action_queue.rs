@@ -81,19 +81,22 @@ pub(super) async fn complete_action(pool: &PgPool, action_id: Uuid) -> Result<()
     Ok(())
 }
 
+/// Truncate `error` to at most [`ERROR_MESSAGE_MAX_LEN`] Unicode scalar values,
+/// always cutting at a character boundary to avoid splitting multi-byte sequences.
+pub(crate) fn truncate_error_message(error: &str) -> &str {
+    let byte_end = error
+        .char_indices()
+        .nth(ERROR_MESSAGE_MAX_LEN)
+        .map_or(error.len(), |(i, _)| i);
+    &error[..byte_end]
+}
+
 pub(super) async fn fail_action(
     pool: &PgPool,
     action_id: Uuid,
     error: &str,
 ) -> Result<(), TrustRepoError> {
-    // Truncate at a character boundary so nested sqlx/engine errors don't produce
-    // unbounded rows.  Byte length may exceed ERROR_MESSAGE_MAX_LEN for multibyte
-    // chars, but character count is always bounded.
-    let byte_end = error
-        .char_indices()
-        .nth(ERROR_MESSAGE_MAX_LEN)
-        .map_or(error.len(), |(i, _)| i);
-    let error = &error[..byte_end];
+    let error = truncate_error_message(error);
 
     sqlx::query(
         "UPDATE trust__action_log \
@@ -106,4 +109,43 @@ pub(super) async fn fail_action(
     .await?;
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn truncate_error_message_passes_short_error_unchanged() {
+        let error = "short error";
+        assert_eq!(truncate_error_message(error), error);
+    }
+
+    #[test]
+    fn truncate_error_message_passes_exactly_max_len_unchanged() {
+        let error = "x".repeat(ERROR_MESSAGE_MAX_LEN);
+        assert_eq!(truncate_error_message(&error), error);
+    }
+
+    #[test]
+    fn truncate_error_message_truncates_to_max_len() {
+        let error = "x".repeat(ERROR_MESSAGE_MAX_LEN + 10);
+        let result = truncate_error_message(&error);
+        assert_eq!(result.chars().count(), ERROR_MESSAGE_MAX_LEN);
+    }
+
+    #[test]
+    fn truncate_error_message_cuts_at_char_boundary_for_multibyte() {
+        // Each '中' is 3 bytes; build a string that exceeds the limit by one char.
+        let error = "中".repeat(ERROR_MESSAGE_MAX_LEN + 1);
+        let result = truncate_error_message(&error);
+        assert_eq!(result.chars().count(), ERROR_MESSAGE_MAX_LEN);
+        // Must be valid UTF-8 — slicing inside a multibyte char would panic.
+        assert!(std::str::from_utf8(result.as_bytes()).is_ok());
+    }
+
+    #[test]
+    fn truncate_error_message_returns_empty_for_empty_input() {
+        assert_eq!(truncate_error_message(""), "");
+    }
 }
