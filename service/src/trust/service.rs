@@ -1083,7 +1083,7 @@ mod tests {
             unimplemented!()
         }
         async fn count_total_denouncements_by(&self, _: Uuid) -> Result<i64, TrustRepoError> {
-            unimplemented!()
+            Ok(0) // below denouncement slot limit — enables denounce happy-path tests
         }
         async fn create_invite(
             &self,
@@ -1283,6 +1283,37 @@ mod tests {
             payload["in_slot"],
             serde_json::Value::Bool(true),
             "non-verifier with available slots must be queued as in-slot"
+        );
+    }
+
+    // ─── denounce payload content test ───────────────────────────────────────
+
+    #[tokio::test]
+    async fn denounce_enqueues_payload_with_target_id_and_reason() {
+        // Verifies that denounce places the correct target_id (not the accuser_id)
+        // and the verbatim reason string into the enqueued payload.  A swap of
+        // accuser_id/target_id would silently pass all guard tests above.
+        let captured = Arc::new(Mutex::new(None));
+        let svc = DefaultTrustService::new(
+            Arc::new(CapturingEnqueueRepo {
+                captured: captured.clone(),
+            }),
+            Arc::new(PanicReputationRepo),
+        );
+        let accuser = Uuid::new_v4();
+        let target = Uuid::new_v4();
+        let reason = "harmful conduct";
+        svc.denounce(accuser, target, reason).await.unwrap();
+        let payload = captured.lock().unwrap().clone().unwrap();
+        assert_eq!(
+            payload["target_id"],
+            serde_json::Value::String(target.to_string()),
+            "payload must carry target_id, not accuser_id"
+        );
+        assert_eq!(
+            payload["reason"],
+            serde_json::Value::String(reason.to_string()),
+            "payload must carry the verbatim reason"
         );
     }
 }
