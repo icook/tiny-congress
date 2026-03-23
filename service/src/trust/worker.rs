@@ -508,6 +508,37 @@ mod tests {
     }
 
     #[test]
+    fn parse_endorse_payload_errors_when_subject_id_is_not_a_string() {
+        let payload = json!({
+            "subject_id": 42,
+            "weight": 0.5,
+            "attestation": null,
+            "in_slot": true,
+        });
+        let err = parse_endorse_payload(&payload).unwrap_err();
+        assert!(
+            matches!(err, TrustActionError::InvalidPayload(ref msg) if msg.contains("subject_id")),
+            "expected InvalidPayload mentioning 'subject_id' for non-string value, got: {err}"
+        );
+    }
+
+    #[test]
+    fn parse_endorse_payload_errors_when_subject_id_is_invalid_uuid() {
+        let payload = json!({
+            "subject_id": "not-a-uuid",
+            "weight": 0.5,
+            "attestation": null,
+            "in_slot": true,
+        });
+        let err = parse_endorse_payload(&payload).unwrap_err();
+        assert!(
+            matches!(err, TrustActionError::InvalidPayload(ref msg)
+                if msg.contains("subject_id") && msg.contains("not a valid UUID")),
+            "expected InvalidPayload mentioning 'subject_id' and 'not a valid UUID', got: {err}"
+        );
+    }
+
+    #[test]
     fn parse_endorse_payload_errors_when_weight_is_missing() {
         let subject_id = Uuid::new_v4();
         let payload = json!({
