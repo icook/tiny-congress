@@ -878,6 +878,35 @@ mod tests {
         assert!(matches!(err, TrustServiceError::InvalidReason { .. }));
     }
 
+    #[tokio::test]
+    async fn denounce_accepts_reason_at_exactly_max_len() {
+        // The boundary is inclusive: exactly DENOUNCEMENT_REASON_MAX_LEN characters
+        // must be accepted. This catches an off-by-one if the service-layer guard
+        // ever uses `<` instead of `<=` in its length check.
+        //
+        // Uses CapturingEnqueueRepo (passes all guards) to verify the action is
+        // actually enqueued rather than rejected.
+        let captured = Arc::new(Mutex::new(None));
+        let svc = DefaultTrustService::new(
+            Arc::new(CapturingEnqueueRepo {
+                captured: captured.clone(),
+            }),
+            Arc::new(PanicReputationRepo),
+        );
+        let accuser = Uuid::new_v4();
+        let target = Uuid::new_v4();
+        let reason = "x".repeat(DENOUNCEMENT_REASON_MAX_LEN);
+        svc.denounce(accuser, target, &reason).await.expect(
+            "denounce must accept reason at exactly DENOUNCEMENT_REASON_MAX_LEN characters",
+        );
+        let payload = captured.lock().unwrap().clone().unwrap();
+        assert_eq!(
+            payload["reason"].as_str().unwrap().chars().count(),
+            DENOUNCEMENT_REASON_MAX_LEN,
+            "payload reason must carry the full max-length string"
+        );
+    }
+
     /// Stub [`TrustRepo`] that simulates a user who has no active denouncement against
     /// the target and is under their daily quota, but has already consumed all
     /// permanent denouncement slots. Used to test the
