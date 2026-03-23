@@ -3695,6 +3695,177 @@ mod tests {
             "revoke_endorsement must check the daily quota for endorser_id, not subject_id"
         );
     }
+
+    // ─── denounce daily quota actor correctness ───────────────────────────────
+
+    /// Stub [`TrustRepo`] that passes all pre-enqueue guards in
+    /// [`DefaultTrustService::denounce`] (active denouncement and denouncement
+    /// slot checks) and captures the `actor_id` argument passed to
+    /// `count_daily_actions`. Used to verify that `denounce` applies the daily
+    /// quota check against `accuser_id` (not `target_id`): a bug that passed
+    /// `target_id` would allow an accuser who has hit their quota to keep filing
+    /// denouncements as long as their targets still have quota capacity —
+    /// silently bypassing the rate limit.
+    ///
+    /// `enqueue_action` deliberately returns a database error so the test can
+    /// assert on the quota actor without needing the call to succeed.
+    struct DenounceQuotaActorCapturingRepo {
+        captured_quota_actor: Arc<Mutex<Option<Uuid>>>,
+    }
+
+    #[async_trait]
+    impl TrustRepo for DenounceQuotaActorCapturingRepo {
+        async fn has_active_denouncement(&self, _: Uuid, _: Uuid) -> Result<bool, TrustRepoError> {
+            Ok(false) // no existing denouncement — guard passes
+        }
+        async fn count_daily_actions(&self, actor_id: Uuid) -> Result<i64, TrustRepoError> {
+            *self.captured_quota_actor.lock().unwrap() = Some(actor_id);
+            Ok(0) // below quota — guard passes
+        }
+        async fn count_total_denouncements_by(&self, _: Uuid) -> Result<i64, TrustRepoError> {
+            Ok(0) // below slot limit — guard passes
+        }
+        async fn enqueue_action(
+            &self,
+            _: Uuid,
+            _: ActionType,
+            _: &serde_json::Value,
+        ) -> Result<ActionRecord, TrustRepoError> {
+            Err(TrustRepoError::Database(sqlx::Error::RowNotFound))
+        }
+        async fn get_or_create_influence(
+            &self,
+            _: Uuid,
+        ) -> Result<InfluenceRecord, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn get_action(&self, _: Uuid) -> Result<ActionRecord, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn complete_action(&self, _: Uuid) -> Result<(), TrustRepoError> {
+            unimplemented!()
+        }
+        async fn fail_action(&self, _: Uuid, _: &str) -> Result<(), TrustRepoError> {
+            unimplemented!()
+        }
+        async fn create_denouncement(
+            &self,
+            _: Uuid,
+            _: Uuid,
+            _: &str,
+        ) -> Result<DenouncementRecord, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn create_denouncement_and_revoke_endorsement(
+            &self,
+            _: Uuid,
+            _: Uuid,
+            _: &str,
+        ) -> Result<DenouncementRecord, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn list_denouncements_against(
+            &self,
+            _: Uuid,
+        ) -> Result<Vec<DenouncementRecord>, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn list_denouncements_by(
+            &self,
+            _: Uuid,
+        ) -> Result<Vec<DenouncementRecord>, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn list_denouncements_by_with_username(
+            &self,
+            _: Uuid,
+        ) -> Result<Vec<DenouncementWithUsername>, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn create_invite(
+            &self,
+            _: Uuid,
+            _: &[u8],
+            _: DeliveryMethod,
+            _: Option<RelationshipDepth>,
+            _: f32,
+            _: &serde_json::Value,
+            _: chrono::DateTime<chrono::Utc>,
+        ) -> Result<InviteRecord, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn get_invite(&self, _: Uuid) -> Result<InviteRecord, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn accept_invite(&self, _: Uuid, _: Uuid) -> Result<InviteRecord, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn list_invites_by_endorser(
+            &self,
+            _: Uuid,
+        ) -> Result<Vec<InviteRecord>, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn upsert_score(
+            &self,
+            _: Uuid,
+            _: Option<Uuid>,
+            _: Option<f32>,
+            _: Option<i32>,
+            _: Option<f32>,
+        ) -> Result<(), TrustRepoError> {
+            unimplemented!()
+        }
+        async fn get_score(
+            &self,
+            _: Uuid,
+            _: Option<Uuid>,
+        ) -> Result<Option<ScoreSnapshot>, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn get_all_scores(&self, _: Uuid) -> Result<Vec<ScoreSnapshot>, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn has_identity_endorsement(
+            &self,
+            _: Uuid,
+            _: &[Uuid],
+            _: &str,
+        ) -> Result<bool, TrustRepoError> {
+            unimplemented!()
+        }
+    }
+
+    #[tokio::test]
+    async fn denounce_passes_accuser_to_count_daily_actions() {
+        // Verifies that denounce() applies the daily quota check against
+        // accuser_id, not target_id. A bug that passed target_id would allow an
+        // accuser who has hit their quota to keep filing denouncements as long as
+        // their targets still have capacity — silently bypassing the rate limit.
+        // All other denounce tests use repos that ignore the actor_id argument to
+        // count_daily_actions, so this gap would not be caught without an explicit
+        // capturing test.
+        //
+        // The enqueue_action stub returns an error to terminate the call early;
+        // we assert on the captured actor before checking the result.
+        let captured_quota_actor = Arc::new(Mutex::new(None::<Uuid>));
+        let svc = DefaultTrustService::new(
+            Arc::new(DenounceQuotaActorCapturingRepo {
+                captured_quota_actor: captured_quota_actor.clone(),
+            }),
+            Arc::new(PanicReputationRepo),
+        );
+        let accuser = Uuid::new_v4();
+        let target = Uuid::new_v4();
+        // Result is an error from enqueue_action — expected; we only care about
+        // the quota actor.
+        let _ = svc.denounce(accuser, target, "valid reason").await;
+        assert_eq!(
+            *captured_quota_actor.lock().unwrap(),
+            Some(accuser),
+            "denounce must check the daily quota for accuser_id, not target_id"
+        );
+    }
 }
 
 impl DefaultTrustService {
