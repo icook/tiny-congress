@@ -4622,6 +4622,118 @@ mod tests {
         );
     }
 
+    // ─── endorse active-slot-count actor-id correctness ──────────────────────
+
+    /// A [`ReputationRepo`] stub that returns `Ok(false)` from `has_endorsement`
+    /// (marking the caller as a non-verifier) and captures the `actor_id` passed
+    /// to `count_active_trust_endorsements_by`, then returns an error to terminate
+    /// the call early. Used to verify that [`DefaultTrustService::endorse`] checks
+    /// the *endorser's* active slot count, not the subject's.
+    ///
+    /// A bug that passed `subject_id` instead of `endorser_id` would check whether
+    /// the *subject* has available slots — granting `in_slot = true` whenever the
+    /// subject still has capacity, regardless of the endorser's own slot usage.
+    struct CapturingActiveCountRepo {
+        captured_id: Arc<Mutex<Option<Uuid>>>,
+    }
+
+    #[async_trait]
+    impl ReputationRepo for CapturingActiveCountRepo {
+        async fn has_endorsement(&self, _: Uuid, _: &str) -> Result<bool, EndorsementRepoError> {
+            Ok(false) // non-verifier — proceeds to count_active_trust_endorsements_by
+        }
+        async fn count_active_trust_endorsements_by(
+            &self,
+            actor_id: Uuid,
+        ) -> Result<i64, EndorsementRepoError> {
+            *self.captured_id.lock().unwrap() = Some(actor_id);
+            Err(EndorsementRepoError::Database(sqlx::Error::RowNotFound))
+        }
+        async fn create_endorsement(
+            &self,
+            _: Uuid,
+            _: &str,
+            _: Option<Uuid>,
+            _: Option<&serde_json::Value>,
+            _: f32,
+            _: Option<&serde_json::Value>,
+            _: bool,
+        ) -> Result<CreatedEndorsement, EndorsementRepoError> {
+            unimplemented!()
+        }
+        async fn count_all_active_trust_endorsements_by(
+            &self,
+            _: Uuid,
+        ) -> Result<i64, EndorsementRepoError> {
+            unimplemented!()
+        }
+        async fn list_endorsements_by_subject(
+            &self,
+            _: Uuid,
+        ) -> Result<Vec<EndorsementRecord>, EndorsementRepoError> {
+            unimplemented!()
+        }
+        async fn revoke_endorsement(
+            &self,
+            _: Uuid,
+            _: Uuid,
+            _: &str,
+        ) -> Result<(), EndorsementRepoError> {
+            unimplemented!()
+        }
+        async fn link_external_identity(
+            &self,
+            _: Uuid,
+            _: &str,
+            _: &str,
+        ) -> Result<ExternalIdentityRecord, ExternalIdentityRepoError> {
+            unimplemented!()
+        }
+        async fn get_external_identity_by_provider(
+            &self,
+            _: &str,
+            _: &str,
+        ) -> Result<ExternalIdentityRecord, ExternalIdentityRepoError> {
+            unimplemented!()
+        }
+    }
+
+    #[tokio::test]
+    async fn endorse_passes_endorser_id_to_count_active_trust_endorsements_by() {
+        // Verifies that endorse() checks the *endorser's* active slot count, not
+        // the subject's. A swap would check whether the subject still has available
+        // endorsement slots — granting in_slot = true to an endorser who has
+        // exhausted their own slots, as long as the subject has capacity. All other
+        // endorse tests use repos that ignore the actor_id argument to
+        // count_active_trust_endorsements_by, so this gap would not be caught
+        // without an explicit capturing test.
+        //
+        // CapturingEnqueueRepo provides the TrustRepo (passes count_daily_actions
+        // and has_active_denouncement guards). CapturingActiveCountRepo returns
+        // Ok(false) from has_endorsement (non-verifier path) and captures the
+        // actor_id passed to count_active_trust_endorsements_by, then returns an
+        // error to terminate early.
+        let captured_id = Arc::new(Mutex::new(None::<Uuid>));
+        let svc = DefaultTrustService::new(
+            Arc::new(CapturingEnqueueRepo {
+                captured: Arc::new(Mutex::new(None)),
+            }),
+            Arc::new(CapturingActiveCountRepo {
+                captured_id: captured_id.clone(),
+            }),
+        );
+        let endorser = Uuid::new_v4();
+        let subject = Uuid::new_v4();
+        // Result is an error from count_active_trust_endorsements_by — expected;
+        // we only care about which ID was passed.
+        let _ = svc.endorse(endorser, subject, 0.5, None).await;
+        assert_eq!(
+            *captured_id.lock().unwrap(),
+            Some(endorser),
+            "endorse must check the endorser's active slot count, not the subject's"
+        );
+    }
+
     #[tokio::test]
     async fn denounce_passes_accuser_to_count_total_denouncements_by() {
         // Verifies that denounce() checks the permanent denouncement slot budget
