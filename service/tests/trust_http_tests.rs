@@ -214,6 +214,24 @@ async fn test_revoke_returns_202() {
     assert_eq!(json["message"], "revocation queued");
 }
 
+#[shared_runtime_test]
+async fn test_revoke_self_returns_400() {
+    let db = isolated_db().await;
+    let (app, keys, account_id) = signup_and_get_account("selfrevoke", db.pool()).await;
+
+    let body = serde_json::json!({ "subject_id": account_id }).to_string();
+    let request = build_authed_request(
+        Method::POST,
+        "/trust/revoke",
+        &body,
+        &keys.device_signing_key,
+        &keys.device_kid,
+    );
+
+    let response = app.oneshot(request).await.expect("response");
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}
+
 // ─── Denounce ────────────────────────────────────────────────────────────────
 
 #[shared_runtime_test]
