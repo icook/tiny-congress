@@ -671,6 +671,14 @@ mod tests {
         assert!(matches!(err, TrustServiceError::InvalidWeight));
     }
 
+    #[tokio::test]
+    async fn endorse_returns_invalid_weight_for_negative() {
+        let a = Uuid::new_v4();
+        let b = Uuid::new_v4();
+        let err = make_service().endorse(a, b, -0.5, None).await.unwrap_err();
+        assert!(matches!(err, TrustServiceError::InvalidWeight));
+    }
+
     /// Stub [`TrustRepo`] that reports the daily action quota as exhausted —
     /// used to verify the [`TrustServiceError::QuotaExceeded`] guard in
     /// [`DefaultTrustService::endorse`] fires before `has_active_denouncement`.
