@@ -3370,6 +3370,19 @@ impl DefaultTrustService {
             daily_quota: DAILY_ACTION_QUOTA,
         }
     }
+
+    /// Check whether `actor_id` has reached the daily action quota.
+    ///
+    /// Returns `Ok(())` when the actor is below the limit, or
+    /// `Err(TrustServiceError::QuotaExceeded)` when the limit is reached.
+    /// Propagates any repo error as `TrustServiceError::Repo`.
+    async fn check_daily_quota(&self, actor_id: Uuid) -> Result<(), TrustServiceError> {
+        let daily_count = self.trust_repo.count_daily_actions(actor_id).await?;
+        if daily_count >= self.daily_quota {
+            return Err(TrustServiceError::QuotaExceeded);
+        }
+        Ok(())
+    }
 }
 
 #[async_trait]
@@ -3389,10 +3402,7 @@ impl TrustService for DefaultTrustService {
             return Err(TrustServiceError::InvalidWeight);
         }
 
-        let daily_count = self.trust_repo.count_daily_actions(endorser_id).await?;
-        if daily_count >= self.daily_quota {
-            return Err(TrustServiceError::QuotaExceeded);
-        }
+        self.check_daily_quota(endorser_id).await?;
 
         // Denouncement and endorsement are mutually exclusive: cannot endorse
         // someone you have denounced (ADR-024).
@@ -3442,10 +3452,7 @@ impl TrustService for DefaultTrustService {
             return Err(TrustServiceError::SelfAction);
         }
 
-        let daily_count = self.trust_repo.count_daily_actions(endorser_id).await?;
-        if daily_count >= self.daily_quota {
-            return Err(TrustServiceError::QuotaExceeded);
-        }
+        self.check_daily_quota(endorser_id).await?;
 
         let payload = json!({ "subject_id": subject_id });
         self.trust_repo
@@ -3482,10 +3489,7 @@ impl TrustService for DefaultTrustService {
             return Err(TrustServiceError::AlreadyDenounced);
         }
 
-        let daily_count = self.trust_repo.count_daily_actions(accuser_id).await?;
-        if daily_count >= self.daily_quota {
-            return Err(TrustServiceError::QuotaExceeded);
-        }
+        self.check_daily_quota(accuser_id).await?;
 
         let total_denouncements = self
             .trust_repo
