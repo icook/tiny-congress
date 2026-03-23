@@ -365,6 +365,107 @@ async fn denouncement_without_endorsement_succeeds() {
 // Task 4: Mutual Exclusion — Cannot Endorse After Denouncing
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// has_active_denouncement
+// ---------------------------------------------------------------------------
+
+#[shared_runtime_test]
+async fn test_has_active_denouncement_returns_true_when_active() {
+    let db = isolated_db().await;
+    let pool = db.pool().clone();
+
+    let accuser = AccountFactory::new()
+        .with_seed(70)
+        .create(&pool)
+        .await
+        .expect("create accuser");
+
+    let target = AccountFactory::new()
+        .with_seed(71)
+        .create(&pool)
+        .await
+        .expect("create target");
+
+    let repo = PgTrustRepo::new(pool);
+    repo.create_denouncement(accuser.id, target.id, "reason")
+        .await
+        .expect("create denouncement");
+
+    let result = repo
+        .has_active_denouncement(accuser.id, target.id)
+        .await
+        .expect("has_active_denouncement");
+
+    assert!(result, "expected true for active denouncement");
+}
+
+#[shared_runtime_test]
+async fn test_has_active_denouncement_returns_false_when_none() {
+    let db = isolated_db().await;
+    let pool = db.pool().clone();
+
+    let accuser = AccountFactory::new()
+        .with_seed(72)
+        .create(&pool)
+        .await
+        .expect("create accuser");
+
+    let target = AccountFactory::new()
+        .with_seed(73)
+        .create(&pool)
+        .await
+        .expect("create target");
+
+    let repo = PgTrustRepo::new(pool);
+
+    let result = repo
+        .has_active_denouncement(accuser.id, target.id)
+        .await
+        .expect("has_active_denouncement");
+
+    assert!(!result, "expected false when no denouncement exists");
+}
+
+#[shared_runtime_test]
+async fn test_has_active_denouncement_returns_false_when_resolved() {
+    let db = isolated_db().await;
+    let pool = db.pool().clone();
+
+    let accuser = AccountFactory::new()
+        .with_seed(74)
+        .create(&pool)
+        .await
+        .expect("create accuser");
+
+    let target = AccountFactory::new()
+        .with_seed(75)
+        .create(&pool)
+        .await
+        .expect("create target");
+
+    let repo = PgTrustRepo::new(pool.clone());
+    repo.create_denouncement(accuser.id, target.id, "reason")
+        .await
+        .expect("create denouncement");
+
+    sqlx::query(
+        "UPDATE trust__denouncements SET resolved_at = NOW() \
+         WHERE accuser_id = $1 AND target_id = $2",
+    )
+    .bind(accuser.id)
+    .bind(target.id)
+    .execute(&pool)
+    .await
+    .expect("resolve denouncement");
+
+    let result = repo
+        .has_active_denouncement(accuser.id, target.id)
+        .await
+        .expect("has_active_denouncement");
+
+    assert!(!result, "expected false for resolved denouncement");
+}
+
 /// After A denounces B, A must not be able to endorse B.
 /// The service layer must reject the endorsement attempt with DenouncementConflict.
 #[shared_runtime_test]
