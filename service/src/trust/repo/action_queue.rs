@@ -69,7 +69,7 @@ pub(super) async fn get_action(
 }
 
 pub(super) async fn complete_action(pool: &PgPool, action_id: Uuid) -> Result<(), TrustRepoError> {
-    sqlx::query(
+    let result = sqlx::query(
         "UPDATE trust__action_log \
          SET status = 'completed', processed_at = now() \
          WHERE id = $1",
@@ -77,6 +77,10 @@ pub(super) async fn complete_action(pool: &PgPool, action_id: Uuid) -> Result<()
     .bind(action_id)
     .execute(pool)
     .await?;
+
+    if result.rows_affected() == 0 {
+        return Err(TrustRepoError::NotFound);
+    }
 
     Ok(())
 }
@@ -98,7 +102,7 @@ pub(super) async fn fail_action(
 ) -> Result<(), TrustRepoError> {
     let error = truncate_error_message(error);
 
-    sqlx::query(
+    let result = sqlx::query(
         "UPDATE trust__action_log \
          SET status = 'failed', error_message = $2, processed_at = now() \
          WHERE id = $1",
@@ -107,6 +111,10 @@ pub(super) async fn fail_action(
     .bind(error)
     .execute(pool)
     .await?;
+
+    if result.rows_affected() == 0 {
+        return Err(TrustRepoError::NotFound);
+    }
 
     Ok(())
 }
