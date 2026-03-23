@@ -734,4 +734,17 @@ mod tests {
             "got: {err}"
         );
     }
+
+    #[test]
+    fn parse_denounce_payload_accepts_reason_at_exactly_max_len() {
+        // The boundary is inclusive: exactly DENOUNCEMENT_REASON_MAX_LEN characters
+        // must be accepted. This test catches an off-by-one in the length check
+        // at the parse layer (is_valid_reason uses `<=`, not `<`).
+        let target_id = Uuid::new_v4();
+        let reason = "x".repeat(DENOUNCEMENT_REASON_MAX_LEN);
+        let payload = json!({ "target_id": target_id.to_string(), "reason": reason });
+        let (tid, parsed_reason) = parse_denounce_payload(&payload).unwrap();
+        assert_eq!(tid, target_id);
+        assert_eq!(parsed_reason.chars().count(), DENOUNCEMENT_REASON_MAX_LEN);
+    }
 }
