@@ -6,8 +6,9 @@ use common::factories::AccountFactory;
 use common::test_db::isolated_db;
 use tc_test_macros::shared_runtime_test;
 use tinycongress_api::trust::repo::action_queue::ERROR_MESSAGE_MAX_LEN;
-use tinycongress_api::trust::repo::{PgTrustRepo, TrustRepo};
+use tinycongress_api::trust::repo::{PgTrustRepo, TrustRepo, TrustRepoError};
 use tinycongress_api::trust::service::ActionType;
+use uuid::Uuid;
 
 #[shared_runtime_test]
 async fn test_enqueue_action_creates_pending() {
@@ -92,6 +93,20 @@ async fn test_get_action() {
     assert_eq!(fetched.actor_id, account.id);
     assert_eq!(fetched.action_type, "endorse");
     assert_eq!(fetched.status, "pending");
+}
+
+#[shared_runtime_test]
+async fn test_get_action_returns_notfound_for_unknown_id() {
+    let db = isolated_db().await;
+    let pool = db.pool().clone();
+
+    let repo = PgTrustRepo::new(pool);
+    let result = repo.get_action(Uuid::new_v4()).await;
+
+    assert!(
+        matches!(result, Err(TrustRepoError::NotFound)),
+        "expected NotFound for unknown action id, got: {result:?}"
+    );
 }
 
 #[shared_runtime_test]
