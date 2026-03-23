@@ -3890,6 +3890,183 @@ mod tests {
         );
     }
 
+    // ─── revoke enqueue actor-id correctness ─────────────────────────────────
+
+    /// Stub [`TrustRepo`] that passes the quota guard in
+    /// [`DefaultTrustService::revoke_endorsement`] and captures the `actor_id`
+    /// passed to `enqueue_action`. Used to verify that `revoke_endorsement`
+    /// records the action against `endorser_id`, not `subject_id`: a swap would
+    /// attribute the revocation to the subject in `trust__action_log`, causing
+    /// the quota to count against the wrong user on future actions.
+    ///
+    /// Unlike `RevokeQuotaActorCapturingRepo` (which terminates at
+    /// `enqueue_action` with an error), this stub lets `enqueue_action` succeed
+    /// so the test can assert on the actor recorded there rather than the quota
+    /// actor.
+    struct RevokeEnqueueActorCapturingRepo {
+        captured_actor: Arc<Mutex<Option<Uuid>>>,
+    }
+
+    #[async_trait]
+    impl TrustRepo for RevokeEnqueueActorCapturingRepo {
+        async fn count_daily_actions(&self, _: Uuid) -> Result<i64, TrustRepoError> {
+            Ok(0) // below quota — guard passes
+        }
+        async fn enqueue_action(
+            &self,
+            actor_id: Uuid,
+            action_type: ActionType,
+            payload: &serde_json::Value,
+        ) -> Result<ActionRecord, TrustRepoError> {
+            *self.captured_actor.lock().unwrap() = Some(actor_id);
+            Ok(ActionRecord {
+                id: Uuid::new_v4(),
+                actor_id,
+                action_type: action_type.as_str().to_string(),
+                payload: payload.clone(),
+                status: "pending".to_string(),
+                quota_date: chrono::Utc::now().date_naive(),
+                error_message: None,
+                created_at: chrono::Utc::now(),
+                processed_at: None,
+            })
+        }
+        async fn get_or_create_influence(
+            &self,
+            _: Uuid,
+        ) -> Result<InfluenceRecord, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn get_action(&self, _: Uuid) -> Result<ActionRecord, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn complete_action(&self, _: Uuid) -> Result<(), TrustRepoError> {
+            unimplemented!()
+        }
+        async fn fail_action(&self, _: Uuid, _: &str) -> Result<(), TrustRepoError> {
+            unimplemented!()
+        }
+        async fn create_denouncement(
+            &self,
+            _: Uuid,
+            _: Uuid,
+            _: &str,
+        ) -> Result<DenouncementRecord, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn create_denouncement_and_revoke_endorsement(
+            &self,
+            _: Uuid,
+            _: Uuid,
+            _: &str,
+        ) -> Result<DenouncementRecord, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn list_denouncements_against(
+            &self,
+            _: Uuid,
+        ) -> Result<Vec<DenouncementRecord>, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn list_denouncements_by(
+            &self,
+            _: Uuid,
+        ) -> Result<Vec<DenouncementRecord>, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn list_denouncements_by_with_username(
+            &self,
+            _: Uuid,
+        ) -> Result<Vec<DenouncementWithUsername>, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn count_total_denouncements_by(&self, _: Uuid) -> Result<i64, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn has_active_denouncement(&self, _: Uuid, _: Uuid) -> Result<bool, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn create_invite(
+            &self,
+            _: Uuid,
+            _: &[u8],
+            _: DeliveryMethod,
+            _: Option<RelationshipDepth>,
+            _: f32,
+            _: &serde_json::Value,
+            _: chrono::DateTime<chrono::Utc>,
+        ) -> Result<InviteRecord, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn get_invite(&self, _: Uuid) -> Result<InviteRecord, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn accept_invite(&self, _: Uuid, _: Uuid) -> Result<InviteRecord, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn list_invites_by_endorser(
+            &self,
+            _: Uuid,
+        ) -> Result<Vec<InviteRecord>, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn upsert_score(
+            &self,
+            _: Uuid,
+            _: Option<Uuid>,
+            _: Option<f32>,
+            _: Option<i32>,
+            _: Option<f32>,
+        ) -> Result<(), TrustRepoError> {
+            unimplemented!()
+        }
+        async fn get_score(
+            &self,
+            _: Uuid,
+            _: Option<Uuid>,
+        ) -> Result<Option<ScoreSnapshot>, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn get_all_scores(&self, _: Uuid) -> Result<Vec<ScoreSnapshot>, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn has_identity_endorsement(
+            &self,
+            _: Uuid,
+            _: &[Uuid],
+            _: &str,
+        ) -> Result<bool, TrustRepoError> {
+            unimplemented!()
+        }
+    }
+
+    #[tokio::test]
+    async fn revoke_endorsement_enqueues_action_with_endorser_as_actor() {
+        // Verifies that revoke_endorsement() records the action against endorser_id
+        // (not subject_id) in the action log. A swap would attribute the revocation
+        // to the subject: the subject's daily quota would be debited on subsequent
+        // actions instead of the endorser's, silently bypassing rate limiting.
+        //
+        // This is distinct from the payload-content test (which checks that
+        // subject_id appears inside the payload JSON) — here we verify the
+        // actor_id column of the enqueued record, which is used for quota counting.
+        let captured_actor = Arc::new(Mutex::new(None::<Uuid>));
+        let svc = DefaultTrustService::new(
+            Arc::new(RevokeEnqueueActorCapturingRepo {
+                captured_actor: captured_actor.clone(),
+            }),
+            Arc::new(PanicReputationRepo),
+        );
+        let endorser = Uuid::new_v4();
+        let subject = Uuid::new_v4();
+        svc.revoke_endorsement(endorser, subject).await.unwrap();
+        assert_eq!(
+            *captured_actor.lock().unwrap(),
+            Some(endorser),
+            "revoke_endorsement must enqueue the action with endorser_id as actor, not subject_id"
+        );
+    }
+
     // ─── denounce daily quota actor correctness ───────────────────────────────
 
     /// Stub [`TrustRepo`] that passes all pre-enqueue guards in
