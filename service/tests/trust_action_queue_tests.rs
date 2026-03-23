@@ -230,6 +230,34 @@ async fn test_fail_action_truncates_long_error_message() {
     );
 }
 
+#[shared_runtime_test]
+async fn test_complete_action_returns_notfound_for_unknown_id() {
+    let db = isolated_db().await;
+    let pool = db.pool().clone();
+
+    let repo = PgTrustRepo::new(pool);
+    let result = repo.complete_action(Uuid::new_v4()).await;
+
+    assert!(
+        matches!(result, Err(TrustRepoError::NotFound)),
+        "expected NotFound for unknown action id, got: {result:?}"
+    );
+}
+
+#[shared_runtime_test]
+async fn test_fail_action_returns_notfound_for_unknown_id() {
+    let db = isolated_db().await;
+    let pool = db.pool().clone();
+
+    let repo = PgTrustRepo::new(pool);
+    let result = repo.fail_action(Uuid::new_v4(), "some error").await;
+
+    assert!(
+        matches!(result, Err(TrustRepoError::NotFound)),
+        "expected NotFound for unknown action id, got: {result:?}"
+    );
+}
+
 /// Verify that `fail_action` truncates at a character boundary for multibyte strings.
 ///
 /// The truncation code uses `char_indices().nth(ERROR_MESSAGE_MAX_LEN)` which is
