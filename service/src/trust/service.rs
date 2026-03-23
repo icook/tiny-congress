@@ -4508,6 +4508,120 @@ mod tests {
         );
     }
 
+    // ─── endorse verifier-check actor-id correctness ─────────────────────────
+
+    /// A [`ReputationRepo`] stub that captures the `user_id` passed to
+    /// `has_endorsement` and immediately returns an error to terminate the call
+    /// early. Used to verify that [`DefaultTrustService::endorse`] checks the
+    /// *endorser's* verifier status, not the subject's.
+    ///
+    /// A bug that passed `subject_id` instead of `endorser_id` would check
+    /// whether the *subject* has the verifier endorsement — granting slot-limit
+    /// exemption to the endorser whenever the subject is a verifier, rather than
+    /// when the endorser is.
+    struct CapturingVerifierCheckRepo {
+        captured_id: Arc<Mutex<Option<Uuid>>>,
+    }
+
+    #[async_trait]
+    impl ReputationRepo for CapturingVerifierCheckRepo {
+        async fn has_endorsement(
+            &self,
+            subject: Uuid,
+            _: &str,
+        ) -> Result<bool, EndorsementRepoError> {
+            *self.captured_id.lock().unwrap() = Some(subject);
+            Err(EndorsementRepoError::NotFound)
+        }
+        async fn count_active_trust_endorsements_by(
+            &self,
+            _: Uuid,
+        ) -> Result<i64, EndorsementRepoError> {
+            unimplemented!()
+        }
+        async fn create_endorsement(
+            &self,
+            _: Uuid,
+            _: &str,
+            _: Option<Uuid>,
+            _: Option<&serde_json::Value>,
+            _: f32,
+            _: Option<&serde_json::Value>,
+            _: bool,
+        ) -> Result<CreatedEndorsement, EndorsementRepoError> {
+            unimplemented!()
+        }
+        async fn count_all_active_trust_endorsements_by(
+            &self,
+            _: Uuid,
+        ) -> Result<i64, EndorsementRepoError> {
+            unimplemented!()
+        }
+        async fn list_endorsements_by_subject(
+            &self,
+            _: Uuid,
+        ) -> Result<Vec<EndorsementRecord>, EndorsementRepoError> {
+            unimplemented!()
+        }
+        async fn revoke_endorsement(
+            &self,
+            _: Uuid,
+            _: Uuid,
+            _: &str,
+        ) -> Result<(), EndorsementRepoError> {
+            unimplemented!()
+        }
+        async fn link_external_identity(
+            &self,
+            _: Uuid,
+            _: &str,
+            _: &str,
+        ) -> Result<ExternalIdentityRecord, ExternalIdentityRepoError> {
+            unimplemented!()
+        }
+        async fn get_external_identity_by_provider(
+            &self,
+            _: &str,
+            _: &str,
+        ) -> Result<ExternalIdentityRecord, ExternalIdentityRepoError> {
+            unimplemented!()
+        }
+    }
+
+    #[tokio::test]
+    async fn endorse_passes_endorser_id_to_has_endorsement() {
+        // Verifies that endorse() checks the *endorser's* verifier status, not
+        // the subject's. A swap would grant slot-limit exemption whenever the
+        // subject is a verifier rather than the endorser. All other verifier-check
+        // tests use repos that ignore which user_id is passed to has_endorsement
+        // (`StubReputationRepo`, `ErrorHasEndorsementRepo`), so this gap would not
+        // be caught without an explicit capturing test.
+        //
+        // Uses CapturingEnqueueRepo for TrustRepo (passes count_daily_actions and
+        // has_active_denouncement guards). CapturingVerifierCheckRepo returns an
+        // error from has_endorsement to terminate early; we only care about the
+        // captured ID.
+        let captured_id = Arc::new(Mutex::new(None::<Uuid>));
+        let svc = DefaultTrustService::new(
+            Arc::new(CapturingEnqueueRepo {
+                captured: Arc::new(Mutex::new(None)),
+            }),
+            Arc::new(CapturingVerifierCheckRepo {
+                captured_id: captured_id.clone(),
+            }),
+        );
+        let endorser = Uuid::new_v4();
+        let subject = Uuid::new_v4();
+        // Result is an error from has_endorsement — expected; we only care about
+        // which ID was passed.
+        let _ = svc.endorse(endorser, subject, 0.5, None).await;
+        assert_eq!(
+            *captured_id.lock().unwrap(),
+            Some(endorser),
+            "endorse must check the endorser's verifier status, not the subject's"
+        );
+    }
+
     #[tokio::test]
     async fn denounce_passes_accuser_to_count_total_denouncements_by() {
         // Verifies that denounce() checks the permanent denouncement slot budget
