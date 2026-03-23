@@ -4622,6 +4622,119 @@ mod tests {
         );
     }
 
+    // ─── endorse verifier-check topic correctness ────────────────────────────
+
+    /// A [`ReputationRepo`] stub that captures the topic string passed to
+    /// `has_endorsement` and immediately returns an error to terminate the call
+    /// early. Used to verify that [`DefaultTrustService::endorse`] queries the
+    /// `"authorized_verifier"` topic specifically.
+    ///
+    /// A bug that passed the wrong topic (e.g., `"trust"`, `"verifier"`) would
+    /// silently grant or deny the slot-limit exemption to all users depending on
+    /// which endorsement they hold. No existing test captures the topic argument
+    /// because other stubs discard it (`_: &str`).
+    struct CapturingVerifierTopicRepo {
+        captured_topic: Arc<Mutex<Option<String>>>,
+    }
+
+    #[async_trait]
+    impl ReputationRepo for CapturingVerifierTopicRepo {
+        async fn has_endorsement(
+            &self,
+            _: Uuid,
+            topic: &str,
+        ) -> Result<bool, EndorsementRepoError> {
+            *self.captured_topic.lock().unwrap() = Some(topic.to_string());
+            Err(EndorsementRepoError::NotFound)
+        }
+        async fn count_active_trust_endorsements_by(
+            &self,
+            _: Uuid,
+        ) -> Result<i64, EndorsementRepoError> {
+            unimplemented!()
+        }
+        async fn create_endorsement(
+            &self,
+            _: Uuid,
+            _: &str,
+            _: Option<Uuid>,
+            _: Option<&serde_json::Value>,
+            _: f32,
+            _: Option<&serde_json::Value>,
+            _: bool,
+        ) -> Result<CreatedEndorsement, EndorsementRepoError> {
+            unimplemented!()
+        }
+        async fn count_all_active_trust_endorsements_by(
+            &self,
+            _: Uuid,
+        ) -> Result<i64, EndorsementRepoError> {
+            unimplemented!()
+        }
+        async fn list_endorsements_by_subject(
+            &self,
+            _: Uuid,
+        ) -> Result<Vec<EndorsementRecord>, EndorsementRepoError> {
+            unimplemented!()
+        }
+        async fn revoke_endorsement(
+            &self,
+            _: Uuid,
+            _: Uuid,
+            _: &str,
+        ) -> Result<(), EndorsementRepoError> {
+            unimplemented!()
+        }
+        async fn link_external_identity(
+            &self,
+            _: Uuid,
+            _: &str,
+            _: &str,
+        ) -> Result<ExternalIdentityRecord, ExternalIdentityRepoError> {
+            unimplemented!()
+        }
+        async fn get_external_identity_by_provider(
+            &self,
+            _: &str,
+            _: &str,
+        ) -> Result<ExternalIdentityRecord, ExternalIdentityRepoError> {
+            unimplemented!()
+        }
+    }
+
+    #[tokio::test]
+    async fn endorse_passes_authorized_verifier_topic_to_has_endorsement() {
+        // Verifies that endorse() queries the "authorized_verifier" topic when
+        // checking slot-limit exemption. A wrong topic (e.g. "trust" or "verifier")
+        // would silently grant or deny the exemption to the wrong users. All other
+        // endorse tests use stubs that discard the topic argument (`_: &str`), so
+        // this invariant is not covered elsewhere.
+        //
+        // Uses CapturingEnqueueRepo for TrustRepo (passes count_daily_actions and
+        // has_active_denouncement guards). CapturingVerifierTopicRepo returns an
+        // error from has_endorsement to terminate early; we only care about the
+        // captured topic.
+        let captured_topic = Arc::new(Mutex::new(None::<String>));
+        let svc = DefaultTrustService::new(
+            Arc::new(CapturingEnqueueRepo {
+                captured: Arc::new(Mutex::new(None)),
+            }),
+            Arc::new(CapturingVerifierTopicRepo {
+                captured_topic: captured_topic.clone(),
+            }),
+        );
+        let endorser = Uuid::new_v4();
+        let subject = Uuid::new_v4();
+        // Result is an error from has_endorsement — expected; we only care about
+        // which topic was passed.
+        let _ = svc.endorse(endorser, subject, 0.5, None).await;
+        assert_eq!(
+            captured_topic.lock().unwrap().as_deref(),
+            Some("authorized_verifier"),
+            "endorse must query the 'authorized_verifier' topic, not some other string"
+        );
+    }
+
     // ─── endorse active-slot-count actor-id correctness ──────────────────────
 
     /// A [`ReputationRepo`] stub that returns `Ok(false)` from `has_endorsement`
