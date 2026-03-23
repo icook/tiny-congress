@@ -628,6 +628,27 @@ mod tests {
     }
 
     #[test]
+    fn parse_denounce_payload_errors_when_target_id_is_not_a_string() {
+        let payload = json!({ "target_id": 42, "reason": "harmful conduct" });
+        let err = parse_denounce_payload(&payload).unwrap_err();
+        assert!(
+            matches!(err, TrustActionError::InvalidPayload(ref msg) if msg.contains("target_id")),
+            "got: {err}"
+        );
+    }
+
+    #[test]
+    fn parse_denounce_payload_errors_when_target_id_is_invalid_uuid() {
+        let payload = json!({ "target_id": "not-a-uuid", "reason": "harmful conduct" });
+        let err = parse_denounce_payload(&payload).unwrap_err();
+        assert!(
+            matches!(err, TrustActionError::InvalidPayload(ref msg)
+                if msg.contains("target_id") && msg.contains("not a valid UUID")),
+            "got: {err}"
+        );
+    }
+
+    #[test]
     fn parse_denounce_payload_errors_when_reason_is_missing() {
         let target_id = Uuid::new_v4();
         let payload = json!({ "target_id": target_id.to_string() });
