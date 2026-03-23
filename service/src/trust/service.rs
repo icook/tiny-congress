@@ -4012,6 +4012,184 @@ mod tests {
             "denounce must check the daily quota for accuser_id, not target_id"
         );
     }
+
+    // ─── denounce has_active_denouncement ID-order correctness ───────────────
+
+    /// Stub [`TrustRepo`] that captures both ID arguments passed to
+    /// `has_active_denouncement` and returns an error, terminating the call
+    /// early. Used to verify that `denounce` passes `(accuser_id, target_id)`
+    /// — not `(target_id, accuser_id)` — to the check: a swap would query the
+    /// wrong direction of the denouncement relationship, allowing the accuser
+    /// to file a duplicate denouncement undetected.
+    struct DenounceHasActiveCapturingRepo {
+        captured: Arc<Mutex<Option<(Uuid, Uuid)>>>,
+    }
+
+    #[async_trait]
+    impl TrustRepo for DenounceHasActiveCapturingRepo {
+        async fn has_active_denouncement(
+            &self,
+            first: Uuid,
+            second: Uuid,
+        ) -> Result<bool, TrustRepoError> {
+            *self.captured.lock().unwrap() = Some((first, second));
+            Err(TrustRepoError::Database(sqlx::Error::RowNotFound))
+        }
+        async fn count_daily_actions(&self, _: Uuid) -> Result<i64, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn enqueue_action(
+            &self,
+            _: Uuid,
+            _: ActionType,
+            _: &serde_json::Value,
+        ) -> Result<ActionRecord, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn get_or_create_influence(
+            &self,
+            _: Uuid,
+        ) -> Result<InfluenceRecord, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn get_action(&self, _: Uuid) -> Result<ActionRecord, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn complete_action(&self, _: Uuid) -> Result<(), TrustRepoError> {
+            unimplemented!()
+        }
+        async fn fail_action(&self, _: Uuid, _: &str) -> Result<(), TrustRepoError> {
+            unimplemented!()
+        }
+        async fn create_denouncement(
+            &self,
+            _: Uuid,
+            _: Uuid,
+            _: &str,
+        ) -> Result<DenouncementRecord, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn create_denouncement_and_revoke_endorsement(
+            &self,
+            _: Uuid,
+            _: Uuid,
+            _: &str,
+        ) -> Result<DenouncementRecord, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn list_denouncements_against(
+            &self,
+            _: Uuid,
+        ) -> Result<Vec<DenouncementRecord>, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn list_denouncements_by(
+            &self,
+            _: Uuid,
+        ) -> Result<Vec<DenouncementRecord>, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn list_denouncements_by_with_username(
+            &self,
+            _: Uuid,
+        ) -> Result<Vec<DenouncementWithUsername>, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn count_total_denouncements_by(&self, _: Uuid) -> Result<i64, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn create_invite(
+            &self,
+            _: Uuid,
+            _: &[u8],
+            _: DeliveryMethod,
+            _: Option<RelationshipDepth>,
+            _: f32,
+            _: &serde_json::Value,
+            _: chrono::DateTime<chrono::Utc>,
+        ) -> Result<InviteRecord, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn get_invite(&self, _: Uuid) -> Result<InviteRecord, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn accept_invite(&self, _: Uuid, _: Uuid) -> Result<InviteRecord, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn list_invites_by_endorser(
+            &self,
+            _: Uuid,
+        ) -> Result<Vec<InviteRecord>, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn upsert_score(
+            &self,
+            _: Uuid,
+            _: Option<Uuid>,
+            _: Option<f32>,
+            _: Option<i32>,
+            _: Option<f32>,
+        ) -> Result<(), TrustRepoError> {
+            unimplemented!()
+        }
+        async fn get_score(
+            &self,
+            _: Uuid,
+            _: Option<Uuid>,
+        ) -> Result<Option<ScoreSnapshot>, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn get_all_scores(&self, _: Uuid) -> Result<Vec<ScoreSnapshot>, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn has_identity_endorsement(
+            &self,
+            _: Uuid,
+            _: &[Uuid],
+            _: &str,
+        ) -> Result<bool, TrustRepoError> {
+            unimplemented!()
+        }
+    }
+
+    #[tokio::test]
+    async fn denounce_passes_accuser_id_and_target_id_to_has_active_denouncement() {
+        // Verifies that denounce() passes (accuser_id, target_id) — not
+        // (target_id, accuser_id) — to has_active_denouncement. A swap would
+        // query the wrong direction of the denouncement relationship: it would
+        // check whether the target has already denounced the accuser, not
+        // whether the accuser has already denounced the target. That would
+        // allow the accuser to file duplicate denouncements undetected.
+        // All other denounce tests use repos that ignore the ID arguments to
+        // has_active_denouncement, so this gap would not be caught without an
+        // explicit capturing test.
+        //
+        // The stub returns an error from has_active_denouncement to terminate
+        // the call early; we assert on the captured IDs before checking the
+        // result.
+        let captured = Arc::new(Mutex::new(None::<(Uuid, Uuid)>));
+        let svc = DefaultTrustService::new(
+            Arc::new(DenounceHasActiveCapturingRepo {
+                captured: captured.clone(),
+            }),
+            Arc::new(PanicReputationRepo),
+        );
+        let accuser = Uuid::new_v4();
+        let target = Uuid::new_v4();
+        // Result is an error from has_active_denouncement — expected; we only
+        // care about the captured IDs.
+        let _ = svc.denounce(accuser, target, "valid reason").await;
+        let ids = captured.lock().unwrap();
+        let (first, second) = ids.expect("has_active_denouncement must have been called");
+        assert_eq!(
+            first, accuser,
+            "denounce must pass accuser_id as the first arg to has_active_denouncement"
+        );
+        assert_eq!(
+            second, target,
+            "denounce must pass target_id as the second arg to has_active_denouncement"
+        );
+    }
 }
 
 impl DefaultTrustService {
