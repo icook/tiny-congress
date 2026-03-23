@@ -290,6 +290,20 @@ async fn test_get_invite_returns_notfound_for_unknown_id() {
 }
 
 #[shared_runtime_test]
+async fn test_accept_invite_returns_notfound_for_unknown_id() {
+    let db = isolated_db().await;
+    let pool = db.pool().clone();
+
+    let repo = PgTrustRepo::new(pool);
+    let result = repo.accept_invite(Uuid::new_v4(), Uuid::new_v4()).await;
+
+    assert!(
+        matches!(result, Err(TrustRepoError::NotFound)),
+        "expected NotFound for unknown invite id, got: {result:?}"
+    );
+}
+
+#[shared_runtime_test]
 async fn test_invite_weight_defaults_to_one() {
     let db = isolated_db().await;
     let pool = db.pool().clone();
