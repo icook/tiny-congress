@@ -4013,6 +4013,184 @@ mod tests {
         );
     }
 
+    // ─── endorse has_active_denouncement ID-order correctness ────────────────
+
+    /// Stub [`TrustRepo`] that passes the daily-quota guard and captures both
+    /// ID arguments passed to `has_active_denouncement`, then returns an error
+    /// to terminate early. Used to verify that `endorse` passes
+    /// `(endorser_id, subject_id)` — not `(subject_id, endorser_id)` — to the
+    /// check: a swap would query whether the *subject* has denounced the
+    /// *endorser*, not whether the endorser has denounced the subject, silently
+    /// allowing endorsement of a denounced user (bypasses ADR-024).
+    struct EndorseHasActiveCapturingRepo {
+        captured: Arc<Mutex<Option<(Uuid, Uuid)>>>,
+    }
+
+    #[async_trait]
+    impl TrustRepo for EndorseHasActiveCapturingRepo {
+        async fn count_daily_actions(&self, _: Uuid) -> Result<i64, TrustRepoError> {
+            Ok(0) // below quota — guard passes so has_active_denouncement is reached
+        }
+        async fn has_active_denouncement(
+            &self,
+            first: Uuid,
+            second: Uuid,
+        ) -> Result<bool, TrustRepoError> {
+            *self.captured.lock().unwrap() = Some((first, second));
+            Err(TrustRepoError::Database(sqlx::Error::RowNotFound))
+        }
+        async fn get_or_create_influence(
+            &self,
+            _: Uuid,
+        ) -> Result<InfluenceRecord, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn enqueue_action(
+            &self,
+            _: Uuid,
+            _: ActionType,
+            _: &serde_json::Value,
+        ) -> Result<ActionRecord, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn get_action(&self, _: Uuid) -> Result<ActionRecord, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn complete_action(&self, _: Uuid) -> Result<(), TrustRepoError> {
+            unimplemented!()
+        }
+        async fn fail_action(&self, _: Uuid, _: &str) -> Result<(), TrustRepoError> {
+            unimplemented!()
+        }
+        async fn create_denouncement(
+            &self,
+            _: Uuid,
+            _: Uuid,
+            _: &str,
+        ) -> Result<DenouncementRecord, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn create_denouncement_and_revoke_endorsement(
+            &self,
+            _: Uuid,
+            _: Uuid,
+            _: &str,
+        ) -> Result<DenouncementRecord, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn list_denouncements_against(
+            &self,
+            _: Uuid,
+        ) -> Result<Vec<DenouncementRecord>, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn list_denouncements_by(
+            &self,
+            _: Uuid,
+        ) -> Result<Vec<DenouncementRecord>, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn list_denouncements_by_with_username(
+            &self,
+            _: Uuid,
+        ) -> Result<Vec<DenouncementWithUsername>, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn count_total_denouncements_by(&self, _: Uuid) -> Result<i64, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn create_invite(
+            &self,
+            _: Uuid,
+            _: &[u8],
+            _: DeliveryMethod,
+            _: Option<RelationshipDepth>,
+            _: f32,
+            _: &serde_json::Value,
+            _: chrono::DateTime<chrono::Utc>,
+        ) -> Result<InviteRecord, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn get_invite(&self, _: Uuid) -> Result<InviteRecord, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn accept_invite(&self, _: Uuid, _: Uuid) -> Result<InviteRecord, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn list_invites_by_endorser(
+            &self,
+            _: Uuid,
+        ) -> Result<Vec<InviteRecord>, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn upsert_score(
+            &self,
+            _: Uuid,
+            _: Option<Uuid>,
+            _: Option<f32>,
+            _: Option<i32>,
+            _: Option<f32>,
+        ) -> Result<(), TrustRepoError> {
+            unimplemented!()
+        }
+        async fn get_score(
+            &self,
+            _: Uuid,
+            _: Option<Uuid>,
+        ) -> Result<Option<ScoreSnapshot>, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn get_all_scores(&self, _: Uuid) -> Result<Vec<ScoreSnapshot>, TrustRepoError> {
+            unimplemented!()
+        }
+        async fn has_identity_endorsement(
+            &self,
+            _: Uuid,
+            _: &[Uuid],
+            _: &str,
+        ) -> Result<bool, TrustRepoError> {
+            unimplemented!()
+        }
+    }
+
+    #[tokio::test]
+    async fn endorse_passes_endorser_id_and_subject_id_to_has_active_denouncement() {
+        // Verifies that endorse() passes (endorser_id, subject_id) — not
+        // (subject_id, endorser_id) — to has_active_denouncement. A swap would
+        // check whether the *subject* has denounced the *endorser*, not whether
+        // the endorser has already denounced the subject. That would silently
+        // allow an endorser to endorse a user they have previously denounced,
+        // bypassing ADR-024's mutual-exclusivity guarantee.
+        // All other endorse tests use repos that ignore the ID arguments to
+        // has_active_denouncement, so this gap would not be caught without an
+        // explicit capturing test.
+        //
+        // The stub returns an error from has_active_denouncement to terminate
+        // the call early; we assert on the captured IDs before checking the result.
+        let captured = Arc::new(Mutex::new(None::<(Uuid, Uuid)>));
+        let svc = DefaultTrustService::new(
+            Arc::new(EndorseHasActiveCapturingRepo {
+                captured: captured.clone(),
+            }),
+            Arc::new(PanicReputationRepo),
+        );
+        let endorser = Uuid::new_v4();
+        let subject = Uuid::new_v4();
+        // Result is an error from has_active_denouncement — expected; we only
+        // care about the captured IDs.
+        let _ = svc.endorse(endorser, subject, 0.5, None).await;
+        let ids = captured.lock().unwrap();
+        let (first, second) = ids.expect("has_active_denouncement must have been called");
+        assert_eq!(
+            first, endorser,
+            "endorse must pass endorser_id as the first arg to has_active_denouncement"
+        );
+        assert_eq!(
+            second, subject,
+            "endorse must pass subject_id as the second arg to has_active_denouncement"
+        );
+    }
+
     // ─── denounce has_active_denouncement ID-order correctness ───────────────
 
     /// Stub [`TrustRepo`] that captures both ID arguments passed to
