@@ -825,6 +825,25 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn revoke_endorsement_returns_quota_exceeded_when_daily_limit_reached() {
+        // The daily action quota is exhausted. The guard fires before
+        // `enqueue_action` — `AtDailyQuotaForEndorseRepo` panics on
+        // `enqueue_action`, so a missing guard causes the test to panic
+        // rather than silently pass.
+        let svc = DefaultTrustService::new(
+            Arc::new(AtDailyQuotaForEndorseRepo),
+            Arc::new(PanicReputationRepo),
+        );
+        let a = Uuid::new_v4();
+        let b = Uuid::new_v4();
+        let err = svc.revoke_endorsement(a, b).await.unwrap_err();
+        assert!(
+            matches!(err, TrustServiceError::QuotaExceeded),
+            "expected QuotaExceeded, got: {err}"
+        );
+    }
+
+    #[tokio::test]
     async fn denounce_returns_self_action_when_accuser_equals_target() {
         let id = Uuid::new_v4();
         let err = make_service().denounce(id, id, "reason").await.unwrap_err();
