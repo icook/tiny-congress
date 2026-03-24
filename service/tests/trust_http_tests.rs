@@ -232,6 +232,55 @@ async fn test_revoke_self_returns_400() {
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 }
 
+#[shared_runtime_test]
+async fn test_revoke_quota_exceeded_returns_429() {
+    let db = isolated_db().await;
+    let (app, keys, account_id) = signup_and_get_account("revokequota", db.pool()).await;
+
+    // Seed 5 actions (daily quota) directly in the DB
+    use tinycongress_api::trust::repo::{PgTrustRepo, TrustRepo};
+    use tinycongress_api::trust::service::ActionType;
+    let trust_repo = PgTrustRepo::new(db.pool().clone());
+    for _ in 0..5 {
+        trust_repo
+            .enqueue_action(account_id, ActionType::Revoke, &serde_json::json!({}))
+            .await
+            .expect("enqueue");
+    }
+
+    // Sign up another user to revoke
+    let (json2, _) = valid_signup_with_keys("revokequotasubject");
+    let resp2 = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/auth/signup")
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(json2))
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+    let body2 = axum::body::to_bytes(resp2.into_body(), 1024 * 1024)
+        .await
+        .expect("body2");
+    let j2: Value = serde_json::from_slice(&body2).expect("json2");
+    let subject_id = j2["account_id"].as_str().expect("account_id");
+
+    let body = serde_json::json!({ "subject_id": subject_id }).to_string();
+    let request = build_authed_request(
+        Method::POST,
+        "/trust/revoke",
+        &body,
+        &keys.device_signing_key,
+        &keys.device_kid,
+    );
+
+    let response = app.oneshot(request).await.expect("response");
+    assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
+}
+
 // ─── Denounce ────────────────────────────────────────────────────────────────
 
 #[shared_runtime_test]
