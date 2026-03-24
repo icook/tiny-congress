@@ -982,6 +982,26 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn denounce_propagates_repo_error_from_count_daily_actions() {
+        // `count_daily_actions` is called inside `check_daily_quota`, which runs
+        // after `has_active_denouncement` passes. If the database fails there, the
+        // service must surface the error rather than silently succeeding or panicking.
+        // `StubTrustRepo` panics on `count_total_denouncements_by`, so a
+        // missing `?` would cause the test to fail loudly.
+        let svc = DefaultTrustService::new(
+            Arc::new(StubTrustRepo::default().active(false).daily_error()),
+            Arc::new(StubReputationRepo::default()),
+        );
+        let a = Uuid::new_v4();
+        let b = Uuid::new_v4();
+        let err = svc.denounce(a, b, "valid reason").await.unwrap_err();
+        assert!(
+            matches!(err, TrustServiceError::Repo(TrustRepoError::Database(_))),
+            "expected Repo(Database(...)), got: {err}"
+        );
+    }
+
     // ─── endorse repo-error propagation tests ────────────────────────────────
 
     #[tokio::test]
