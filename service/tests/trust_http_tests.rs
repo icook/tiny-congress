@@ -279,6 +279,28 @@ async fn test_denounce_returns_202() {
     assert_eq!(json["message"], "denouncement queued");
 }
 
+#[shared_runtime_test]
+async fn test_denounce_self_returns_400() {
+    let db = isolated_db().await;
+    let (app, keys, account_id) = signup_and_get_account("selfdenounce", db.pool()).await;
+
+    let body = serde_json::json!({
+        "target_id": account_id,
+        "reason": "testing self-denounce"
+    })
+    .to_string();
+    let request = build_authed_request(
+        Method::POST,
+        "/trust/denounce",
+        &body,
+        &keys.device_signing_key,
+        &keys.device_kid,
+    );
+
+    let response = app.oneshot(request).await.expect("response");
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}
+
 // ─── Scores ───────────────────────────────────────────────────────────────────
 
 #[shared_runtime_test]
