@@ -466,6 +466,65 @@ async fn test_has_active_denouncement_returns_false_when_resolved() {
     assert!(!result, "expected false for resolved denouncement");
 }
 
+// ---------------------------------------------------------------------------
+// create_denouncement_and_revoke_endorsement atomicity
+// ---------------------------------------------------------------------------
+
+/// When `create_denouncement_and_revoke_endorsement` is called and a denouncement
+/// already exists, it returns `Duplicate`. The transaction rolls back before reaching
+/// the revocation step, so any active endorsement is left untouched.
+#[shared_runtime_test]
+async fn create_denouncement_and_revoke_endorsement_rolls_back_on_duplicate() {
+    let db = isolated_db().await;
+    let pool = db.pool().clone();
+
+    let accuser = AccountFactory::new()
+        .with_seed(94)
+        .create(&pool)
+        .await
+        .expect("create accuser");
+
+    let target = AccountFactory::new()
+        .with_seed(95)
+        .create(&pool)
+        .await
+        .expect("create target");
+
+    // Insert an endorsement and a denouncement directly so a retry scenario
+    // is simulated: the denouncement exists but the endorsement was never revoked.
+    insert_endorsement(&pool, accuser.id, target.id, 1.0).await;
+    let repo = PgTrustRepo::new(pool.clone());
+    repo.create_denouncement(accuser.id, target.id, "pre-existing")
+        .await
+        .expect("seed denouncement");
+
+    // Calling the atomic function now should return Duplicate without revoking the endorsement.
+    let result = repo
+        .create_denouncement_and_revoke_endorsement(accuser.id, target.id, "retry")
+        .await;
+
+    assert!(
+        matches!(result, Err(TrustRepoError::Duplicate)),
+        "expected Duplicate when denouncement already exists, got: {result:?}"
+    );
+
+    // The endorsement must still be active — the rollback must have prevented revocation.
+    let active: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM reputation__endorsements \
+         WHERE endorser_id = $1 AND subject_id = $2 AND revoked_at IS NULL",
+    )
+    .bind(accuser.id)
+    .bind(target.id)
+    .fetch_one(&pool)
+    .await
+    .expect("count active endorsements");
+
+    assert_eq!(
+        active, 1,
+        "endorsement must not be revoked when denouncement creation fails"
+    );
+}
+
 /// After A denounces B, A must not be able to endorse B.
 /// The service layer must reject the endorsement attempt with DenouncementConflict.
 #[shared_runtime_test]
