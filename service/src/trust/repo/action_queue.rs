@@ -156,4 +156,18 @@ mod tests {
     fn truncate_error_message_returns_empty_for_empty_input() {
         assert_eq!(truncate_error_message(""), "");
     }
+
+    #[test]
+    fn truncate_error_message_passes_exactly_max_len_multibyte_unchanged() {
+        // 1024 multi-byte characters must be passed through unchanged — the limit
+        // is character-based, not byte-based.  A byte-count implementation would
+        // truncate this string (1024 × 3 = 3072 bytes > 1024) even though the
+        // character count is exactly at the limit.
+        let error = "中".repeat(ERROR_MESSAGE_MAX_LEN);
+        assert_eq!(
+            truncate_error_message(&error),
+            error,
+            "a string of exactly ERROR_MESSAGE_MAX_LEN multi-byte characters must not be truncated"
+        );
+    }
 }
