@@ -1447,13 +1447,14 @@ mod tests {
     #[tokio::test]
     async fn revoke_endorsement_enqueues_action_type_revoke() {
         // Verifies that revoke_endorsement() passes ActionType::Revoke to enqueue_action.
+        // Only `.daily(0)` and `.capture_type(...)` are set: `revoke_endorsement` does not
+        // call `has_active_denouncement` or `count_total_denouncements_by`, so those methods
+        // are left unset (unimplemented!()) to catch any unexpected calls.
         let captured_type = Arc::new(Mutex::new(None));
         let svc = DefaultTrustService::new(
             Arc::new(
                 StubTrustRepo::default()
                     .daily(0)
-                    .active(false)
-                    .total(0)
                     .capture_type(captured_type.clone()),
             ),
             Arc::new(StubReputationRepo::default()),
