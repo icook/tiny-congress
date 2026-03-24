@@ -86,16 +86,69 @@ mod tests {
     use crate::trust::weight::{DeliveryMethod, RelationshipDepth};
     use async_trait::async_trait;
 
-    struct FixedScoreRepo(Option<ScoreSnapshot>);
+    /// Single configurable stub for [`TrustRepo`] covering all graph-reader test scenarios.
+    ///
+    /// Enable the field(s) relevant to your test; all other methods panic with
+    /// `unimplemented!()`. When `TrustRepo` gains a new method that graph-reader
+    /// tests need to exercise, add one field here rather than updating every
+    /// separate stub.
+    #[derive(Default)]
+    struct StubTrustRepo {
+        score: Option<ScoreSnapshot>,
+        score_fails: bool,
+        endorsement: Option<bool>,
+        endorsement_fails: bool,
+    }
+
+    impl StubTrustRepo {
+        fn with_score(snapshot: Option<ScoreSnapshot>) -> Self {
+            Self {
+                score: snapshot,
+                ..Default::default()
+            }
+        }
+        fn with_score_error() -> Self {
+            Self {
+                score_fails: true,
+                ..Default::default()
+            }
+        }
+        fn with_endorsement(value: bool) -> Self {
+            Self {
+                endorsement: Some(value),
+                ..Default::default()
+            }
+        }
+        fn with_endorsement_error() -> Self {
+            Self {
+                endorsement_fails: true,
+                ..Default::default()
+            }
+        }
+    }
 
     #[async_trait]
-    impl TrustRepo for FixedScoreRepo {
+    impl TrustRepo for StubTrustRepo {
         async fn get_score(
             &self,
             _: Uuid,
             _: Option<Uuid>,
         ) -> Result<Option<ScoreSnapshot>, TrustRepoError> {
-            Ok(self.0.clone())
+            if self.score_fails {
+                return Err(TrustRepoError::Database(sqlx::Error::RowNotFound));
+            }
+            Ok(self.score.clone())
+        }
+        async fn has_identity_endorsement(
+            &self,
+            _: Uuid,
+            _: &[Uuid],
+            _: &str,
+        ) -> Result<bool, TrustRepoError> {
+            if self.endorsement_fails {
+                return Err(TrustRepoError::Database(sqlx::Error::RowNotFound));
+            }
+            Ok(self.endorsement.unwrap_or(false))
         }
         async fn get_or_create_influence(
             &self,
@@ -198,289 +251,30 @@ mod tests {
             unimplemented!()
         }
         async fn get_all_scores(&self, _: Uuid) -> Result<Vec<ScoreSnapshot>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn has_identity_endorsement(
-            &self,
-            _: Uuid,
-            _: &[Uuid],
-            _: &str,
-        ) -> Result<bool, TrustRepoError> {
             unimplemented!()
         }
     }
 
     fn make_reader(snapshot: Option<ScoreSnapshot>) -> TrustRepoGraphReader {
-        TrustRepoGraphReader::new(Arc::new(FixedScoreRepo(snapshot)))
+        TrustRepoGraphReader::new(Arc::new(StubTrustRepo::with_score(snapshot)))
+    }
+
+    fn make_endorsement_reader(result: Result<bool, TrustRepoError>) -> TrustRepoGraphReader {
+        let stub = match result {
+            Ok(v) => StubTrustRepo::with_endorsement(v),
+            Err(_) => StubTrustRepo::with_endorsement_error(),
+        };
+        TrustRepoGraphReader::new(Arc::new(stub))
     }
 
     #[tokio::test]
     async fn get_score_propagates_repo_error() {
-        struct ErrorScoreRepo;
-
-        #[async_trait]
-        impl TrustRepo for ErrorScoreRepo {
-            async fn get_score(
-                &self,
-                _: Uuid,
-                _: Option<Uuid>,
-            ) -> Result<Option<ScoreSnapshot>, TrustRepoError> {
-                Err(TrustRepoError::Database(sqlx::Error::RowNotFound))
-            }
-            async fn get_or_create_influence(
-                &self,
-                _: Uuid,
-            ) -> Result<InfluenceRecord, TrustRepoError> {
-                unimplemented!()
-            }
-            async fn enqueue_action(
-                &self,
-                _: Uuid,
-                _: ActionType,
-                _: &serde_json::Value,
-            ) -> Result<ActionRecord, TrustRepoError> {
-                unimplemented!()
-            }
-            async fn count_daily_actions(&self, _: Uuid) -> Result<i64, TrustRepoError> {
-                unimplemented!()
-            }
-            async fn get_action(&self, _: Uuid) -> Result<ActionRecord, TrustRepoError> {
-                unimplemented!()
-            }
-            async fn complete_action(&self, _: Uuid) -> Result<(), TrustRepoError> {
-                unimplemented!()
-            }
-            async fn fail_action(&self, _: Uuid, _: &str) -> Result<(), TrustRepoError> {
-                unimplemented!()
-            }
-            async fn create_denouncement(
-                &self,
-                _: Uuid,
-                _: Uuid,
-                _: &str,
-            ) -> Result<DenouncementRecord, TrustRepoError> {
-                unimplemented!()
-            }
-            async fn create_denouncement_and_revoke_endorsement(
-                &self,
-                _: Uuid,
-                _: Uuid,
-                _: &str,
-            ) -> Result<DenouncementRecord, TrustRepoError> {
-                unimplemented!()
-            }
-            async fn list_denouncements_against(
-                &self,
-                _: Uuid,
-            ) -> Result<Vec<DenouncementRecord>, TrustRepoError> {
-                unimplemented!()
-            }
-            async fn list_denouncements_by(
-                &self,
-                _: Uuid,
-            ) -> Result<Vec<DenouncementRecord>, TrustRepoError> {
-                unimplemented!()
-            }
-            async fn list_denouncements_by_with_username(
-                &self,
-                _: Uuid,
-            ) -> Result<Vec<DenouncementWithUsername>, TrustRepoError> {
-                unimplemented!()
-            }
-            async fn count_total_denouncements_by(&self, _: Uuid) -> Result<i64, TrustRepoError> {
-                unimplemented!()
-            }
-            async fn has_active_denouncement(
-                &self,
-                _: Uuid,
-                _: Uuid,
-            ) -> Result<bool, TrustRepoError> {
-                unimplemented!()
-            }
-            async fn create_invite(
-                &self,
-                _: Uuid,
-                _: &[u8],
-                _: DeliveryMethod,
-                _: Option<RelationshipDepth>,
-                _: f32,
-                _: &serde_json::Value,
-                _: chrono::DateTime<chrono::Utc>,
-            ) -> Result<InviteRecord, TrustRepoError> {
-                unimplemented!()
-            }
-            async fn get_invite(&self, _: Uuid) -> Result<InviteRecord, TrustRepoError> {
-                unimplemented!()
-            }
-            async fn accept_invite(
-                &self,
-                _: Uuid,
-                _: Uuid,
-            ) -> Result<InviteRecord, TrustRepoError> {
-                unimplemented!()
-            }
-            async fn list_invites_by_endorser(
-                &self,
-                _: Uuid,
-            ) -> Result<Vec<InviteRecord>, TrustRepoError> {
-                unimplemented!()
-            }
-            async fn upsert_score(
-                &self,
-                _: Uuid,
-                _: Option<Uuid>,
-                _: Option<f32>,
-                _: Option<i32>,
-                _: Option<f32>,
-            ) -> Result<(), TrustRepoError> {
-                unimplemented!()
-            }
-            async fn get_all_scores(&self, _: Uuid) -> Result<Vec<ScoreSnapshot>, TrustRepoError> {
-                unimplemented!()
-            }
-            async fn has_identity_endorsement(
-                &self,
-                _: Uuid,
-                _: &[Uuid],
-                _: &str,
-            ) -> Result<bool, TrustRepoError> {
-                unimplemented!()
-            }
-        }
-
-        let reader = TrustRepoGraphReader::new(Arc::new(ErrorScoreRepo));
+        let reader = TrustRepoGraphReader::new(Arc::new(StubTrustRepo::with_score_error()));
         let result = reader.get_score(Uuid::new_v4(), None).await;
         assert!(
             result.is_err(),
             "expected get_score to propagate the repo error"
         );
-    }
-
-    struct FixedHasEndorsementRepo(Result<bool, TrustRepoError>);
-
-    #[async_trait]
-    impl TrustRepo for FixedHasEndorsementRepo {
-        async fn has_identity_endorsement(
-            &self,
-            _: Uuid,
-            _: &[Uuid],
-            _: &str,
-        ) -> Result<bool, TrustRepoError> {
-            match &self.0 {
-                Ok(v) => Ok(*v),
-                Err(_) => Err(TrustRepoError::Database(sqlx::Error::RowNotFound)),
-            }
-        }
-        async fn get_or_create_influence(
-            &self,
-            _: Uuid,
-        ) -> Result<InfluenceRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn enqueue_action(
-            &self,
-            _: Uuid,
-            _: ActionType,
-            _: &serde_json::Value,
-        ) -> Result<ActionRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn count_daily_actions(&self, _: Uuid) -> Result<i64, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn get_action(&self, _: Uuid) -> Result<ActionRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn complete_action(&self, _: Uuid) -> Result<(), TrustRepoError> {
-            unimplemented!()
-        }
-        async fn fail_action(&self, _: Uuid, _: &str) -> Result<(), TrustRepoError> {
-            unimplemented!()
-        }
-        async fn create_denouncement(
-            &self,
-            _: Uuid,
-            _: Uuid,
-            _: &str,
-        ) -> Result<DenouncementRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn create_denouncement_and_revoke_endorsement(
-            &self,
-            _: Uuid,
-            _: Uuid,
-            _: &str,
-        ) -> Result<DenouncementRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn list_denouncements_against(
-            &self,
-            _: Uuid,
-        ) -> Result<Vec<DenouncementRecord>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn list_denouncements_by(
-            &self,
-            _: Uuid,
-        ) -> Result<Vec<DenouncementRecord>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn list_denouncements_by_with_username(
-            &self,
-            _: Uuid,
-        ) -> Result<Vec<DenouncementWithUsername>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn count_total_denouncements_by(&self, _: Uuid) -> Result<i64, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn has_active_denouncement(&self, _: Uuid, _: Uuid) -> Result<bool, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn create_invite(
-            &self,
-            _: Uuid,
-            _: &[u8],
-            _: DeliveryMethod,
-            _: Option<RelationshipDepth>,
-            _: f32,
-            _: &serde_json::Value,
-            _: chrono::DateTime<chrono::Utc>,
-        ) -> Result<InviteRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn get_invite(&self, _: Uuid) -> Result<InviteRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn accept_invite(&self, _: Uuid, _: Uuid) -> Result<InviteRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn list_invites_by_endorser(
-            &self,
-            _: Uuid,
-        ) -> Result<Vec<InviteRecord>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn upsert_score(
-            &self,
-            _: Uuid,
-            _: Option<Uuid>,
-            _: Option<f32>,
-            _: Option<i32>,
-            _: Option<f32>,
-        ) -> Result<(), TrustRepoError> {
-            unimplemented!()
-        }
-        async fn get_score(
-            &self,
-            _: Uuid,
-            _: Option<Uuid>,
-        ) -> Result<Option<ScoreSnapshot>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn get_all_scores(&self, _: Uuid) -> Result<Vec<ScoreSnapshot>, TrustRepoError> {
-            unimplemented!()
-        }
     }
 
     fn base_snapshot() -> ScoreSnapshot {
@@ -571,10 +365,6 @@ mod tests {
     }
 
     // ─── has_endorsement ─────────────────────────────────────────────────────
-
-    fn make_endorsement_reader(result: Result<bool, TrustRepoError>) -> TrustRepoGraphReader {
-        TrustRepoGraphReader::new(Arc::new(FixedHasEndorsementRepo(result)))
-    }
 
     #[tokio::test]
     async fn has_endorsement_returns_true_when_repo_returns_true() {
