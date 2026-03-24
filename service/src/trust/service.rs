@@ -303,26 +303,194 @@ mod tests {
     };
     use crate::trust::weight::{DeliveryMethod, RelationshipDepth};
 
-    struct PanicTrustRepo;
     struct PanicReputationRepo;
 
+    /// Single configurable stub for [`TrustRepo`] used across service-layer tests.
+    ///
+    /// All methods default to `unimplemented!()`. Set field(s) relevant to your
+    /// test; every other method panics if called, so a missing guard in the
+    /// code-under-test surfaces as a test panic rather than a silently wrong result.
+    ///
+    /// When [`TrustRepo`] gains a new method service tests need to exercise, add
+    /// one field here rather than creating a new per-test stub struct.
+    #[derive(Default)]
+    struct StubTrustRepo {
+        /// `Some(n)` → `count_daily_actions` returns `Ok(n)`. `None` → `unimplemented!()`.
+        daily_actions: Option<i64>,
+        /// `true` → `count_daily_actions` returns a database error.
+        daily_actions_fails: bool,
+        /// If set, captures the `actor_id` argument to `count_daily_actions`.
+        captured_daily_actor: Option<Arc<Mutex<Option<Uuid>>>>,
+        /// `Some(v)` → `has_active_denouncement` returns `Ok(v)`. `None` → `unimplemented!()`.
+        active_denouncement: Option<bool>,
+        /// `true` → `has_active_denouncement` returns a database error.
+        active_denouncement_fails: bool,
+        /// If set, captures both `(first, second)` arguments to `has_active_denouncement`.
+        captured_active: Option<Arc<Mutex<Option<(Uuid, Uuid)>>>>,
+        /// `Some(n)` → `count_total_denouncements_by` returns `Ok(n)`. `None` → `unimplemented!()`.
+        total_denouncements: Option<i64>,
+        /// `true` → `count_total_denouncements_by` returns a database error.
+        total_denouncements_fails: bool,
+        /// If set, captures the `actor_id` argument to `count_total_denouncements_by`.
+        captured_total_actor: Option<Arc<Mutex<Option<Uuid>>>>,
+        /// `true` → `enqueue_action` returns a database error.
+        enqueue_fails: bool,
+        /// `true` → `enqueue_action` returns a dummy `ActionRecord` (and any capture fields are written).
+        /// Automatically true if any `captured_enqueue_*` field is set.
+        enqueue_ok: bool,
+        /// If set, captures the `payload` argument to `enqueue_action` (implies enqueue succeeds).
+        captured_enqueue_payload: Option<Arc<Mutex<Option<serde_json::Value>>>>,
+        /// If set, captures the `actor_id` argument to `enqueue_action` (implies enqueue succeeds).
+        captured_enqueue_actor: Option<Arc<Mutex<Option<Uuid>>>>,
+        /// If set, captures the `action_type` argument to `enqueue_action` (implies enqueue succeeds).
+        captured_enqueue_type: Option<Arc<Mutex<Option<ActionType>>>>,
+    }
+
+    impl StubTrustRepo {
+        fn daily(mut self, n: i64) -> Self {
+            self.daily_actions = Some(n);
+            self
+        }
+        fn daily_error(mut self) -> Self {
+            self.daily_actions_fails = true;
+            self
+        }
+        fn capture_daily_actor(mut self, cap: Arc<Mutex<Option<Uuid>>>) -> Self {
+            self.captured_daily_actor = Some(cap);
+            self
+        }
+        fn active(mut self, v: bool) -> Self {
+            self.active_denouncement = Some(v);
+            self
+        }
+        fn active_error(mut self) -> Self {
+            self.active_denouncement_fails = true;
+            self
+        }
+        fn capture_active(mut self, cap: Arc<Mutex<Option<(Uuid, Uuid)>>>) -> Self {
+            self.captured_active = Some(cap);
+            self
+        }
+        fn total(mut self, n: i64) -> Self {
+            self.total_denouncements = Some(n);
+            self
+        }
+        fn total_error(mut self) -> Self {
+            self.total_denouncements_fails = true;
+            self
+        }
+        fn capture_total_actor(mut self, cap: Arc<Mutex<Option<Uuid>>>) -> Self {
+            self.captured_total_actor = Some(cap);
+            self
+        }
+        fn enqueue_error(mut self) -> Self {
+            self.enqueue_fails = true;
+            self
+        }
+        fn enqueue_ok(mut self) -> Self {
+            self.enqueue_ok = true;
+            self
+        }
+        fn capture_payload(mut self, cap: Arc<Mutex<Option<serde_json::Value>>>) -> Self {
+            self.captured_enqueue_payload = Some(cap);
+            self
+        }
+        fn capture_actor(mut self, cap: Arc<Mutex<Option<Uuid>>>) -> Self {
+            self.captured_enqueue_actor = Some(cap);
+            self
+        }
+        fn capture_type(mut self, cap: Arc<Mutex<Option<ActionType>>>) -> Self {
+            self.captured_enqueue_type = Some(cap);
+            self
+        }
+    }
+
     #[async_trait]
-    impl TrustRepo for PanicTrustRepo {
-        async fn get_or_create_influence(
+    impl TrustRepo for StubTrustRepo {
+        async fn count_daily_actions(&self, actor_id: Uuid) -> Result<i64, TrustRepoError> {
+            if let Some(cap) = &self.captured_daily_actor {
+                *cap.lock().unwrap() = Some(actor_id);
+            }
+            if self.daily_actions_fails {
+                return Err(TrustRepoError::Database(sqlx::Error::RowNotFound));
+            }
+            if let Some(n) = self.daily_actions {
+                return Ok(n);
+            }
+            unimplemented!()
+        }
+        async fn has_active_denouncement(
             &self,
-            _: Uuid,
-        ) -> Result<InfluenceRecord, TrustRepoError> {
+            first: Uuid,
+            second: Uuid,
+        ) -> Result<bool, TrustRepoError> {
+            if let Some(cap) = &self.captured_active {
+                *cap.lock().unwrap() = Some((first, second));
+            }
+            if self.active_denouncement_fails {
+                return Err(TrustRepoError::Database(sqlx::Error::RowNotFound));
+            }
+            if let Some(v) = self.active_denouncement {
+                return Ok(v);
+            }
+            unimplemented!()
+        }
+        async fn count_total_denouncements_by(
+            &self,
+            actor_id: Uuid,
+        ) -> Result<i64, TrustRepoError> {
+            if let Some(cap) = &self.captured_total_actor {
+                *cap.lock().unwrap() = Some(actor_id);
+            }
+            if self.total_denouncements_fails {
+                return Err(TrustRepoError::Database(sqlx::Error::RowNotFound));
+            }
+            if let Some(n) = self.total_denouncements {
+                return Ok(n);
+            }
             unimplemented!()
         }
         async fn enqueue_action(
             &self,
-            _: Uuid,
-            _: ActionType,
-            _: &serde_json::Value,
+            actor_id: Uuid,
+            action_type: ActionType,
+            payload: &serde_json::Value,
         ) -> Result<ActionRecord, TrustRepoError> {
+            if let Some(cap) = &self.captured_enqueue_payload {
+                *cap.lock().unwrap() = Some(payload.clone());
+            }
+            if let Some(cap) = &self.captured_enqueue_actor {
+                *cap.lock().unwrap() = Some(actor_id);
+            }
+            if let Some(cap) = &self.captured_enqueue_type {
+                *cap.lock().unwrap() = Some(action_type);
+            }
+            if self.enqueue_fails {
+                return Err(TrustRepoError::Database(sqlx::Error::RowNotFound));
+            }
+            let enqueue_enabled = self.enqueue_ok
+                || self.captured_enqueue_payload.is_some()
+                || self.captured_enqueue_actor.is_some()
+                || self.captured_enqueue_type.is_some();
+            if enqueue_enabled {
+                return Ok(ActionRecord {
+                    id: Uuid::new_v4(),
+                    actor_id,
+                    action_type: action_type.as_str().to_string(),
+                    payload: payload.clone(),
+                    status: "pending".to_string(),
+                    quota_date: chrono::Utc::now().date_naive(),
+                    error_message: None,
+                    created_at: chrono::Utc::now(),
+                    processed_at: None,
+                });
+            }
             unimplemented!()
         }
-        async fn count_daily_actions(&self, _: Uuid) -> Result<i64, TrustRepoError> {
+        async fn get_or_create_influence(
+            &self,
+            _: Uuid,
+        ) -> Result<InfluenceRecord, TrustRepoError> {
             unimplemented!()
         }
         async fn get_action(&self, _: Uuid) -> Result<ActionRecord, TrustRepoError> {
@@ -366,12 +534,6 @@ mod tests {
             &self,
             _: Uuid,
         ) -> Result<Vec<DenouncementWithUsername>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn count_total_denouncements_by(&self, _: Uuid) -> Result<i64, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn has_active_denouncement(&self, _: Uuid, _: Uuid) -> Result<bool, TrustRepoError> {
             unimplemented!()
         }
         async fn create_invite(
@@ -489,134 +651,10 @@ mod tests {
     }
 
     fn make_service() -> DefaultTrustService {
-        DefaultTrustService::new(Arc::new(PanicTrustRepo), Arc::new(PanicReputationRepo))
-    }
-
-    /// Stub [`TrustRepo`] that returns "under quota" and "has active denouncement" —
-    /// used to test the [`TrustServiceError::DenouncementConflict`] guard in
-    /// [`DefaultTrustService::endorse`] without reaching the reputation repo.
-    struct BelowQuotaWithActiveDenouncement;
-
-    #[async_trait]
-    impl TrustRepo for BelowQuotaWithActiveDenouncement {
-        async fn count_daily_actions(&self, _: Uuid) -> Result<i64, TrustRepoError> {
-            Ok(0)
-        }
-        async fn has_active_denouncement(&self, _: Uuid, _: Uuid) -> Result<bool, TrustRepoError> {
-            Ok(true)
-        }
-        async fn get_or_create_influence(
-            &self,
-            _: Uuid,
-        ) -> Result<InfluenceRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn enqueue_action(
-            &self,
-            _: Uuid,
-            _: ActionType,
-            _: &serde_json::Value,
-        ) -> Result<ActionRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn get_action(&self, _: Uuid) -> Result<ActionRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn complete_action(&self, _: Uuid) -> Result<(), TrustRepoError> {
-            unimplemented!()
-        }
-        async fn fail_action(&self, _: Uuid, _: &str) -> Result<(), TrustRepoError> {
-            unimplemented!()
-        }
-        async fn create_denouncement(
-            &self,
-            _: Uuid,
-            _: Uuid,
-            _: &str,
-        ) -> Result<DenouncementRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn create_denouncement_and_revoke_endorsement(
-            &self,
-            _: Uuid,
-            _: Uuid,
-            _: &str,
-        ) -> Result<DenouncementRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn list_denouncements_against(
-            &self,
-            _: Uuid,
-        ) -> Result<Vec<DenouncementRecord>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn list_denouncements_by(
-            &self,
-            _: Uuid,
-        ) -> Result<Vec<DenouncementRecord>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn list_denouncements_by_with_username(
-            &self,
-            _: Uuid,
-        ) -> Result<Vec<DenouncementWithUsername>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn count_total_denouncements_by(&self, _: Uuid) -> Result<i64, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn create_invite(
-            &self,
-            _: Uuid,
-            _: &[u8],
-            _: DeliveryMethod,
-            _: Option<RelationshipDepth>,
-            _: f32,
-            _: &serde_json::Value,
-            _: chrono::DateTime<chrono::Utc>,
-        ) -> Result<InviteRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn get_invite(&self, _: Uuid) -> Result<InviteRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn accept_invite(&self, _: Uuid, _: Uuid) -> Result<InviteRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn list_invites_by_endorser(
-            &self,
-            _: Uuid,
-        ) -> Result<Vec<InviteRecord>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn upsert_score(
-            &self,
-            _: Uuid,
-            _: Option<Uuid>,
-            _: Option<f32>,
-            _: Option<i32>,
-            _: Option<f32>,
-        ) -> Result<(), TrustRepoError> {
-            unimplemented!()
-        }
-        async fn get_score(
-            &self,
-            _: Uuid,
-            _: Option<Uuid>,
-        ) -> Result<Option<ScoreSnapshot>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn get_all_scores(&self, _: Uuid) -> Result<Vec<ScoreSnapshot>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn has_identity_endorsement(
-            &self,
-            _: Uuid,
-            _: &[Uuid],
-            _: &str,
-        ) -> Result<bool, TrustRepoError> {
-            unimplemented!()
-        }
+        DefaultTrustService::new(
+            Arc::new(StubTrustRepo::default()),
+            Arc::new(PanicReputationRepo),
+        )
     }
 
     #[tokio::test]
@@ -625,7 +663,7 @@ mod tests {
         // Calling endorse() when the endorser already has an active denouncement
         // against the subject must return DenouncementConflict without enqueueing.
         let svc = DefaultTrustService::new(
-            Arc::new(BelowQuotaWithActiveDenouncement),
+            Arc::new(StubTrustRepo::default().daily(0).active(true)),
             Arc::new(PanicReputationRepo),
         );
         let a = Uuid::new_v4();
@@ -679,141 +717,14 @@ mod tests {
         assert!(matches!(err, TrustServiceError::InvalidWeight));
     }
 
-    /// Stub [`TrustRepo`] that reports the daily action quota as exhausted —
-    /// used to verify the [`TrustServiceError::QuotaExceeded`] guard in
-    /// [`DefaultTrustService::endorse`] fires before `has_active_denouncement`.
-    struct AtDailyQuotaForEndorseRepo;
-
-    #[async_trait]
-    impl TrustRepo for AtDailyQuotaForEndorseRepo {
-        async fn count_daily_actions(&self, _: Uuid) -> Result<i64, TrustRepoError> {
-            Ok(DAILY_ACTION_QUOTA)
-        }
-        async fn get_or_create_influence(
-            &self,
-            _: Uuid,
-        ) -> Result<InfluenceRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn enqueue_action(
-            &self,
-            _: Uuid,
-            _: ActionType,
-            _: &serde_json::Value,
-        ) -> Result<ActionRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn get_action(&self, _: Uuid) -> Result<ActionRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn complete_action(&self, _: Uuid) -> Result<(), TrustRepoError> {
-            unimplemented!()
-        }
-        async fn fail_action(&self, _: Uuid, _: &str) -> Result<(), TrustRepoError> {
-            unimplemented!()
-        }
-        async fn create_denouncement(
-            &self,
-            _: Uuid,
-            _: Uuid,
-            _: &str,
-        ) -> Result<DenouncementRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn create_denouncement_and_revoke_endorsement(
-            &self,
-            _: Uuid,
-            _: Uuid,
-            _: &str,
-        ) -> Result<DenouncementRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn list_denouncements_against(
-            &self,
-            _: Uuid,
-        ) -> Result<Vec<DenouncementRecord>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn list_denouncements_by(
-            &self,
-            _: Uuid,
-        ) -> Result<Vec<DenouncementRecord>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn list_denouncements_by_with_username(
-            &self,
-            _: Uuid,
-        ) -> Result<Vec<DenouncementWithUsername>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn count_total_denouncements_by(&self, _: Uuid) -> Result<i64, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn has_active_denouncement(&self, _: Uuid, _: Uuid) -> Result<bool, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn create_invite(
-            &self,
-            _: Uuid,
-            _: &[u8],
-            _: DeliveryMethod,
-            _: Option<RelationshipDepth>,
-            _: f32,
-            _: &serde_json::Value,
-            _: chrono::DateTime<chrono::Utc>,
-        ) -> Result<InviteRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn get_invite(&self, _: Uuid) -> Result<InviteRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn accept_invite(&self, _: Uuid, _: Uuid) -> Result<InviteRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn list_invites_by_endorser(
-            &self,
-            _: Uuid,
-        ) -> Result<Vec<InviteRecord>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn upsert_score(
-            &self,
-            _: Uuid,
-            _: Option<Uuid>,
-            _: Option<f32>,
-            _: Option<i32>,
-            _: Option<f32>,
-        ) -> Result<(), TrustRepoError> {
-            unimplemented!()
-        }
-        async fn get_score(
-            &self,
-            _: Uuid,
-            _: Option<Uuid>,
-        ) -> Result<Option<ScoreSnapshot>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn get_all_scores(&self, _: Uuid) -> Result<Vec<ScoreSnapshot>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn has_identity_endorsement(
-            &self,
-            _: Uuid,
-            _: &[Uuid],
-            _: &str,
-        ) -> Result<bool, TrustRepoError> {
-            unimplemented!()
-        }
-    }
-
     #[tokio::test]
     async fn endorse_returns_quota_exceeded_when_daily_limit_reached() {
         // The daily action quota is exhausted. The guard fires before
-        // `has_active_denouncement` — AtDailyQuotaForEndorseRepo panics on
+        // `has_active_denouncement` — StubTrustRepo panics on
         // `has_active_denouncement`, so a missing guard causes the test to panic
         // rather than silently pass.
         let svc = DefaultTrustService::new(
-            Arc::new(AtDailyQuotaForEndorseRepo),
+            Arc::new(StubTrustRepo::default().daily(DAILY_ACTION_QUOTA)),
             Arc::new(PanicReputationRepo),
         );
         let a = Uuid::new_v4();
@@ -835,11 +746,11 @@ mod tests {
     #[tokio::test]
     async fn revoke_endorsement_returns_quota_exceeded_when_daily_limit_reached() {
         // The daily action quota is exhausted. The guard fires before
-        // `enqueue_action` — `AtDailyQuotaForEndorseRepo` panics on
+        // `enqueue_action` — StubTrustRepo panics on
         // `enqueue_action`, so a missing guard causes the test to panic
         // rather than silently pass.
         let svc = DefaultTrustService::new(
-            Arc::new(AtDailyQuotaForEndorseRepo),
+            Arc::new(StubTrustRepo::default().daily(DAILY_ACTION_QUOTA)),
             Arc::new(PanicReputationRepo),
         );
         let a = Uuid::new_v4();
@@ -892,13 +803,17 @@ mod tests {
         // must be accepted. This catches an off-by-one if the service-layer guard
         // ever uses `<` instead of `<=` in its length check.
         //
-        // Uses CapturingEnqueueRepo (passes all guards) to verify the action is
+        // Uses StubTrustRepo (passes all guards) to verify the action is
         // actually enqueued rather than rejected.
         let captured = Arc::new(Mutex::new(None));
         let svc = DefaultTrustService::new(
-            Arc::new(CapturingEnqueueRepo {
-                captured: captured.clone(),
-            }),
+            Arc::new(
+                StubTrustRepo::default()
+                    .daily(0)
+                    .active(false)
+                    .total(0)
+                    .capture_payload(captured.clone()),
+            ),
             Arc::new(PanicReputationRepo),
         );
         let accuser = Uuid::new_v4();
@@ -915,142 +830,18 @@ mod tests {
         );
     }
 
-    /// Stub [`TrustRepo`] that simulates a user who has no active denouncement against
-    /// the target and is under their daily quota, but has already consumed all
-    /// permanent denouncement slots. Used to test the
-    /// [`TrustServiceError::DenouncementSlotsExhausted`] guard in
-    /// [`DefaultTrustService::denounce`] without reaching `enqueue_action`.
-    struct AtDenouncementSlotLimitRepo;
-
-    #[async_trait]
-    impl TrustRepo for AtDenouncementSlotLimitRepo {
-        async fn count_daily_actions(&self, _: Uuid) -> Result<i64, TrustRepoError> {
-            Ok(0)
-        }
-        async fn has_active_denouncement(&self, _: Uuid, _: Uuid) -> Result<bool, TrustRepoError> {
-            Ok(false)
-        }
-        async fn count_total_denouncements_by(&self, _: Uuid) -> Result<i64, TrustRepoError> {
-            Ok(i64::from(DENOUNCEMENT_SLOT_LIMIT))
-        }
-        async fn get_or_create_influence(
-            &self,
-            _: Uuid,
-        ) -> Result<InfluenceRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn enqueue_action(
-            &self,
-            _: Uuid,
-            _: ActionType,
-            _: &serde_json::Value,
-        ) -> Result<ActionRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn get_action(&self, _: Uuid) -> Result<ActionRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn complete_action(&self, _: Uuid) -> Result<(), TrustRepoError> {
-            unimplemented!()
-        }
-        async fn fail_action(&self, _: Uuid, _: &str) -> Result<(), TrustRepoError> {
-            unimplemented!()
-        }
-        async fn create_denouncement(
-            &self,
-            _: Uuid,
-            _: Uuid,
-            _: &str,
-        ) -> Result<DenouncementRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn create_denouncement_and_revoke_endorsement(
-            &self,
-            _: Uuid,
-            _: Uuid,
-            _: &str,
-        ) -> Result<DenouncementRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn list_denouncements_against(
-            &self,
-            _: Uuid,
-        ) -> Result<Vec<DenouncementRecord>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn list_denouncements_by(
-            &self,
-            _: Uuid,
-        ) -> Result<Vec<DenouncementRecord>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn list_denouncements_by_with_username(
-            &self,
-            _: Uuid,
-        ) -> Result<Vec<DenouncementWithUsername>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn create_invite(
-            &self,
-            _: Uuid,
-            _: &[u8],
-            _: DeliveryMethod,
-            _: Option<RelationshipDepth>,
-            _: f32,
-            _: &serde_json::Value,
-            _: chrono::DateTime<chrono::Utc>,
-        ) -> Result<InviteRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn get_invite(&self, _: Uuid) -> Result<InviteRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn accept_invite(&self, _: Uuid, _: Uuid) -> Result<InviteRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn list_invites_by_endorser(
-            &self,
-            _: Uuid,
-        ) -> Result<Vec<InviteRecord>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn upsert_score(
-            &self,
-            _: Uuid,
-            _: Option<Uuid>,
-            _: Option<f32>,
-            _: Option<i32>,
-            _: Option<f32>,
-        ) -> Result<(), TrustRepoError> {
-            unimplemented!()
-        }
-        async fn get_score(
-            &self,
-            _: Uuid,
-            _: Option<Uuid>,
-        ) -> Result<Option<ScoreSnapshot>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn get_all_scores(&self, _: Uuid) -> Result<Vec<ScoreSnapshot>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn has_identity_endorsement(
-            &self,
-            _: Uuid,
-            _: &[Uuid],
-            _: &str,
-        ) -> Result<bool, TrustRepoError> {
-            unimplemented!()
-        }
-    }
-
     #[tokio::test]
     async fn denounce_returns_slots_exhausted_when_at_denouncement_limit() {
         // The permanent denouncement budget (d=2) is full. The guard must fire
-        // before enqueue_action is called — AtDenouncementSlotLimitRepo panics
+        // before enqueue_action is called — StubTrustRepo panics
         // on enqueue_action, so a missing guard would cause the test to panic.
         let svc = DefaultTrustService::new(
-            Arc::new(AtDenouncementSlotLimitRepo),
+            Arc::new(
+                StubTrustRepo::default()
+                    .daily(0)
+                    .active(false)
+                    .total(i64::from(DENOUNCEMENT_SLOT_LIMIT)),
+            ),
             Arc::new(PanicReputationRepo),
         );
         let a = Uuid::new_v4();
@@ -1066,142 +857,18 @@ mod tests {
         );
     }
 
-    /// Stub [`TrustRepo`] that returns no active denouncement but reports the daily
-    /// action quota as exhausted — used to test the [`TrustServiceError::QuotaExceeded`]
-    /// guard in [`DefaultTrustService::denounce`] without reaching
-    /// `count_total_denouncements_by`.
-    struct AtDailyQuotaForDenounceRepo;
-
-    #[async_trait]
-    impl TrustRepo for AtDailyQuotaForDenounceRepo {
-        async fn count_daily_actions(&self, _: Uuid) -> Result<i64, TrustRepoError> {
-            Ok(DAILY_ACTION_QUOTA)
-        }
-        async fn has_active_denouncement(&self, _: Uuid, _: Uuid) -> Result<bool, TrustRepoError> {
-            Ok(false)
-        }
-        async fn get_or_create_influence(
-            &self,
-            _: Uuid,
-        ) -> Result<InfluenceRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn enqueue_action(
-            &self,
-            _: Uuid,
-            _: ActionType,
-            _: &serde_json::Value,
-        ) -> Result<ActionRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn get_action(&self, _: Uuid) -> Result<ActionRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn complete_action(&self, _: Uuid) -> Result<(), TrustRepoError> {
-            unimplemented!()
-        }
-        async fn fail_action(&self, _: Uuid, _: &str) -> Result<(), TrustRepoError> {
-            unimplemented!()
-        }
-        async fn create_denouncement(
-            &self,
-            _: Uuid,
-            _: Uuid,
-            _: &str,
-        ) -> Result<DenouncementRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn create_denouncement_and_revoke_endorsement(
-            &self,
-            _: Uuid,
-            _: Uuid,
-            _: &str,
-        ) -> Result<DenouncementRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn list_denouncements_against(
-            &self,
-            _: Uuid,
-        ) -> Result<Vec<DenouncementRecord>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn list_denouncements_by(
-            &self,
-            _: Uuid,
-        ) -> Result<Vec<DenouncementRecord>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn list_denouncements_by_with_username(
-            &self,
-            _: Uuid,
-        ) -> Result<Vec<DenouncementWithUsername>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn count_total_denouncements_by(&self, _: Uuid) -> Result<i64, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn create_invite(
-            &self,
-            _: Uuid,
-            _: &[u8],
-            _: DeliveryMethod,
-            _: Option<RelationshipDepth>,
-            _: f32,
-            _: &serde_json::Value,
-            _: chrono::DateTime<chrono::Utc>,
-        ) -> Result<InviteRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn get_invite(&self, _: Uuid) -> Result<InviteRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn accept_invite(&self, _: Uuid, _: Uuid) -> Result<InviteRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn list_invites_by_endorser(
-            &self,
-            _: Uuid,
-        ) -> Result<Vec<InviteRecord>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn upsert_score(
-            &self,
-            _: Uuid,
-            _: Option<Uuid>,
-            _: Option<f32>,
-            _: Option<i32>,
-            _: Option<f32>,
-        ) -> Result<(), TrustRepoError> {
-            unimplemented!()
-        }
-        async fn get_score(
-            &self,
-            _: Uuid,
-            _: Option<Uuid>,
-        ) -> Result<Option<ScoreSnapshot>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn get_all_scores(&self, _: Uuid) -> Result<Vec<ScoreSnapshot>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn has_identity_endorsement(
-            &self,
-            _: Uuid,
-            _: &[Uuid],
-            _: &str,
-        ) -> Result<bool, TrustRepoError> {
-            unimplemented!()
-        }
-    }
-
     #[tokio::test]
     async fn denounce_returns_quota_exceeded_when_daily_limit_reached() {
         // The daily action quota is exhausted. The guard must fire before
-        // count_total_denouncements_by is reached — AtDailyQuotaForDenounceRepo
+        // count_total_denouncements_by is reached — StubTrustRepo
         // panics on count_total_denouncements_by, so a missing guard causes the
         // test to panic rather than silently pass.
         let svc = DefaultTrustService::new(
-            Arc::new(AtDailyQuotaForDenounceRepo),
+            Arc::new(
+                StubTrustRepo::default()
+                    .daily(DAILY_ACTION_QUOTA)
+                    .active(false),
+            ),
             Arc::new(PanicReputationRepo),
         );
         let a = Uuid::new_v4();
@@ -1215,142 +882,15 @@ mod tests {
 
     // ─── denounce repo-error propagation test ────────────────────────────────
 
-    /// Stub [`TrustRepo`] that fails `has_active_denouncement` with a database
-    /// error — used to verify that `denounce` propagates the error rather than
-    /// silently swallowing it.
-    struct FailingHasActiveDenouncementRepo;
-
-    #[async_trait]
-    impl TrustRepo for FailingHasActiveDenouncementRepo {
-        async fn has_active_denouncement(&self, _: Uuid, _: Uuid) -> Result<bool, TrustRepoError> {
-            Err(TrustRepoError::Database(sqlx::Error::RowNotFound))
-        }
-        async fn get_or_create_influence(
-            &self,
-            _: Uuid,
-        ) -> Result<InfluenceRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn enqueue_action(
-            &self,
-            _: Uuid,
-            _: ActionType,
-            _: &serde_json::Value,
-        ) -> Result<ActionRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn count_daily_actions(&self, _: Uuid) -> Result<i64, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn get_action(&self, _: Uuid) -> Result<ActionRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn complete_action(&self, _: Uuid) -> Result<(), TrustRepoError> {
-            unimplemented!()
-        }
-        async fn fail_action(&self, _: Uuid, _: &str) -> Result<(), TrustRepoError> {
-            unimplemented!()
-        }
-        async fn create_denouncement(
-            &self,
-            _: Uuid,
-            _: Uuid,
-            _: &str,
-        ) -> Result<DenouncementRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn create_denouncement_and_revoke_endorsement(
-            &self,
-            _: Uuid,
-            _: Uuid,
-            _: &str,
-        ) -> Result<DenouncementRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn list_denouncements_against(
-            &self,
-            _: Uuid,
-        ) -> Result<Vec<DenouncementRecord>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn list_denouncements_by(
-            &self,
-            _: Uuid,
-        ) -> Result<Vec<DenouncementRecord>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn list_denouncements_by_with_username(
-            &self,
-            _: Uuid,
-        ) -> Result<Vec<DenouncementWithUsername>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn count_total_denouncements_by(&self, _: Uuid) -> Result<i64, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn create_invite(
-            &self,
-            _: Uuid,
-            _: &[u8],
-            _: DeliveryMethod,
-            _: Option<RelationshipDepth>,
-            _: f32,
-            _: &serde_json::Value,
-            _: chrono::DateTime<chrono::Utc>,
-        ) -> Result<InviteRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn get_invite(&self, _: Uuid) -> Result<InviteRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn accept_invite(&self, _: Uuid, _: Uuid) -> Result<InviteRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn list_invites_by_endorser(
-            &self,
-            _: Uuid,
-        ) -> Result<Vec<InviteRecord>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn upsert_score(
-            &self,
-            _: Uuid,
-            _: Option<Uuid>,
-            _: Option<f32>,
-            _: Option<i32>,
-            _: Option<f32>,
-        ) -> Result<(), TrustRepoError> {
-            unimplemented!()
-        }
-        async fn get_score(
-            &self,
-            _: Uuid,
-            _: Option<Uuid>,
-        ) -> Result<Option<ScoreSnapshot>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn get_all_scores(&self, _: Uuid) -> Result<Vec<ScoreSnapshot>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn has_identity_endorsement(
-            &self,
-            _: Uuid,
-            _: &[Uuid],
-            _: &str,
-        ) -> Result<bool, TrustRepoError> {
-            unimplemented!()
-        }
-    }
-
     #[tokio::test]
     async fn denounce_propagates_repo_error_from_has_active_denouncement() {
         // `has_active_denouncement` is the first repo call in `denounce` (after the
         // pure self-action and reason checks). If the database fails there, the
         // service must surface the error rather than silently succeeding or panicking.
-        // `FailingHasActiveDenouncementRepo` panics on every other method, so a
+        // `StubTrustRepo` panics on every other method, so a
         // missing `?` would cause the test to fail loudly.
         let svc = DefaultTrustService::new(
-            Arc::new(FailingHasActiveDenouncementRepo),
+            Arc::new(StubTrustRepo::default().active_error()),
             Arc::new(PanicReputationRepo),
         );
         let a = Uuid::new_v4();
@@ -1364,141 +904,15 @@ mod tests {
 
     // ─── endorse repo-error propagation tests ────────────────────────────────
 
-    /// Stub [`TrustRepo`] that fails `count_daily_actions` — used to verify
-    /// that `endorse` propagates the error rather than silently swallowing it.
-    struct FailingCountDailyActionsForEndorseRepo;
-
-    #[async_trait]
-    impl TrustRepo for FailingCountDailyActionsForEndorseRepo {
-        async fn count_daily_actions(&self, _: Uuid) -> Result<i64, TrustRepoError> {
-            Err(TrustRepoError::Database(sqlx::Error::RowNotFound))
-        }
-        async fn get_or_create_influence(
-            &self,
-            _: Uuid,
-        ) -> Result<InfluenceRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn enqueue_action(
-            &self,
-            _: Uuid,
-            _: ActionType,
-            _: &serde_json::Value,
-        ) -> Result<ActionRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn get_action(&self, _: Uuid) -> Result<ActionRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn complete_action(&self, _: Uuid) -> Result<(), TrustRepoError> {
-            unimplemented!()
-        }
-        async fn fail_action(&self, _: Uuid, _: &str) -> Result<(), TrustRepoError> {
-            unimplemented!()
-        }
-        async fn create_denouncement(
-            &self,
-            _: Uuid,
-            _: Uuid,
-            _: &str,
-        ) -> Result<DenouncementRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn create_denouncement_and_revoke_endorsement(
-            &self,
-            _: Uuid,
-            _: Uuid,
-            _: &str,
-        ) -> Result<DenouncementRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn list_denouncements_against(
-            &self,
-            _: Uuid,
-        ) -> Result<Vec<DenouncementRecord>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn list_denouncements_by(
-            &self,
-            _: Uuid,
-        ) -> Result<Vec<DenouncementRecord>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn list_denouncements_by_with_username(
-            &self,
-            _: Uuid,
-        ) -> Result<Vec<DenouncementWithUsername>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn count_total_denouncements_by(&self, _: Uuid) -> Result<i64, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn has_active_denouncement(&self, _: Uuid, _: Uuid) -> Result<bool, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn create_invite(
-            &self,
-            _: Uuid,
-            _: &[u8],
-            _: DeliveryMethod,
-            _: Option<RelationshipDepth>,
-            _: f32,
-            _: &serde_json::Value,
-            _: chrono::DateTime<chrono::Utc>,
-        ) -> Result<InviteRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn get_invite(&self, _: Uuid) -> Result<InviteRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn accept_invite(&self, _: Uuid, _: Uuid) -> Result<InviteRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn list_invites_by_endorser(
-            &self,
-            _: Uuid,
-        ) -> Result<Vec<InviteRecord>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn upsert_score(
-            &self,
-            _: Uuid,
-            _: Option<Uuid>,
-            _: Option<f32>,
-            _: Option<i32>,
-            _: Option<f32>,
-        ) -> Result<(), TrustRepoError> {
-            unimplemented!()
-        }
-        async fn get_score(
-            &self,
-            _: Uuid,
-            _: Option<Uuid>,
-        ) -> Result<Option<ScoreSnapshot>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn get_all_scores(&self, _: Uuid) -> Result<Vec<ScoreSnapshot>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn has_identity_endorsement(
-            &self,
-            _: Uuid,
-            _: &[Uuid],
-            _: &str,
-        ) -> Result<bool, TrustRepoError> {
-            unimplemented!()
-        }
-    }
-
     #[tokio::test]
     async fn endorse_propagates_repo_error_from_count_daily_actions() {
         // `count_daily_actions` is the first repo call in `endorse` (after the
         // pure self-action and weight checks). If the database fails there, the
         // service must surface the error rather than silently succeeding or panicking.
-        // `FailingCountDailyActionsForEndorseRepo` panics on every other method, so a
+        // `StubTrustRepo` panics on every other method, so a
         // missing `?` would cause the test to fail loudly.
         let svc = DefaultTrustService::new(
-            Arc::new(FailingCountDailyActionsForEndorseRepo),
+            Arc::new(StubTrustRepo::default().daily_error()),
             Arc::new(PanicReputationRepo),
         );
         let a = Uuid::new_v4();
@@ -1510,142 +924,15 @@ mod tests {
         );
     }
 
-    /// Stub [`TrustRepo`] that passes `count_daily_actions` but fails
-    /// `has_active_denouncement` — used to verify that `endorse` propagates
-    /// the error rather than silently swallowing it.
-    struct FailingHasActiveDenouncementForEndorseRepo;
-
-    #[async_trait]
-    impl TrustRepo for FailingHasActiveDenouncementForEndorseRepo {
-        async fn count_daily_actions(&self, _: Uuid) -> Result<i64, TrustRepoError> {
-            Ok(0) // below quota — guard passes
-        }
-        async fn has_active_denouncement(&self, _: Uuid, _: Uuid) -> Result<bool, TrustRepoError> {
-            Err(TrustRepoError::Database(sqlx::Error::RowNotFound))
-        }
-        async fn get_or_create_influence(
-            &self,
-            _: Uuid,
-        ) -> Result<InfluenceRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn enqueue_action(
-            &self,
-            _: Uuid,
-            _: ActionType,
-            _: &serde_json::Value,
-        ) -> Result<ActionRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn get_action(&self, _: Uuid) -> Result<ActionRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn complete_action(&self, _: Uuid) -> Result<(), TrustRepoError> {
-            unimplemented!()
-        }
-        async fn fail_action(&self, _: Uuid, _: &str) -> Result<(), TrustRepoError> {
-            unimplemented!()
-        }
-        async fn create_denouncement(
-            &self,
-            _: Uuid,
-            _: Uuid,
-            _: &str,
-        ) -> Result<DenouncementRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn create_denouncement_and_revoke_endorsement(
-            &self,
-            _: Uuid,
-            _: Uuid,
-            _: &str,
-        ) -> Result<DenouncementRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn list_denouncements_against(
-            &self,
-            _: Uuid,
-        ) -> Result<Vec<DenouncementRecord>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn list_denouncements_by(
-            &self,
-            _: Uuid,
-        ) -> Result<Vec<DenouncementRecord>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn list_denouncements_by_with_username(
-            &self,
-            _: Uuid,
-        ) -> Result<Vec<DenouncementWithUsername>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn count_total_denouncements_by(&self, _: Uuid) -> Result<i64, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn create_invite(
-            &self,
-            _: Uuid,
-            _: &[u8],
-            _: DeliveryMethod,
-            _: Option<RelationshipDepth>,
-            _: f32,
-            _: &serde_json::Value,
-            _: chrono::DateTime<chrono::Utc>,
-        ) -> Result<InviteRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn get_invite(&self, _: Uuid) -> Result<InviteRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn accept_invite(&self, _: Uuid, _: Uuid) -> Result<InviteRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn list_invites_by_endorser(
-            &self,
-            _: Uuid,
-        ) -> Result<Vec<InviteRecord>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn upsert_score(
-            &self,
-            _: Uuid,
-            _: Option<Uuid>,
-            _: Option<f32>,
-            _: Option<i32>,
-            _: Option<f32>,
-        ) -> Result<(), TrustRepoError> {
-            unimplemented!()
-        }
-        async fn get_score(
-            &self,
-            _: Uuid,
-            _: Option<Uuid>,
-        ) -> Result<Option<ScoreSnapshot>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn get_all_scores(&self, _: Uuid) -> Result<Vec<ScoreSnapshot>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn has_identity_endorsement(
-            &self,
-            _: Uuid,
-            _: &[Uuid],
-            _: &str,
-        ) -> Result<bool, TrustRepoError> {
-            unimplemented!()
-        }
-    }
-
     #[tokio::test]
     async fn endorse_propagates_repo_error_from_has_active_denouncement() {
         // `has_active_denouncement` is called after `count_daily_actions` passes.
         // If the database fails there, the service must surface the error rather
         // than silently succeeding or panicking.
-        // `FailingHasActiveDenouncementForEndorseRepo` panics on every other method,
+        // `StubTrustRepo` panics on every other method,
         // so a missing `?` would cause the test to fail loudly.
         let svc = DefaultTrustService::new(
-            Arc::new(FailingHasActiveDenouncementForEndorseRepo),
+            Arc::new(StubTrustRepo::default().daily(0).active_error()),
             Arc::new(PanicReputationRepo),
         );
         let a = Uuid::new_v4();
@@ -1666,146 +953,6 @@ mod tests {
     //     many active endorsements they have (the exemption).
     //   - non-verifier accounts at the slot limit receive `in_slot = false` but
     //     the action is still queued — slots full is NOT an error.
-
-    /// A [`TrustRepo`] stub that passes the two pre-enqueue guards (quota and
-    /// denouncement checks) and captures the `enqueue_action` payload for
-    /// inspection.
-    struct CapturingEnqueueRepo {
-        captured: Arc<Mutex<Option<serde_json::Value>>>,
-    }
-
-    #[async_trait]
-    impl TrustRepo for CapturingEnqueueRepo {
-        async fn count_daily_actions(&self, _: Uuid) -> Result<i64, TrustRepoError> {
-            Ok(0) // below quota
-        }
-        async fn has_active_denouncement(&self, _: Uuid, _: Uuid) -> Result<bool, TrustRepoError> {
-            Ok(false) // no conflict
-        }
-        async fn enqueue_action(
-            &self,
-            actor_id: Uuid,
-            action_type: ActionType,
-            payload: &serde_json::Value,
-        ) -> Result<ActionRecord, TrustRepoError> {
-            *self.captured.lock().unwrap() = Some(payload.clone());
-            Ok(ActionRecord {
-                id: Uuid::new_v4(),
-                actor_id,
-                action_type: action_type.as_str().to_string(),
-                payload: payload.clone(),
-                status: "pending".to_string(),
-                quota_date: chrono::Utc::now().date_naive(),
-                error_message: None,
-                created_at: chrono::Utc::now(),
-                processed_at: None,
-            })
-        }
-        async fn get_or_create_influence(
-            &self,
-            _: Uuid,
-        ) -> Result<InfluenceRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn get_action(&self, _: Uuid) -> Result<ActionRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn complete_action(&self, _: Uuid) -> Result<(), TrustRepoError> {
-            unimplemented!()
-        }
-        async fn fail_action(&self, _: Uuid, _: &str) -> Result<(), TrustRepoError> {
-            unimplemented!()
-        }
-        async fn create_denouncement(
-            &self,
-            _: Uuid,
-            _: Uuid,
-            _: &str,
-        ) -> Result<DenouncementRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn create_denouncement_and_revoke_endorsement(
-            &self,
-            _: Uuid,
-            _: Uuid,
-            _: &str,
-        ) -> Result<DenouncementRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn list_denouncements_against(
-            &self,
-            _: Uuid,
-        ) -> Result<Vec<DenouncementRecord>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn list_denouncements_by(
-            &self,
-            _: Uuid,
-        ) -> Result<Vec<DenouncementRecord>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn list_denouncements_by_with_username(
-            &self,
-            _: Uuid,
-        ) -> Result<Vec<DenouncementWithUsername>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn count_total_denouncements_by(&self, _: Uuid) -> Result<i64, TrustRepoError> {
-            Ok(0) // below denouncement slot limit — enables denounce happy-path tests
-        }
-        async fn create_invite(
-            &self,
-            _: Uuid,
-            _: &[u8],
-            _: DeliveryMethod,
-            _: Option<RelationshipDepth>,
-            _: f32,
-            _: &serde_json::Value,
-            _: chrono::DateTime<chrono::Utc>,
-        ) -> Result<InviteRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn get_invite(&self, _: Uuid) -> Result<InviteRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn accept_invite(&self, _: Uuid, _: Uuid) -> Result<InviteRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn list_invites_by_endorser(
-            &self,
-            _: Uuid,
-        ) -> Result<Vec<InviteRecord>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn upsert_score(
-            &self,
-            _: Uuid,
-            _: Option<Uuid>,
-            _: Option<f32>,
-            _: Option<i32>,
-            _: Option<f32>,
-        ) -> Result<(), TrustRepoError> {
-            unimplemented!()
-        }
-        async fn get_score(
-            &self,
-            _: Uuid,
-            _: Option<Uuid>,
-        ) -> Result<Option<ScoreSnapshot>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn get_all_scores(&self, _: Uuid) -> Result<Vec<ScoreSnapshot>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn has_identity_endorsement(
-            &self,
-            _: Uuid,
-            _: &[Uuid],
-            _: &str,
-        ) -> Result<bool, TrustRepoError> {
-            unimplemented!()
-        }
-    }
 
     /// A [`ReputationRepo`] stub with configurable verifier and active-endorsement
     /// values, used to drive the `in_slot` computation in [`DefaultTrustService::endorse`].
@@ -1881,9 +1028,12 @@ mod tests {
         // payload must carry `in_slot = true`.
         let captured = Arc::new(Mutex::new(None));
         let svc = DefaultTrustService::new(
-            Arc::new(CapturingEnqueueRepo {
-                captured: captured.clone(),
-            }),
+            Arc::new(
+                StubTrustRepo::default()
+                    .daily(0)
+                    .active(false)
+                    .capture_payload(captured.clone()),
+            ),
             Arc::new(StubReputationRepo {
                 is_verifier: true,
                 active_endorsements: i64::from(ENDORSEMENT_SLOT_LIMIT), // slots "full"
@@ -1907,9 +1057,12 @@ mod tests {
         // endorsement does not count toward the slot quota.
         let captured = Arc::new(Mutex::new(None));
         let svc = DefaultTrustService::new(
-            Arc::new(CapturingEnqueueRepo {
-                captured: captured.clone(),
-            }),
+            Arc::new(
+                StubTrustRepo::default()
+                    .daily(0)
+                    .active(false)
+                    .capture_payload(captured.clone()),
+            ),
             Arc::new(StubReputationRepo {
                 is_verifier: false,
                 active_endorsements: i64::from(ENDORSEMENT_SLOT_LIMIT), // at slot limit
@@ -1935,9 +1088,12 @@ mod tests {
         // slot-full test above.
         let captured = Arc::new(Mutex::new(None));
         let svc = DefaultTrustService::new(
-            Arc::new(CapturingEnqueueRepo {
-                captured: captured.clone(),
-            }),
+            Arc::new(
+                StubTrustRepo::default()
+                    .daily(0)
+                    .active(false)
+                    .capture_payload(captured.clone()),
+            ),
             Arc::new(StubReputationRepo {
                 is_verifier: false,
                 active_endorsements: i64::from(ENDORSEMENT_SLOT_LIMIT) - 1, // one slot free
@@ -1964,9 +1120,12 @@ mod tests {
         // because those tests only inspect the `in_slot` field.
         let captured = Arc::new(Mutex::new(None));
         let svc = DefaultTrustService::new(
-            Arc::new(CapturingEnqueueRepo {
-                captured: captured.clone(),
-            }),
+            Arc::new(
+                StubTrustRepo::default()
+                    .daily(0)
+                    .active(false)
+                    .capture_payload(captured.clone()),
+            ),
             Arc::new(StubReputationRepo {
                 is_verifier: false,
                 active_endorsements: 0,
@@ -1996,9 +1155,12 @@ mod tests {
         // silently drop attestation data for every real endorsement that carries one.
         let captured = Arc::new(Mutex::new(None));
         let svc = DefaultTrustService::new(
-            Arc::new(CapturingEnqueueRepo {
-                captured: captured.clone(),
-            }),
+            Arc::new(
+                StubTrustRepo::default()
+                    .daily(0)
+                    .active(false)
+                    .capture_payload(captured.clone()),
+            ),
             Arc::new(StubReputationRepo {
                 is_verifier: false,
                 active_endorsements: 0,
@@ -2026,9 +1188,13 @@ mod tests {
         // accuser_id/target_id would silently pass all guard tests above.
         let captured = Arc::new(Mutex::new(None));
         let svc = DefaultTrustService::new(
-            Arc::new(CapturingEnqueueRepo {
-                captured: captured.clone(),
-            }),
+            Arc::new(
+                StubTrustRepo::default()
+                    .daily(0)
+                    .active(false)
+                    .total(0)
+                    .capture_payload(captured.clone()),
+            ),
             Arc::new(PanicReputationRepo),
         );
         let accuser = Uuid::new_v4();
@@ -2189,13 +1355,16 @@ mod tests {
         // `endorse` calls `count_active_trust_endorsements_by` to determine the
         // `in_slot` flag. If that call fails, the error must be propagated as
         // `TrustServiceError::EndorsementRepo` rather than silently treating the
-        // count as 0 and proceeding to enqueue. `CapturingEnqueueRepo` panics on
+        // count as 0 and proceeding to enqueue. `StubTrustRepo` panics on
         // `enqueue_action`, so a missing `?` here would surface immediately.
         let captured = Arc::new(Mutex::new(None));
         let svc = DefaultTrustService::new(
-            Arc::new(CapturingEnqueueRepo {
-                captured: captured.clone(),
-            }),
+            Arc::new(
+                StubTrustRepo::default()
+                    .daily(0)
+                    .active(false)
+                    .capture_payload(captured.clone()),
+            ),
             Arc::new(NonVerifierWithFailingActiveCountRepo),
         );
         let a = Uuid::new_v4();
@@ -2213,143 +1382,20 @@ mod tests {
 
     // ─── denounce count_total_denouncements_by error propagation ─────────────
 
-    /// Stub [`TrustRepo`] that passes `has_active_denouncement` and
-    /// `count_daily_actions` but fails `count_total_denouncements_by` — used
-    /// to verify that `denounce` propagates the error rather than silently
-    /// swallowing it or proceeding to `enqueue_action`.
-    struct FailingCountTotalDenouncementsByRepo;
-
-    #[async_trait]
-    impl TrustRepo for FailingCountTotalDenouncementsByRepo {
-        async fn has_active_denouncement(&self, _: Uuid, _: Uuid) -> Result<bool, TrustRepoError> {
-            Ok(false) // no existing denouncement → proceed past AlreadyDenounced guard
-        }
-        async fn count_daily_actions(&self, _: Uuid) -> Result<i64, TrustRepoError> {
-            Ok(0) // below quota → proceed past QuotaExceeded guard
-        }
-        async fn count_total_denouncements_by(&self, _: Uuid) -> Result<i64, TrustRepoError> {
-            Err(TrustRepoError::Database(sqlx::Error::RowNotFound))
-        }
-        async fn get_or_create_influence(
-            &self,
-            _: Uuid,
-        ) -> Result<InfluenceRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn enqueue_action(
-            &self,
-            _: Uuid,
-            _: ActionType,
-            _: &serde_json::Value,
-        ) -> Result<ActionRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn get_action(&self, _: Uuid) -> Result<ActionRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn complete_action(&self, _: Uuid) -> Result<(), TrustRepoError> {
-            unimplemented!()
-        }
-        async fn fail_action(&self, _: Uuid, _: &str) -> Result<(), TrustRepoError> {
-            unimplemented!()
-        }
-        async fn create_denouncement(
-            &self,
-            _: Uuid,
-            _: Uuid,
-            _: &str,
-        ) -> Result<DenouncementRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn create_denouncement_and_revoke_endorsement(
-            &self,
-            _: Uuid,
-            _: Uuid,
-            _: &str,
-        ) -> Result<DenouncementRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn list_denouncements_against(
-            &self,
-            _: Uuid,
-        ) -> Result<Vec<DenouncementRecord>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn list_denouncements_by(
-            &self,
-            _: Uuid,
-        ) -> Result<Vec<DenouncementRecord>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn list_denouncements_by_with_username(
-            &self,
-            _: Uuid,
-        ) -> Result<Vec<DenouncementWithUsername>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn create_invite(
-            &self,
-            _: Uuid,
-            _: &[u8],
-            _: DeliveryMethod,
-            _: Option<RelationshipDepth>,
-            _: f32,
-            _: &serde_json::Value,
-            _: chrono::DateTime<chrono::Utc>,
-        ) -> Result<InviteRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn get_invite(&self, _: Uuid) -> Result<InviteRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn accept_invite(&self, _: Uuid, _: Uuid) -> Result<InviteRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn list_invites_by_endorser(
-            &self,
-            _: Uuid,
-        ) -> Result<Vec<InviteRecord>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn upsert_score(
-            &self,
-            _: Uuid,
-            _: Option<Uuid>,
-            _: Option<f32>,
-            _: Option<i32>,
-            _: Option<f32>,
-        ) -> Result<(), TrustRepoError> {
-            unimplemented!()
-        }
-        async fn get_score(
-            &self,
-            _: Uuid,
-            _: Option<Uuid>,
-        ) -> Result<Option<ScoreSnapshot>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn get_all_scores(&self, _: Uuid) -> Result<Vec<ScoreSnapshot>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn has_identity_endorsement(
-            &self,
-            _: Uuid,
-            _: &[Uuid],
-            _: &str,
-        ) -> Result<bool, TrustRepoError> {
-            unimplemented!()
-        }
-    }
-
     #[tokio::test]
     async fn denounce_propagates_repo_error_from_count_total_denouncements_by() {
         // `count_total_denouncements_by` is called after `has_active_denouncement`
         // and `count_daily_actions` pass. If the database fails there, the service
         // must surface the error rather than silently succeeding or panicking.
-        // `FailingCountTotalDenouncementsByRepo` panics on `enqueue_action`, so a
+        // `StubTrustRepo` panics on `enqueue_action`, so a
         // missing `?` on the repo call would cause the test to panic loudly.
         let svc = DefaultTrustService::new(
-            Arc::new(FailingCountTotalDenouncementsByRepo),
+            Arc::new(
+                StubTrustRepo::default()
+                    .daily(0)
+                    .active(false)
+                    .total_error(),
+            ),
             Arc::new(PanicReputationRepo),
         );
         let a = Uuid::new_v4();
@@ -2367,14 +1413,17 @@ mod tests {
         // `endorse` must propagate it as `TrustServiceError::EndorsementRepo` rather than
         // silently treating the caller as a non-verifier and proceeding to enqueue.
         //
-        // Uses `CapturingEnqueueRepo` as the TrustRepo stub so all upstream guards
+        // Uses `StubTrustRepo` as the TrustRepo stub so all upstream guards
         // (quota, denouncement conflict) pass, ensuring the path reaches
         // `has_endorsement` before the error is returned.
         let captured = Arc::new(Mutex::new(None));
         let svc = DefaultTrustService::new(
-            Arc::new(CapturingEnqueueRepo {
-                captured: captured.clone(),
-            }),
+            Arc::new(
+                StubTrustRepo::default()
+                    .daily(0)
+                    .active(false)
+                    .capture_payload(captured.clone()),
+            ),
             Arc::new(ErrorHasEndorsementRepo),
         );
         let a = Uuid::new_v4();
@@ -2393,273 +1442,21 @@ mod tests {
 
     // ─── enqueue_action error propagation tests ──────────────────────────────
 
-    /// Stub [`TrustRepo`] that passes all pre-enqueue guards in
-    /// [`DefaultTrustService::revoke_endorsement`] (daily quota check) but
-    /// returns a database error from `enqueue_action`. Used to verify the
-    /// service propagates the error rather than silently succeeding.
-    struct FailingEnqueueRepo;
-
-    #[async_trait]
-    impl TrustRepo for FailingEnqueueRepo {
-        async fn count_daily_actions(&self, _: Uuid) -> Result<i64, TrustRepoError> {
-            Ok(0) // below quota — all guards pass
-        }
-        async fn enqueue_action(
-            &self,
-            _: Uuid,
-            _: ActionType,
-            _: &serde_json::Value,
-        ) -> Result<ActionRecord, TrustRepoError> {
-            Err(TrustRepoError::Database(sqlx::Error::RowNotFound))
-        }
-        async fn get_or_create_influence(
-            &self,
-            _: Uuid,
-        ) -> Result<InfluenceRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn get_action(&self, _: Uuid) -> Result<ActionRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn complete_action(&self, _: Uuid) -> Result<(), TrustRepoError> {
-            unimplemented!()
-        }
-        async fn fail_action(&self, _: Uuid, _: &str) -> Result<(), TrustRepoError> {
-            unimplemented!()
-        }
-        async fn create_denouncement(
-            &self,
-            _: Uuid,
-            _: Uuid,
-            _: &str,
-        ) -> Result<DenouncementRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn create_denouncement_and_revoke_endorsement(
-            &self,
-            _: Uuid,
-            _: Uuid,
-            _: &str,
-        ) -> Result<DenouncementRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn list_denouncements_against(
-            &self,
-            _: Uuid,
-        ) -> Result<Vec<DenouncementRecord>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn list_denouncements_by(
-            &self,
-            _: Uuid,
-        ) -> Result<Vec<DenouncementRecord>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn list_denouncements_by_with_username(
-            &self,
-            _: Uuid,
-        ) -> Result<Vec<DenouncementWithUsername>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn count_total_denouncements_by(&self, _: Uuid) -> Result<i64, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn has_active_denouncement(&self, _: Uuid, _: Uuid) -> Result<bool, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn create_invite(
-            &self,
-            _: Uuid,
-            _: &[u8],
-            _: DeliveryMethod,
-            _: Option<RelationshipDepth>,
-            _: f32,
-            _: &serde_json::Value,
-            _: chrono::DateTime<chrono::Utc>,
-        ) -> Result<InviteRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn get_invite(&self, _: Uuid) -> Result<InviteRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn accept_invite(&self, _: Uuid, _: Uuid) -> Result<InviteRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn list_invites_by_endorser(
-            &self,
-            _: Uuid,
-        ) -> Result<Vec<InviteRecord>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn upsert_score(
-            &self,
-            _: Uuid,
-            _: Option<Uuid>,
-            _: Option<f32>,
-            _: Option<i32>,
-            _: Option<f32>,
-        ) -> Result<(), TrustRepoError> {
-            unimplemented!()
-        }
-        async fn get_score(
-            &self,
-            _: Uuid,
-            _: Option<Uuid>,
-        ) -> Result<Option<ScoreSnapshot>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn get_all_scores(&self, _: Uuid) -> Result<Vec<ScoreSnapshot>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn has_identity_endorsement(
-            &self,
-            _: Uuid,
-            _: &[Uuid],
-            _: &str,
-        ) -> Result<bool, TrustRepoError> {
-            unimplemented!()
-        }
-    }
-
-    /// Stub [`TrustRepo`] that passes all pre-enqueue guards in
-    /// [`DefaultTrustService::endorse`] (daily quota check and denouncement
-    /// conflict check) but returns a database error from `enqueue_action`.
-    /// Used to verify the service propagates the error rather than silently
-    /// succeeding.
-    struct FailingEnqueueForEndorseRepo;
-
-    #[async_trait]
-    impl TrustRepo for FailingEnqueueForEndorseRepo {
-        async fn count_daily_actions(&self, _: Uuid) -> Result<i64, TrustRepoError> {
-            Ok(0) // below quota — guard passes
-        }
-        async fn has_active_denouncement(&self, _: Uuid, _: Uuid) -> Result<bool, TrustRepoError> {
-            Ok(false) // no conflict — guard passes
-        }
-        async fn enqueue_action(
-            &self,
-            _: Uuid,
-            _: ActionType,
-            _: &serde_json::Value,
-        ) -> Result<ActionRecord, TrustRepoError> {
-            Err(TrustRepoError::Database(sqlx::Error::RowNotFound))
-        }
-        async fn get_or_create_influence(
-            &self,
-            _: Uuid,
-        ) -> Result<InfluenceRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn get_action(&self, _: Uuid) -> Result<ActionRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn complete_action(&self, _: Uuid) -> Result<(), TrustRepoError> {
-            unimplemented!()
-        }
-        async fn fail_action(&self, _: Uuid, _: &str) -> Result<(), TrustRepoError> {
-            unimplemented!()
-        }
-        async fn create_denouncement(
-            &self,
-            _: Uuid,
-            _: Uuid,
-            _: &str,
-        ) -> Result<DenouncementRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn create_denouncement_and_revoke_endorsement(
-            &self,
-            _: Uuid,
-            _: Uuid,
-            _: &str,
-        ) -> Result<DenouncementRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn list_denouncements_against(
-            &self,
-            _: Uuid,
-        ) -> Result<Vec<DenouncementRecord>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn list_denouncements_by(
-            &self,
-            _: Uuid,
-        ) -> Result<Vec<DenouncementRecord>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn list_denouncements_by_with_username(
-            &self,
-            _: Uuid,
-        ) -> Result<Vec<DenouncementWithUsername>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn count_total_denouncements_by(&self, _: Uuid) -> Result<i64, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn create_invite(
-            &self,
-            _: Uuid,
-            _: &[u8],
-            _: DeliveryMethod,
-            _: Option<RelationshipDepth>,
-            _: f32,
-            _: &serde_json::Value,
-            _: chrono::DateTime<chrono::Utc>,
-        ) -> Result<InviteRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn get_invite(&self, _: Uuid) -> Result<InviteRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn accept_invite(&self, _: Uuid, _: Uuid) -> Result<InviteRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn list_invites_by_endorser(
-            &self,
-            _: Uuid,
-        ) -> Result<Vec<InviteRecord>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn upsert_score(
-            &self,
-            _: Uuid,
-            _: Option<Uuid>,
-            _: Option<f32>,
-            _: Option<i32>,
-            _: Option<f32>,
-        ) -> Result<(), TrustRepoError> {
-            unimplemented!()
-        }
-        async fn get_score(
-            &self,
-            _: Uuid,
-            _: Option<Uuid>,
-        ) -> Result<Option<ScoreSnapshot>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn get_all_scores(&self, _: Uuid) -> Result<Vec<ScoreSnapshot>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn has_identity_endorsement(
-            &self,
-            _: Uuid,
-            _: &[Uuid],
-            _: &str,
-        ) -> Result<bool, TrustRepoError> {
-            unimplemented!()
-        }
-    }
-
     #[tokio::test]
     async fn endorse_propagates_repo_error_from_enqueue_action() {
         // `enqueue_action` is the last repo call in `endorse` — all guards pass
         // (self-action, weight, daily quota, denouncement conflict, and the
         // verifier/slot checks). If the database fails at the enqueue step, the
         // service must surface the error rather than silently succeeding.
-        // `FailingEnqueueForEndorseRepo` panics on all other methods, so a stray
+        // `StubTrustRepo` panics on all other methods, so a stray
         // call would cause the test to fail loudly.
         let svc = DefaultTrustService::new(
-            Arc::new(FailingEnqueueForEndorseRepo),
+            Arc::new(
+                StubTrustRepo::default()
+                    .daily(0)
+                    .active(false)
+                    .enqueue_error(),
+            ),
             Arc::new(StubReputationRepo {
                 is_verifier: false,
                 active_endorsements: 0,
@@ -2679,10 +1476,12 @@ mod tests {
         // `enqueue_action` is the last repo call in `revoke_endorsement` — all
         // guards pass (self-action check and daily quota check). If the database
         // fails at the enqueue step, the service must surface the error rather
-        // than silently succeeding. `FailingEnqueueRepo` panics on all other
+        // than silently succeeding. `StubTrustRepo` panics on all other
         // methods, so a stray call would cause the test to fail loudly.
-        let svc =
-            DefaultTrustService::new(Arc::new(FailingEnqueueRepo), Arc::new(PanicReputationRepo));
+        let svc = DefaultTrustService::new(
+            Arc::new(StubTrustRepo::default().daily(0).enqueue_error()),
+            Arc::new(PanicReputationRepo),
+        );
         let a = Uuid::new_v4();
         let b = Uuid::new_v4();
         let err = svc.revoke_endorsement(a, b).await.unwrap_err();
@@ -2694,145 +1493,22 @@ mod tests {
 
     // ─── denounce enqueue_action error propagation ────────────────────────────
 
-    /// Stub [`TrustRepo`] that passes all pre-enqueue guards in
-    /// [`DefaultTrustService::denounce`] (`has_active_denouncement`,
-    /// `count_daily_actions`, `count_total_denouncements_by`) but returns a
-    /// database error from `enqueue_action`. Used to verify the service
-    /// propagates the error rather than silently succeeding.
-    struct FailingEnqueueForDenounceRepo;
-
-    #[async_trait]
-    impl TrustRepo for FailingEnqueueForDenounceRepo {
-        async fn has_active_denouncement(&self, _: Uuid, _: Uuid) -> Result<bool, TrustRepoError> {
-            Ok(false) // no existing denouncement — guard passes
-        }
-        async fn count_daily_actions(&self, _: Uuid) -> Result<i64, TrustRepoError> {
-            Ok(0) // below quota — guard passes
-        }
-        async fn count_total_denouncements_by(&self, _: Uuid) -> Result<i64, TrustRepoError> {
-            Ok(0) // below slot limit — guard passes
-        }
-        async fn enqueue_action(
-            &self,
-            _: Uuid,
-            _: ActionType,
-            _: &serde_json::Value,
-        ) -> Result<ActionRecord, TrustRepoError> {
-            Err(TrustRepoError::Database(sqlx::Error::RowNotFound))
-        }
-        async fn get_or_create_influence(
-            &self,
-            _: Uuid,
-        ) -> Result<InfluenceRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn get_action(&self, _: Uuid) -> Result<ActionRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn complete_action(&self, _: Uuid) -> Result<(), TrustRepoError> {
-            unimplemented!()
-        }
-        async fn fail_action(&self, _: Uuid, _: &str) -> Result<(), TrustRepoError> {
-            unimplemented!()
-        }
-        async fn create_denouncement(
-            &self,
-            _: Uuid,
-            _: Uuid,
-            _: &str,
-        ) -> Result<DenouncementRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn create_denouncement_and_revoke_endorsement(
-            &self,
-            _: Uuid,
-            _: Uuid,
-            _: &str,
-        ) -> Result<DenouncementRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn list_denouncements_against(
-            &self,
-            _: Uuid,
-        ) -> Result<Vec<DenouncementRecord>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn list_denouncements_by(
-            &self,
-            _: Uuid,
-        ) -> Result<Vec<DenouncementRecord>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn list_denouncements_by_with_username(
-            &self,
-            _: Uuid,
-        ) -> Result<Vec<DenouncementWithUsername>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn create_invite(
-            &self,
-            _: Uuid,
-            _: &[u8],
-            _: DeliveryMethod,
-            _: Option<RelationshipDepth>,
-            _: f32,
-            _: &serde_json::Value,
-            _: chrono::DateTime<chrono::Utc>,
-        ) -> Result<InviteRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn get_invite(&self, _: Uuid) -> Result<InviteRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn accept_invite(&self, _: Uuid, _: Uuid) -> Result<InviteRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn list_invites_by_endorser(
-            &self,
-            _: Uuid,
-        ) -> Result<Vec<InviteRecord>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn upsert_score(
-            &self,
-            _: Uuid,
-            _: Option<Uuid>,
-            _: Option<f32>,
-            _: Option<i32>,
-            _: Option<f32>,
-        ) -> Result<(), TrustRepoError> {
-            unimplemented!()
-        }
-        async fn get_score(
-            &self,
-            _: Uuid,
-            _: Option<Uuid>,
-        ) -> Result<Option<ScoreSnapshot>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn get_all_scores(&self, _: Uuid) -> Result<Vec<ScoreSnapshot>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn has_identity_endorsement(
-            &self,
-            _: Uuid,
-            _: &[Uuid],
-            _: &str,
-        ) -> Result<bool, TrustRepoError> {
-            unimplemented!()
-        }
-    }
-
     #[tokio::test]
     async fn denounce_propagates_repo_error_from_enqueue_action() {
         // `enqueue_action` is the last repo call in `denounce` — all guards pass
         // (self-action, reason validation, `has_active_denouncement`, daily quota,
         // and slot limit checks). If the database fails at the enqueue step, the
         // service must surface the error rather than silently succeeding.
-        // `FailingEnqueueForDenounceRepo` panics on all other methods, so a stray
+        // `StubTrustRepo` panics on all other methods, so a stray
         // call would cause the test to fail loudly.
         let svc = DefaultTrustService::new(
-            Arc::new(FailingEnqueueForDenounceRepo),
+            Arc::new(
+                StubTrustRepo::default()
+                    .daily(0)
+                    .active(false)
+                    .total(0)
+                    .enqueue_error(),
+            ),
             Arc::new(PanicReputationRepo),
         );
         let a = Uuid::new_v4();
@@ -2846,148 +1522,6 @@ mod tests {
 
     // ─── action_type pinning tests ────────────────────────────────────────────
 
-    /// A [`TrustRepo`] stub that passes all pre-enqueue guards and captures
-    /// the `action_type` argument passed to `enqueue_action`. Used to verify
-    /// that each service method uses the correct [`ActionType`] discriminant —
-    /// a copy-paste error (e.g. endorse passing `ActionType::Revoke`) would
-    /// cause the worker to silently misprocess the queued action.
-    struct ActionTypeCapturingRepo {
-        captured_type: Arc<Mutex<Option<ActionType>>>,
-    }
-
-    #[async_trait]
-    impl TrustRepo for ActionTypeCapturingRepo {
-        async fn count_daily_actions(&self, _: Uuid) -> Result<i64, TrustRepoError> {
-            Ok(0) // below quota — all daily-quota guards pass
-        }
-        async fn has_active_denouncement(&self, _: Uuid, _: Uuid) -> Result<bool, TrustRepoError> {
-            Ok(false) // no conflict or duplicate
-        }
-        async fn count_total_denouncements_by(&self, _: Uuid) -> Result<i64, TrustRepoError> {
-            Ok(0) // below slot limit
-        }
-        async fn enqueue_action(
-            &self,
-            actor_id: Uuid,
-            action_type: ActionType,
-            payload: &serde_json::Value,
-        ) -> Result<ActionRecord, TrustRepoError> {
-            *self.captured_type.lock().unwrap() = Some(action_type);
-            Ok(ActionRecord {
-                id: Uuid::new_v4(),
-                actor_id,
-                action_type: action_type.as_str().to_string(),
-                payload: payload.clone(),
-                status: "pending".to_string(),
-                quota_date: chrono::Utc::now().date_naive(),
-                error_message: None,
-                created_at: chrono::Utc::now(),
-                processed_at: None,
-            })
-        }
-        async fn get_or_create_influence(
-            &self,
-            _: Uuid,
-        ) -> Result<InfluenceRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn get_action(&self, _: Uuid) -> Result<ActionRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn complete_action(&self, _: Uuid) -> Result<(), TrustRepoError> {
-            unimplemented!()
-        }
-        async fn fail_action(&self, _: Uuid, _: &str) -> Result<(), TrustRepoError> {
-            unimplemented!()
-        }
-        async fn create_denouncement(
-            &self,
-            _: Uuid,
-            _: Uuid,
-            _: &str,
-        ) -> Result<DenouncementRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn create_denouncement_and_revoke_endorsement(
-            &self,
-            _: Uuid,
-            _: Uuid,
-            _: &str,
-        ) -> Result<DenouncementRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn list_denouncements_against(
-            &self,
-            _: Uuid,
-        ) -> Result<Vec<DenouncementRecord>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn list_denouncements_by(
-            &self,
-            _: Uuid,
-        ) -> Result<Vec<DenouncementRecord>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn list_denouncements_by_with_username(
-            &self,
-            _: Uuid,
-        ) -> Result<Vec<DenouncementWithUsername>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn create_invite(
-            &self,
-            _: Uuid,
-            _: &[u8],
-            _: DeliveryMethod,
-            _: Option<RelationshipDepth>,
-            _: f32,
-            _: &serde_json::Value,
-            _: chrono::DateTime<chrono::Utc>,
-        ) -> Result<InviteRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn get_invite(&self, _: Uuid) -> Result<InviteRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn accept_invite(&self, _: Uuid, _: Uuid) -> Result<InviteRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn list_invites_by_endorser(
-            &self,
-            _: Uuid,
-        ) -> Result<Vec<InviteRecord>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn upsert_score(
-            &self,
-            _: Uuid,
-            _: Option<Uuid>,
-            _: Option<f32>,
-            _: Option<i32>,
-            _: Option<f32>,
-        ) -> Result<(), TrustRepoError> {
-            unimplemented!()
-        }
-        async fn get_score(
-            &self,
-            _: Uuid,
-            _: Option<Uuid>,
-        ) -> Result<Option<ScoreSnapshot>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn get_all_scores(&self, _: Uuid) -> Result<Vec<ScoreSnapshot>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn has_identity_endorsement(
-            &self,
-            _: Uuid,
-            _: &[Uuid],
-            _: &str,
-        ) -> Result<bool, TrustRepoError> {
-            unimplemented!()
-        }
-    }
-
     #[tokio::test]
     async fn endorse_enqueues_action_type_endorse() {
         // Verifies that endorse() passes ActionType::Endorse to enqueue_action.
@@ -2995,9 +1529,13 @@ mod tests {
         // pass all other tests, and cause the worker to process endorsements as revokes.
         let captured_type = Arc::new(Mutex::new(None));
         let svc = DefaultTrustService::new(
-            Arc::new(ActionTypeCapturingRepo {
-                captured_type: captured_type.clone(),
-            }),
+            Arc::new(
+                StubTrustRepo::default()
+                    .daily(0)
+                    .active(false)
+                    .total(0)
+                    .capture_type(captured_type.clone()),
+            ),
             Arc::new(StubReputationRepo {
                 is_verifier: false,
                 active_endorsements: 0,
@@ -3018,9 +1556,13 @@ mod tests {
         // Verifies that revoke_endorsement() passes ActionType::Revoke to enqueue_action.
         let captured_type = Arc::new(Mutex::new(None));
         let svc = DefaultTrustService::new(
-            Arc::new(ActionTypeCapturingRepo {
-                captured_type: captured_type.clone(),
-            }),
+            Arc::new(
+                StubTrustRepo::default()
+                    .daily(0)
+                    .active(false)
+                    .total(0)
+                    .capture_type(captured_type.clone()),
+            ),
             Arc::new(PanicReputationRepo),
         );
         let a = Uuid::new_v4();
@@ -3038,9 +1580,13 @@ mod tests {
         // Verifies that denounce() passes ActionType::Denounce to enqueue_action.
         let captured_type = Arc::new(Mutex::new(None));
         let svc = DefaultTrustService::new(
-            Arc::new(ActionTypeCapturingRepo {
-                captured_type: captured_type.clone(),
-            }),
+            Arc::new(
+                StubTrustRepo::default()
+                    .daily(0)
+                    .active(false)
+                    .total(0)
+                    .capture_type(captured_type.clone()),
+            ),
             Arc::new(PanicReputationRepo),
         );
         let a = Uuid::new_v4();
@@ -3055,289 +1601,7 @@ mod tests {
 
     // ─── denounce actor_id correctness ───────────────────────────────────────
 
-    /// Stub [`TrustRepo`] that passes all pre-enqueue guards in
-    /// [`DefaultTrustService::denounce`] and captures the `actor_id` argument
-    /// passed to `enqueue_action`. Used to verify that `denounce` passes
-    /// `accuser_id` (not `target_id`) as the actor.
-    struct DenounceActorCapturingRepo {
-        captured_actor: Arc<Mutex<Option<Uuid>>>,
-    }
-
-    #[async_trait]
-    impl TrustRepo for DenounceActorCapturingRepo {
-        async fn has_active_denouncement(&self, _: Uuid, _: Uuid) -> Result<bool, TrustRepoError> {
-            Ok(false) // no existing denouncement — guard passes
-        }
-        async fn count_daily_actions(&self, _: Uuid) -> Result<i64, TrustRepoError> {
-            Ok(0) // below quota — guard passes
-        }
-        async fn count_total_denouncements_by(&self, _: Uuid) -> Result<i64, TrustRepoError> {
-            Ok(0) // below slot limit — guard passes
-        }
-        async fn enqueue_action(
-            &self,
-            actor_id: Uuid,
-            action_type: ActionType,
-            payload: &serde_json::Value,
-        ) -> Result<ActionRecord, TrustRepoError> {
-            *self.captured_actor.lock().unwrap() = Some(actor_id);
-            Ok(ActionRecord {
-                id: Uuid::new_v4(),
-                actor_id,
-                action_type: action_type.as_str().to_string(),
-                payload: payload.clone(),
-                status: "pending".to_string(),
-                quota_date: chrono::Utc::now().date_naive(),
-                error_message: None,
-                created_at: chrono::Utc::now(),
-                processed_at: None,
-            })
-        }
-        async fn get_or_create_influence(
-            &self,
-            _: Uuid,
-        ) -> Result<InfluenceRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn get_action(&self, _: Uuid) -> Result<ActionRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn complete_action(&self, _: Uuid) -> Result<(), TrustRepoError> {
-            unimplemented!()
-        }
-        async fn fail_action(&self, _: Uuid, _: &str) -> Result<(), TrustRepoError> {
-            unimplemented!()
-        }
-        async fn create_denouncement(
-            &self,
-            _: Uuid,
-            _: Uuid,
-            _: &str,
-        ) -> Result<DenouncementRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn create_denouncement_and_revoke_endorsement(
-            &self,
-            _: Uuid,
-            _: Uuid,
-            _: &str,
-        ) -> Result<DenouncementRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn list_denouncements_against(
-            &self,
-            _: Uuid,
-        ) -> Result<Vec<DenouncementRecord>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn list_denouncements_by(
-            &self,
-            _: Uuid,
-        ) -> Result<Vec<DenouncementRecord>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn list_denouncements_by_with_username(
-            &self,
-            _: Uuid,
-        ) -> Result<Vec<DenouncementWithUsername>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn create_invite(
-            &self,
-            _: Uuid,
-            _: &[u8],
-            _: DeliveryMethod,
-            _: Option<RelationshipDepth>,
-            _: f32,
-            _: &serde_json::Value,
-            _: chrono::DateTime<chrono::Utc>,
-        ) -> Result<InviteRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn get_invite(&self, _: Uuid) -> Result<InviteRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn accept_invite(&self, _: Uuid, _: Uuid) -> Result<InviteRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn list_invites_by_endorser(
-            &self,
-            _: Uuid,
-        ) -> Result<Vec<InviteRecord>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn upsert_score(
-            &self,
-            _: Uuid,
-            _: Option<Uuid>,
-            _: Option<f32>,
-            _: Option<i32>,
-            _: Option<f32>,
-        ) -> Result<(), TrustRepoError> {
-            unimplemented!()
-        }
-        async fn get_score(
-            &self,
-            _: Uuid,
-            _: Option<Uuid>,
-        ) -> Result<Option<ScoreSnapshot>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn get_all_scores(&self, _: Uuid) -> Result<Vec<ScoreSnapshot>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn has_identity_endorsement(
-            &self,
-            _: Uuid,
-            _: &[Uuid],
-            _: &str,
-        ) -> Result<bool, TrustRepoError> {
-            unimplemented!()
-        }
-    }
-
     // ─── revoke_endorsement actor_id correctness ─────────────────────────────
-
-    /// Stub [`TrustRepo`] that passes all pre-enqueue guards in
-    /// [`DefaultTrustService::revoke_endorsement`] and captures the `actor_id`
-    /// argument passed to `enqueue_action`. Used to verify that
-    /// `revoke_endorsement` passes `endorser_id` (not `subject_id`) as the actor.
-    struct RevokeActorCapturingRepo {
-        captured_actor: Arc<Mutex<Option<Uuid>>>,
-    }
-
-    #[async_trait]
-    impl TrustRepo for RevokeActorCapturingRepo {
-        async fn count_daily_actions(&self, _: Uuid) -> Result<i64, TrustRepoError> {
-            Ok(0) // below quota — guard passes
-        }
-        async fn enqueue_action(
-            &self,
-            actor_id: Uuid,
-            action_type: ActionType,
-            payload: &serde_json::Value,
-        ) -> Result<ActionRecord, TrustRepoError> {
-            *self.captured_actor.lock().unwrap() = Some(actor_id);
-            Ok(ActionRecord {
-                id: Uuid::new_v4(),
-                actor_id,
-                action_type: action_type.as_str().to_string(),
-                payload: payload.clone(),
-                status: "pending".to_string(),
-                quota_date: chrono::Utc::now().date_naive(),
-                error_message: None,
-                created_at: chrono::Utc::now(),
-                processed_at: None,
-            })
-        }
-        async fn get_or_create_influence(
-            &self,
-            _: Uuid,
-        ) -> Result<InfluenceRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn get_action(&self, _: Uuid) -> Result<ActionRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn complete_action(&self, _: Uuid) -> Result<(), TrustRepoError> {
-            unimplemented!()
-        }
-        async fn fail_action(&self, _: Uuid, _: &str) -> Result<(), TrustRepoError> {
-            unimplemented!()
-        }
-        async fn create_denouncement(
-            &self,
-            _: Uuid,
-            _: Uuid,
-            _: &str,
-        ) -> Result<DenouncementRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn create_denouncement_and_revoke_endorsement(
-            &self,
-            _: Uuid,
-            _: Uuid,
-            _: &str,
-        ) -> Result<DenouncementRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn list_denouncements_against(
-            &self,
-            _: Uuid,
-        ) -> Result<Vec<DenouncementRecord>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn list_denouncements_by(
-            &self,
-            _: Uuid,
-        ) -> Result<Vec<DenouncementRecord>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn list_denouncements_by_with_username(
-            &self,
-            _: Uuid,
-        ) -> Result<Vec<DenouncementWithUsername>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn count_total_denouncements_by(&self, _: Uuid) -> Result<i64, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn has_active_denouncement(&self, _: Uuid, _: Uuid) -> Result<bool, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn create_invite(
-            &self,
-            _: Uuid,
-            _: &[u8],
-            _: DeliveryMethod,
-            _: Option<RelationshipDepth>,
-            _: f32,
-            _: &serde_json::Value,
-            _: chrono::DateTime<chrono::Utc>,
-        ) -> Result<InviteRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn get_invite(&self, _: Uuid) -> Result<InviteRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn accept_invite(&self, _: Uuid, _: Uuid) -> Result<InviteRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn list_invites_by_endorser(
-            &self,
-            _: Uuid,
-        ) -> Result<Vec<InviteRecord>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn upsert_score(
-            &self,
-            _: Uuid,
-            _: Option<Uuid>,
-            _: Option<f32>,
-            _: Option<i32>,
-            _: Option<f32>,
-        ) -> Result<(), TrustRepoError> {
-            unimplemented!()
-        }
-        async fn get_score(
-            &self,
-            _: Uuid,
-            _: Option<Uuid>,
-        ) -> Result<Option<ScoreSnapshot>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn get_all_scores(&self, _: Uuid) -> Result<Vec<ScoreSnapshot>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn has_identity_endorsement(
-            &self,
-            _: Uuid,
-            _: &[Uuid],
-            _: &str,
-        ) -> Result<bool, TrustRepoError> {
-            unimplemented!()
-        }
-    }
 
     #[tokio::test]
     async fn revoke_endorsement_passes_endorser_as_actor_to_enqueue_action() {
@@ -3348,9 +1612,11 @@ mod tests {
         // revocation to the subject's account in the action log.
         let captured_actor = Arc::new(Mutex::new(None::<Uuid>));
         let svc = DefaultTrustService::new(
-            Arc::new(RevokeActorCapturingRepo {
-                captured_actor: captured_actor.clone(),
-            }),
+            Arc::new(
+                StubTrustRepo::default()
+                    .daily(0)
+                    .capture_actor(captured_actor.clone()),
+            ),
             Arc::new(PanicReputationRepo),
         );
         let endorser = Uuid::new_v4();
@@ -3373,9 +1639,13 @@ mod tests {
         // denouncement to the target's account in the action log.
         let captured_actor = Arc::new(Mutex::new(None::<Uuid>));
         let svc = DefaultTrustService::new(
-            Arc::new(DenounceActorCapturingRepo {
-                captured_actor: captured_actor.clone(),
-            }),
+            Arc::new(
+                StubTrustRepo::default()
+                    .active(false)
+                    .daily(0)
+                    .total(0)
+                    .capture_actor(captured_actor.clone()),
+            ),
             Arc::new(PanicReputationRepo),
         );
         let accuser = Uuid::new_v4();
@@ -3390,148 +1660,6 @@ mod tests {
 
     // ─── endorse actor_id correctness ─────────────────────────────────────────
 
-    /// Stub [`TrustRepo`] that passes all pre-enqueue guards in
-    /// [`DefaultTrustService::endorse`] (daily quota and denouncement conflict
-    /// checks) and captures the `actor_id` argument passed to `enqueue_action`.
-    /// Used to verify that `endorse` passes `endorser_id` (not `subject_id`) as
-    /// the actor.
-    struct EndorseActorCapturingRepo {
-        captured_actor: Arc<Mutex<Option<Uuid>>>,
-    }
-
-    #[async_trait]
-    impl TrustRepo for EndorseActorCapturingRepo {
-        async fn count_daily_actions(&self, _: Uuid) -> Result<i64, TrustRepoError> {
-            Ok(0) // below quota — guard passes
-        }
-        async fn has_active_denouncement(&self, _: Uuid, _: Uuid) -> Result<bool, TrustRepoError> {
-            Ok(false) // no conflict — guard passes
-        }
-        async fn enqueue_action(
-            &self,
-            actor_id: Uuid,
-            action_type: ActionType,
-            payload: &serde_json::Value,
-        ) -> Result<ActionRecord, TrustRepoError> {
-            *self.captured_actor.lock().unwrap() = Some(actor_id);
-            Ok(ActionRecord {
-                id: Uuid::new_v4(),
-                actor_id,
-                action_type: action_type.as_str().to_string(),
-                payload: payload.clone(),
-                status: "pending".to_string(),
-                quota_date: chrono::Utc::now().date_naive(),
-                error_message: None,
-                created_at: chrono::Utc::now(),
-                processed_at: None,
-            })
-        }
-        async fn get_or_create_influence(
-            &self,
-            _: Uuid,
-        ) -> Result<InfluenceRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn get_action(&self, _: Uuid) -> Result<ActionRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn complete_action(&self, _: Uuid) -> Result<(), TrustRepoError> {
-            unimplemented!()
-        }
-        async fn fail_action(&self, _: Uuid, _: &str) -> Result<(), TrustRepoError> {
-            unimplemented!()
-        }
-        async fn create_denouncement(
-            &self,
-            _: Uuid,
-            _: Uuid,
-            _: &str,
-        ) -> Result<DenouncementRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn create_denouncement_and_revoke_endorsement(
-            &self,
-            _: Uuid,
-            _: Uuid,
-            _: &str,
-        ) -> Result<DenouncementRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn list_denouncements_against(
-            &self,
-            _: Uuid,
-        ) -> Result<Vec<DenouncementRecord>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn list_denouncements_by(
-            &self,
-            _: Uuid,
-        ) -> Result<Vec<DenouncementRecord>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn list_denouncements_by_with_username(
-            &self,
-            _: Uuid,
-        ) -> Result<Vec<DenouncementWithUsername>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn count_total_denouncements_by(&self, _: Uuid) -> Result<i64, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn create_invite(
-            &self,
-            _: Uuid,
-            _: &[u8],
-            _: DeliveryMethod,
-            _: Option<RelationshipDepth>,
-            _: f32,
-            _: &serde_json::Value,
-            _: chrono::DateTime<chrono::Utc>,
-        ) -> Result<InviteRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn get_invite(&self, _: Uuid) -> Result<InviteRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn accept_invite(&self, _: Uuid, _: Uuid) -> Result<InviteRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn list_invites_by_endorser(
-            &self,
-            _: Uuid,
-        ) -> Result<Vec<InviteRecord>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn upsert_score(
-            &self,
-            _: Uuid,
-            _: Option<Uuid>,
-            _: Option<f32>,
-            _: Option<i32>,
-            _: Option<f32>,
-        ) -> Result<(), TrustRepoError> {
-            unimplemented!()
-        }
-        async fn get_score(
-            &self,
-            _: Uuid,
-            _: Option<Uuid>,
-        ) -> Result<Option<ScoreSnapshot>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn get_all_scores(&self, _: Uuid) -> Result<Vec<ScoreSnapshot>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn has_identity_endorsement(
-            &self,
-            _: Uuid,
-            _: &[Uuid],
-            _: &str,
-        ) -> Result<bool, TrustRepoError> {
-            unimplemented!()
-        }
-    }
-
     #[tokio::test]
     async fn endorse_passes_endorser_as_actor_to_enqueue_action() {
         // Verifies that endorse() passes endorser_id (not subject_id) as the actor
@@ -3541,9 +1669,12 @@ mod tests {
         // endorsement to the subject's account in the action log.
         let captured_actor = Arc::new(Mutex::new(None::<Uuid>));
         let svc = DefaultTrustService::new(
-            Arc::new(EndorseActorCapturingRepo {
-                captured_actor: captured_actor.clone(),
-            }),
+            Arc::new(
+                StubTrustRepo::default()
+                    .daily(0)
+                    .active(false)
+                    .capture_actor(captured_actor.clone()),
+            ),
             Arc::new(StubReputationRepo {
                 is_verifier: false,
                 active_endorsements: 0,
@@ -3567,134 +1698,6 @@ mod tests {
     /// `subject_id` would allow an endorser to bypass their quota if the
     /// subject still has capacity.
     ///
-    /// `enqueue_action` deliberately returns a database error so the test can
-    /// assert on the quota actor without needing the call to succeed.
-    struct EndorseQuotaActorCapturingRepo {
-        captured_quota_actor: Arc<Mutex<Option<Uuid>>>,
-    }
-
-    #[async_trait]
-    impl TrustRepo for EndorseQuotaActorCapturingRepo {
-        async fn count_daily_actions(&self, actor_id: Uuid) -> Result<i64, TrustRepoError> {
-            *self.captured_quota_actor.lock().unwrap() = Some(actor_id);
-            Ok(0) // below quota — guard passes
-        }
-        async fn has_active_denouncement(&self, _: Uuid, _: Uuid) -> Result<bool, TrustRepoError> {
-            Ok(false) // no conflict — guard passes
-        }
-        async fn enqueue_action(
-            &self,
-            _: Uuid,
-            _: ActionType,
-            _: &serde_json::Value,
-        ) -> Result<ActionRecord, TrustRepoError> {
-            Err(TrustRepoError::Database(sqlx::Error::RowNotFound))
-        }
-        async fn get_or_create_influence(
-            &self,
-            _: Uuid,
-        ) -> Result<InfluenceRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn get_action(&self, _: Uuid) -> Result<ActionRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn complete_action(&self, _: Uuid) -> Result<(), TrustRepoError> {
-            unimplemented!()
-        }
-        async fn fail_action(&self, _: Uuid, _: &str) -> Result<(), TrustRepoError> {
-            unimplemented!()
-        }
-        async fn create_denouncement(
-            &self,
-            _: Uuid,
-            _: Uuid,
-            _: &str,
-        ) -> Result<DenouncementRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn create_denouncement_and_revoke_endorsement(
-            &self,
-            _: Uuid,
-            _: Uuid,
-            _: &str,
-        ) -> Result<DenouncementRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn list_denouncements_against(
-            &self,
-            _: Uuid,
-        ) -> Result<Vec<DenouncementRecord>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn list_denouncements_by(
-            &self,
-            _: Uuid,
-        ) -> Result<Vec<DenouncementRecord>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn list_denouncements_by_with_username(
-            &self,
-            _: Uuid,
-        ) -> Result<Vec<DenouncementWithUsername>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn count_total_denouncements_by(&self, _: Uuid) -> Result<i64, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn create_invite(
-            &self,
-            _: Uuid,
-            _: &[u8],
-            _: DeliveryMethod,
-            _: Option<RelationshipDepth>,
-            _: f32,
-            _: &serde_json::Value,
-            _: chrono::DateTime<chrono::Utc>,
-        ) -> Result<InviteRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn get_invite(&self, _: Uuid) -> Result<InviteRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn accept_invite(&self, _: Uuid, _: Uuid) -> Result<InviteRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn list_invites_by_endorser(
-            &self,
-            _: Uuid,
-        ) -> Result<Vec<InviteRecord>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn upsert_score(
-            &self,
-            _: Uuid,
-            _: Option<Uuid>,
-            _: Option<f32>,
-            _: Option<i32>,
-            _: Option<f32>,
-        ) -> Result<(), TrustRepoError> {
-            unimplemented!()
-        }
-        async fn get_score(
-            &self,
-            _: Uuid,
-            _: Option<Uuid>,
-        ) -> Result<Option<ScoreSnapshot>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn get_all_scores(&self, _: Uuid) -> Result<Vec<ScoreSnapshot>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn has_identity_endorsement(
-            &self,
-            _: Uuid,
-            _: &[Uuid],
-            _: &str,
-        ) -> Result<bool, TrustRepoError> {
-            unimplemented!()
-        }
-    }
 
     #[tokio::test]
     async fn endorse_passes_endorser_to_count_daily_actions() {
@@ -3710,9 +1713,13 @@ mod tests {
         // early; we assert on the captured actor before checking the result.
         let captured_quota_actor = Arc::new(Mutex::new(None::<Uuid>));
         let svc = DefaultTrustService::new(
-            Arc::new(EndorseQuotaActorCapturingRepo {
-                captured_quota_actor: captured_quota_actor.clone(),
-            }),
+            Arc::new(
+                StubTrustRepo::default()
+                    .daily(0)
+                    .active(false)
+                    .capture_daily_actor(captured_quota_actor.clone())
+                    .enqueue_error(),
+            ),
             Arc::new(StubReputationRepo {
                 is_verifier: false,
                 active_endorsements: 0,
@@ -3738,134 +1745,6 @@ mod tests {
     /// `subject_id` would allow an endorser to bypass their quota if the
     /// subject still has capacity.
     ///
-    /// `enqueue_action` deliberately returns a database error so the test can
-    /// assert on the quota actor without needing the call to succeed.
-    struct RevokeQuotaActorCapturingRepo {
-        captured_quota_actor: Arc<Mutex<Option<Uuid>>>,
-    }
-
-    #[async_trait]
-    impl TrustRepo for RevokeQuotaActorCapturingRepo {
-        async fn count_daily_actions(&self, actor_id: Uuid) -> Result<i64, TrustRepoError> {
-            *self.captured_quota_actor.lock().unwrap() = Some(actor_id);
-            Ok(0) // below quota — guard passes
-        }
-        async fn enqueue_action(
-            &self,
-            _: Uuid,
-            _: ActionType,
-            _: &serde_json::Value,
-        ) -> Result<ActionRecord, TrustRepoError> {
-            Err(TrustRepoError::Database(sqlx::Error::RowNotFound))
-        }
-        async fn get_or_create_influence(
-            &self,
-            _: Uuid,
-        ) -> Result<InfluenceRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn get_action(&self, _: Uuid) -> Result<ActionRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn complete_action(&self, _: Uuid) -> Result<(), TrustRepoError> {
-            unimplemented!()
-        }
-        async fn fail_action(&self, _: Uuid, _: &str) -> Result<(), TrustRepoError> {
-            unimplemented!()
-        }
-        async fn create_denouncement(
-            &self,
-            _: Uuid,
-            _: Uuid,
-            _: &str,
-        ) -> Result<DenouncementRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn create_denouncement_and_revoke_endorsement(
-            &self,
-            _: Uuid,
-            _: Uuid,
-            _: &str,
-        ) -> Result<DenouncementRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn list_denouncements_against(
-            &self,
-            _: Uuid,
-        ) -> Result<Vec<DenouncementRecord>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn list_denouncements_by(
-            &self,
-            _: Uuid,
-        ) -> Result<Vec<DenouncementRecord>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn list_denouncements_by_with_username(
-            &self,
-            _: Uuid,
-        ) -> Result<Vec<DenouncementWithUsername>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn count_total_denouncements_by(&self, _: Uuid) -> Result<i64, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn has_active_denouncement(&self, _: Uuid, _: Uuid) -> Result<bool, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn create_invite(
-            &self,
-            _: Uuid,
-            _: &[u8],
-            _: DeliveryMethod,
-            _: Option<RelationshipDepth>,
-            _: f32,
-            _: &serde_json::Value,
-            _: chrono::DateTime<chrono::Utc>,
-        ) -> Result<InviteRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn get_invite(&self, _: Uuid) -> Result<InviteRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn accept_invite(&self, _: Uuid, _: Uuid) -> Result<InviteRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn list_invites_by_endorser(
-            &self,
-            _: Uuid,
-        ) -> Result<Vec<InviteRecord>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn upsert_score(
-            &self,
-            _: Uuid,
-            _: Option<Uuid>,
-            _: Option<f32>,
-            _: Option<i32>,
-            _: Option<f32>,
-        ) -> Result<(), TrustRepoError> {
-            unimplemented!()
-        }
-        async fn get_score(
-            &self,
-            _: Uuid,
-            _: Option<Uuid>,
-        ) -> Result<Option<ScoreSnapshot>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn get_all_scores(&self, _: Uuid) -> Result<Vec<ScoreSnapshot>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn has_identity_endorsement(
-            &self,
-            _: Uuid,
-            _: &[Uuid],
-            _: &str,
-        ) -> Result<bool, TrustRepoError> {
-            unimplemented!()
-        }
-    }
 
     #[tokio::test]
     async fn revoke_endorsement_passes_endorser_to_count_daily_actions() {
@@ -3881,9 +1760,12 @@ mod tests {
         // we assert on the captured actor before checking the result.
         let captured_quota_actor = Arc::new(Mutex::new(None::<Uuid>));
         let svc = DefaultTrustService::new(
-            Arc::new(RevokeQuotaActorCapturingRepo {
-                captured_quota_actor: captured_quota_actor.clone(),
-            }),
+            Arc::new(
+                StubTrustRepo::default()
+                    .daily(0)
+                    .capture_daily_actor(captured_quota_actor.clone())
+                    .enqueue_error(),
+            ),
             Arc::new(PanicReputationRepo),
         );
         let endorser = Uuid::new_v4();
@@ -3909,134 +1791,6 @@ mod tests {
     /// denouncements as long as their targets still have quota capacity —
     /// silently bypassing the rate limit.
     ///
-    /// `enqueue_action` deliberately returns a database error so the test can
-    /// assert on the quota actor without needing the call to succeed.
-    struct DenounceQuotaActorCapturingRepo {
-        captured_quota_actor: Arc<Mutex<Option<Uuid>>>,
-    }
-
-    #[async_trait]
-    impl TrustRepo for DenounceQuotaActorCapturingRepo {
-        async fn has_active_denouncement(&self, _: Uuid, _: Uuid) -> Result<bool, TrustRepoError> {
-            Ok(false) // no existing denouncement — guard passes
-        }
-        async fn count_daily_actions(&self, actor_id: Uuid) -> Result<i64, TrustRepoError> {
-            *self.captured_quota_actor.lock().unwrap() = Some(actor_id);
-            Ok(0) // below quota — guard passes
-        }
-        async fn count_total_denouncements_by(&self, _: Uuid) -> Result<i64, TrustRepoError> {
-            Ok(0) // below slot limit — guard passes
-        }
-        async fn enqueue_action(
-            &self,
-            _: Uuid,
-            _: ActionType,
-            _: &serde_json::Value,
-        ) -> Result<ActionRecord, TrustRepoError> {
-            Err(TrustRepoError::Database(sqlx::Error::RowNotFound))
-        }
-        async fn get_or_create_influence(
-            &self,
-            _: Uuid,
-        ) -> Result<InfluenceRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn get_action(&self, _: Uuid) -> Result<ActionRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn complete_action(&self, _: Uuid) -> Result<(), TrustRepoError> {
-            unimplemented!()
-        }
-        async fn fail_action(&self, _: Uuid, _: &str) -> Result<(), TrustRepoError> {
-            unimplemented!()
-        }
-        async fn create_denouncement(
-            &self,
-            _: Uuid,
-            _: Uuid,
-            _: &str,
-        ) -> Result<DenouncementRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn create_denouncement_and_revoke_endorsement(
-            &self,
-            _: Uuid,
-            _: Uuid,
-            _: &str,
-        ) -> Result<DenouncementRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn list_denouncements_against(
-            &self,
-            _: Uuid,
-        ) -> Result<Vec<DenouncementRecord>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn list_denouncements_by(
-            &self,
-            _: Uuid,
-        ) -> Result<Vec<DenouncementRecord>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn list_denouncements_by_with_username(
-            &self,
-            _: Uuid,
-        ) -> Result<Vec<DenouncementWithUsername>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn create_invite(
-            &self,
-            _: Uuid,
-            _: &[u8],
-            _: DeliveryMethod,
-            _: Option<RelationshipDepth>,
-            _: f32,
-            _: &serde_json::Value,
-            _: chrono::DateTime<chrono::Utc>,
-        ) -> Result<InviteRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn get_invite(&self, _: Uuid) -> Result<InviteRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn accept_invite(&self, _: Uuid, _: Uuid) -> Result<InviteRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn list_invites_by_endorser(
-            &self,
-            _: Uuid,
-        ) -> Result<Vec<InviteRecord>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn upsert_score(
-            &self,
-            _: Uuid,
-            _: Option<Uuid>,
-            _: Option<f32>,
-            _: Option<i32>,
-            _: Option<f32>,
-        ) -> Result<(), TrustRepoError> {
-            unimplemented!()
-        }
-        async fn get_score(
-            &self,
-            _: Uuid,
-            _: Option<Uuid>,
-        ) -> Result<Option<ScoreSnapshot>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn get_all_scores(&self, _: Uuid) -> Result<Vec<ScoreSnapshot>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn has_identity_endorsement(
-            &self,
-            _: Uuid,
-            _: &[Uuid],
-            _: &str,
-        ) -> Result<bool, TrustRepoError> {
-            unimplemented!()
-        }
-    }
 
     #[tokio::test]
     async fn denounce_passes_accuser_to_count_daily_actions() {
@@ -4052,9 +1806,14 @@ mod tests {
         // we assert on the captured actor before checking the result.
         let captured_quota_actor = Arc::new(Mutex::new(None::<Uuid>));
         let svc = DefaultTrustService::new(
-            Arc::new(DenounceQuotaActorCapturingRepo {
-                captured_quota_actor: captured_quota_actor.clone(),
-            }),
+            Arc::new(
+                StubTrustRepo::default()
+                    .daily(0)
+                    .active(false)
+                    .total(0)
+                    .capture_daily_actor(captured_quota_actor.clone())
+                    .enqueue_error(),
+            ),
             Arc::new(PanicReputationRepo),
         );
         let accuser = Uuid::new_v4();
@@ -4070,143 +1829,6 @@ mod tests {
     }
 
     // ─── denounce has_active_denouncement ID-order correctness ───────────────
-
-    /// Stub [`TrustRepo`] that captures both ID arguments passed to
-    /// `has_active_denouncement` and returns an error, terminating the call
-    /// early. Used to verify that `denounce` passes `(accuser_id, target_id)`
-    /// — not `(target_id, accuser_id)` — to the check: a swap would query the
-    /// wrong direction of the denouncement relationship, allowing the accuser
-    /// to file a duplicate denouncement undetected.
-    struct DenounceHasActiveCapturingRepo {
-        captured: Arc<Mutex<Option<(Uuid, Uuid)>>>,
-    }
-
-    #[async_trait]
-    impl TrustRepo for DenounceHasActiveCapturingRepo {
-        async fn has_active_denouncement(
-            &self,
-            first: Uuid,
-            second: Uuid,
-        ) -> Result<bool, TrustRepoError> {
-            *self.captured.lock().unwrap() = Some((first, second));
-            Err(TrustRepoError::Database(sqlx::Error::RowNotFound))
-        }
-        async fn count_daily_actions(&self, _: Uuid) -> Result<i64, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn enqueue_action(
-            &self,
-            _: Uuid,
-            _: ActionType,
-            _: &serde_json::Value,
-        ) -> Result<ActionRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn get_or_create_influence(
-            &self,
-            _: Uuid,
-        ) -> Result<InfluenceRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn get_action(&self, _: Uuid) -> Result<ActionRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn complete_action(&self, _: Uuid) -> Result<(), TrustRepoError> {
-            unimplemented!()
-        }
-        async fn fail_action(&self, _: Uuid, _: &str) -> Result<(), TrustRepoError> {
-            unimplemented!()
-        }
-        async fn create_denouncement(
-            &self,
-            _: Uuid,
-            _: Uuid,
-            _: &str,
-        ) -> Result<DenouncementRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn create_denouncement_and_revoke_endorsement(
-            &self,
-            _: Uuid,
-            _: Uuid,
-            _: &str,
-        ) -> Result<DenouncementRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn list_denouncements_against(
-            &self,
-            _: Uuid,
-        ) -> Result<Vec<DenouncementRecord>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn list_denouncements_by(
-            &self,
-            _: Uuid,
-        ) -> Result<Vec<DenouncementRecord>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn list_denouncements_by_with_username(
-            &self,
-            _: Uuid,
-        ) -> Result<Vec<DenouncementWithUsername>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn count_total_denouncements_by(&self, _: Uuid) -> Result<i64, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn create_invite(
-            &self,
-            _: Uuid,
-            _: &[u8],
-            _: DeliveryMethod,
-            _: Option<RelationshipDepth>,
-            _: f32,
-            _: &serde_json::Value,
-            _: chrono::DateTime<chrono::Utc>,
-        ) -> Result<InviteRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn get_invite(&self, _: Uuid) -> Result<InviteRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn accept_invite(&self, _: Uuid, _: Uuid) -> Result<InviteRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn list_invites_by_endorser(
-            &self,
-            _: Uuid,
-        ) -> Result<Vec<InviteRecord>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn upsert_score(
-            &self,
-            _: Uuid,
-            _: Option<Uuid>,
-            _: Option<f32>,
-            _: Option<i32>,
-            _: Option<f32>,
-        ) -> Result<(), TrustRepoError> {
-            unimplemented!()
-        }
-        async fn get_score(
-            &self,
-            _: Uuid,
-            _: Option<Uuid>,
-        ) -> Result<Option<ScoreSnapshot>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn get_all_scores(&self, _: Uuid) -> Result<Vec<ScoreSnapshot>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn has_identity_endorsement(
-            &self,
-            _: Uuid,
-            _: &[Uuid],
-            _: &str,
-        ) -> Result<bool, TrustRepoError> {
-            unimplemented!()
-        }
-    }
 
     #[tokio::test]
     async fn denounce_passes_accuser_id_and_target_id_to_has_active_denouncement() {
@@ -4225,9 +1847,11 @@ mod tests {
         // result.
         let captured = Arc::new(Mutex::new(None::<(Uuid, Uuid)>));
         let svc = DefaultTrustService::new(
-            Arc::new(DenounceHasActiveCapturingRepo {
-                captured: captured.clone(),
-            }),
+            Arc::new(
+                StubTrustRepo::default()
+                    .active_error()
+                    .capture_active(captured.clone()),
+            ),
             Arc::new(PanicReputationRepo),
         );
         let accuser = Uuid::new_v4();
@@ -4253,138 +1877,6 @@ mod tests {
     /// `count_daily_actions`, then captures the actor_id passed to
     /// `count_total_denouncements_by` and returns an error to terminate early.
     ///
-    /// A bug that passed `target_id` instead of `accuser_id` would check the
-    /// *target's* permanent slot budget — allowing the accuser to bypass the
-    /// d=2 limit by targeting users who haven't used their own slots.
-    struct DenounceSlotActorCapturingRepo {
-        captured_slot_actor: Arc<Mutex<Option<Uuid>>>,
-    }
-
-    #[async_trait]
-    impl TrustRepo for DenounceSlotActorCapturingRepo {
-        async fn has_active_denouncement(&self, _: Uuid, _: Uuid) -> Result<bool, TrustRepoError> {
-            Ok(false) // no existing denouncement — guard passes
-        }
-        async fn count_daily_actions(&self, _: Uuid) -> Result<i64, TrustRepoError> {
-            Ok(0) // below quota — guard passes
-        }
-        async fn count_total_denouncements_by(
-            &self,
-            actor_id: Uuid,
-        ) -> Result<i64, TrustRepoError> {
-            *self.captured_slot_actor.lock().unwrap() = Some(actor_id);
-            Err(TrustRepoError::Database(sqlx::Error::RowNotFound))
-        }
-        async fn get_or_create_influence(
-            &self,
-            _: Uuid,
-        ) -> Result<InfluenceRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn enqueue_action(
-            &self,
-            _: Uuid,
-            _: ActionType,
-            _: &serde_json::Value,
-        ) -> Result<ActionRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn get_action(&self, _: Uuid) -> Result<ActionRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn complete_action(&self, _: Uuid) -> Result<(), TrustRepoError> {
-            unimplemented!()
-        }
-        async fn fail_action(&self, _: Uuid, _: &str) -> Result<(), TrustRepoError> {
-            unimplemented!()
-        }
-        async fn create_denouncement(
-            &self,
-            _: Uuid,
-            _: Uuid,
-            _: &str,
-        ) -> Result<DenouncementRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn create_denouncement_and_revoke_endorsement(
-            &self,
-            _: Uuid,
-            _: Uuid,
-            _: &str,
-        ) -> Result<DenouncementRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn list_denouncements_against(
-            &self,
-            _: Uuid,
-        ) -> Result<Vec<DenouncementRecord>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn list_denouncements_by(
-            &self,
-            _: Uuid,
-        ) -> Result<Vec<DenouncementRecord>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn list_denouncements_by_with_username(
-            &self,
-            _: Uuid,
-        ) -> Result<Vec<DenouncementWithUsername>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn create_invite(
-            &self,
-            _: Uuid,
-            _: &[u8],
-            _: DeliveryMethod,
-            _: Option<RelationshipDepth>,
-            _: f32,
-            _: &serde_json::Value,
-            _: chrono::DateTime<chrono::Utc>,
-        ) -> Result<InviteRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn get_invite(&self, _: Uuid) -> Result<InviteRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn accept_invite(&self, _: Uuid, _: Uuid) -> Result<InviteRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn list_invites_by_endorser(
-            &self,
-            _: Uuid,
-        ) -> Result<Vec<InviteRecord>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn upsert_score(
-            &self,
-            _: Uuid,
-            _: Option<Uuid>,
-            _: Option<f32>,
-            _: Option<i32>,
-            _: Option<f32>,
-        ) -> Result<(), TrustRepoError> {
-            unimplemented!()
-        }
-        async fn get_score(
-            &self,
-            _: Uuid,
-            _: Option<Uuid>,
-        ) -> Result<Option<ScoreSnapshot>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn get_all_scores(&self, _: Uuid) -> Result<Vec<ScoreSnapshot>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn has_identity_endorsement(
-            &self,
-            _: Uuid,
-            _: &[Uuid],
-            _: &str,
-        ) -> Result<bool, TrustRepoError> {
-            unimplemented!()
-        }
-    }
 
     // ─── endorse has_active_denouncement actor-id correctness ────────────────
 
@@ -4392,140 +1884,6 @@ mod tests {
     /// IDs passed to `has_active_denouncement` and returns an error to terminate
     /// early.
     ///
-    /// A bug that swapped `endorser_id` and `subject_id` would check whether the
-    /// *subject* has already denounced the endorser — the wrong direction —
-    /// allowing a duplicate endorsement to proceed when the endorser already has
-    /// an active denouncement against the subject.
-    struct EndorseHasActiveCapturingRepo {
-        captured: Arc<Mutex<Option<(Uuid, Uuid)>>>,
-    }
-
-    #[async_trait]
-    impl TrustRepo for EndorseHasActiveCapturingRepo {
-        async fn count_daily_actions(&self, _: Uuid) -> Result<i64, TrustRepoError> {
-            Ok(0) // below quota — guard passes
-        }
-        async fn has_active_denouncement(
-            &self,
-            first: Uuid,
-            second: Uuid,
-        ) -> Result<bool, TrustRepoError> {
-            *self.captured.lock().unwrap() = Some((first, second));
-            Err(TrustRepoError::Database(sqlx::Error::RowNotFound))
-        }
-        async fn get_or_create_influence(
-            &self,
-            _: Uuid,
-        ) -> Result<InfluenceRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn enqueue_action(
-            &self,
-            _: Uuid,
-            _: ActionType,
-            _: &serde_json::Value,
-        ) -> Result<ActionRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn get_action(&self, _: Uuid) -> Result<ActionRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn complete_action(&self, _: Uuid) -> Result<(), TrustRepoError> {
-            unimplemented!()
-        }
-        async fn fail_action(&self, _: Uuid, _: &str) -> Result<(), TrustRepoError> {
-            unimplemented!()
-        }
-        async fn create_denouncement(
-            &self,
-            _: Uuid,
-            _: Uuid,
-            _: &str,
-        ) -> Result<DenouncementRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn create_denouncement_and_revoke_endorsement(
-            &self,
-            _: Uuid,
-            _: Uuid,
-            _: &str,
-        ) -> Result<DenouncementRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn list_denouncements_against(
-            &self,
-            _: Uuid,
-        ) -> Result<Vec<DenouncementRecord>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn list_denouncements_by(
-            &self,
-            _: Uuid,
-        ) -> Result<Vec<DenouncementRecord>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn list_denouncements_by_with_username(
-            &self,
-            _: Uuid,
-        ) -> Result<Vec<DenouncementWithUsername>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn count_total_denouncements_by(&self, _: Uuid) -> Result<i64, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn create_invite(
-            &self,
-            _: Uuid,
-            _: &[u8],
-            _: DeliveryMethod,
-            _: Option<RelationshipDepth>,
-            _: f32,
-            _: &serde_json::Value,
-            _: chrono::DateTime<chrono::Utc>,
-        ) -> Result<InviteRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn get_invite(&self, _: Uuid) -> Result<InviteRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn accept_invite(&self, _: Uuid, _: Uuid) -> Result<InviteRecord, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn list_invites_by_endorser(
-            &self,
-            _: Uuid,
-        ) -> Result<Vec<InviteRecord>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn upsert_score(
-            &self,
-            _: Uuid,
-            _: Option<Uuid>,
-            _: Option<f32>,
-            _: Option<i32>,
-            _: Option<f32>,
-        ) -> Result<(), TrustRepoError> {
-            unimplemented!()
-        }
-        async fn get_score(
-            &self,
-            _: Uuid,
-            _: Option<Uuid>,
-        ) -> Result<Option<ScoreSnapshot>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn get_all_scores(&self, _: Uuid) -> Result<Vec<ScoreSnapshot>, TrustRepoError> {
-            unimplemented!()
-        }
-        async fn has_identity_endorsement(
-            &self,
-            _: Uuid,
-            _: &[Uuid],
-            _: &str,
-        ) -> Result<bool, TrustRepoError> {
-            unimplemented!()
-        }
-    }
 
     #[tokio::test]
     async fn endorse_passes_endorser_id_and_subject_id_to_has_active_denouncement() {
@@ -4542,9 +1900,12 @@ mod tests {
         // call early; we assert on the captured IDs before checking the result.
         let captured = Arc::new(Mutex::new(None::<(Uuid, Uuid)>));
         let svc = DefaultTrustService::new(
-            Arc::new(EndorseHasActiveCapturingRepo {
-                captured: captured.clone(),
-            }),
+            Arc::new(
+                StubTrustRepo::default()
+                    .daily(0)
+                    .active_error()
+                    .capture_active(captured.clone()),
+            ),
             Arc::new(PanicReputationRepo),
         );
         let endorser = Uuid::new_v4();
@@ -4653,15 +2014,18 @@ mod tests {
         // (`StubReputationRepo`, `ErrorHasEndorsementRepo`), so this gap would not
         // be caught without an explicit capturing test.
         //
-        // Uses CapturingEnqueueRepo for TrustRepo (passes count_daily_actions and
+        // Uses StubTrustRepo for TrustRepo (passes count_daily_actions and
         // has_active_denouncement guards). CapturingVerifierCheckRepo returns an
         // error from has_endorsement to terminate early; we only care about the
         // captured ID.
         let captured_id = Arc::new(Mutex::new(None::<Uuid>));
         let svc = DefaultTrustService::new(
-            Arc::new(CapturingEnqueueRepo {
-                captured: Arc::new(Mutex::new(None)),
-            }),
+            Arc::new(
+                StubTrustRepo::default()
+                    .daily(0)
+                    .active(false)
+                    .capture_payload(Arc::new(Mutex::new(None))),
+            ),
             Arc::new(CapturingVerifierCheckRepo {
                 captured_id: captured_id.clone(),
             }),
@@ -4766,15 +2130,18 @@ mod tests {
         // endorse tests use stubs that discard the topic argument (`_: &str`), so
         // this invariant is not covered elsewhere.
         //
-        // Uses CapturingEnqueueRepo for TrustRepo (passes count_daily_actions and
+        // Uses StubTrustRepo for TrustRepo (passes count_daily_actions and
         // has_active_denouncement guards). CapturingVerifierTopicRepo returns an
         // error from has_endorsement to terminate early; we only care about the
         // captured topic.
         let captured_topic = Arc::new(Mutex::new(None::<String>));
         let svc = DefaultTrustService::new(
-            Arc::new(CapturingEnqueueRepo {
-                captured: Arc::new(Mutex::new(None)),
-            }),
+            Arc::new(
+                StubTrustRepo::default()
+                    .daily(0)
+                    .active(false)
+                    .capture_payload(Arc::new(Mutex::new(None))),
+            ),
             Arc::new(CapturingVerifierTopicRepo {
                 captured_topic: captured_topic.clone(),
             }),
@@ -4877,16 +2244,19 @@ mod tests {
         // count_active_trust_endorsements_by, so this gap would not be caught
         // without an explicit capturing test.
         //
-        // CapturingEnqueueRepo provides the TrustRepo (passes count_daily_actions
+        // StubTrustRepo provides the TrustRepo (passes count_daily_actions
         // and has_active_denouncement guards). CapturingActiveCountRepo returns
         // Ok(false) from has_endorsement (non-verifier path) and captures the
         // actor_id passed to count_active_trust_endorsements_by, then returns an
         // error to terminate early.
         let captured_id = Arc::new(Mutex::new(None::<Uuid>));
         let svc = DefaultTrustService::new(
-            Arc::new(CapturingEnqueueRepo {
-                captured: Arc::new(Mutex::new(None)),
-            }),
+            Arc::new(
+                StubTrustRepo::default()
+                    .daily(0)
+                    .active(false)
+                    .capture_payload(Arc::new(Mutex::new(None))),
+            ),
             Arc::new(CapturingActiveCountRepo {
                 captured_id: captured_id.clone(),
             }),
@@ -4917,9 +2287,13 @@ mod tests {
         // the call early; we assert on the captured actor before checking the result.
         let captured_slot_actor = Arc::new(Mutex::new(None::<Uuid>));
         let svc = DefaultTrustService::new(
-            Arc::new(DenounceSlotActorCapturingRepo {
-                captured_slot_actor: captured_slot_actor.clone(),
-            }),
+            Arc::new(
+                StubTrustRepo::default()
+                    .active(false)
+                    .daily(0)
+                    .total_error()
+                    .capture_total_actor(captured_slot_actor.clone()),
+            ),
             Arc::new(PanicReputationRepo),
         );
         let accuser = Uuid::new_v4();
