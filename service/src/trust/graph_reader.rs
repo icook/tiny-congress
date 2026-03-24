@@ -40,6 +40,14 @@ impl TrustGraphReader for TrustRepoGraphReader {
                 );
                 return None;
             };
+            if trust_distance_raw < 0.0 {
+                tracing::warn!(
+                    subject = %subject,
+                    trust_distance = trust_distance_raw,
+                    "negative trust_distance — possible data corruption; treating as no score"
+                );
+                return None;
+            }
             let raw = s.path_diversity.unwrap_or(0);
             u32::try_from(raw).map_or_else(
                 |_| {
@@ -318,6 +326,22 @@ mod tests {
         assert!(
             result.is_none(),
             "NULL trust_distance must map to no score, not distance=0.0"
+        );
+    }
+
+    #[tokio::test]
+    async fn get_score_returns_none_when_trust_distance_is_negative() {
+        // Negative trust_distance cannot arise from a correct hop-count computation
+        // (distances are always >= 0). Treating it as "no score" rather than silently
+        // propagating a nonsensical negative distance follows the same fail-closed
+        // approach applied to negative path_diversity.
+        let mut snapshot = base_snapshot();
+        snapshot.trust_distance = Some(-0.5);
+        let reader = make_reader(Some(snapshot));
+        let result = reader.get_score(Uuid::new_v4(), None).await.unwrap();
+        assert!(
+            result.is_none(),
+            "negative trust_distance must map to no score (data corruption), not a negative distance"
         );
     }
 
