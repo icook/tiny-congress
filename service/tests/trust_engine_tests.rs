@@ -5,7 +5,7 @@
 mod common;
 
 use async_trait::async_trait;
-use common::factories::{insert_endorsement, insert_revoked_endorsement, AccountFactory};
+use common::factories::{insert_endorsement, insert_out_of_slot_endorsement, insert_revoked_endorsement, AccountFactory};
 use common::test_db::isolated_db;
 use tc_test_macros::shared_runtime_test;
 use tinycongress_api::trust::engine::{TrustEngine, TrustEngineError};
@@ -277,6 +277,49 @@ async fn test_revoked_edge_exclusion() {
     assert!(
         b_score.is_none(),
         "B should be unreachable (A→B edge is revoked)"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// TRD 6.1: Out-of-slot edge exclusion
+// Setup: Seed → A (in_slot=true) → B (in_slot=false)
+// Assert: B is NOT reachable (in_slot=false edges do not contribute to distance)
+// ---------------------------------------------------------------------------
+#[shared_runtime_test]
+async fn test_out_of_slot_edge_excluded_from_distance() {
+    let db = isolated_db().await;
+    let pool = db.pool().clone();
+
+    let seed = AccountFactory::new()
+        .with_seed(1)
+        .create(&pool)
+        .await
+        .expect("create seed");
+    let a = AccountFactory::new()
+        .with_seed(2)
+        .create(&pool)
+        .await
+        .expect("create a");
+    let b = AccountFactory::new()
+        .with_seed(3)
+        .create(&pool)
+        .await
+        .expect("create b");
+
+    insert_endorsement(&pool, seed.id, a.id, 1.0).await;
+    // A→B is out-of-slot: exceeds the per-account slot budget, must not be traversed
+    insert_out_of_slot_endorsement(&pool, a.id, b.id, 1.0).await;
+
+    let engine = TrustEngine::new(pool);
+    let scores = engine
+        .compute_distances_from(seed.id)
+        .await
+        .expect("compute_distances_from");
+
+    let b_score = scores.iter().find(|s| s.account_id == b.id);
+    assert!(
+        b_score.is_none(),
+        "B should be unreachable: the A→B edge has in_slot=false and must be excluded from trust distance"
     );
 }
 

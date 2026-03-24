@@ -30,3 +30,25 @@ pub async fn insert_revoked_endorsement(pool: &PgPool, endorser: Uuid, subject: 
     .await
     .unwrap();
 }
+
+/// Insert an out-of-slot endorsement (in_slot = false).
+///
+/// Out-of-slot endorsements exceed the per-account slot budget and must not
+/// contribute to trust distance or path diversity computation.
+pub async fn insert_out_of_slot_endorsement(
+    pool: &PgPool,
+    endorser: Uuid,
+    subject: Uuid,
+    weight: f32,
+) {
+    sqlx::query(
+        "INSERT INTO reputation__endorsements (endorser_id, subject_id, topic, weight, in_slot)
+         VALUES ($1, $2, 'trust', $3, false)",
+    )
+    .bind(endorser)
+    .bind(subject)
+    .bind(weight)
+    .execute(pool)
+    .await
+    .unwrap();
+}
