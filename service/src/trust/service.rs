@@ -2273,6 +2273,73 @@ mod tests {
         );
     }
 
+    // ─── has_active_denouncement argument-order correctness ───────────────────
+
+    #[tokio::test]
+    async fn endorse_passes_endorser_id_first_to_has_active_denouncement() {
+        // Verifies that endorse() passes (endorser_id, subject_id) to
+        // has_active_denouncement, NOT (subject_id, endorser_id). A swap would
+        // check whether the *subject* has denounced the endorser rather than
+        // whether the endorser has denounced the subject — allowing an endorser
+        // who has filed a denouncement against their target to still endorse them.
+        //
+        // Uses active_error() to terminate early after capturing; we only care
+        // about the captured argument pair, not the call outcome.
+        let captured_active = Arc::new(Mutex::new(None::<(Uuid, Uuid)>));
+        let svc = DefaultTrustService::new(
+            Arc::new(
+                StubTrustRepo::default()
+                    .daily(0)
+                    .capture_active(captured_active.clone())
+                    .active_error(),
+            ),
+            Arc::new(PanicReputationRepo),
+        );
+        let endorser = Uuid::new_v4();
+        let subject = Uuid::new_v4();
+        // Result is an error from has_active_denouncement — expected; we only
+        // care about which IDs were passed and in which order.
+        let _ = svc.endorse(endorser, subject, 0.5, None).await;
+        assert_eq!(
+            *captured_active.lock().unwrap(),
+            Some((endorser, subject)),
+            "endorse must pass (endorser_id, subject_id) to has_active_denouncement, \
+             not (subject_id, endorser_id)"
+        );
+    }
+
+    #[tokio::test]
+    async fn denounce_passes_accuser_id_first_to_has_active_denouncement() {
+        // Verifies that denounce() passes (accuser_id, target_id) to
+        // has_active_denouncement, NOT (target_id, accuser_id). A swap would
+        // check whether the *target* has already denounced the accuser rather
+        // than whether the accuser has already denounced the target — allowing
+        // the accuser to file a duplicate denouncement.
+        //
+        // Uses active_error() to terminate early after capturing; we only care
+        // about the captured argument pair, not the call outcome.
+        let captured_active = Arc::new(Mutex::new(None::<(Uuid, Uuid)>));
+        let svc = DefaultTrustService::new(
+            Arc::new(
+                StubTrustRepo::default()
+                    .capture_active(captured_active.clone())
+                    .active_error(),
+            ),
+            Arc::new(PanicReputationRepo),
+        );
+        let accuser = Uuid::new_v4();
+        let target = Uuid::new_v4();
+        // Result is an error from has_active_denouncement — expected; we only
+        // care about which IDs were passed and in which order.
+        let _ = svc.denounce(accuser, target, "valid reason").await;
+        assert_eq!(
+            *captured_active.lock().unwrap(),
+            Some((accuser, target)),
+            "denounce must pass (accuser_id, target_id) to has_active_denouncement, \
+             not (target_id, accuser_id)"
+        );
+    }
+
     #[tokio::test]
     async fn denounce_passes_accuser_to_count_total_denouncements_by() {
         // Verifies that denounce() checks the permanent denouncement slot budget
