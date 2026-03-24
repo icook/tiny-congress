@@ -303,7 +303,147 @@ mod tests {
     };
     use crate::trust::weight::{DeliveryMethod, RelationshipDepth};
 
-    struct PanicReputationRepo;
+    /// Single configurable stub for [`ReputationRepo`] used across service-layer tests.
+    ///
+    /// All methods default to `unimplemented!()`. Set field(s) relevant to your
+    /// test; every other method panics if called, so a missing guard in the
+    /// code-under-test surfaces as a test panic rather than a silently wrong result.
+    ///
+    /// When [`ReputationRepo`] gains a new method service tests need to exercise, add
+    /// one field here rather than creating a new per-test stub struct.
+    #[derive(Default)]
+    struct StubReputationRepo {
+        /// `Some(v)` → `has_endorsement` returns `Ok(v)`. `None` → `unimplemented!()`.
+        endorsement: Option<bool>,
+        /// `true` → `has_endorsement` returns a database error.
+        endorsement_fails: bool,
+        /// If set, captures the `subject_id` argument to `has_endorsement`.
+        captured_endorsement_id: Option<Arc<Mutex<Option<Uuid>>>>,
+        /// If set, captures the `topic` argument to `has_endorsement`.
+        captured_endorsement_topic: Option<Arc<Mutex<Option<String>>>>,
+        /// `Some(n)` → `count_active_trust_endorsements_by` returns `Ok(n)`. `None` → `unimplemented!()`.
+        active_count: Option<i64>,
+        /// `true` → `count_active_trust_endorsements_by` returns a database error.
+        active_count_fails: bool,
+        /// If set, captures the `endorser_id` argument to `count_active_trust_endorsements_by`.
+        captured_active_count_id: Option<Arc<Mutex<Option<Uuid>>>>,
+    }
+
+    impl StubReputationRepo {
+        fn verifier(mut self, v: bool) -> Self {
+            self.endorsement = Some(v);
+            self
+        }
+        fn verifier_error(mut self) -> Self {
+            self.endorsement_fails = true;
+            self
+        }
+        fn capture_endorsement_id(mut self, cap: Arc<Mutex<Option<Uuid>>>) -> Self {
+            self.captured_endorsement_id = Some(cap);
+            self
+        }
+        fn capture_endorsement_topic(mut self, cap: Arc<Mutex<Option<String>>>) -> Self {
+            self.captured_endorsement_topic = Some(cap);
+            self
+        }
+        fn active_count(mut self, n: i64) -> Self {
+            self.active_count = Some(n);
+            self
+        }
+        fn active_count_error(mut self) -> Self {
+            self.active_count_fails = true;
+            self
+        }
+        fn capture_active_id(mut self, cap: Arc<Mutex<Option<Uuid>>>) -> Self {
+            self.captured_active_count_id = Some(cap);
+            self
+        }
+    }
+
+    #[async_trait]
+    impl ReputationRepo for StubReputationRepo {
+        async fn has_endorsement(
+            &self,
+            subject_id: Uuid,
+            topic: &str,
+        ) -> Result<bool, EndorsementRepoError> {
+            if let Some(cap) = &self.captured_endorsement_id {
+                *cap.lock().unwrap() = Some(subject_id);
+            }
+            if let Some(cap) = &self.captured_endorsement_topic {
+                *cap.lock().unwrap() = Some(topic.to_string());
+            }
+            if self.endorsement_fails {
+                return Err(EndorsementRepoError::NotFound);
+            }
+            if let Some(v) = self.endorsement {
+                return Ok(v);
+            }
+            unimplemented!()
+        }
+        async fn count_active_trust_endorsements_by(
+            &self,
+            endorser_id: Uuid,
+        ) -> Result<i64, EndorsementRepoError> {
+            if let Some(cap) = &self.captured_active_count_id {
+                *cap.lock().unwrap() = Some(endorser_id);
+            }
+            if self.active_count_fails {
+                return Err(EndorsementRepoError::Database(sqlx::Error::RowNotFound));
+            }
+            if let Some(n) = self.active_count {
+                return Ok(n);
+            }
+            unimplemented!()
+        }
+        async fn create_endorsement(
+            &self,
+            _: Uuid,
+            _: &str,
+            _: Option<Uuid>,
+            _: Option<&serde_json::Value>,
+            _: f32,
+            _: Option<&serde_json::Value>,
+            _: bool,
+        ) -> Result<CreatedEndorsement, EndorsementRepoError> {
+            unimplemented!()
+        }
+        async fn count_all_active_trust_endorsements_by(
+            &self,
+            _: Uuid,
+        ) -> Result<i64, EndorsementRepoError> {
+            unimplemented!()
+        }
+        async fn list_endorsements_by_subject(
+            &self,
+            _: Uuid,
+        ) -> Result<Vec<EndorsementRecord>, EndorsementRepoError> {
+            unimplemented!()
+        }
+        async fn revoke_endorsement(
+            &self,
+            _: Uuid,
+            _: Uuid,
+            _: &str,
+        ) -> Result<(), EndorsementRepoError> {
+            unimplemented!()
+        }
+        async fn link_external_identity(
+            &self,
+            _: Uuid,
+            _: &str,
+            _: &str,
+        ) -> Result<ExternalIdentityRecord, ExternalIdentityRepoError> {
+            unimplemented!()
+        }
+        async fn get_external_identity_by_provider(
+            &self,
+            _: &str,
+            _: &str,
+        ) -> Result<ExternalIdentityRecord, ExternalIdentityRepoError> {
+            unimplemented!()
+        }
+    }
 
     /// Single configurable stub for [`TrustRepo`] used across service-layer tests.
     ///
@@ -590,70 +730,10 @@ mod tests {
         }
     }
 
-    #[async_trait]
-    impl ReputationRepo for PanicReputationRepo {
-        async fn create_endorsement(
-            &self,
-            _: Uuid,
-            _: &str,
-            _: Option<Uuid>,
-            _: Option<&serde_json::Value>,
-            _: f32,
-            _: Option<&serde_json::Value>,
-            _: bool,
-        ) -> Result<CreatedEndorsement, EndorsementRepoError> {
-            unimplemented!()
-        }
-        async fn count_all_active_trust_endorsements_by(
-            &self,
-            _: Uuid,
-        ) -> Result<i64, EndorsementRepoError> {
-            unimplemented!()
-        }
-        async fn has_endorsement(&self, _: Uuid, _: &str) -> Result<bool, EndorsementRepoError> {
-            unimplemented!()
-        }
-        async fn list_endorsements_by_subject(
-            &self,
-            _: Uuid,
-        ) -> Result<Vec<EndorsementRecord>, EndorsementRepoError> {
-            unimplemented!()
-        }
-        async fn revoke_endorsement(
-            &self,
-            _: Uuid,
-            _: Uuid,
-            _: &str,
-        ) -> Result<(), EndorsementRepoError> {
-            unimplemented!()
-        }
-        async fn count_active_trust_endorsements_by(
-            &self,
-            _: Uuid,
-        ) -> Result<i64, EndorsementRepoError> {
-            unimplemented!()
-        }
-        async fn link_external_identity(
-            &self,
-            _: Uuid,
-            _: &str,
-            _: &str,
-        ) -> Result<ExternalIdentityRecord, ExternalIdentityRepoError> {
-            unimplemented!()
-        }
-        async fn get_external_identity_by_provider(
-            &self,
-            _: &str,
-            _: &str,
-        ) -> Result<ExternalIdentityRecord, ExternalIdentityRepoError> {
-            unimplemented!()
-        }
-    }
-
     fn make_service() -> DefaultTrustService {
         DefaultTrustService::new(
             Arc::new(StubTrustRepo::default()),
-            Arc::new(PanicReputationRepo),
+            Arc::new(StubReputationRepo::default()),
         )
     }
 
@@ -664,7 +744,7 @@ mod tests {
         // against the subject must return DenouncementConflict without enqueueing.
         let svc = DefaultTrustService::new(
             Arc::new(StubTrustRepo::default().daily(0).active(true)),
-            Arc::new(PanicReputationRepo),
+            Arc::new(StubReputationRepo::default()),
         );
         let a = Uuid::new_v4();
         let b = Uuid::new_v4();
@@ -725,7 +805,7 @@ mod tests {
         // rather than silently pass.
         let svc = DefaultTrustService::new(
             Arc::new(StubTrustRepo::default().daily(DAILY_ACTION_QUOTA)),
-            Arc::new(PanicReputationRepo),
+            Arc::new(StubReputationRepo::default()),
         );
         let a = Uuid::new_v4();
         let b = Uuid::new_v4();
@@ -751,7 +831,7 @@ mod tests {
         // rather than silently pass.
         let svc = DefaultTrustService::new(
             Arc::new(StubTrustRepo::default().daily(DAILY_ACTION_QUOTA)),
-            Arc::new(PanicReputationRepo),
+            Arc::new(StubReputationRepo::default()),
         );
         let a = Uuid::new_v4();
         let b = Uuid::new_v4();
@@ -814,7 +894,7 @@ mod tests {
                     .total(0)
                     .capture_payload(captured.clone()),
             ),
-            Arc::new(PanicReputationRepo),
+            Arc::new(StubReputationRepo::default()),
         );
         let accuser = Uuid::new_v4();
         let target = Uuid::new_v4();
@@ -842,7 +922,7 @@ mod tests {
                     .active(false)
                     .total(i64::from(DENOUNCEMENT_SLOT_LIMIT)),
             ),
-            Arc::new(PanicReputationRepo),
+            Arc::new(StubReputationRepo::default()),
         );
         let a = Uuid::new_v4();
         let b = Uuid::new_v4();
@@ -869,7 +949,7 @@ mod tests {
                     .daily(DAILY_ACTION_QUOTA)
                     .active(false),
             ),
-            Arc::new(PanicReputationRepo),
+            Arc::new(StubReputationRepo::default()),
         );
         let a = Uuid::new_v4();
         let b = Uuid::new_v4();
@@ -891,7 +971,7 @@ mod tests {
         // missing `?` would cause the test to fail loudly.
         let svc = DefaultTrustService::new(
             Arc::new(StubTrustRepo::default().active_error()),
-            Arc::new(PanicReputationRepo),
+            Arc::new(StubReputationRepo::default()),
         );
         let a = Uuid::new_v4();
         let b = Uuid::new_v4();
@@ -913,7 +993,7 @@ mod tests {
         // missing `?` would cause the test to fail loudly.
         let svc = DefaultTrustService::new(
             Arc::new(StubTrustRepo::default().daily_error()),
-            Arc::new(PanicReputationRepo),
+            Arc::new(StubReputationRepo::default()),
         );
         let a = Uuid::new_v4();
         let b = Uuid::new_v4();
@@ -933,7 +1013,7 @@ mod tests {
         // so a missing `?` would cause the test to fail loudly.
         let svc = DefaultTrustService::new(
             Arc::new(StubTrustRepo::default().daily(0).active_error()),
-            Arc::new(PanicReputationRepo),
+            Arc::new(StubReputationRepo::default()),
         );
         let a = Uuid::new_v4();
         let b = Uuid::new_v4();
@@ -954,73 +1034,6 @@ mod tests {
     //   - non-verifier accounts at the slot limit receive `in_slot = false` but
     //     the action is still queued — slots full is NOT an error.
 
-    /// A [`ReputationRepo`] stub with configurable verifier and active-endorsement
-    /// values, used to drive the `in_slot` computation in [`DefaultTrustService::endorse`].
-    struct StubReputationRepo {
-        is_verifier: bool,
-        active_endorsements: i64,
-    }
-
-    #[async_trait]
-    impl ReputationRepo for StubReputationRepo {
-        async fn has_endorsement(&self, _: Uuid, _: &str) -> Result<bool, EndorsementRepoError> {
-            Ok(self.is_verifier)
-        }
-        async fn count_active_trust_endorsements_by(
-            &self,
-            _: Uuid,
-        ) -> Result<i64, EndorsementRepoError> {
-            Ok(self.active_endorsements)
-        }
-        async fn create_endorsement(
-            &self,
-            _: Uuid,
-            _: &str,
-            _: Option<Uuid>,
-            _: Option<&serde_json::Value>,
-            _: f32,
-            _: Option<&serde_json::Value>,
-            _: bool,
-        ) -> Result<CreatedEndorsement, EndorsementRepoError> {
-            unimplemented!()
-        }
-        async fn count_all_active_trust_endorsements_by(
-            &self,
-            _: Uuid,
-        ) -> Result<i64, EndorsementRepoError> {
-            unimplemented!()
-        }
-        async fn list_endorsements_by_subject(
-            &self,
-            _: Uuid,
-        ) -> Result<Vec<EndorsementRecord>, EndorsementRepoError> {
-            unimplemented!()
-        }
-        async fn revoke_endorsement(
-            &self,
-            _: Uuid,
-            _: Uuid,
-            _: &str,
-        ) -> Result<(), EndorsementRepoError> {
-            unimplemented!()
-        }
-        async fn link_external_identity(
-            &self,
-            _: Uuid,
-            _: &str,
-            _: &str,
-        ) -> Result<ExternalIdentityRecord, ExternalIdentityRepoError> {
-            unimplemented!()
-        }
-        async fn get_external_identity_by_provider(
-            &self,
-            _: &str,
-            _: &str,
-        ) -> Result<ExternalIdentityRecord, ExternalIdentityRepoError> {
-            unimplemented!()
-        }
-    }
-
     #[tokio::test]
     async fn endorse_queues_with_in_slot_true_for_verifier() {
         // Verifier accounts are exempt from the k=3 endorsement slot limit.
@@ -1034,10 +1047,11 @@ mod tests {
                     .active(false)
                     .capture_payload(captured.clone()),
             ),
-            Arc::new(StubReputationRepo {
-                is_verifier: true,
-                active_endorsements: i64::from(ENDORSEMENT_SLOT_LIMIT), // slots "full"
-            }),
+            Arc::new(
+                StubReputationRepo::default()
+                    .verifier(true)
+                    .active_count(i64::from(ENDORSEMENT_SLOT_LIMIT)),
+            ), // slots "full"
         );
         let a = Uuid::new_v4();
         let b = Uuid::new_v4();
@@ -1063,10 +1077,11 @@ mod tests {
                     .active(false)
                     .capture_payload(captured.clone()),
             ),
-            Arc::new(StubReputationRepo {
-                is_verifier: false,
-                active_endorsements: i64::from(ENDORSEMENT_SLOT_LIMIT), // at slot limit
-            }),
+            Arc::new(
+                StubReputationRepo::default()
+                    .verifier(false)
+                    .active_count(i64::from(ENDORSEMENT_SLOT_LIMIT)),
+            ), // at slot limit
         );
         let a = Uuid::new_v4();
         let b = Uuid::new_v4();
@@ -1094,10 +1109,11 @@ mod tests {
                     .active(false)
                     .capture_payload(captured.clone()),
             ),
-            Arc::new(StubReputationRepo {
-                is_verifier: false,
-                active_endorsements: i64::from(ENDORSEMENT_SLOT_LIMIT) - 1, // one slot free
-            }),
+            Arc::new(
+                StubReputationRepo::default()
+                    .verifier(false)
+                    .active_count(i64::from(ENDORSEMENT_SLOT_LIMIT) - 1),
+            ), // one slot free
         );
         let a = Uuid::new_v4();
         let b = Uuid::new_v4();
@@ -1126,10 +1142,11 @@ mod tests {
                     .active(false)
                     .capture_payload(captured.clone()),
             ),
-            Arc::new(StubReputationRepo {
-                is_verifier: false,
-                active_endorsements: 0,
-            }),
+            Arc::new(
+                StubReputationRepo::default()
+                    .verifier(false)
+                    .active_count(0),
+            ),
         );
         let endorser = Uuid::new_v4();
         let subject = Uuid::new_v4();
@@ -1161,10 +1178,11 @@ mod tests {
                     .active(false)
                     .capture_payload(captured.clone()),
             ),
-            Arc::new(StubReputationRepo {
-                is_verifier: false,
-                active_endorsements: 0,
-            }),
+            Arc::new(
+                StubReputationRepo::default()
+                    .verifier(false)
+                    .active_count(0),
+            ),
         );
         let endorser = Uuid::new_v4();
         let subject = Uuid::new_v4();
@@ -1195,7 +1213,7 @@ mod tests {
                     .total(0)
                     .capture_payload(captured.clone()),
             ),
-            Arc::new(PanicReputationRepo),
+            Arc::new(StubReputationRepo::default()),
         );
         let accuser = Uuid::new_v4();
         let target = Uuid::new_v4();
@@ -1216,138 +1234,7 @@ mod tests {
 
     // ─── endorsement repo error propagation ──────────────────────────────────
 
-    /// A [`ReputationRepo`] stub whose `has_endorsement` always returns an error.
-    /// Used to verify that `DefaultTrustService::endorse` propagates the error
-    /// rather than silently treating the caller as a non-verifier.
-    struct ErrorHasEndorsementRepo;
-
-    #[async_trait]
-    impl ReputationRepo for ErrorHasEndorsementRepo {
-        async fn has_endorsement(&self, _: Uuid, _: &str) -> Result<bool, EndorsementRepoError> {
-            Err(EndorsementRepoError::NotFound)
-        }
-        async fn count_active_trust_endorsements_by(
-            &self,
-            _: Uuid,
-        ) -> Result<i64, EndorsementRepoError> {
-            unimplemented!()
-        }
-        async fn create_endorsement(
-            &self,
-            _: Uuid,
-            _: &str,
-            _: Option<Uuid>,
-            _: Option<&serde_json::Value>,
-            _: f32,
-            _: Option<&serde_json::Value>,
-            _: bool,
-        ) -> Result<CreatedEndorsement, EndorsementRepoError> {
-            unimplemented!()
-        }
-        async fn count_all_active_trust_endorsements_by(
-            &self,
-            _: Uuid,
-        ) -> Result<i64, EndorsementRepoError> {
-            unimplemented!()
-        }
-        async fn list_endorsements_by_subject(
-            &self,
-            _: Uuid,
-        ) -> Result<Vec<EndorsementRecord>, EndorsementRepoError> {
-            unimplemented!()
-        }
-        async fn revoke_endorsement(
-            &self,
-            _: Uuid,
-            _: Uuid,
-            _: &str,
-        ) -> Result<(), EndorsementRepoError> {
-            unimplemented!()
-        }
-        async fn link_external_identity(
-            &self,
-            _: Uuid,
-            _: &str,
-            _: &str,
-        ) -> Result<ExternalIdentityRecord, ExternalIdentityRepoError> {
-            unimplemented!()
-        }
-        async fn get_external_identity_by_provider(
-            &self,
-            _: &str,
-            _: &str,
-        ) -> Result<ExternalIdentityRecord, ExternalIdentityRepoError> {
-            unimplemented!()
-        }
-    }
-
     // ─── count_active_trust_endorsements_by error propagation ────────────────
-
-    /// A [`ReputationRepo`] stub where `has_endorsement` identifies the caller as
-    /// a non-verifier (`Ok(false)`) but `count_active_trust_endorsements_by` fails
-    /// with a database error. Used to verify that `DefaultTrustService::endorse`
-    /// propagates the error rather than silently treating the active count as 0.
-    struct NonVerifierWithFailingActiveCountRepo;
-
-    #[async_trait]
-    impl ReputationRepo for NonVerifierWithFailingActiveCountRepo {
-        async fn has_endorsement(&self, _: Uuid, _: &str) -> Result<bool, EndorsementRepoError> {
-            Ok(false) // non-verifier — proceeds to count_active_trust_endorsements_by
-        }
-        async fn count_active_trust_endorsements_by(
-            &self,
-            _: Uuid,
-        ) -> Result<i64, EndorsementRepoError> {
-            Err(EndorsementRepoError::Database(sqlx::Error::RowNotFound))
-        }
-        async fn create_endorsement(
-            &self,
-            _: Uuid,
-            _: &str,
-            _: Option<Uuid>,
-            _: Option<&serde_json::Value>,
-            _: f32,
-            _: Option<&serde_json::Value>,
-            _: bool,
-        ) -> Result<CreatedEndorsement, EndorsementRepoError> {
-            unimplemented!()
-        }
-        async fn count_all_active_trust_endorsements_by(
-            &self,
-            _: Uuid,
-        ) -> Result<i64, EndorsementRepoError> {
-            unimplemented!()
-        }
-        async fn list_endorsements_by_subject(
-            &self,
-            _: Uuid,
-        ) -> Result<Vec<EndorsementRecord>, EndorsementRepoError> {
-            unimplemented!()
-        }
-        async fn revoke_endorsement(
-            &self,
-            _: Uuid,
-            _: Uuid,
-            _: &str,
-        ) -> Result<(), EndorsementRepoError> {
-            unimplemented!()
-        }
-        async fn link_external_identity(
-            &self,
-            _: Uuid,
-            _: &str,
-            _: &str,
-        ) -> Result<ExternalIdentityRecord, ExternalIdentityRepoError> {
-            unimplemented!()
-        }
-        async fn get_external_identity_by_provider(
-            &self,
-            _: &str,
-            _: &str,
-        ) -> Result<ExternalIdentityRecord, ExternalIdentityRepoError> {
-            unimplemented!()
-        }
-    }
 
     #[tokio::test]
     async fn endorse_propagates_endorsement_repo_error_when_active_count_check_fails() {
@@ -1365,7 +1252,11 @@ mod tests {
                     .active(false)
                     .capture_payload(captured.clone()),
             ),
-            Arc::new(NonVerifierWithFailingActiveCountRepo),
+            Arc::new(
+                StubReputationRepo::default()
+                    .verifier(false)
+                    .active_count_error(),
+            ),
         );
         let a = Uuid::new_v4();
         let b = Uuid::new_v4();
@@ -1396,7 +1287,7 @@ mod tests {
                     .active(false)
                     .total_error(),
             ),
-            Arc::new(PanicReputationRepo),
+            Arc::new(StubReputationRepo::default()),
         );
         let a = Uuid::new_v4();
         let b = Uuid::new_v4();
@@ -1424,7 +1315,7 @@ mod tests {
                     .active(false)
                     .capture_payload(captured.clone()),
             ),
-            Arc::new(ErrorHasEndorsementRepo),
+            Arc::new(StubReputationRepo::default().verifier_error()),
         );
         let a = Uuid::new_v4();
         let b = Uuid::new_v4();
@@ -1457,10 +1348,11 @@ mod tests {
                     .active(false)
                     .enqueue_error(),
             ),
-            Arc::new(StubReputationRepo {
-                is_verifier: false,
-                active_endorsements: 0,
-            }),
+            Arc::new(
+                StubReputationRepo::default()
+                    .verifier(false)
+                    .active_count(0),
+            ),
         );
         let a = Uuid::new_v4();
         let b = Uuid::new_v4();
@@ -1480,7 +1372,7 @@ mod tests {
         // methods, so a stray call would cause the test to fail loudly.
         let svc = DefaultTrustService::new(
             Arc::new(StubTrustRepo::default().daily(0).enqueue_error()),
-            Arc::new(PanicReputationRepo),
+            Arc::new(StubReputationRepo::default()),
         );
         let a = Uuid::new_v4();
         let b = Uuid::new_v4();
@@ -1509,7 +1401,7 @@ mod tests {
                     .total(0)
                     .enqueue_error(),
             ),
-            Arc::new(PanicReputationRepo),
+            Arc::new(StubReputationRepo::default()),
         );
         let a = Uuid::new_v4();
         let b = Uuid::new_v4();
@@ -1536,10 +1428,11 @@ mod tests {
                     .total(0)
                     .capture_type(captured_type.clone()),
             ),
-            Arc::new(StubReputationRepo {
-                is_verifier: false,
-                active_endorsements: 0,
-            }),
+            Arc::new(
+                StubReputationRepo::default()
+                    .verifier(false)
+                    .active_count(0),
+            ),
         );
         let a = Uuid::new_v4();
         let b = Uuid::new_v4();
@@ -1563,7 +1456,7 @@ mod tests {
                     .total(0)
                     .capture_type(captured_type.clone()),
             ),
-            Arc::new(PanicReputationRepo),
+            Arc::new(StubReputationRepo::default()),
         );
         let a = Uuid::new_v4();
         let b = Uuid::new_v4();
@@ -1587,7 +1480,7 @@ mod tests {
                     .total(0)
                     .capture_type(captured_type.clone()),
             ),
-            Arc::new(PanicReputationRepo),
+            Arc::new(StubReputationRepo::default()),
         );
         let a = Uuid::new_v4();
         let b = Uuid::new_v4();
@@ -1617,7 +1510,7 @@ mod tests {
                     .daily(0)
                     .capture_actor(captured_actor.clone()),
             ),
-            Arc::new(PanicReputationRepo),
+            Arc::new(StubReputationRepo::default()),
         );
         let endorser = Uuid::new_v4();
         let subject = Uuid::new_v4();
@@ -1646,7 +1539,7 @@ mod tests {
                     .total(0)
                     .capture_actor(captured_actor.clone()),
             ),
-            Arc::new(PanicReputationRepo),
+            Arc::new(StubReputationRepo::default()),
         );
         let accuser = Uuid::new_v4();
         let target = Uuid::new_v4();
@@ -1675,10 +1568,11 @@ mod tests {
                     .active(false)
                     .capture_actor(captured_actor.clone()),
             ),
-            Arc::new(StubReputationRepo {
-                is_verifier: false,
-                active_endorsements: 0,
-            }),
+            Arc::new(
+                StubReputationRepo::default()
+                    .verifier(false)
+                    .active_count(0),
+            ),
         );
         let endorser = Uuid::new_v4();
         let subject = Uuid::new_v4();
@@ -1720,10 +1614,11 @@ mod tests {
                     .capture_daily_actor(captured_quota_actor.clone())
                     .enqueue_error(),
             ),
-            Arc::new(StubReputationRepo {
-                is_verifier: false,
-                active_endorsements: 0,
-            }),
+            Arc::new(
+                StubReputationRepo::default()
+                    .verifier(false)
+                    .active_count(0),
+            ),
         );
         let endorser = Uuid::new_v4();
         let subject = Uuid::new_v4();
@@ -1766,7 +1661,7 @@ mod tests {
                     .capture_daily_actor(captured_quota_actor.clone())
                     .enqueue_error(),
             ),
-            Arc::new(PanicReputationRepo),
+            Arc::new(StubReputationRepo::default()),
         );
         let endorser = Uuid::new_v4();
         let subject = Uuid::new_v4();
@@ -1814,7 +1709,7 @@ mod tests {
                     .capture_daily_actor(captured_quota_actor.clone())
                     .enqueue_error(),
             ),
-            Arc::new(PanicReputationRepo),
+            Arc::new(StubReputationRepo::default()),
         );
         let accuser = Uuid::new_v4();
         let target = Uuid::new_v4();
@@ -1852,7 +1747,7 @@ mod tests {
                     .active_error()
                     .capture_active(captured.clone()),
             ),
-            Arc::new(PanicReputationRepo),
+            Arc::new(StubReputationRepo::default()),
         );
         let accuser = Uuid::new_v4();
         let target = Uuid::new_v4();
@@ -1906,7 +1801,7 @@ mod tests {
                     .active_error()
                     .capture_active(captured.clone()),
             ),
-            Arc::new(PanicReputationRepo),
+            Arc::new(StubReputationRepo::default()),
         );
         let endorser = Uuid::new_v4();
         let subject = Uuid::new_v4();
@@ -1927,97 +1822,19 @@ mod tests {
 
     // ─── endorse verifier-check actor-id correctness ─────────────────────────
 
-    /// A [`ReputationRepo`] stub that captures the `user_id` passed to
-    /// `has_endorsement` and immediately returns an error to terminate the call
-    /// early. Used to verify that [`DefaultTrustService::endorse`] checks the
-    /// *endorser's* verifier status, not the subject's.
-    ///
-    /// A bug that passed `subject_id` instead of `endorser_id` would check
-    /// whether the *subject* has the verifier endorsement — granting slot-limit
-    /// exemption to the endorser whenever the subject is a verifier, rather than
-    /// when the endorser is.
-    struct CapturingVerifierCheckRepo {
-        captured_id: Arc<Mutex<Option<Uuid>>>,
-    }
-
-    #[async_trait]
-    impl ReputationRepo for CapturingVerifierCheckRepo {
-        async fn has_endorsement(
-            &self,
-            subject: Uuid,
-            _: &str,
-        ) -> Result<bool, EndorsementRepoError> {
-            *self.captured_id.lock().unwrap() = Some(subject);
-            Err(EndorsementRepoError::NotFound)
-        }
-        async fn count_active_trust_endorsements_by(
-            &self,
-            _: Uuid,
-        ) -> Result<i64, EndorsementRepoError> {
-            unimplemented!()
-        }
-        async fn create_endorsement(
-            &self,
-            _: Uuid,
-            _: &str,
-            _: Option<Uuid>,
-            _: Option<&serde_json::Value>,
-            _: f32,
-            _: Option<&serde_json::Value>,
-            _: bool,
-        ) -> Result<CreatedEndorsement, EndorsementRepoError> {
-            unimplemented!()
-        }
-        async fn count_all_active_trust_endorsements_by(
-            &self,
-            _: Uuid,
-        ) -> Result<i64, EndorsementRepoError> {
-            unimplemented!()
-        }
-        async fn list_endorsements_by_subject(
-            &self,
-            _: Uuid,
-        ) -> Result<Vec<EndorsementRecord>, EndorsementRepoError> {
-            unimplemented!()
-        }
-        async fn revoke_endorsement(
-            &self,
-            _: Uuid,
-            _: Uuid,
-            _: &str,
-        ) -> Result<(), EndorsementRepoError> {
-            unimplemented!()
-        }
-        async fn link_external_identity(
-            &self,
-            _: Uuid,
-            _: &str,
-            _: &str,
-        ) -> Result<ExternalIdentityRecord, ExternalIdentityRepoError> {
-            unimplemented!()
-        }
-        async fn get_external_identity_by_provider(
-            &self,
-            _: &str,
-            _: &str,
-        ) -> Result<ExternalIdentityRecord, ExternalIdentityRepoError> {
-            unimplemented!()
-        }
-    }
-
     #[tokio::test]
     async fn endorse_passes_endorser_id_to_has_endorsement() {
         // Verifies that endorse() checks the *endorser's* verifier status, not
         // the subject's. A swap would grant slot-limit exemption whenever the
         // subject is a verifier rather than the endorser. All other verifier-check
         // tests use repos that ignore which user_id is passed to has_endorsement
-        // (`StubReputationRepo`, `ErrorHasEndorsementRepo`), so this gap would not
+        // (`StubReputationRepo` without a capture), so this gap would not
         // be caught without an explicit capturing test.
         //
         // Uses StubTrustRepo for TrustRepo (passes count_daily_actions and
-        // has_active_denouncement guards). CapturingVerifierCheckRepo returns an
-        // error from has_endorsement to terminate early; we only care about the
-        // captured ID.
+        // has_active_denouncement guards). StubReputationRepo with
+        // capture_endorsement_id + verifier_error terminates early; we only care
+        // about the captured ID.
         let captured_id = Arc::new(Mutex::new(None::<Uuid>));
         let svc = DefaultTrustService::new(
             Arc::new(
@@ -2026,9 +1843,11 @@ mod tests {
                     .active(false)
                     .capture_payload(Arc::new(Mutex::new(None))),
             ),
-            Arc::new(CapturingVerifierCheckRepo {
-                captured_id: captured_id.clone(),
-            }),
+            Arc::new(
+                StubReputationRepo::default()
+                    .capture_endorsement_id(captured_id.clone())
+                    .verifier_error(),
+            ),
         );
         let endorser = Uuid::new_v4();
         let subject = Uuid::new_v4();
@@ -2044,84 +1863,6 @@ mod tests {
 
     // ─── endorse verifier-check topic correctness ────────────────────────────
 
-    /// A [`ReputationRepo`] stub that captures the topic string passed to
-    /// `has_endorsement` and immediately returns an error to terminate the call
-    /// early. Used to verify that [`DefaultTrustService::endorse`] queries the
-    /// `"authorized_verifier"` topic specifically.
-    ///
-    /// A bug that passed the wrong topic (e.g., `"trust"`, `"verifier"`) would
-    /// silently grant or deny the slot-limit exemption to all users depending on
-    /// which endorsement they hold. No existing test captures the topic argument
-    /// because other stubs discard it (`_: &str`).
-    struct CapturingVerifierTopicRepo {
-        captured_topic: Arc<Mutex<Option<String>>>,
-    }
-
-    #[async_trait]
-    impl ReputationRepo for CapturingVerifierTopicRepo {
-        async fn has_endorsement(
-            &self,
-            _: Uuid,
-            topic: &str,
-        ) -> Result<bool, EndorsementRepoError> {
-            *self.captured_topic.lock().unwrap() = Some(topic.to_string());
-            Err(EndorsementRepoError::NotFound)
-        }
-        async fn count_active_trust_endorsements_by(
-            &self,
-            _: Uuid,
-        ) -> Result<i64, EndorsementRepoError> {
-            unimplemented!()
-        }
-        async fn create_endorsement(
-            &self,
-            _: Uuid,
-            _: &str,
-            _: Option<Uuid>,
-            _: Option<&serde_json::Value>,
-            _: f32,
-            _: Option<&serde_json::Value>,
-            _: bool,
-        ) -> Result<CreatedEndorsement, EndorsementRepoError> {
-            unimplemented!()
-        }
-        async fn count_all_active_trust_endorsements_by(
-            &self,
-            _: Uuid,
-        ) -> Result<i64, EndorsementRepoError> {
-            unimplemented!()
-        }
-        async fn list_endorsements_by_subject(
-            &self,
-            _: Uuid,
-        ) -> Result<Vec<EndorsementRecord>, EndorsementRepoError> {
-            unimplemented!()
-        }
-        async fn revoke_endorsement(
-            &self,
-            _: Uuid,
-            _: Uuid,
-            _: &str,
-        ) -> Result<(), EndorsementRepoError> {
-            unimplemented!()
-        }
-        async fn link_external_identity(
-            &self,
-            _: Uuid,
-            _: &str,
-            _: &str,
-        ) -> Result<ExternalIdentityRecord, ExternalIdentityRepoError> {
-            unimplemented!()
-        }
-        async fn get_external_identity_by_provider(
-            &self,
-            _: &str,
-            _: &str,
-        ) -> Result<ExternalIdentityRecord, ExternalIdentityRepoError> {
-            unimplemented!()
-        }
-    }
-
     #[tokio::test]
     async fn endorse_passes_authorized_verifier_topic_to_has_endorsement() {
         // Verifies that endorse() queries the "authorized_verifier" topic when
@@ -2131,9 +1872,9 @@ mod tests {
         // this invariant is not covered elsewhere.
         //
         // Uses StubTrustRepo for TrustRepo (passes count_daily_actions and
-        // has_active_denouncement guards). CapturingVerifierTopicRepo returns an
-        // error from has_endorsement to terminate early; we only care about the
-        // captured topic.
+        // has_active_denouncement guards). StubReputationRepo with
+        // capture_endorsement_topic + verifier_error terminates early; we only
+        // care about the captured topic.
         let captured_topic = Arc::new(Mutex::new(None::<String>));
         let svc = DefaultTrustService::new(
             Arc::new(
@@ -2142,9 +1883,11 @@ mod tests {
                     .active(false)
                     .capture_payload(Arc::new(Mutex::new(None))),
             ),
-            Arc::new(CapturingVerifierTopicRepo {
-                captured_topic: captured_topic.clone(),
-            }),
+            Arc::new(
+                StubReputationRepo::default()
+                    .capture_endorsement_topic(captured_topic.clone())
+                    .verifier_error(),
+            ),
         );
         let endorser = Uuid::new_v4();
         let subject = Uuid::new_v4();
@@ -2160,80 +1903,6 @@ mod tests {
 
     // ─── endorse active-slot-count actor-id correctness ──────────────────────
 
-    /// A [`ReputationRepo`] stub that returns `Ok(false)` from `has_endorsement`
-    /// (marking the caller as a non-verifier) and captures the `actor_id` passed
-    /// to `count_active_trust_endorsements_by`, then returns an error to terminate
-    /// the call early. Used to verify that [`DefaultTrustService::endorse`] checks
-    /// the *endorser's* active slot count, not the subject's.
-    ///
-    /// A bug that passed `subject_id` instead of `endorser_id` would check whether
-    /// the *subject* has available slots — granting `in_slot = true` whenever the
-    /// subject still has capacity, regardless of the endorser's own slot usage.
-    struct CapturingActiveCountRepo {
-        captured_id: Arc<Mutex<Option<Uuid>>>,
-    }
-
-    #[async_trait]
-    impl ReputationRepo for CapturingActiveCountRepo {
-        async fn has_endorsement(&self, _: Uuid, _: &str) -> Result<bool, EndorsementRepoError> {
-            Ok(false) // non-verifier — proceeds to count_active_trust_endorsements_by
-        }
-        async fn count_active_trust_endorsements_by(
-            &self,
-            actor_id: Uuid,
-        ) -> Result<i64, EndorsementRepoError> {
-            *self.captured_id.lock().unwrap() = Some(actor_id);
-            Err(EndorsementRepoError::Database(sqlx::Error::RowNotFound))
-        }
-        async fn create_endorsement(
-            &self,
-            _: Uuid,
-            _: &str,
-            _: Option<Uuid>,
-            _: Option<&serde_json::Value>,
-            _: f32,
-            _: Option<&serde_json::Value>,
-            _: bool,
-        ) -> Result<CreatedEndorsement, EndorsementRepoError> {
-            unimplemented!()
-        }
-        async fn count_all_active_trust_endorsements_by(
-            &self,
-            _: Uuid,
-        ) -> Result<i64, EndorsementRepoError> {
-            unimplemented!()
-        }
-        async fn list_endorsements_by_subject(
-            &self,
-            _: Uuid,
-        ) -> Result<Vec<EndorsementRecord>, EndorsementRepoError> {
-            unimplemented!()
-        }
-        async fn revoke_endorsement(
-            &self,
-            _: Uuid,
-            _: Uuid,
-            _: &str,
-        ) -> Result<(), EndorsementRepoError> {
-            unimplemented!()
-        }
-        async fn link_external_identity(
-            &self,
-            _: Uuid,
-            _: &str,
-            _: &str,
-        ) -> Result<ExternalIdentityRecord, ExternalIdentityRepoError> {
-            unimplemented!()
-        }
-        async fn get_external_identity_by_provider(
-            &self,
-            _: &str,
-            _: &str,
-        ) -> Result<ExternalIdentityRecord, ExternalIdentityRepoError> {
-            unimplemented!()
-        }
-    }
-
     #[tokio::test]
     async fn endorse_passes_endorser_id_to_count_active_trust_endorsements_by() {
         // Verifies that endorse() checks the *endorser's* active slot count, not
@@ -2245,10 +1914,11 @@ mod tests {
         // without an explicit capturing test.
         //
         // StubTrustRepo provides the TrustRepo (passes count_daily_actions
-        // and has_active_denouncement guards). CapturingActiveCountRepo returns
-        // Ok(false) from has_endorsement (non-verifier path) and captures the
-        // actor_id passed to count_active_trust_endorsements_by, then returns an
-        // error to terminate early.
+        // and has_active_denouncement guards). StubReputationRepo with
+        // verifier(false) + capture_active_id + active_count_error returns Ok(false)
+        // from has_endorsement (non-verifier path) and captures the actor_id passed
+        // to count_active_trust_endorsements_by, then returns an error to terminate
+        // early.
         let captured_id = Arc::new(Mutex::new(None::<Uuid>));
         let svc = DefaultTrustService::new(
             Arc::new(
@@ -2257,9 +1927,12 @@ mod tests {
                     .active(false)
                     .capture_payload(Arc::new(Mutex::new(None))),
             ),
-            Arc::new(CapturingActiveCountRepo {
-                captured_id: captured_id.clone(),
-            }),
+            Arc::new(
+                StubReputationRepo::default()
+                    .verifier(false)
+                    .capture_active_id(captured_id.clone())
+                    .active_count_error(),
+            ),
         );
         let endorser = Uuid::new_v4();
         let subject = Uuid::new_v4();
@@ -2294,7 +1967,7 @@ mod tests {
                     .total_error()
                     .capture_total_actor(captured_slot_actor.clone()),
             ),
-            Arc::new(PanicReputationRepo),
+            Arc::new(StubReputationRepo::default()),
         );
         let accuser = Uuid::new_v4();
         let target = Uuid::new_v4();
