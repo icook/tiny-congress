@@ -4,17 +4,221 @@
 
 mod common;
 
+use std::sync::Arc;
+
+use async_trait::async_trait;
 use axum::{
     body::Body,
     http::{header::CONTENT_TYPE, Method, Request, StatusCode},
 };
 use serde_json::Value;
 use tower::ServiceExt;
+use uuid::Uuid;
 
 use common::app_builder::TestAppBuilder;
 use common::factories::{build_authed_request, valid_signup_with_keys};
 use common::test_db::isolated_db;
 use tc_test_macros::shared_runtime_test;
+use tinycongress_api::trust::repo::{
+    ActionRecord, DenouncementRecord, DenouncementWithUsername, InfluenceRecord, InviteRecord,
+    ScoreSnapshot, TrustRepo, TrustRepoError,
+};
+use tinycongress_api::trust::service::{ActionType, TrustService, TrustServiceError};
+use tinycongress_api::trust::weight::{DeliveryMethod, RelationshipDepth};
+
+// ─── Stub TrustRepo for accepted_at=None scenario ────────────────────────────
+
+/// Stub [`TrustRepo`] that returns an [`InviteRecord`] with `accepted_at = None`
+/// from both `get_invite` and `accept_invite`.  All other methods panic — this
+/// stub is only valid for the `accept_invite_handler` code path.
+struct StubAcceptInviteNullTimestamp {
+    endorser_id: Uuid,
+}
+
+impl StubAcceptInviteNullTimestamp {
+    fn invite_record(&self) -> InviteRecord {
+        InviteRecord {
+            id: Uuid::new_v4(),
+            endorser_id: self.endorser_id,
+            envelope: vec![0u8],
+            delivery_method: "qr".to_string(),
+            attestation: serde_json::Value::Object(serde_json::Map::new()),
+            accepted_by: None,
+            expires_at: chrono::Utc::now() + chrono::Duration::days(7),
+            accepted_at: None, // ← the invariant under test
+            created_at: chrono::Utc::now(),
+            relationship_depth: None,
+            weight: 1.0,
+        }
+    }
+}
+
+#[async_trait]
+impl TrustRepo for StubAcceptInviteNullTimestamp {
+    async fn get_invite(&self, _invite_id: Uuid) -> Result<InviteRecord, TrustRepoError> {
+        Ok(self.invite_record())
+    }
+
+    async fn accept_invite(
+        &self,
+        _invite_id: Uuid,
+        _accepted_by: Uuid,
+    ) -> Result<InviteRecord, TrustRepoError> {
+        Ok(self.invite_record())
+    }
+
+    async fn get_or_create_influence(
+        &self,
+        _user_id: Uuid,
+    ) -> Result<InfluenceRecord, TrustRepoError> {
+        unimplemented!("StubAcceptInviteNullTimestamp: not needed for this test")
+    }
+    async fn enqueue_action(
+        &self,
+        _actor_id: Uuid,
+        _action_type: ActionType,
+        _payload: &serde_json::Value,
+    ) -> Result<ActionRecord, TrustRepoError> {
+        unimplemented!("StubAcceptInviteNullTimestamp: not needed for this test")
+    }
+    async fn count_daily_actions(&self, _actor_id: Uuid) -> Result<i64, TrustRepoError> {
+        unimplemented!("StubAcceptInviteNullTimestamp: not needed for this test")
+    }
+    async fn get_action(&self, _action_id: Uuid) -> Result<ActionRecord, TrustRepoError> {
+        unimplemented!("StubAcceptInviteNullTimestamp: not needed for this test")
+    }
+    async fn complete_action(&self, _action_id: Uuid) -> Result<(), TrustRepoError> {
+        unimplemented!("StubAcceptInviteNullTimestamp: not needed for this test")
+    }
+    async fn fail_action(&self, _action_id: Uuid, _error: &str) -> Result<(), TrustRepoError> {
+        unimplemented!("StubAcceptInviteNullTimestamp: not needed for this test")
+    }
+    async fn create_denouncement(
+        &self,
+        _accuser_id: Uuid,
+        _target_id: Uuid,
+        _reason: &str,
+    ) -> Result<DenouncementRecord, TrustRepoError> {
+        unimplemented!("StubAcceptInviteNullTimestamp: not needed for this test")
+    }
+    async fn create_denouncement_and_revoke_endorsement(
+        &self,
+        _accuser_id: Uuid,
+        _target_id: Uuid,
+        _reason: &str,
+    ) -> Result<DenouncementRecord, TrustRepoError> {
+        unimplemented!("StubAcceptInviteNullTimestamp: not needed for this test")
+    }
+    async fn list_denouncements_against(
+        &self,
+        _target_id: Uuid,
+    ) -> Result<Vec<DenouncementRecord>, TrustRepoError> {
+        unimplemented!("StubAcceptInviteNullTimestamp: not needed for this test")
+    }
+    async fn list_denouncements_by(
+        &self,
+        _accuser_id: Uuid,
+    ) -> Result<Vec<DenouncementRecord>, TrustRepoError> {
+        unimplemented!("StubAcceptInviteNullTimestamp: not needed for this test")
+    }
+    async fn list_denouncements_by_with_username(
+        &self,
+        _accuser_id: Uuid,
+    ) -> Result<Vec<DenouncementWithUsername>, TrustRepoError> {
+        unimplemented!("StubAcceptInviteNullTimestamp: not needed for this test")
+    }
+    async fn count_total_denouncements_by(&self, _accuser_id: Uuid) -> Result<i64, TrustRepoError> {
+        unimplemented!("StubAcceptInviteNullTimestamp: not needed for this test")
+    }
+    async fn has_active_denouncement(
+        &self,
+        _accuser_id: Uuid,
+        _target_id: Uuid,
+    ) -> Result<bool, TrustRepoError> {
+        unimplemented!("StubAcceptInviteNullTimestamp: not needed for this test")
+    }
+    async fn create_invite(
+        &self,
+        _endorser_id: Uuid,
+        _envelope: &[u8],
+        _delivery_method: DeliveryMethod,
+        _relationship_depth: Option<RelationshipDepth>,
+        _weight: f32,
+        _attestation: &serde_json::Value,
+        _expires_at: chrono::DateTime<chrono::Utc>,
+    ) -> Result<InviteRecord, TrustRepoError> {
+        unimplemented!("StubAcceptInviteNullTimestamp: not needed for this test")
+    }
+    async fn list_invites_by_endorser(
+        &self,
+        _endorser_id: Uuid,
+    ) -> Result<Vec<InviteRecord>, TrustRepoError> {
+        unimplemented!("StubAcceptInviteNullTimestamp: not needed for this test")
+    }
+    async fn upsert_score(
+        &self,
+        _user_id: Uuid,
+        _context_user_id: Option<Uuid>,
+        _distance: Option<f32>,
+        _diversity: Option<i32>,
+        _centrality: Option<f32>,
+    ) -> Result<(), TrustRepoError> {
+        unimplemented!("StubAcceptInviteNullTimestamp: not needed for this test")
+    }
+    async fn get_score(
+        &self,
+        _user_id: Uuid,
+        _context_user_id: Option<Uuid>,
+    ) -> Result<Option<ScoreSnapshot>, TrustRepoError> {
+        unimplemented!("StubAcceptInviteNullTimestamp: not needed for this test")
+    }
+    async fn get_all_scores(&self, _user_id: Uuid) -> Result<Vec<ScoreSnapshot>, TrustRepoError> {
+        unimplemented!("StubAcceptInviteNullTimestamp: not needed for this test")
+    }
+    async fn has_identity_endorsement(
+        &self,
+        _user_id: Uuid,
+        _verifier_ids: &[Uuid],
+        _topic: &str,
+    ) -> Result<bool, TrustRepoError> {
+        unimplemented!("StubAcceptInviteNullTimestamp: not needed for this test")
+    }
+}
+
+/// Stub [`TrustService`] that panics on every call.
+///
+/// The `accept_invite_handler` returns early with 500 before reaching the
+/// service call when `accepted_at` is `None`, so this stub should never
+/// be invoked in the test below.
+struct PanickingTrustService;
+
+#[async_trait]
+impl TrustService for PanickingTrustService {
+    async fn endorse(
+        &self,
+        _endorser_id: Uuid,
+        _subject_id: Uuid,
+        _weight: f32,
+        _attestation: Option<serde_json::Value>,
+    ) -> Result<(), TrustServiceError> {
+        unimplemented!("PanickingTrustService: must not be called in this test")
+    }
+    async fn revoke_endorsement(
+        &self,
+        _endorser_id: Uuid,
+        _subject_id: Uuid,
+    ) -> Result<(), TrustServiceError> {
+        unimplemented!("PanickingTrustService: must not be called in this test")
+    }
+    async fn denounce(
+        &self,
+        _accuser_id: Uuid,
+        _target_id: Uuid,
+        _reason: &str,
+    ) -> Result<(), TrustServiceError> {
+        unimplemented!("PanickingTrustService: must not be called in this test")
+    }
+}
 
 /// Helper: sign up a user and return (app, keys, account_id).
 async fn signup_and_get_account(
@@ -2548,4 +2752,50 @@ async fn test_accept_already_accepted_invite_returns_404() {
     );
 
     let _ = (endorser_keys, acceptor_keys);
+}
+
+// ─── Accept invite — data integrity guard ─────────────────────────────────────
+
+/// When `accept_invite` succeeds but returns an `InviteRecord` with
+/// `accepted_at = None`, the handler returns 500 Internal Server Error.
+///
+/// This invariant cannot occur with the real PostgreSQL implementation because
+/// the UPDATE always sets `accepted_at = now()`.  A stub repo simulates the
+/// impossible-but-defensive case to confirm the guard fires correctly.
+#[shared_runtime_test]
+async fn accept_invite_returns_500_when_accepted_at_is_none() {
+    let db = isolated_db().await;
+    // Sign up an acceptor so we have a valid authenticated device to make the request.
+    let (_, keys, account_id) = signup_and_get_account("acceptorinvariantcheck", db.pool()).await;
+
+    // The endorser must be a different user so the self-accept guard doesn't
+    // fire before we reach the `accepted_at` check.
+    let endorser_id = Uuid::new_v4();
+    assert_ne!(
+        endorser_id, account_id,
+        "stub endorser_id must differ from acceptor"
+    );
+
+    let app = TestAppBuilder::new()
+        .with_identity_pool(db.pool().clone())
+        .with_stub_trust_repo(Arc::new(StubAcceptInviteNullTimestamp { endorser_id }))
+        .with_stub_trust_service(Arc::new(PanickingTrustService))
+        .build();
+
+    let invite_id = Uuid::new_v4();
+    let uri = format!("/trust/invites/{invite_id}/accept");
+    let request = build_authed_request(
+        Method::POST,
+        &uri,
+        "",
+        &keys.device_signing_key,
+        &keys.device_kid,
+    );
+
+    let response = app.oneshot(request).await.expect("response");
+    assert_eq!(
+        response.status(),
+        StatusCode::INTERNAL_SERVER_ERROR,
+        "handler must return 500 when accept_invite returns an InviteRecord with accepted_at = None"
+    );
 }
