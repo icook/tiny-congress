@@ -67,10 +67,27 @@ impl TrustGraphReader for TrustRepoGraphReader {
                     None
                 },
                 |path_diversity| {
+                    let ec_raw = s.eigenvector_centrality.unwrap_or(0.0);
+                    if ec_raw < 0.0 {
+                        tracing::warn!(
+                            subject = %subject,
+                            eigenvector_centrality = ec_raw,
+                            "negative eigenvector_centrality — possible data corruption; treating as no score"
+                        );
+                        return None;
+                    }
+                    if !ec_raw.is_finite() {
+                        tracing::warn!(
+                            subject = %subject,
+                            eigenvector_centrality = ec_raw,
+                            "non-finite eigenvector_centrality — possible data corruption; treating as no score"
+                        );
+                        return None;
+                    }
                     Some(TrustScoreSnapshot {
                         trust_distance: f64::from(trust_distance_raw),
                         path_diversity,
-                        eigenvector_centrality: f64::from(s.eigenvector_centrality.unwrap_or(0.0)),
+                        eigenvector_centrality: f64::from(ec_raw),
                     })
                 },
             )
@@ -422,6 +439,37 @@ mod tests {
         assert!(
             score.eigenvector_centrality.abs() < f64::EPSILON,
             "NULL eigenvector_centrality must map to 0.0"
+        );
+    }
+
+    #[tokio::test]
+    async fn get_score_returns_none_when_eigenvector_centrality_is_negative() {
+        // Negative eigenvector_centrality cannot arise from a correct computation
+        // (centrality values are always >= 0). Treating it as "no score" follows the
+        // same fail-closed approach applied to negative trust_distance and
+        // path_diversity.
+        let mut snapshot = base_snapshot();
+        snapshot.eigenvector_centrality = Some(-0.1);
+        let reader = make_reader(Some(snapshot));
+        let result = reader.get_score(Uuid::new_v4(), None).await.unwrap();
+        assert!(
+            result.is_none(),
+            "negative eigenvector_centrality must map to no score (data corruption), not a negative centrality"
+        );
+    }
+
+    #[tokio::test]
+    async fn get_score_returns_none_when_eigenvector_centrality_is_non_finite() {
+        // Non-finite eigenvector_centrality (NaN or INFINITY) indicates data
+        // corruption. Treating it as "no score" is consistent with the same check
+        // applied to trust_distance.
+        let mut snapshot = base_snapshot();
+        snapshot.eigenvector_centrality = Some(f32::NAN);
+        let reader = make_reader(Some(snapshot));
+        let result = reader.get_score(Uuid::new_v4(), None).await.unwrap();
+        assert!(
+            result.is_none(),
+            "NaN eigenvector_centrality must map to no score (data corruption), not NaN"
         );
     }
 
