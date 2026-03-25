@@ -383,6 +383,30 @@ impl TestAppBuilder {
         self
     }
 
+    /// Inject a pre-built stub [`TrustRepo`] without wiring up a database pool.
+    ///
+    /// Enables the trust routes and registers the supplied repo as the
+    /// `Extension<Arc<dyn TrustRepo>>` extension.  Pair with
+    /// [`with_stub_trust_service`] to provide the service extension as well.
+    /// Use [`with_trust_pool`] instead when you need a real database.
+    #[must_use]
+    pub fn with_stub_trust_repo(mut self, repo: Arc<dyn TrustRepo>) -> Self {
+        self.include_trust = true;
+        self.trust_repo = Some(repo);
+        self
+    }
+
+    /// Inject a pre-built stub [`TrustService`] without wiring up a database pool.
+    ///
+    /// Registers the supplied service as the `Extension<Arc<dyn TrustService>>`
+    /// extension.  Pair with [`with_stub_trust_repo`] to provide the repo
+    /// extension as well.
+    #[must_use]
+    pub fn with_stub_trust_service(mut self, service: Arc<dyn TrustService>) -> Self {
+        self.trust_service = Some(service);
+        self
+    }
+
     /// Add a database pool as an Extension (for health check testing).
     ///
     /// Unlike [`with_identity_pool()`], this does NOT enable identity routes.
