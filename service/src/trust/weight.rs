@@ -200,4 +200,55 @@ mod tests {
             "Text and Messaging must share the same base weight per ADR-023"
         );
     }
+
+    /// Verify that `rename_all = "lowercase"` deserializes each `DeliveryMethod`
+    /// variant from the same string that `as_str()` returns.
+    ///
+    /// `as_str()` is the string written to the `trust_invites.delivery_method`
+    /// column (enforced by the DB CHECK constraint). If the serde deserialization
+    /// accepts a different string than `as_str()` produces, an API client could
+    /// send a value that the DB rejects — or vice versa, store a value that
+    /// the API never accepts. This test pins the two in sync.
+    #[test]
+    fn delivery_method_serde_deserializes_all_variants() {
+        let cases = [
+            (DeliveryMethod::Qr, "qr"),
+            (DeliveryMethod::Email, "email"),
+            (DeliveryMethod::Video, "video"),
+            (DeliveryMethod::Text, "text"),
+            (DeliveryMethod::Messaging, "messaging"),
+        ];
+        for (variant, db_str) in cases {
+            let json = format!("\"{}\"", db_str);
+            let parsed: DeliveryMethod = serde_json::from_str(&json)
+                .unwrap_or_else(|e| panic!("{variant:?}: failed to deserialize {json}: {e}"));
+            assert_eq!(
+                parsed, variant,
+                "serde must deserialize {json} to {variant:?}"
+            );
+        }
+    }
+
+    /// Verify that `rename_all = "lowercase"` deserializes each `RelationshipDepth`
+    /// variant from the same string that `as_str()` returns.
+    ///
+    /// Same invariant as for `DeliveryMethod`: the serde-accepted string and the
+    /// DB-stored string must agree so the invite creation flow works end-to-end.
+    #[test]
+    fn relationship_depth_serde_deserializes_all_variants() {
+        let cases = [
+            (RelationshipDepth::Years, "years"),
+            (RelationshipDepth::Months, "months"),
+            (RelationshipDepth::Acquaintance, "acquaintance"),
+        ];
+        for (variant, db_str) in cases {
+            let json = format!("\"{}\"", db_str);
+            let parsed: RelationshipDepth = serde_json::from_str(&json)
+                .unwrap_or_else(|e| panic!("{variant:?}: failed to deserialize {json}: {e}"));
+            assert_eq!(
+                parsed, variant,
+                "serde must deserialize {json} to {variant:?}"
+            );
+        }
+    }
 }
