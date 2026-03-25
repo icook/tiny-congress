@@ -1076,6 +1076,38 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn denounce_proceeds_when_daily_count_is_one_below_quota() {
+        // Lower boundary of the daily quota check: daily_count = DAILY_ACTION_QUOTA - 1
+        // (one action still allowed today). The guard is `daily_count >= self.daily_quota`,
+        // so this must NOT fire. This is the complement of
+        // denounce_returns_quota_exceeded_when_daily_limit_reached, which tests the upper
+        // boundary (daily_count == DAILY_ACTION_QUOTA → blocked). Together they pin the
+        // `>=` comparison: if it were changed to `>`, the upper-boundary test would
+        // catch it; if it were changed to `>= DAILY_ACTION_QUOTA - 1`, this lower-boundary
+        // test would catch it.
+        let captured = Arc::new(Mutex::new(None::<serde_json::Value>));
+        let svc = DefaultTrustService::new(
+            Arc::new(
+                StubTrustRepo::default()
+                    .active(false)
+                    .daily(DAILY_ACTION_QUOTA - 1)
+                    .total(0)
+                    .capture_payload(captured.clone()),
+            ),
+            Arc::new(StubReputationRepo::default()),
+        );
+        let accuser = Uuid::new_v4();
+        let target = Uuid::new_v4();
+        svc.denounce(accuser, target, "valid reason")
+            .await
+            .expect("denounce must succeed when daily count is one below quota");
+        assert!(
+            captured.lock().unwrap().is_some(),
+            "enqueue_action must be called when daily quota is not yet reached"
+        );
+    }
+
     // ─── denounce repo-error propagation test ────────────────────────────────
 
     #[tokio::test]
