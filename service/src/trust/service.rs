@@ -1658,13 +1658,6 @@ mod tests {
 
     // ─── daily quota actor correctness ───────────────────────────────────────
 
-    /// Stub [`TrustRepo`] that captures the `actor_id` argument passed to
-    /// `count_daily_actions`. Used to verify that `endorse` applies the daily
-    /// quota check against `endorser_id` (not `subject_id`): a bug that passed
-    /// `subject_id` would allow an endorser to bypass their quota if the
-    /// subject still has capacity.
-    ///
-
     #[tokio::test]
     async fn endorse_passes_endorser_to_count_daily_actions() {
         // Verifies that endorse() applies the daily quota check against
@@ -1706,13 +1699,6 @@ mod tests {
 
     // ─── revoke daily quota actor correctness ────────────────────────────────
 
-    /// Stub [`TrustRepo`] that captures the `actor_id` argument passed to
-    /// `count_daily_actions`. Used to verify that `revoke_endorsement` applies the
-    /// daily quota check against `endorser_id` (not `subject_id`): a bug that passed
-    /// `subject_id` would allow an endorser to bypass their quota if the
-    /// subject still has capacity.
-    ///
-
     #[tokio::test]
     async fn revoke_endorsement_passes_endorser_to_count_daily_actions() {
         // Verifies that revoke_endorsement() applies the daily quota check against
@@ -1748,16 +1734,6 @@ mod tests {
     }
 
     // ─── denounce daily quota actor correctness ───────────────────────────────
-
-    /// Stub [`TrustRepo`] that passes all pre-enqueue guards in
-    /// [`DefaultTrustService::denounce`] (active denouncement and denouncement
-    /// slot checks) and captures the `actor_id` argument passed to
-    /// `count_daily_actions`. Used to verify that `denounce` applies the daily
-    /// quota check against `accuser_id` (not `target_id`): a bug that passed
-    /// `target_id` would allow an accuser who has hit their quota to keep filing
-    /// denouncements as long as their targets still have quota capacity —
-    /// silently bypassing the rate limit.
-    ///
 
     #[tokio::test]
     async fn denounce_passes_accuser_to_count_daily_actions() {
@@ -1840,17 +1816,7 @@ mod tests {
 
     // ─── denounce count_total_denouncements_by actor-id correctness ──────────
 
-    /// Stub [`TrustRepo`] that passes `has_active_denouncement` and
-    /// `count_daily_actions`, then captures the actor_id passed to
-    /// `count_total_denouncements_by` and returns an error to terminate early.
-    ///
-
     // ─── endorse has_active_denouncement actor-id correctness ────────────────
-
-    /// Stub [`TrustRepo`] that passes `count_daily_actions`, then captures both
-    /// IDs passed to `has_active_denouncement` and returns an error to terminate
-    /// early.
-    ///
 
     #[tokio::test]
     async fn endorse_passes_endorser_id_and_subject_id_to_has_active_denouncement() {
