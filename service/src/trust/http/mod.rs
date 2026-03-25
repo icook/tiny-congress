@@ -804,10 +804,40 @@ mod tests {
     }
 
     #[test]
+    fn service_repo_duplicate_maps_to_500_not_409() {
+        // Duplicate from the repo layer is unexpected at the service layer — must be
+        // 500, not the 409 that trust_repo_error_response would return for the same variant.
+        assert_eq!(
+            service_status(&TrustServiceError::Repo(TrustRepoError::Duplicate)),
+            StatusCode::INTERNAL_SERVER_ERROR
+        );
+    }
+
+    #[test]
+    fn service_repo_database_error_maps_to_500() {
+        assert_eq!(
+            service_status(&TrustServiceError::Repo(TrustRepoError::Database(
+                sqlx::Error::RowNotFound
+            ))),
+            StatusCode::INTERNAL_SERVER_ERROR
+        );
+    }
+
+    #[test]
     fn service_endorsement_repo_error_maps_to_500() {
         assert_eq!(
             service_status(&TrustServiceError::EndorsementRepo(
                 EndorsementRepoError::NotFound
+            )),
+            StatusCode::INTERNAL_SERVER_ERROR
+        );
+    }
+
+    #[test]
+    fn service_endorsement_repo_database_error_maps_to_500() {
+        assert_eq!(
+            service_status(&TrustServiceError::EndorsementRepo(
+                EndorsementRepoError::Database(sqlx::Error::RowNotFound)
             )),
             StatusCode::INTERNAL_SERVER_ERROR
         );
