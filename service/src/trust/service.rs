@@ -958,6 +958,37 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn denounce_proceeds_when_one_denouncement_slot_remains() {
+        // Lower boundary of the slot check: total = max - 1 (one slot still available).
+        // The guard is `total >= max_denouncement_slots`, so this must NOT fire.
+        // This is the complement of denounce_returns_slots_exhausted_when_at_denouncement_limit,
+        // which tests the upper boundary (total == max → blocked). Together they pin the `>=`
+        // comparison: if it were changed to `>`, the upper-boundary test would catch it;
+        // if a +1 offset were added (e.g. `total + 1 >= max`), this lower-boundary test
+        // would catch it.
+        let captured = Arc::new(Mutex::new(None::<serde_json::Value>));
+        let svc = DefaultTrustService::new(
+            Arc::new(
+                StubTrustRepo::default()
+                    .daily(0)
+                    .active(false)
+                    .total(i64::from(DENOUNCEMENT_SLOT_LIMIT) - 1)
+                    .capture_payload(captured.clone()),
+            ),
+            Arc::new(StubReputationRepo::default()),
+        );
+        let accuser = Uuid::new_v4();
+        let target = Uuid::new_v4();
+        svc.denounce(accuser, target, "valid reason")
+            .await
+            .expect("denounce must succeed when one denouncement slot remains");
+        assert!(
+            captured.lock().unwrap().is_some(),
+            "enqueue_action must be called when denouncement slots remain"
+        );
+    }
+
+    #[tokio::test]
     async fn denounce_returns_quota_exceeded_when_daily_limit_reached() {
         // The daily action quota is exhausted. The guard must fire before
         // count_total_denouncements_by is reached — StubTrustRepo
