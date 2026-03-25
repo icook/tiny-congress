@@ -2459,3 +2459,67 @@ async fn accept_invite_succeeds_even_when_endorser_quota_exceeded() {
 
     let _ = (endorser_keys, acceptor_keys);
 }
+
+// ─── Accept Invite: self-accept rejected ─────────────────────────────────────
+
+/// The invite creator must not be able to accept their own invite.
+///
+/// The handler checks `invite.endorser_id == auth.account_id` before any write
+/// and returns 400 "Cannot accept your own invite". This prevents a user from
+/// engineering a self-endorsement through the invite flow.
+///
+/// The check is race-free because `endorser_id` is immutable on creation — this
+/// test pins that invariant so a future refactor that removes or misorders the
+/// guard fails loudly rather than silently allowing self-endorsement.
+#[shared_runtime_test]
+async fn test_accept_own_invite_returns_400() {
+    let db = isolated_db().await;
+    let (app, keys, _account_id) = signup_and_get_account("selfacceptor", db.pool()).await;
+
+    // Creator makes an invite.
+    let envelope_b64 = tc_crypto::encode_base64url(b"self-accept-envelope");
+    let invite_body = serde_json::json!({
+        "envelope": envelope_b64,
+        "delivery_method": "email",
+        "attestation": {}
+    })
+    .to_string();
+
+    let create_req = build_authed_request(
+        Method::POST,
+        "/trust/invites",
+        &invite_body,
+        &keys.device_signing_key,
+        &keys.device_kid,
+    );
+    let create_resp = app.clone().oneshot(create_req).await.expect("create");
+    assert_eq!(create_resp.status(), StatusCode::CREATED);
+    let invite_json = json_body(create_resp).await;
+    let invite_id = invite_json["id"].as_str().expect("invite id");
+
+    // The same user tries to accept their own invite.
+    let accept_uri = format!("/trust/invites/{invite_id}/accept");
+    let accept_req = build_authed_request(
+        Method::POST,
+        &accept_uri,
+        "",
+        &keys.device_signing_key,
+        &keys.device_kid,
+    );
+    let accept_resp = app.oneshot(accept_req).await.expect("accept");
+    assert_eq!(
+        accept_resp.status(),
+        StatusCode::BAD_REQUEST,
+        "creator accepting their own invite must return 400"
+    );
+    let body = json_body(accept_resp).await;
+    assert!(
+        body["error"]
+            .as_str()
+            .unwrap_or("")
+            .to_lowercase()
+            .contains("own invite"),
+        "error message must mention 'own invite', got: {:?}",
+        body["error"]
+    );
+}
