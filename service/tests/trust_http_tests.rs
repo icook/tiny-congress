@@ -185,6 +185,143 @@ impl TrustRepo for StubAcceptInviteNullTimestamp {
     }
 }
 
+/// Stub [`TrustRepo`] that returns a database error from `get_invite`.
+///
+/// Used to verify that `accept_invite_handler` maps `TrustRepoError::Database`
+/// to 500 when the initial `get_invite` lookup fails.  All other methods panic.
+struct StubGetInviteDatabaseError;
+
+#[async_trait]
+impl TrustRepo for StubGetInviteDatabaseError {
+    async fn get_invite(&self, _invite_id: Uuid) -> Result<InviteRecord, TrustRepoError> {
+        Err(TrustRepoError::Database(sqlx::Error::RowNotFound))
+    }
+
+    async fn get_or_create_influence(
+        &self,
+        _user_id: Uuid,
+    ) -> Result<InfluenceRecord, TrustRepoError> {
+        unimplemented!("StubGetInviteDatabaseError: not needed for this test")
+    }
+    async fn enqueue_action(
+        &self,
+        _actor_id: Uuid,
+        _action_type: ActionType,
+        _payload: &serde_json::Value,
+    ) -> Result<ActionRecord, TrustRepoError> {
+        unimplemented!("StubGetInviteDatabaseError: not needed for this test")
+    }
+    async fn count_daily_actions(&self, _actor_id: Uuid) -> Result<i64, TrustRepoError> {
+        unimplemented!("StubGetInviteDatabaseError: not needed for this test")
+    }
+    async fn get_action(&self, _action_id: Uuid) -> Result<ActionRecord, TrustRepoError> {
+        unimplemented!("StubGetInviteDatabaseError: not needed for this test")
+    }
+    async fn complete_action(&self, _action_id: Uuid) -> Result<(), TrustRepoError> {
+        unimplemented!("StubGetInviteDatabaseError: not needed for this test")
+    }
+    async fn fail_action(&self, _action_id: Uuid, _error: &str) -> Result<(), TrustRepoError> {
+        unimplemented!("StubGetInviteDatabaseError: not needed for this test")
+    }
+    async fn create_denouncement(
+        &self,
+        _accuser_id: Uuid,
+        _target_id: Uuid,
+        _reason: &str,
+    ) -> Result<DenouncementRecord, TrustRepoError> {
+        unimplemented!("StubGetInviteDatabaseError: not needed for this test")
+    }
+    async fn create_denouncement_and_revoke_endorsement(
+        &self,
+        _accuser_id: Uuid,
+        _target_id: Uuid,
+        _reason: &str,
+    ) -> Result<DenouncementRecord, TrustRepoError> {
+        unimplemented!("StubGetInviteDatabaseError: not needed for this test")
+    }
+    async fn list_denouncements_against(
+        &self,
+        _target_id: Uuid,
+    ) -> Result<Vec<DenouncementRecord>, TrustRepoError> {
+        unimplemented!("StubGetInviteDatabaseError: not needed for this test")
+    }
+    async fn list_denouncements_by(
+        &self,
+        _accuser_id: Uuid,
+    ) -> Result<Vec<DenouncementRecord>, TrustRepoError> {
+        unimplemented!("StubGetInviteDatabaseError: not needed for this test")
+    }
+    async fn list_denouncements_by_with_username(
+        &self,
+        _accuser_id: Uuid,
+    ) -> Result<Vec<DenouncementWithUsername>, TrustRepoError> {
+        unimplemented!("StubGetInviteDatabaseError: not needed for this test")
+    }
+    async fn count_total_denouncements_by(&self, _accuser_id: Uuid) -> Result<i64, TrustRepoError> {
+        unimplemented!("StubGetInviteDatabaseError: not needed for this test")
+    }
+    async fn has_active_denouncement(
+        &self,
+        _accuser_id: Uuid,
+        _target_id: Uuid,
+    ) -> Result<bool, TrustRepoError> {
+        unimplemented!("StubGetInviteDatabaseError: not needed for this test")
+    }
+    async fn create_invite(
+        &self,
+        _endorser_id: Uuid,
+        _envelope: &[u8],
+        _delivery_method: DeliveryMethod,
+        _relationship_depth: Option<RelationshipDepth>,
+        _weight: f32,
+        _attestation: &serde_json::Value,
+        _expires_at: chrono::DateTime<chrono::Utc>,
+    ) -> Result<InviteRecord, TrustRepoError> {
+        unimplemented!("StubGetInviteDatabaseError: not needed for this test")
+    }
+    async fn accept_invite(
+        &self,
+        _invite_id: Uuid,
+        _accepted_by: Uuid,
+    ) -> Result<InviteRecord, TrustRepoError> {
+        unimplemented!("StubGetInviteDatabaseError: not needed for this test")
+    }
+    async fn list_invites_by_endorser(
+        &self,
+        _endorser_id: Uuid,
+    ) -> Result<Vec<InviteRecord>, TrustRepoError> {
+        unimplemented!("StubGetInviteDatabaseError: not needed for this test")
+    }
+    async fn upsert_score(
+        &self,
+        _user_id: Uuid,
+        _context_user_id: Option<Uuid>,
+        _distance: Option<f32>,
+        _diversity: Option<i32>,
+        _centrality: Option<f32>,
+    ) -> Result<(), TrustRepoError> {
+        unimplemented!("StubGetInviteDatabaseError: not needed for this test")
+    }
+    async fn get_score(
+        &self,
+        _user_id: Uuid,
+        _context_user_id: Option<Uuid>,
+    ) -> Result<Option<ScoreSnapshot>, TrustRepoError> {
+        unimplemented!("StubGetInviteDatabaseError: not needed for this test")
+    }
+    async fn get_all_scores(&self, _user_id: Uuid) -> Result<Vec<ScoreSnapshot>, TrustRepoError> {
+        unimplemented!("StubGetInviteDatabaseError: not needed for this test")
+    }
+    async fn has_identity_endorsement(
+        &self,
+        _user_id: Uuid,
+        _verifier_ids: &[Uuid],
+        _topic: &str,
+    ) -> Result<bool, TrustRepoError> {
+        unimplemented!("StubGetInviteDatabaseError: not needed for this test")
+    }
+}
+
 /// Stub [`TrustService`] that panics on every call.
 ///
 /// The `accept_invite_handler` returns early with 500 before reaching the
@@ -2797,5 +2934,45 @@ async fn accept_invite_returns_500_when_accepted_at_is_none() {
         response.status(),
         StatusCode::INTERNAL_SERVER_ERROR,
         "handler must return 500 when accept_invite returns an InviteRecord with accepted_at = None"
+    );
+}
+
+// ─── Accept invite — get_invite database error ────────────────────────────────
+
+/// When `get_invite` fails with a database error, the handler returns 500.
+///
+/// The `accept_invite_handler` has three `get_invite` outcomes:
+///   - `Ok(invite)` where endorser_id == auth.account_id  → 400
+///   - `Err(TrustRepoError::NotFound)`                    → 404
+///   - `Err(other)`                                        → 500  ← this test
+///
+/// A stub repo simulates the third arm so we can confirm it maps to 500
+/// without needing a live database.
+#[shared_runtime_test]
+async fn accept_invite_returns_500_when_get_invite_fails_with_database_error() {
+    let db = isolated_db().await;
+    let (_, keys, _account_id) = signup_and_get_account("getinvitedbfail", db.pool()).await;
+
+    let app = TestAppBuilder::new()
+        .with_identity_pool(db.pool().clone())
+        .with_stub_trust_repo(Arc::new(StubGetInviteDatabaseError))
+        .with_stub_trust_service(Arc::new(PanickingTrustService))
+        .build();
+
+    let invite_id = Uuid::new_v4();
+    let uri = format!("/trust/invites/{invite_id}/accept");
+    let request = build_authed_request(
+        Method::POST,
+        &uri,
+        "",
+        &keys.device_signing_key,
+        &keys.device_kid,
+    );
+
+    let response = app.oneshot(request).await.expect("response");
+    assert_eq!(
+        response.status(),
+        StatusCode::INTERNAL_SERVER_ERROR,
+        "handler must return 500 when get_invite fails with a database error"
     );
 }
