@@ -498,6 +498,27 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn get_score_maps_i32_max_path_diversity_as_valid_score() {
+        // path_diversity = i32::MAX is the sentinel stored by TrustEngine::recompute_from_anchor
+        // for the anchor's own score. The adapter converts it via u32::try_from(i32::MAX),
+        // which must succeed because i32::MAX (2^31 - 1) is within the u32 range.
+        // A signed/unsigned mismatch regression — e.g. treating i32::MAX as negative
+        // before the cast — would cause the anchor's score to be silently discarded.
+        let mut snapshot = base_snapshot();
+        snapshot.path_diversity = Some(i32::MAX);
+        let reader = make_reader(Some(snapshot));
+        let result = reader.get_score(Uuid::new_v4(), None).await.unwrap();
+        let score = result.expect(
+            "path_diversity=i32::MAX (anchor sentinel) must map to a valid score, not be discarded",
+        );
+        assert_eq!(
+            score.path_diversity,
+            i32::MAX as u32,
+            "path_diversity=i32::MAX must round-trip to the correct u32 value"
+        );
+    }
+
+    #[tokio::test]
     async fn get_score_maps_null_eigenvector_centrality_as_zero() {
         // NULL eigenvector_centrality is treated as 0.0 (supplemental metric not yet
         // computed), which is a valid state — the snapshot is still returned.
