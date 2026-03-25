@@ -48,6 +48,14 @@ impl TrustGraphReader for TrustRepoGraphReader {
                 );
                 return None;
             }
+            if !trust_distance_raw.is_finite() {
+                tracing::warn!(
+                    subject = %subject,
+                    trust_distance = trust_distance_raw,
+                    "non-finite trust_distance — possible data corruption; treating as no score"
+                );
+                return None;
+            }
             let raw = s.path_diversity.unwrap_or(0);
             u32::try_from(raw).map_or_else(
                 |_| {
@@ -342,6 +350,35 @@ mod tests {
         assert!(
             result.is_none(),
             "negative trust_distance must map to no score (data corruption), not a negative distance"
+        );
+    }
+
+    #[tokio::test]
+    async fn get_score_returns_none_when_trust_distance_is_nan() {
+        // NaN trust_distance must be rejected — it is not < 0.0, so without an
+        // explicit is_finite() check it would silently propagate to the caller as
+        // f64::NAN, which is nonsensical as a trust distance.
+        let mut snapshot = base_snapshot();
+        snapshot.trust_distance = Some(f32::NAN);
+        let reader = make_reader(Some(snapshot));
+        let result = reader.get_score(Uuid::new_v4(), None).await.unwrap();
+        assert!(
+            result.is_none(),
+            "NaN trust_distance must map to no score (data corruption), not NaN"
+        );
+    }
+
+    #[tokio::test]
+    async fn get_score_returns_none_when_trust_distance_is_infinite() {
+        // INFINITY trust_distance similarly cannot arise from correct computation
+        // (distances are always finite) and must be treated as data corruption.
+        let mut snapshot = base_snapshot();
+        snapshot.trust_distance = Some(f32::INFINITY);
+        let reader = make_reader(Some(snapshot));
+        let result = reader.get_score(Uuid::new_v4(), None).await.unwrap();
+        assert!(
+            result.is_none(),
+            "INFINITY trust_distance must map to no score (data corruption), not INFINITY"
         );
     }
 
