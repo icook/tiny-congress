@@ -843,6 +843,36 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn revoke_endorsement_proceeds_when_daily_count_is_one_below_quota() {
+        // Lower boundary of the quota check: daily_count = DAILY_ACTION_QUOTA - 1
+        // (one action slot still available). The guard is `daily_count >= daily_quota`,
+        // so this must NOT fire.
+        // This is the complement of revoke_endorsement_returns_quota_exceeded_when_daily_limit_reached,
+        // which tests the upper boundary (daily_count == quota → blocked). Together they pin the `>=`
+        // comparison: if it were changed to `>`, the upper-boundary test would catch it;
+        // if a +1 offset were added (e.g. `daily_count + 1 >= quota`), this lower-boundary
+        // test would catch it.
+        let captured = Arc::new(Mutex::new(None::<serde_json::Value>));
+        let svc = DefaultTrustService::new(
+            Arc::new(
+                StubTrustRepo::default()
+                    .daily(DAILY_ACTION_QUOTA - 1)
+                    .capture_payload(captured.clone()),
+            ),
+            Arc::new(StubReputationRepo::default()),
+        );
+        let endorser = Uuid::new_v4();
+        let subject = Uuid::new_v4();
+        svc.revoke_endorsement(endorser, subject)
+            .await
+            .expect("revoke_endorsement must succeed when one daily action slot remains");
+        assert!(
+            captured.lock().unwrap().is_some(),
+            "enqueue_action must be called when daily quota is not yet reached"
+        );
+    }
+
+    #[tokio::test]
     async fn denounce_returns_self_action_when_accuser_equals_target() {
         let id = Uuid::new_v4();
         let err = make_service().denounce(id, id, "reason").await.unwrap_err();
