@@ -16,6 +16,8 @@ pub const DENOUNCEMENT_SLOT_LIMIT: u32 = 2;
 pub const DAILY_ACTION_QUOTA: i64 = 5;
 /// Maximum character count of a denouncement reason (matches the user-facing "500 characters" limit).
 pub const DENOUNCEMENT_REASON_MAX_LEN: usize = 500;
+/// Endorsement topic that grants slot-limit exemption to verified accounts.
+pub const AUTHORIZED_VERIFIER_TOPIC: &str = "authorized_verifier";
 
 /// Returns `true` if `reason` is a valid denouncement reason: non-empty, not whitespace-only,
 /// and within the max length.
@@ -2031,8 +2033,8 @@ mod tests {
         let _ = svc.endorse(endorser, subject, 0.5, None).await;
         assert_eq!(
             captured_topic.lock().unwrap().as_deref(),
-            Some("authorized_verifier"),
-            "endorse must query the 'authorized_verifier' topic, not some other string"
+            Some(AUTHORIZED_VERIFIER_TOPIC),
+            "endorse must query the AUTHORIZED_VERIFIER_TOPIC, not some other string"
         );
     }
 
@@ -2176,7 +2178,7 @@ impl TrustService for DefaultTrustService {
         // Verifier accounts are exempt from endorsement slot limits
         let is_verifier = self
             .reputation_repo
-            .has_endorsement(endorser_id, "authorized_verifier")
+            .has_endorsement(endorser_id, AUTHORIZED_VERIFIER_TOPIC)
             .await?;
 
         let in_slot = if is_verifier {
