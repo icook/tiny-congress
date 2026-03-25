@@ -622,6 +622,28 @@ mod tests {
     }
 
     #[test]
+    fn parse_endorse_payload_errors_when_weight_underflows_f32() {
+        // A finite f64 value more negative than -f32::MAX (~-3.4e38) underflows to
+        // f32::NEG_INFINITY when cast with `as f32`. The `#[allow(cast_possible_truncation)]`
+        // annotation on that cast is safe only because is_valid_endorsement_weight
+        // subsequently rejects infinities. This test verifies that safety net for the
+        // negative direction (positive direction is covered by
+        // parse_endorse_payload_errors_when_weight_overflows_f32).
+        let subject_id = Uuid::new_v4();
+        let payload = json!({
+            "subject_id": subject_id.to_string(),
+            "weight": -1e39_f64,
+            "attestation": null,
+            "in_slot": true,
+        });
+        let err = parse_endorse_payload(&payload).unwrap_err();
+        assert!(
+            matches!(err, TrustActionError::InvalidPayload(ref msg) if msg.contains("out of range")),
+            "weight underflowing to f32::NEG_INFINITY must be rejected as out of range, got: {err}"
+        );
+    }
+
+    #[test]
     fn parse_endorse_payload_errors_when_weight_is_negative() {
         let subject_id = Uuid::new_v4();
         let payload = json!({
