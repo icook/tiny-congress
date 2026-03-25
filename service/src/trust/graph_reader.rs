@@ -131,6 +131,10 @@ mod tests {
     struct StubTrustRepo {
         score: Option<ScoreSnapshot>,
         score_fails: bool,
+        /// If set, captures the `user_id` argument passed to `get_score`.
+        captured_score_subject: Option<Arc<Mutex<Option<Uuid>>>>,
+        /// If set, captures the `context_user_id` argument passed to `get_score`.
+        captured_score_anchor: Option<Arc<Mutex<Option<Option<Uuid>>>>>,
         endorsement: Option<bool>,
         endorsement_fails: bool,
         /// If set, captures the `user_id` argument passed to `has_identity_endorsement`.
@@ -153,6 +157,16 @@ mod tests {
                 score_fails: true,
                 ..Default::default()
             }
+        }
+        fn capture_score_args(
+            mut self,
+            subject: Arc<Mutex<Option<Uuid>>>,
+            anchor: Arc<Mutex<Option<Option<Uuid>>>>,
+        ) -> Self {
+            self.score = Some(base_snapshot());
+            self.captured_score_subject = Some(subject);
+            self.captured_score_anchor = Some(anchor);
+            self
         }
         fn with_endorsement(value: bool) -> Self {
             Self {
@@ -184,9 +198,15 @@ mod tests {
     impl TrustRepo for StubTrustRepo {
         async fn get_score(
             &self,
-            _: Uuid,
-            _: Option<Uuid>,
+            user_id: Uuid,
+            context_user_id: Option<Uuid>,
         ) -> Result<Option<ScoreSnapshot>, TrustRepoError> {
+            if let Some(cap) = &self.captured_score_subject {
+                *cap.lock().unwrap() = Some(user_id);
+            }
+            if let Some(cap) = &self.captured_score_anchor {
+                *cap.lock().unwrap() = Some(context_user_id);
+            }
             if self.score_fails {
                 return Err(TrustRepoError::Database(sqlx::Error::RowNotFound));
             }
@@ -516,6 +536,39 @@ mod tests {
         assert!(
             result.is_none(),
             "INFINITY eigenvector_centrality must map to no score (data corruption), not INFINITY"
+        );
+    }
+
+    // ─── get_score argument forwarding ───────────────────────────────────────
+
+    #[tokio::test]
+    async fn get_score_forwards_subject_and_anchor_to_repo() {
+        // Verifies that `TrustRepoGraphReader::get_score(subject, anchor)` passes
+        // both arguments unchanged to `TrustRepo::get_score(user_id, context_user_id)`.
+        // All other get_score tests call with a random Uuid and None but the stub
+        // ignores both — a bug that hardcoded None for anchor or swapped arguments
+        // would pass those tests undetected.
+        let subject = Uuid::new_v4();
+        let anchor = Uuid::new_v4();
+
+        let captured_subject = Arc::new(Mutex::new(None::<Uuid>));
+        let captured_anchor = Arc::new(Mutex::new(None::<Option<Uuid>>));
+
+        let stub = StubTrustRepo::default()
+            .capture_score_args(captured_subject.clone(), captured_anchor.clone());
+        let reader = TrustRepoGraphReader::new(Arc::new(stub));
+
+        reader.get_score(subject, Some(anchor)).await.unwrap();
+
+        assert_eq!(
+            *captured_subject.lock().unwrap(),
+            Some(subject),
+            "get_score must forward subject as the first argument to trust_repo.get_score"
+        );
+        assert_eq!(
+            *captured_anchor.lock().unwrap(),
+            Some(Some(anchor)),
+            "get_score must forward anchor as the second argument to trust_repo.get_score"
         );
     }
 
