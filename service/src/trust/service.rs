@@ -878,6 +878,26 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn denounce_invalid_reason_carries_denouncement_reason_max_len_as_max() {
+        // Verifies that InvalidReason carries DENOUNCEMENT_REASON_MAX_LEN as its
+        // `max` field, not a hardcoded value or zero. This is consistent with how
+        // DenouncementSlotsExhausted is tested (which also verifies its `max` field).
+        // A refactor that accidentally passed a different constant would not be
+        // caught by the existing InvalidReason tests that use `{ .. }`.
+        let a = Uuid::new_v4();
+        let b = Uuid::new_v4();
+        let err = make_service().denounce(a, b, "").await.unwrap_err();
+        assert!(
+            matches!(
+                err,
+                TrustServiceError::InvalidReason { max }
+                    if max == DENOUNCEMENT_REASON_MAX_LEN
+            ),
+            "expected InvalidReason {{ max: {DENOUNCEMENT_REASON_MAX_LEN} }}, got: {err}"
+        );
+    }
+
+    #[tokio::test]
     async fn denounce_accepts_reason_at_exactly_max_len() {
         // The boundary is inclusive: exactly DENOUNCEMENT_REASON_MAX_LEN characters
         // must be accepted. This catches an off-by-one if the service-layer guard
