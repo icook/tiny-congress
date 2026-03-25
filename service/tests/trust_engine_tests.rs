@@ -547,6 +547,51 @@ async fn test_recompute_from_anchor_writes_anchor_score() {
 }
 
 // ---------------------------------------------------------------------------
+// Anchor bootstrap: recompute_from_anchor with no endorsees writes only anchor
+// ---------------------------------------------------------------------------
+#[shared_runtime_test]
+async fn test_recompute_from_anchor_isolated_anchor_writes_only_self() {
+    let db = isolated_db().await;
+    let pool = db.pool().clone();
+
+    let seed = AccountFactory::new()
+        .with_seed(1)
+        .create(&pool)
+        .await
+        .expect("create seed");
+
+    // No endorsements — anchor is completely isolated.
+    let engine = TrustEngine::new(pool.clone());
+    let repo = PgTrustRepo::new(pool.clone());
+    let count = engine
+        .recompute_from_anchor(seed.id, &repo)
+        .await
+        .expect("recompute_from_anchor");
+
+    assert_eq!(count, 1, "Isolated anchor: only the anchor's own score should be written");
+
+    let anchor_snap = repo
+        .get_score(seed.id, Some(seed.id))
+        .await
+        .expect("get_score")
+        .expect("Anchor should have a score snapshot even with no endorsees");
+
+    let anchor_distance = anchor_snap
+        .trust_distance
+        .expect("Anchor should have a trust_distance");
+    assert!(
+        anchor_distance.abs() < 0.01,
+        "Expected anchor distance = 0.0, got {anchor_distance}"
+    );
+
+    assert_eq!(
+        anchor_snap.path_diversity,
+        Some(i32::MAX),
+        "Anchor diversity should be sentinel high value"
+    );
+}
+
+// ---------------------------------------------------------------------------
 // Error propagation: recompute_from_anchor returns UpsertScore on repo failure
 // ---------------------------------------------------------------------------
 
