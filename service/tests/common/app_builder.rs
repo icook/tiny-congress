@@ -407,6 +407,17 @@ impl TestAppBuilder {
         self
     }
 
+    /// Inject a pre-built stub [`ReputationRepo`] without wiring up a database pool.
+    ///
+    /// Registers the supplied repo as the `Extension<Arc<dyn ReputationRepo>>`
+    /// extension.  Use [`with_trust_pool`] or [`with_rooms_pool`] instead when
+    /// you need a real database.
+    #[must_use]
+    pub fn with_stub_reputation_repo(mut self, repo: Arc<dyn ReputationRepo>) -> Self {
+        self.reputation_repo = Some(repo);
+        self
+    }
+
     /// Add a database pool as an Extension (for health check testing).
     ///
     /// Unlike [`with_identity_pool()`], this does NOT enable identity routes.

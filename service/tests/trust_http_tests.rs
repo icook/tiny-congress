@@ -19,6 +19,10 @@ use common::app_builder::TestAppBuilder;
 use common::factories::{build_authed_request, valid_signup_with_keys};
 use common::test_db::isolated_db;
 use tc_test_macros::shared_runtime_test;
+use tinycongress_api::reputation::repo::{
+    CreatedEndorsement, EndorsementRecord, EndorsementRepoError, ExternalIdentityRecord,
+    ExternalIdentityRepoError, ReputationRepo,
+};
 use tinycongress_api::trust::repo::{
     ActionRecord, DenouncementRecord, DenouncementWithUsername, InfluenceRecord, InviteRecord,
     ScoreSnapshot, TrustRepo, TrustRepoError,
@@ -2797,5 +2801,272 @@ async fn accept_invite_returns_500_when_accepted_at_is_none() {
         response.status(),
         StatusCode::INTERNAL_SERVER_ERROR,
         "handler must return 500 when accept_invite returns an InviteRecord with accepted_at = None"
+    );
+}
+
+// ─── Stub ReputationRepo for budget 500 error ────────────────────────────────
+
+/// Stub [`ReputationRepo`] that returns an error from
+/// `count_active_trust_endorsements_by`, simulating the first early-return 500
+/// path in `budget_handler`.  All other methods panic — they must never be
+/// reached in this test.
+struct StubBudgetReputationRepoReturnsError;
+
+#[async_trait]
+impl ReputationRepo for StubBudgetReputationRepoReturnsError {
+    async fn count_active_trust_endorsements_by(
+        &self,
+        _endorser_id: Uuid,
+    ) -> Result<i64, EndorsementRepoError> {
+        Err(EndorsementRepoError::NotFound)
+    }
+
+    async fn count_all_active_trust_endorsements_by(
+        &self,
+        _endorser_id: Uuid,
+    ) -> Result<i64, EndorsementRepoError> {
+        unimplemented!("StubBudgetReputationRepoReturnsError: not needed for this test")
+    }
+
+    async fn create_endorsement(
+        &self,
+        _subject_id: Uuid,
+        _topic: &str,
+        _endorser_id: Option<Uuid>,
+        _evidence: Option<&serde_json::Value>,
+        _weight: f32,
+        _attestation: Option<&serde_json::Value>,
+        _in_slot: bool,
+    ) -> Result<CreatedEndorsement, EndorsementRepoError> {
+        unimplemented!("StubBudgetReputationRepoReturnsError: not needed for this test")
+    }
+
+    async fn has_endorsement(
+        &self,
+        _subject_id: Uuid,
+        _topic: &str,
+    ) -> Result<bool, EndorsementRepoError> {
+        unimplemented!("StubBudgetReputationRepoReturnsError: not needed for this test")
+    }
+
+    async fn list_endorsements_by_subject(
+        &self,
+        _subject_id: Uuid,
+    ) -> Result<Vec<EndorsementRecord>, EndorsementRepoError> {
+        unimplemented!("StubBudgetReputationRepoReturnsError: not needed for this test")
+    }
+
+    async fn revoke_endorsement(
+        &self,
+        _endorser_id: Uuid,
+        _subject_id: Uuid,
+        _topic: &str,
+    ) -> Result<(), EndorsementRepoError> {
+        unimplemented!("StubBudgetReputationRepoReturnsError: not needed for this test")
+    }
+
+    async fn link_external_identity(
+        &self,
+        _account_id: Uuid,
+        _provider: &str,
+        _provider_subject: &str,
+    ) -> Result<ExternalIdentityRecord, ExternalIdentityRepoError> {
+        unimplemented!("StubBudgetReputationRepoReturnsError: not needed for this test")
+    }
+
+    async fn get_external_identity_by_provider(
+        &self,
+        _provider: &str,
+        _provider_subject: &str,
+    ) -> Result<ExternalIdentityRecord, ExternalIdentityRepoError> {
+        unimplemented!("StubBudgetReputationRepoReturnsError: not needed for this test")
+    }
+}
+
+/// Stub [`TrustRepo`] that panics on every call.
+///
+/// `budget_handler` returns early with 500 before reaching any `TrustRepo`
+/// call when the reputation repo fails, so this stub must never be invoked
+/// in the test below.
+struct PanickingTrustRepo;
+
+#[async_trait]
+impl TrustRepo for PanickingTrustRepo {
+    async fn get_or_create_influence(
+        &self,
+        _user_id: Uuid,
+    ) -> Result<InfluenceRecord, TrustRepoError> {
+        unimplemented!("PanickingTrustRepo: must not be called in this test")
+    }
+
+    async fn enqueue_action(
+        &self,
+        _actor_id: Uuid,
+        _action_type: ActionType,
+        _payload: &serde_json::Value,
+    ) -> Result<ActionRecord, TrustRepoError> {
+        unimplemented!("PanickingTrustRepo: must not be called in this test")
+    }
+
+    async fn count_daily_actions(&self, _actor_id: Uuid) -> Result<i64, TrustRepoError> {
+        unimplemented!("PanickingTrustRepo: must not be called in this test")
+    }
+
+    async fn get_action(&self, _action_id: Uuid) -> Result<ActionRecord, TrustRepoError> {
+        unimplemented!("PanickingTrustRepo: must not be called in this test")
+    }
+
+    async fn complete_action(&self, _action_id: Uuid) -> Result<(), TrustRepoError> {
+        unimplemented!("PanickingTrustRepo: must not be called in this test")
+    }
+
+    async fn fail_action(&self, _action_id: Uuid, _error: &str) -> Result<(), TrustRepoError> {
+        unimplemented!("PanickingTrustRepo: must not be called in this test")
+    }
+
+    async fn create_denouncement(
+        &self,
+        _accuser_id: Uuid,
+        _target_id: Uuid,
+        _reason: &str,
+    ) -> Result<DenouncementRecord, TrustRepoError> {
+        unimplemented!("PanickingTrustRepo: must not be called in this test")
+    }
+
+    async fn create_denouncement_and_revoke_endorsement(
+        &self,
+        _accuser_id: Uuid,
+        _target_id: Uuid,
+        _reason: &str,
+    ) -> Result<DenouncementRecord, TrustRepoError> {
+        unimplemented!("PanickingTrustRepo: must not be called in this test")
+    }
+
+    async fn list_denouncements_against(
+        &self,
+        _target_id: Uuid,
+    ) -> Result<Vec<DenouncementRecord>, TrustRepoError> {
+        unimplemented!("PanickingTrustRepo: must not be called in this test")
+    }
+
+    async fn list_denouncements_by(
+        &self,
+        _accuser_id: Uuid,
+    ) -> Result<Vec<DenouncementRecord>, TrustRepoError> {
+        unimplemented!("PanickingTrustRepo: must not be called in this test")
+    }
+
+    async fn list_denouncements_by_with_username(
+        &self,
+        _accuser_id: Uuid,
+    ) -> Result<Vec<DenouncementWithUsername>, TrustRepoError> {
+        unimplemented!("PanickingTrustRepo: must not be called in this test")
+    }
+
+    async fn count_total_denouncements_by(&self, _accuser_id: Uuid) -> Result<i64, TrustRepoError> {
+        unimplemented!("PanickingTrustRepo: must not be called in this test")
+    }
+
+    async fn has_active_denouncement(
+        &self,
+        _accuser_id: Uuid,
+        _target_id: Uuid,
+    ) -> Result<bool, TrustRepoError> {
+        unimplemented!("PanickingTrustRepo: must not be called in this test")
+    }
+
+    async fn create_invite(
+        &self,
+        _endorser_id: Uuid,
+        _envelope: &[u8],
+        _delivery_method: DeliveryMethod,
+        _relationship_depth: Option<RelationshipDepth>,
+        _weight: f32,
+        _attestation: &serde_json::Value,
+        _expires_at: chrono::DateTime<chrono::Utc>,
+    ) -> Result<InviteRecord, TrustRepoError> {
+        unimplemented!("PanickingTrustRepo: must not be called in this test")
+    }
+
+    async fn get_invite(&self, _invite_id: Uuid) -> Result<InviteRecord, TrustRepoError> {
+        unimplemented!("PanickingTrustRepo: must not be called in this test")
+    }
+
+    async fn accept_invite(
+        &self,
+        _invite_id: Uuid,
+        _accepted_by: Uuid,
+    ) -> Result<InviteRecord, TrustRepoError> {
+        unimplemented!("PanickingTrustRepo: must not be called in this test")
+    }
+
+    async fn list_invites_by_endorser(
+        &self,
+        _endorser_id: Uuid,
+    ) -> Result<Vec<InviteRecord>, TrustRepoError> {
+        unimplemented!("PanickingTrustRepo: must not be called in this test")
+    }
+
+    async fn upsert_score(
+        &self,
+        _user_id: Uuid,
+        _context_user_id: Option<Uuid>,
+        _distance: Option<f32>,
+        _diversity: Option<i32>,
+        _centrality: Option<f32>,
+    ) -> Result<(), TrustRepoError> {
+        unimplemented!("PanickingTrustRepo: must not be called in this test")
+    }
+
+    async fn get_score(
+        &self,
+        _user_id: Uuid,
+        _context_user_id: Option<Uuid>,
+    ) -> Result<Option<ScoreSnapshot>, TrustRepoError> {
+        unimplemented!("PanickingTrustRepo: must not be called in this test")
+    }
+
+    async fn get_all_scores(&self, _user_id: Uuid) -> Result<Vec<ScoreSnapshot>, TrustRepoError> {
+        unimplemented!("PanickingTrustRepo: must not be called in this test")
+    }
+
+    async fn has_identity_endorsement(
+        &self,
+        _user_id: Uuid,
+        _verifier_ids: &[Uuid],
+        _topic: &str,
+    ) -> Result<bool, TrustRepoError> {
+        unimplemented!("PanickingTrustRepo: must not be called in this test")
+    }
+}
+
+/// When `count_active_trust_endorsements_by` returns an error, `budget_handler`
+/// must return 500 Internal Server Error before reaching the `TrustRepo` call.
+///
+/// A stub repo simulates the database failure to confirm the guard fires correctly.
+#[shared_runtime_test]
+async fn budget_returns_500_when_endorsement_count_fails() {
+    let db = isolated_db().await;
+    let (_, keys, _) = signup_and_get_account("budgeterror", db.pool()).await;
+
+    let app = TestAppBuilder::new()
+        .with_identity_pool(db.pool().clone())
+        .with_stub_trust_repo(Arc::new(PanickingTrustRepo))
+        .with_stub_reputation_repo(Arc::new(StubBudgetReputationRepoReturnsError))
+        .build();
+
+    let request = build_authed_request(
+        Method::GET,
+        "/trust/budget",
+        "",
+        &keys.device_signing_key,
+        &keys.device_kid,
+    );
+
+    let response = app.oneshot(request).await.expect("response");
+    assert_eq!(
+        response.status(),
+        StatusCode::INTERNAL_SERVER_ERROR,
+        "budget_handler must return 500 when endorsement count query fails"
     );
 }
