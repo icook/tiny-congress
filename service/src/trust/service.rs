@@ -817,6 +817,41 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn endorse_proceeds_when_daily_count_is_one_below_quota() {
+        // Lower boundary of the daily quota check: daily_count = DAILY_ACTION_QUOTA - 1
+        // (one action still allowed today). The guard is `daily_count >= self.daily_quota`,
+        // so this must NOT fire. This is the complement of
+        // endorse_returns_quota_exceeded_when_daily_limit_reached, which tests the upper
+        // boundary (daily_count == DAILY_ACTION_QUOTA → blocked). Together they pin the
+        // `>=` comparison: if it were changed to `>`, the upper-boundary test would
+        // catch it; if it were changed to `>= DAILY_ACTION_QUOTA - 1`, this lower-boundary
+        // test would catch it.
+        let captured = Arc::new(Mutex::new(None::<serde_json::Value>));
+        let svc = DefaultTrustService::new(
+            Arc::new(
+                StubTrustRepo::default()
+                    .daily(DAILY_ACTION_QUOTA - 1)
+                    .active(false)
+                    .capture_payload(captured.clone()),
+            ),
+            Arc::new(
+                StubReputationRepo::default()
+                    .verifier(false)
+                    .active_count(0),
+            ),
+        );
+        let endorser = Uuid::new_v4();
+        let subject = Uuid::new_v4();
+        svc.endorse(endorser, subject, 0.5, None)
+            .await
+            .expect("endorse must succeed when daily count is one below quota");
+        assert!(
+            captured.lock().unwrap().is_some(),
+            "enqueue_action must be called when daily quota is not yet reached"
+        );
+    }
+
+    #[tokio::test]
     async fn revoke_endorsement_returns_self_action_when_ids_match() {
         let id = Uuid::new_v4();
         let err = make_service().revoke_endorsement(id, id).await.unwrap_err();
