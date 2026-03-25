@@ -668,6 +668,27 @@ impl TrustRepo for FailingUpsertRepo {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Error propagation: recompute_from_anchor returns Database when compute_distances_from fails
+// ---------------------------------------------------------------------------
+#[shared_runtime_test]
+async fn test_recompute_from_anchor_propagates_compute_distances_error() {
+    let db = isolated_db().await;
+    let pool = db.pool().clone();
+    let engine = TrustEngine::new(pool.clone());
+
+    // Close the pool to force a database error on the first query inside recompute_from_anchor
+    pool.close().await;
+
+    let repo = FailingUpsertRepo;
+    let result = engine.recompute_from_anchor(Uuid::new_v4(), &repo).await;
+
+    assert!(
+        matches!(result, Err(TrustEngineError::Database(_))),
+        "Expected TrustEngineError::Database when compute_distances_from fails, got {result:?}"
+    );
+}
+
 #[shared_runtime_test]
 async fn test_recompute_from_anchor_propagates_upsert_score_error() {
     let db = isolated_db().await;
