@@ -2459,3 +2459,93 @@ async fn accept_invite_succeeds_even_when_endorser_quota_exceeded() {
 
     let _ = (endorser_keys, acceptor_keys);
 }
+
+/// A second attempt to accept an already-accepted invite returns 404.
+///
+/// The `accept_invite` SQL atomically marks an invite as taken by requiring
+/// `accepted_by IS NULL`.  Once a first acceptor claims the invite, any
+/// subsequent `accept_invite` call — even from the same user — finds no
+/// matching row and returns `TrustRepoError::NotFound`, which the handler
+/// maps to a 404 response.  This is distinct from the "invite UUID does not
+/// exist" 404 tested elsewhere.
+#[shared_runtime_test]
+async fn test_accept_already_accepted_invite_returns_404() {
+    let db = isolated_db().await;
+
+    let (app, endorser_keys, _endorser_id) =
+        signup_and_get_account("alreadyacceptedendorser", db.pool()).await;
+
+    let (json2, acceptor_keys) = valid_signup_with_keys("alreadyacceptedacceptor");
+    let resp2 = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/auth/signup")
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(json2))
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+    assert_eq!(resp2.status(), StatusCode::CREATED);
+
+    // Endorser creates an invite.
+    let envelope_b64 = tc_crypto::encode_base64url(b"already-accepted-envelope");
+    let invite_body = serde_json::json!({
+        "envelope": envelope_b64,
+        "delivery_method": "qr",
+        "attestation": {}
+    })
+    .to_string();
+    let create_req = build_authed_request(
+        Method::POST,
+        "/trust/invites",
+        &invite_body,
+        &endorser_keys.device_signing_key,
+        &endorser_keys.device_kid,
+    );
+    let create_resp = app.clone().oneshot(create_req).await.expect("create");
+    assert_eq!(create_resp.status(), StatusCode::CREATED);
+    let invite_id = json_body(create_resp).await;
+    let invite_id = invite_id["id"].as_str().expect("invite id").to_string();
+
+    let accept_uri = format!("/trust/invites/{invite_id}/accept");
+
+    // First acceptance: succeeds.
+    let first_req = build_authed_request(
+        Method::POST,
+        &accept_uri,
+        "",
+        &acceptor_keys.device_signing_key,
+        &acceptor_keys.device_kid,
+    );
+    let first_resp = app.clone().oneshot(first_req).await.expect("first accept");
+    assert_eq!(
+        first_resp.status(),
+        StatusCode::OK,
+        "first acceptance must succeed"
+    );
+
+    // Second acceptance of the same invite: `accepted_by IS NULL` is no longer
+    // satisfied, so `accept_invite` returns NotFound → handler returns 404.
+    let second_req = build_authed_request(
+        Method::POST,
+        &accept_uri,
+        "",
+        &acceptor_keys.device_signing_key,
+        &acceptor_keys.device_kid,
+    );
+    let second_resp = app
+        .clone()
+        .oneshot(second_req)
+        .await
+        .expect("second accept");
+    assert_eq!(
+        second_resp.status(),
+        StatusCode::NOT_FOUND,
+        "second attempt to accept an already-accepted invite must return 404"
+    );
+
+    let _ = (endorser_keys, acceptor_keys);
+}
