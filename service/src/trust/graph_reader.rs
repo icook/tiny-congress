@@ -110,6 +110,8 @@ impl TrustGraphReader for TrustRepoGraphReader {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::{Arc, Mutex};
+
     use super::*;
     use crate::trust::repo::{
         ActionRecord, DenouncementRecord, DenouncementWithUsername, InfluenceRecord, InviteRecord,
@@ -131,6 +133,12 @@ mod tests {
         score_fails: bool,
         endorsement: Option<bool>,
         endorsement_fails: bool,
+        /// If set, captures the `user_id` argument passed to `has_identity_endorsement`.
+        captured_endorsement_subject: Option<Arc<Mutex<Option<Uuid>>>>,
+        /// If set, captures the `verifier_ids` argument passed to `has_identity_endorsement`.
+        captured_endorsement_verifier_ids: Option<Arc<Mutex<Option<Vec<Uuid>>>>>,
+        /// If set, captures the `topic` argument passed to `has_identity_endorsement`.
+        captured_endorsement_topic: Option<Arc<Mutex<Option<String>>>>,
     }
 
     impl StubTrustRepo {
@@ -158,6 +166,18 @@ mod tests {
                 ..Default::default()
             }
         }
+        fn capture_endorsement_args(
+            mut self,
+            subject: Arc<Mutex<Option<Uuid>>>,
+            verifier_ids: Arc<Mutex<Option<Vec<Uuid>>>>,
+            topic: Arc<Mutex<Option<String>>>,
+        ) -> Self {
+            self.endorsement = Some(false);
+            self.captured_endorsement_subject = Some(subject);
+            self.captured_endorsement_verifier_ids = Some(verifier_ids);
+            self.captured_endorsement_topic = Some(topic);
+            self
+        }
     }
 
     #[async_trait]
@@ -174,10 +194,19 @@ mod tests {
         }
         async fn has_identity_endorsement(
             &self,
-            _: Uuid,
-            _: &[Uuid],
-            _: &str,
+            user_id: Uuid,
+            verifier_ids: &[Uuid],
+            topic: &str,
         ) -> Result<bool, TrustRepoError> {
+            if let Some(cap) = &self.captured_endorsement_subject {
+                *cap.lock().unwrap() = Some(user_id);
+            }
+            if let Some(cap) = &self.captured_endorsement_verifier_ids {
+                *cap.lock().unwrap() = Some(verifier_ids.to_vec());
+            }
+            if let Some(cap) = &self.captured_endorsement_topic {
+                *cap.lock().unwrap() = Some(topic.to_string());
+            }
             if self.endorsement_fails {
                 return Err(TrustRepoError::Database(sqlx::Error::RowNotFound));
             }
@@ -522,6 +551,53 @@ mod tests {
         assert!(
             result.is_err(),
             "expected has_endorsement to propagate the repo error"
+        );
+    }
+
+    #[tokio::test]
+    async fn has_endorsement_forwards_subject_verifier_ids_and_topic_to_repo() {
+        // `TrustGraphReader::has_endorsement(subject, topic, verifier_ids)` and
+        // `TrustRepo::has_identity_endorsement(user_id, verifier_ids, topic)` have
+        // different argument orderings: verifier_ids and topic are swapped.  This
+        // test verifies the adapter maps them correctly.  A swap in the
+        // implementation would pass topic where verifier_ids is expected (a &str
+        // where &[Uuid] is expected), which Rust's type checker would catch — but
+        // if both were the same type, or if a future refactor changed the signatures,
+        // only this test would catch the regression.
+        let subject = Uuid::new_v4();
+        let verifier = Uuid::new_v4();
+        let topic = "authorized_verifier";
+
+        let captured_subject = Arc::new(Mutex::new(None::<Uuid>));
+        let captured_verifier_ids = Arc::new(Mutex::new(None::<Vec<Uuid>>));
+        let captured_topic = Arc::new(Mutex::new(None::<String>));
+
+        let stub = StubTrustRepo::default().capture_endorsement_args(
+            captured_subject.clone(),
+            captured_verifier_ids.clone(),
+            captured_topic.clone(),
+        );
+        let reader = TrustRepoGraphReader::new(Arc::new(stub));
+
+        reader
+            .has_endorsement(subject, topic, &[verifier])
+            .await
+            .unwrap();
+
+        assert_eq!(
+            *captured_subject.lock().unwrap(),
+            Some(subject),
+            "has_identity_endorsement must receive subject as its first argument"
+        );
+        assert_eq!(
+            *captured_verifier_ids.lock().unwrap(),
+            Some(vec![verifier]),
+            "has_identity_endorsement must receive verifier_ids as its second argument"
+        );
+        assert_eq!(
+            captured_topic.lock().unwrap().as_deref(),
+            Some(topic),
+            "has_identity_endorsement must receive topic as its third argument"
         );
     }
 }
