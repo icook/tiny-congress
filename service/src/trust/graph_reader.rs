@@ -404,6 +404,27 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn get_score_maps_zero_trust_distance_as_valid_score() {
+        // trust_distance = 0.0 is the anchor's own distance (a self-query), so it is
+        // a valid state that must be returned as Some — NOT treated as corruption.
+        // The validation guard is `trust_distance_raw < 0.0`, which must not fire for 0.0.
+        // A regression that changes the guard to `<= 0.0` would silently discard
+        // self-scores; this test catches that off-by-one.
+        let mut snapshot = base_snapshot();
+        snapshot.trust_distance = Some(0.0);
+        let reader = make_reader(Some(snapshot));
+        let result = reader.get_score(Uuid::new_v4(), None).await.unwrap();
+        let score = result.expect(
+            "trust_distance=0.0 must be accepted as a valid score, not treated as corruption",
+        );
+        assert!(
+            score.trust_distance.abs() < f64::EPSILON,
+            "trust_distance=0.0 must round-trip to 0.0, got {}",
+            score.trust_distance
+        );
+    }
+
+    #[tokio::test]
     async fn get_score_returns_none_when_trust_distance_is_negative() {
         // Negative trust_distance cannot arise from a correct hop-count computation
         // (distances are always >= 0). Treating it as "no score" rather than silently
