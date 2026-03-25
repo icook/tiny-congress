@@ -568,7 +568,10 @@ async fn test_recompute_from_anchor_isolated_anchor_writes_only_self() {
         .await
         .expect("recompute_from_anchor");
 
-    assert_eq!(count, 1, "Isolated anchor: only the anchor's own score should be written");
+    assert_eq!(
+        count, 1,
+        "Isolated anchor: only the anchor's own score should be written"
+    );
 
     let anchor_snap = repo
         .get_score(seed.id, Some(seed.id))
