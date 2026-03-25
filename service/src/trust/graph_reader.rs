@@ -459,10 +459,10 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn get_score_returns_none_when_eigenvector_centrality_is_non_finite() {
-        // Non-finite eigenvector_centrality (NaN or INFINITY) indicates data
-        // corruption. Treating it as "no score" is consistent with the same check
-        // applied to trust_distance.
+    async fn get_score_returns_none_when_eigenvector_centrality_is_nan() {
+        // NaN eigenvector_centrality must be rejected — it is not < 0.0, so without an
+        // explicit is_finite() check it would silently propagate to the caller as
+        // f64::NAN, which is nonsensical as a centrality value.
         let mut snapshot = base_snapshot();
         snapshot.eigenvector_centrality = Some(f32::NAN);
         let reader = make_reader(Some(snapshot));
@@ -470,6 +470,23 @@ mod tests {
         assert!(
             result.is_none(),
             "NaN eigenvector_centrality must map to no score (data corruption), not NaN"
+        );
+    }
+
+    #[tokio::test]
+    async fn get_score_returns_none_when_eigenvector_centrality_is_infinite() {
+        // INFINITY eigenvector_centrality similarly cannot arise from a correct
+        // computation (centrality values are always finite) and must be treated as
+        // data corruption. The is_finite() guard catches both NaN and INFINITY;
+        // this test verifies the INFINITY case explicitly, matching the pattern
+        // for trust_distance which has separate NaN and INFINITY tests.
+        let mut snapshot = base_snapshot();
+        snapshot.eigenvector_centrality = Some(f32::INFINITY);
+        let reader = make_reader(Some(snapshot));
+        let result = reader.get_score(Uuid::new_v4(), None).await.unwrap();
+        assert!(
+            result.is_none(),
+            "INFINITY eigenvector_centrality must map to no score (data corruption), not INFINITY"
         );
     }
 
