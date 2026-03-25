@@ -220,6 +220,129 @@ impl TrustService for PanickingTrustService {
     }
 }
 
+// ─── Stub TrustRepo for scores database error scenario ─────────────────────
+
+/// Stub [`TrustRepo`] that returns a [`TrustRepoError::Database`] from
+/// `get_all_scores`.  All other methods panic — this stub is only valid for
+/// the `scores_me_handler` database-error-path test.
+struct StubGetAllScoresDatabaseError;
+
+#[async_trait]
+impl TrustRepo for StubGetAllScoresDatabaseError {
+    async fn get_or_create_influence(&self, _: Uuid) -> Result<InfluenceRecord, TrustRepoError> {
+        unimplemented!("StubGetAllScoresDatabaseError: not needed for this test")
+    }
+    async fn enqueue_action(
+        &self,
+        _: Uuid,
+        _: ActionType,
+        _: &serde_json::Value,
+    ) -> Result<ActionRecord, TrustRepoError> {
+        unimplemented!("StubGetAllScoresDatabaseError: not needed for this test")
+    }
+    async fn count_daily_actions(&self, _: Uuid) -> Result<i64, TrustRepoError> {
+        unimplemented!("StubGetAllScoresDatabaseError: not needed for this test")
+    }
+    async fn get_action(&self, _: Uuid) -> Result<ActionRecord, TrustRepoError> {
+        unimplemented!("StubGetAllScoresDatabaseError: not needed for this test")
+    }
+    async fn complete_action(&self, _: Uuid) -> Result<(), TrustRepoError> {
+        unimplemented!("StubGetAllScoresDatabaseError: not needed for this test")
+    }
+    async fn fail_action(&self, _: Uuid, _: &str) -> Result<(), TrustRepoError> {
+        unimplemented!("StubGetAllScoresDatabaseError: not needed for this test")
+    }
+    async fn create_denouncement(
+        &self,
+        _: Uuid,
+        _: Uuid,
+        _: &str,
+    ) -> Result<DenouncementRecord, TrustRepoError> {
+        unimplemented!("StubGetAllScoresDatabaseError: not needed for this test")
+    }
+    async fn create_denouncement_and_revoke_endorsement(
+        &self,
+        _: Uuid,
+        _: Uuid,
+        _: &str,
+    ) -> Result<DenouncementRecord, TrustRepoError> {
+        unimplemented!("StubGetAllScoresDatabaseError: not needed for this test")
+    }
+    async fn list_denouncements_against(
+        &self,
+        _: Uuid,
+    ) -> Result<Vec<DenouncementRecord>, TrustRepoError> {
+        unimplemented!("StubGetAllScoresDatabaseError: not needed for this test")
+    }
+    async fn list_denouncements_by(
+        &self,
+        _: Uuid,
+    ) -> Result<Vec<DenouncementRecord>, TrustRepoError> {
+        unimplemented!("StubGetAllScoresDatabaseError: not needed for this test")
+    }
+    async fn list_denouncements_by_with_username(
+        &self,
+        _: Uuid,
+    ) -> Result<Vec<DenouncementWithUsername>, TrustRepoError> {
+        unimplemented!("StubGetAllScoresDatabaseError: not needed for this test")
+    }
+    async fn count_total_denouncements_by(&self, _: Uuid) -> Result<i64, TrustRepoError> {
+        unimplemented!("StubGetAllScoresDatabaseError: not needed for this test")
+    }
+    async fn has_active_denouncement(&self, _: Uuid, _: Uuid) -> Result<bool, TrustRepoError> {
+        unimplemented!("StubGetAllScoresDatabaseError: not needed for this test")
+    }
+    async fn create_invite(
+        &self,
+        _: Uuid,
+        _: &[u8],
+        _: DeliveryMethod,
+        _: Option<RelationshipDepth>,
+        _: f32,
+        _: &serde_json::Value,
+        _: chrono::DateTime<chrono::Utc>,
+    ) -> Result<InviteRecord, TrustRepoError> {
+        unimplemented!("StubGetAllScoresDatabaseError: not needed for this test")
+    }
+    async fn get_invite(&self, _: Uuid) -> Result<InviteRecord, TrustRepoError> {
+        unimplemented!("StubGetAllScoresDatabaseError: not needed for this test")
+    }
+    async fn accept_invite(&self, _: Uuid, _: Uuid) -> Result<InviteRecord, TrustRepoError> {
+        unimplemented!("StubGetAllScoresDatabaseError: not needed for this test")
+    }
+    async fn list_invites_by_endorser(&self, _: Uuid) -> Result<Vec<InviteRecord>, TrustRepoError> {
+        unimplemented!("StubGetAllScoresDatabaseError: not needed for this test")
+    }
+    async fn upsert_score(
+        &self,
+        _: Uuid,
+        _: Option<Uuid>,
+        _: Option<f32>,
+        _: Option<i32>,
+        _: Option<f32>,
+    ) -> Result<(), TrustRepoError> {
+        unimplemented!("StubGetAllScoresDatabaseError: not needed for this test")
+    }
+    async fn get_score(
+        &self,
+        _: Uuid,
+        _: Option<Uuid>,
+    ) -> Result<Option<ScoreSnapshot>, TrustRepoError> {
+        unimplemented!("StubGetAllScoresDatabaseError: not needed for this test")
+    }
+    async fn get_all_scores(&self, _user_id: Uuid) -> Result<Vec<ScoreSnapshot>, TrustRepoError> {
+        Err(TrustRepoError::Database(sqlx::Error::RowNotFound))
+    }
+    async fn has_identity_endorsement(
+        &self,
+        _: Uuid,
+        _: &[Uuid],
+        _: &str,
+    ) -> Result<bool, TrustRepoError> {
+        unimplemented!("StubGetAllScoresDatabaseError: not needed for this test")
+    }
+}
+
 /// Helper: sign up a user and return (app, keys, account_id).
 async fn signup_and_get_account(
     username: &str,
@@ -744,6 +867,38 @@ async fn test_scores_me_returns_200() {
     let scores = json["scores"].as_array().expect("scores array");
     assert_eq!(scores.len(), 1);
     assert!(scores[0]["trust_distance"].as_f64().is_some());
+}
+
+/// `GET /trust/scores/me` returns 500 when the repo fails with a database error.
+///
+/// The handler calls `get_all_scores` and delegates any repo error to
+/// `trust_repo_error_response`, which maps `TrustRepoError::Database` to 500.
+/// A stub repo simulates the failure so this path can be verified without a
+/// real database.
+#[shared_runtime_test]
+async fn test_scores_me_returns_500_when_get_all_scores_fails() {
+    let db = isolated_db().await;
+    let (_, keys, _) = signup_and_get_account("scoresdberroruser", db.pool()).await;
+
+    let app = TestAppBuilder::new()
+        .with_identity_pool(db.pool().clone())
+        .with_stub_trust_repo(Arc::new(StubGetAllScoresDatabaseError))
+        .build();
+
+    let request = build_authed_request(
+        Method::GET,
+        "/trust/scores/me",
+        "",
+        &keys.device_signing_key,
+        &keys.device_kid,
+    );
+
+    let response = app.oneshot(request).await.expect("response");
+    assert_eq!(
+        response.status(),
+        StatusCode::INTERNAL_SERVER_ERROR,
+        "handler must return 500 when get_all_scores fails with a database error"
+    );
 }
 
 // ─── Budget ───────────────────────────────────────────────────────────────────
