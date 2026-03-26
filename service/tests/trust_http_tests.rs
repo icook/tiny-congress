@@ -3180,3 +3180,272 @@ async fn budget_returns_500_when_all_endorsements_count_fails() {
         "budget_handler must return 500 when all-endorsements count query fails"
     );
 }
+
+// ─── Stub ReputationRepo where both endorsement counts succeed ────────────────
+
+/// Stub [`ReputationRepo`] that lets both `count_active_trust_endorsements_by`
+/// and `count_all_active_trust_endorsements_by` succeed, allowing
+/// `budget_handler` to proceed to the `TrustRepo` call.  All other methods
+/// panic — they must never be reached in this test.
+struct StubBudgetBothEndorsementsSucceed;
+
+#[async_trait]
+impl ReputationRepo for StubBudgetBothEndorsementsSucceed {
+    async fn count_active_trust_endorsements_by(
+        &self,
+        _endorser_id: Uuid,
+    ) -> Result<i64, EndorsementRepoError> {
+        Ok(0)
+    }
+
+    async fn count_all_active_trust_endorsements_by(
+        &self,
+        _endorser_id: Uuid,
+    ) -> Result<i64, EndorsementRepoError> {
+        Ok(0)
+    }
+
+    async fn create_endorsement(
+        &self,
+        _subject_id: Uuid,
+        _topic: &str,
+        _endorser_id: Option<Uuid>,
+        _evidence: Option<&serde_json::Value>,
+        _weight: f32,
+        _attestation: Option<&serde_json::Value>,
+        _in_slot: bool,
+    ) -> Result<CreatedEndorsement, EndorsementRepoError> {
+        unimplemented!("StubBudgetBothEndorsementsSucceed: not needed for this test")
+    }
+
+    async fn has_endorsement(
+        &self,
+        _subject_id: Uuid,
+        _topic: &str,
+    ) -> Result<bool, EndorsementRepoError> {
+        unimplemented!("StubBudgetBothEndorsementsSucceed: not needed for this test")
+    }
+
+    async fn list_endorsements_by_subject(
+        &self,
+        _subject_id: Uuid,
+    ) -> Result<Vec<EndorsementRecord>, EndorsementRepoError> {
+        unimplemented!("StubBudgetBothEndorsementsSucceed: not needed for this test")
+    }
+
+    async fn revoke_endorsement(
+        &self,
+        _endorser_id: Uuid,
+        _subject_id: Uuid,
+        _topic: &str,
+    ) -> Result<(), EndorsementRepoError> {
+        unimplemented!("StubBudgetBothEndorsementsSucceed: not needed for this test")
+    }
+
+    async fn link_external_identity(
+        &self,
+        _account_id: Uuid,
+        _provider: &str,
+        _provider_subject: &str,
+    ) -> Result<ExternalIdentityRecord, ExternalIdentityRepoError> {
+        unimplemented!("StubBudgetBothEndorsementsSucceed: not needed for this test")
+    }
+
+    async fn get_external_identity_by_provider(
+        &self,
+        _provider: &str,
+        _provider_subject: &str,
+    ) -> Result<ExternalIdentityRecord, ExternalIdentityRepoError> {
+        unimplemented!("StubBudgetBothEndorsementsSucceed: not needed for this test")
+    }
+}
+
+// ─── Stub TrustRepo for budget denouncements 500 error ───────────────────────
+
+/// Stub [`TrustRepo`] that returns an error from `count_total_denouncements_by`,
+/// simulating the third early-return 500 path in `budget_handler`.  All other
+/// methods panic — they must never be reached in this test.
+struct StubBudgetTrustRepoDenouncementsError;
+
+#[async_trait]
+impl TrustRepo for StubBudgetTrustRepoDenouncementsError {
+    async fn count_total_denouncements_by(&self, _accuser_id: Uuid) -> Result<i64, TrustRepoError> {
+        Err(TrustRepoError::NotFound)
+    }
+
+    async fn get_or_create_influence(
+        &self,
+        _user_id: Uuid,
+    ) -> Result<InfluenceRecord, TrustRepoError> {
+        unimplemented!("StubBudgetTrustRepoDenouncementsError: must not be called in this test")
+    }
+
+    async fn enqueue_action(
+        &self,
+        _actor_id: Uuid,
+        _action_type: ActionType,
+        _payload: &serde_json::Value,
+    ) -> Result<ActionRecord, TrustRepoError> {
+        unimplemented!("StubBudgetTrustRepoDenouncementsError: must not be called in this test")
+    }
+
+    async fn count_daily_actions(&self, _actor_id: Uuid) -> Result<i64, TrustRepoError> {
+        unimplemented!("StubBudgetTrustRepoDenouncementsError: must not be called in this test")
+    }
+
+    async fn get_action(&self, _action_id: Uuid) -> Result<ActionRecord, TrustRepoError> {
+        unimplemented!("StubBudgetTrustRepoDenouncementsError: must not be called in this test")
+    }
+
+    async fn complete_action(&self, _action_id: Uuid) -> Result<(), TrustRepoError> {
+        unimplemented!("StubBudgetTrustRepoDenouncementsError: must not be called in this test")
+    }
+
+    async fn fail_action(&self, _action_id: Uuid, _error: &str) -> Result<(), TrustRepoError> {
+        unimplemented!("StubBudgetTrustRepoDenouncementsError: must not be called in this test")
+    }
+
+    async fn create_denouncement(
+        &self,
+        _accuser_id: Uuid,
+        _target_id: Uuid,
+        _reason: &str,
+    ) -> Result<DenouncementRecord, TrustRepoError> {
+        unimplemented!("StubBudgetTrustRepoDenouncementsError: must not be called in this test")
+    }
+
+    async fn create_denouncement_and_revoke_endorsement(
+        &self,
+        _accuser_id: Uuid,
+        _target_id: Uuid,
+        _reason: &str,
+    ) -> Result<DenouncementRecord, TrustRepoError> {
+        unimplemented!("StubBudgetTrustRepoDenouncementsError: must not be called in this test")
+    }
+
+    async fn list_denouncements_against(
+        &self,
+        _target_id: Uuid,
+    ) -> Result<Vec<DenouncementRecord>, TrustRepoError> {
+        unimplemented!("StubBudgetTrustRepoDenouncementsError: must not be called in this test")
+    }
+
+    async fn list_denouncements_by(
+        &self,
+        _accuser_id: Uuid,
+    ) -> Result<Vec<DenouncementRecord>, TrustRepoError> {
+        unimplemented!("StubBudgetTrustRepoDenouncementsError: must not be called in this test")
+    }
+
+    async fn list_denouncements_by_with_username(
+        &self,
+        _accuser_id: Uuid,
+    ) -> Result<Vec<DenouncementWithUsername>, TrustRepoError> {
+        unimplemented!("StubBudgetTrustRepoDenouncementsError: must not be called in this test")
+    }
+
+    async fn has_active_denouncement(
+        &self,
+        _accuser_id: Uuid,
+        _target_id: Uuid,
+    ) -> Result<bool, TrustRepoError> {
+        unimplemented!("StubBudgetTrustRepoDenouncementsError: must not be called in this test")
+    }
+
+    async fn create_invite(
+        &self,
+        _endorser_id: Uuid,
+        _envelope: &[u8],
+        _delivery_method: DeliveryMethod,
+        _relationship_depth: Option<RelationshipDepth>,
+        _weight: f32,
+        _attestation: &serde_json::Value,
+        _expires_at: chrono::DateTime<chrono::Utc>,
+    ) -> Result<InviteRecord, TrustRepoError> {
+        unimplemented!("StubBudgetTrustRepoDenouncementsError: must not be called in this test")
+    }
+
+    async fn get_invite(&self, _invite_id: Uuid) -> Result<InviteRecord, TrustRepoError> {
+        unimplemented!("StubBudgetTrustRepoDenouncementsError: must not be called in this test")
+    }
+
+    async fn accept_invite(
+        &self,
+        _invite_id: Uuid,
+        _accepted_by: Uuid,
+    ) -> Result<InviteRecord, TrustRepoError> {
+        unimplemented!("StubBudgetTrustRepoDenouncementsError: must not be called in this test")
+    }
+
+    async fn list_invites_by_endorser(
+        &self,
+        _endorser_id: Uuid,
+    ) -> Result<Vec<InviteRecord>, TrustRepoError> {
+        unimplemented!("StubBudgetTrustRepoDenouncementsError: must not be called in this test")
+    }
+
+    async fn upsert_score(
+        &self,
+        _user_id: Uuid,
+        _context_user_id: Option<Uuid>,
+        _distance: Option<f32>,
+        _diversity: Option<i32>,
+        _centrality: Option<f32>,
+    ) -> Result<(), TrustRepoError> {
+        unimplemented!("StubBudgetTrustRepoDenouncementsError: must not be called in this test")
+    }
+
+    async fn get_score(
+        &self,
+        _user_id: Uuid,
+        _context_user_id: Option<Uuid>,
+    ) -> Result<Option<ScoreSnapshot>, TrustRepoError> {
+        unimplemented!("StubBudgetTrustRepoDenouncementsError: must not be called in this test")
+    }
+
+    async fn get_all_scores(&self, _user_id: Uuid) -> Result<Vec<ScoreSnapshot>, TrustRepoError> {
+        unimplemented!("StubBudgetTrustRepoDenouncementsError: must not be called in this test")
+    }
+
+    async fn has_identity_endorsement(
+        &self,
+        _user_id: Uuid,
+        _verifier_ids: &[Uuid],
+        _topic: &str,
+    ) -> Result<bool, TrustRepoError> {
+        unimplemented!("StubBudgetTrustRepoDenouncementsError: must not be called in this test")
+    }
+}
+
+/// When `count_total_denouncements_by` returns an error, `budget_handler`
+/// must return 500 Internal Server Error.
+///
+/// Both endorsement-count calls succeed (returns 0); the failure occurs at the
+/// `TrustRepo` step. This tests the third early-return 500 path in
+/// `budget_handler`, complementing the two endorsement-count error tests above.
+#[shared_runtime_test]
+async fn budget_returns_500_when_denouncements_count_fails() {
+    let db = isolated_db().await;
+    let (_, keys, _) = signup_and_get_account("budgetdenounceerr", db.pool()).await;
+
+    let app = TestAppBuilder::new()
+        .with_identity_pool(db.pool().clone())
+        .with_stub_trust_repo(Arc::new(StubBudgetTrustRepoDenouncementsError))
+        .with_stub_reputation_repo(Arc::new(StubBudgetBothEndorsementsSucceed))
+        .build();
+
+    let request = build_authed_request(
+        Method::GET,
+        "/trust/budget",
+        "",
+        &keys.device_signing_key,
+        &keys.device_kid,
+    );
+
+    let response = app.oneshot(request).await.expect("response");
+    assert_eq!(
+        response.status(),
+        StatusCode::INTERNAL_SERVER_ERROR,
+        "budget_handler must return 500 when denouncement count query fails"
+    );
+}
