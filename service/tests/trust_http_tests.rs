@@ -4619,3 +4619,154 @@ async fn endorse_handler_returns_500_when_service_db_fails() {
         "endorse_handler must return 500 when the service propagates a database error"
     );
 }
+
+// ─── Stub TrustService for revoke_handler 500 error ──────────────────────────
+
+/// Stub [`TrustService`] that returns a database error from `revoke_endorsement`,
+/// simulating a repo failure propagated as [`TrustServiceError::Repo`].
+/// All other methods panic — they must never be reached in this test.
+struct StubRevokeServiceDbError;
+
+#[async_trait]
+impl TrustService for StubRevokeServiceDbError {
+    async fn endorse(
+        &self,
+        _endorser_id: Uuid,
+        _subject_id: Uuid,
+        _weight: f32,
+        _attestation: Option<serde_json::Value>,
+    ) -> Result<(), TrustServiceError> {
+        unimplemented!("StubRevokeServiceDbError: must not be called in this test")
+    }
+    async fn revoke_endorsement(
+        &self,
+        _endorser_id: Uuid,
+        _subject_id: Uuid,
+    ) -> Result<(), TrustServiceError> {
+        Err(TrustServiceError::Repo(TrustRepoError::Database(
+            sqlx::Error::RowNotFound,
+        )))
+    }
+    async fn denounce(
+        &self,
+        _accuser_id: Uuid,
+        _target_id: Uuid,
+        _reason: &str,
+    ) -> Result<(), TrustServiceError> {
+        unimplemented!("StubRevokeServiceDbError: must not be called in this test")
+    }
+}
+
+/// When the trust service returns a database error, `revoke_handler` must
+/// return 500 Internal Server Error.
+///
+/// `TrustServiceError::Repo` wraps the underlying repo failure and maps to
+/// 500 via `trust_service_error_response`.  This covers the code path where
+/// an unexpected DB error surfaces through the service layer rather than a
+/// user-visible error like `QuotaExceeded` or `SelfAction`.
+#[shared_runtime_test]
+async fn revoke_handler_returns_500_when_service_db_fails() {
+    let db = isolated_db().await;
+    let (_, keys, _) = signup_and_get_account("revokesvcerr", db.pool()).await;
+
+    let app = TestAppBuilder::new()
+        .with_identity_pool(db.pool().clone())
+        .with_stub_trust_repo(Arc::new(NeverCalledTrustRepo))
+        .with_stub_trust_service(Arc::new(StubRevokeServiceDbError))
+        .build();
+
+    let body = serde_json::json!({
+        "subject_id": Uuid::new_v4(),
+    })
+    .to_string();
+    let request = build_authed_request(
+        Method::POST,
+        "/trust/revoke",
+        &body,
+        &keys.device_signing_key,
+        &keys.device_kid,
+    );
+
+    let response = app.oneshot(request).await.expect("response");
+    assert_eq!(
+        response.status(),
+        StatusCode::INTERNAL_SERVER_ERROR,
+        "revoke_handler must return 500 when the service propagates a database error"
+    );
+}
+
+// ─── Stub TrustService for denounce_handler 500 error ────────────────────────
+
+/// Stub [`TrustService`] that returns a database error from `denounce`,
+/// simulating a repo failure propagated as [`TrustServiceError::Repo`].
+/// All other methods panic — they must never be reached in this test.
+struct StubDenounceServiceDbError;
+
+#[async_trait]
+impl TrustService for StubDenounceServiceDbError {
+    async fn endorse(
+        &self,
+        _endorser_id: Uuid,
+        _subject_id: Uuid,
+        _weight: f32,
+        _attestation: Option<serde_json::Value>,
+    ) -> Result<(), TrustServiceError> {
+        unimplemented!("StubDenounceServiceDbError: must not be called in this test")
+    }
+    async fn revoke_endorsement(
+        &self,
+        _endorser_id: Uuid,
+        _subject_id: Uuid,
+    ) -> Result<(), TrustServiceError> {
+        unimplemented!("StubDenounceServiceDbError: must not be called in this test")
+    }
+    async fn denounce(
+        &self,
+        _accuser_id: Uuid,
+        _target_id: Uuid,
+        _reason: &str,
+    ) -> Result<(), TrustServiceError> {
+        Err(TrustServiceError::Repo(TrustRepoError::Database(
+            sqlx::Error::RowNotFound,
+        )))
+    }
+}
+
+/// When the trust service returns a database error, `denounce_handler` must
+/// return 500 Internal Server Error.
+///
+/// `TrustServiceError::Repo` wraps the underlying repo failure and maps to
+/// 500 via `trust_service_error_response`.  This covers the code path where
+/// an unexpected DB error surfaces through the service layer rather than a
+/// user-visible error like `QuotaExceeded` or `SelfAction`.
+#[shared_runtime_test]
+async fn denounce_handler_returns_500_when_service_db_fails() {
+    let db = isolated_db().await;
+    let (_, keys, _) = signup_and_get_account("denouncesvcerr", db.pool()).await;
+
+    let app = TestAppBuilder::new()
+        .with_identity_pool(db.pool().clone())
+        .with_stub_trust_repo(Arc::new(NeverCalledTrustRepo))
+        .with_stub_trust_service(Arc::new(StubDenounceServiceDbError))
+        .build();
+
+    let body = serde_json::json!({
+        "target_id": Uuid::new_v4(),
+        "reason": "valid reason for test"
+    })
+    .to_string();
+    let request = build_authed_request(
+        Method::POST,
+        "/trust/denounce",
+        &body,
+        &keys.device_signing_key,
+        &keys.device_kid,
+    );
+
+    let response = app.oneshot(request).await.expect("response");
+    assert_eq!(
+        response.status(),
+        StatusCode::INTERNAL_SERVER_ERROR,
+        "denounce_handler must return 500 when the service propagates a database error"
+    );
+}
