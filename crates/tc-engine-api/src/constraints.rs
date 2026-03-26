@@ -952,6 +952,76 @@ mod tests {
         assert!(result.err().unwrap().to_string().contains("verifier_ids"));
     }
 
+    // ── Error propagation ─────────────────────────────────────────────
+
+    /// A mock trust reader that always returns an infrastructure error.
+    struct FailingTrustReader;
+
+    #[async_trait]
+    impl TrustGraphReader for FailingTrustReader {
+        async fn get_score(
+            &self,
+            _subject: Uuid,
+            _anchor: Option<Uuid>,
+        ) -> Result<Option<TrustScoreSnapshot>, anyhow::Error> {
+            Err(anyhow::anyhow!("simulated trust reader failure"))
+        }
+
+        async fn has_endorsement(
+            &self,
+            _subject: Uuid,
+            _topic: &str,
+            _verifier_ids: &[Uuid],
+        ) -> Result<bool, anyhow::Error> {
+            Err(anyhow::anyhow!("simulated trust reader failure"))
+        }
+    }
+
+    #[tokio::test]
+    async fn endorsed_by_propagates_trust_reader_error() {
+        let user = Uuid::new_v4();
+        let anchor = Uuid::new_v4();
+        let constraint = EndorsedByConstraint::new(anchor);
+        let err = constraint.check(user, &FailingTrustReader).await.unwrap_err();
+        assert!(err.to_string().contains("trust reader error"));
+    }
+
+    #[tokio::test]
+    async fn community_propagates_trust_reader_error() {
+        let user = Uuid::new_v4();
+        let anchor = Uuid::new_v4();
+        let constraint = CommunityConstraint::new(anchor, 5.0, 2).unwrap();
+        let err = constraint.check(user, &FailingTrustReader).await.unwrap_err();
+        assert!(err.to_string().contains("trust reader error"));
+    }
+
+    #[tokio::test]
+    async fn congress_propagates_trust_reader_error() {
+        let user = Uuid::new_v4();
+        let anchor = Uuid::new_v4();
+        let constraint = CongressConstraint::new(anchor, 3).unwrap();
+        let err = constraint.check(user, &FailingTrustReader).await.unwrap_err();
+        assert!(err.to_string().contains("trust reader error"));
+    }
+
+    #[tokio::test]
+    async fn endorsed_by_user_propagates_trust_reader_error() {
+        let user = Uuid::new_v4();
+        let owner = Uuid::new_v4(); // distinct from user — avoids the owner short-circuit
+        let constraint = EndorsedByUserConstraint::new(owner);
+        let err = constraint.check(user, &FailingTrustReader).await.unwrap_err();
+        assert!(err.to_string().contains("trust reader error"));
+    }
+
+    #[tokio::test]
+    async fn identity_verified_propagates_trust_reader_error() {
+        let user = Uuid::new_v4();
+        let verifier = Uuid::new_v4();
+        let constraint = IdentityVerifiedConstraint::new(vec![verifier], "identity_verified");
+        let err = constraint.check(user, &FailingTrustReader).await.unwrap_err();
+        assert!(err.to_string().contains("trust reader error"));
+    }
+
     // ── ConstraintRegistry::check ─────────────────────────────────────
 
     #[tokio::test]
