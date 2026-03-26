@@ -827,6 +827,26 @@ mod tests {
     // ── build_constraint factory ──────────────────────────────────────
 
     #[tokio::test]
+    async fn build_endorsed_by_user() {
+        let endorser = Uuid::new_v4();
+        let user = Uuid::new_v4();
+        let config = serde_json::json!({ "endorser_id": endorser.to_string() });
+        let reader = MockTrustReader::new().with_endorsement(user, "trust", endorser);
+
+        let constraint = build_constraint("endorsed_by_user", &config).unwrap();
+        let result = constraint.check(user, &reader).await.unwrap();
+        assert!(result.is_eligible);
+    }
+
+    #[test]
+    fn build_endorsed_by_user_missing_endorser_errors() {
+        let config = serde_json::json!({});
+        let result = build_constraint("endorsed_by_user", &config);
+        assert!(result.is_err());
+        assert!(result.err().unwrap().to_string().contains("endorser_id"));
+    }
+
+    #[tokio::test]
     async fn build_endorsed_by() {
         let anchor = Uuid::new_v4();
         let user = Uuid::new_v4();
