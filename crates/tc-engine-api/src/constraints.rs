@@ -979,6 +979,38 @@ mod tests {
         );
     }
 
+    #[test]
+    fn build_community_rejects_negative_min_diversity() {
+        let anchor = Uuid::new_v4();
+        let config = serde_json::json!({
+            "anchor_id": anchor.to_string(),
+            "min_diversity": -1,
+        });
+        let result = build_constraint("community", &config);
+        assert!(result.is_err());
+        let msg = result.err().unwrap().to_string();
+        assert!(
+            msg.contains("out of range"),
+            "expected 'out of range' in error: {msg}"
+        );
+    }
+
+    #[test]
+    fn build_congress_rejects_negative_min_diversity() {
+        let anchor = Uuid::new_v4();
+        let config = serde_json::json!({
+            "anchor_id": anchor.to_string(),
+            "min_diversity": -1,
+        });
+        let result = build_constraint("congress", &config);
+        assert!(result.is_err());
+        let msg = result.err().unwrap().to_string();
+        assert!(
+            msg.contains("out of range"),
+            "expected 'out of range' in error: {msg}"
+        );
+    }
+
     // ── Error propagation ─────────────────────────────────────────────
 
     /// A mock trust reader that always returns an infrastructure error.
