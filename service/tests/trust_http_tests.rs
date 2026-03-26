@@ -3607,6 +3607,176 @@ impl TrustRepo for StubScoresMeReturnsError {
     }
 }
 
+// ─── Stub TrustRepo for list_my_denouncements 500 error ─────────────────────
+
+/// Stub [`TrustRepo`] that returns a database error from
+/// `list_denouncements_by_with_username`, simulating a failing query in
+/// `list_my_denouncements_handler`.  All other methods panic — they must never
+/// be reached in this test.
+struct StubListDenouncementsReturnsError;
+
+#[async_trait]
+impl TrustRepo for StubListDenouncementsReturnsError {
+    async fn list_denouncements_by_with_username(
+        &self,
+        _accuser_id: Uuid,
+    ) -> Result<Vec<DenouncementWithUsername>, TrustRepoError> {
+        Err(TrustRepoError::Database(sqlx::Error::RowNotFound))
+    }
+
+    async fn get_or_create_influence(
+        &self,
+        _user_id: Uuid,
+    ) -> Result<InfluenceRecord, TrustRepoError> {
+        unimplemented!("StubListDenouncementsReturnsError: must not be called in this test")
+    }
+    async fn enqueue_action(
+        &self,
+        _actor_id: Uuid,
+        _action_type: ActionType,
+        _payload: &serde_json::Value,
+    ) -> Result<ActionRecord, TrustRepoError> {
+        unimplemented!("StubListDenouncementsReturnsError: must not be called in this test")
+    }
+    async fn count_daily_actions(&self, _actor_id: Uuid) -> Result<i64, TrustRepoError> {
+        unimplemented!("StubListDenouncementsReturnsError: must not be called in this test")
+    }
+    async fn get_action(&self, _action_id: Uuid) -> Result<ActionRecord, TrustRepoError> {
+        unimplemented!("StubListDenouncementsReturnsError: must not be called in this test")
+    }
+    async fn complete_action(&self, _action_id: Uuid) -> Result<(), TrustRepoError> {
+        unimplemented!("StubListDenouncementsReturnsError: must not be called in this test")
+    }
+    async fn fail_action(&self, _action_id: Uuid, _error: &str) -> Result<(), TrustRepoError> {
+        unimplemented!("StubListDenouncementsReturnsError: must not be called in this test")
+    }
+    async fn create_denouncement(
+        &self,
+        _accuser_id: Uuid,
+        _target_id: Uuid,
+        _reason: &str,
+    ) -> Result<DenouncementRecord, TrustRepoError> {
+        unimplemented!("StubListDenouncementsReturnsError: must not be called in this test")
+    }
+    async fn create_denouncement_and_revoke_endorsement(
+        &self,
+        _accuser_id: Uuid,
+        _target_id: Uuid,
+        _reason: &str,
+    ) -> Result<DenouncementRecord, TrustRepoError> {
+        unimplemented!("StubListDenouncementsReturnsError: must not be called in this test")
+    }
+    async fn list_denouncements_against(
+        &self,
+        _target_id: Uuid,
+    ) -> Result<Vec<DenouncementRecord>, TrustRepoError> {
+        unimplemented!("StubListDenouncementsReturnsError: must not be called in this test")
+    }
+    async fn list_denouncements_by(
+        &self,
+        _accuser_id: Uuid,
+    ) -> Result<Vec<DenouncementRecord>, TrustRepoError> {
+        unimplemented!("StubListDenouncementsReturnsError: must not be called in this test")
+    }
+    async fn count_total_denouncements_by(&self, _accuser_id: Uuid) -> Result<i64, TrustRepoError> {
+        unimplemented!("StubListDenouncementsReturnsError: must not be called in this test")
+    }
+    async fn has_active_denouncement(
+        &self,
+        _accuser_id: Uuid,
+        _target_id: Uuid,
+    ) -> Result<bool, TrustRepoError> {
+        unimplemented!("StubListDenouncementsReturnsError: must not be called in this test")
+    }
+    async fn create_invite(
+        &self,
+        _endorser_id: Uuid,
+        _envelope: &[u8],
+        _delivery_method: DeliveryMethod,
+        _relationship_depth: Option<RelationshipDepth>,
+        _weight: f32,
+        _attestation: &serde_json::Value,
+        _expires_at: chrono::DateTime<chrono::Utc>,
+    ) -> Result<InviteRecord, TrustRepoError> {
+        unimplemented!("StubListDenouncementsReturnsError: must not be called in this test")
+    }
+    async fn get_invite(&self, _invite_id: Uuid) -> Result<InviteRecord, TrustRepoError> {
+        unimplemented!("StubListDenouncementsReturnsError: must not be called in this test")
+    }
+    async fn accept_invite(
+        &self,
+        _invite_id: Uuid,
+        _accepted_by: Uuid,
+    ) -> Result<InviteRecord, TrustRepoError> {
+        unimplemented!("StubListDenouncementsReturnsError: must not be called in this test")
+    }
+    async fn list_invites_by_endorser(
+        &self,
+        _endorser_id: Uuid,
+    ) -> Result<Vec<InviteRecord>, TrustRepoError> {
+        unimplemented!("StubListDenouncementsReturnsError: must not be called in this test")
+    }
+    async fn upsert_score(
+        &self,
+        _user_id: Uuid,
+        _context_user_id: Option<Uuid>,
+        _distance: Option<f32>,
+        _diversity: Option<i32>,
+        _centrality: Option<f32>,
+    ) -> Result<(), TrustRepoError> {
+        unimplemented!("StubListDenouncementsReturnsError: must not be called in this test")
+    }
+    async fn get_score(
+        &self,
+        _user_id: Uuid,
+        _context_user_id: Option<Uuid>,
+    ) -> Result<Option<ScoreSnapshot>, TrustRepoError> {
+        unimplemented!("StubListDenouncementsReturnsError: must not be called in this test")
+    }
+    async fn get_all_scores(&self, _user_id: Uuid) -> Result<Vec<ScoreSnapshot>, TrustRepoError> {
+        unimplemented!("StubListDenouncementsReturnsError: must not be called in this test")
+    }
+    async fn has_identity_endorsement(
+        &self,
+        _user_id: Uuid,
+        _verifier_ids: &[Uuid],
+        _topic: &str,
+    ) -> Result<bool, TrustRepoError> {
+        unimplemented!("StubListDenouncementsReturnsError: must not be called in this test")
+    }
+}
+
+/// When `list_denouncements_by_with_username` returns a database error,
+/// `list_my_denouncements_handler` must return 500 Internal Server Error.
+///
+/// A stub repo simulates the database failure; the handler must propagate it
+/// via `trust_repo_error_response` rather than panic or swallow it.
+#[shared_runtime_test]
+async fn list_my_denouncements_returns_500_when_db_fails() {
+    let db = isolated_db().await;
+    let (_, keys, _) = signup_and_get_account("denouncementdberr", db.pool()).await;
+
+    let app = TestAppBuilder::new()
+        .with_identity_pool(db.pool().clone())
+        .with_stub_trust_repo(Arc::new(StubListDenouncementsReturnsError))
+        .build();
+
+    let request = build_authed_request(
+        Method::GET,
+        "/trust/denouncements/mine",
+        "",
+        &keys.device_signing_key,
+        &keys.device_kid,
+    );
+
+    let response = app.oneshot(request).await.expect("response");
+    assert_eq!(
+        response.status(),
+        StatusCode::INTERNAL_SERVER_ERROR,
+        "list_my_denouncements_handler must return 500 when list_denouncements_by_with_username query fails"
+    );
+}
+
 /// When `get_all_scores` returns a database error, `scores_me_handler` must
 /// return 500 Internal Server Error.
 ///
