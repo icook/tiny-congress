@@ -4734,6 +4734,84 @@ async fn denounce_handler_returns_500_when_service_db_fails() {
 
 // ─── Stub TrustService for endorse_handler 500 error ─────────────────────────
 
+// ─── Stub TrustService for endorse_handler EndorsementRepo 500 error ─────────
+
+/// Stub [`TrustService`] that returns an endorsement repo error from `endorse`,
+/// simulating a failure propagated as [`TrustServiceError::EndorsementRepo`].
+/// All other methods panic — they must never be reached in this test.
+struct StubEndorseServiceEndorsementRepoError;
+
+#[async_trait]
+impl TrustService for StubEndorseServiceEndorsementRepoError {
+    async fn endorse(
+        &self,
+        _endorser_id: Uuid,
+        _subject_id: Uuid,
+        _weight: f32,
+        _attestation: Option<serde_json::Value>,
+    ) -> Result<(), TrustServiceError> {
+        Err(TrustServiceError::EndorsementRepo(
+            EndorsementRepoError::Database(sqlx::Error::RowNotFound),
+        ))
+    }
+    async fn revoke_endorsement(
+        &self,
+        _endorser_id: Uuid,
+        _subject_id: Uuid,
+    ) -> Result<(), TrustServiceError> {
+        unimplemented!("StubEndorseServiceEndorsementRepoError: must not be called in this test")
+    }
+    async fn denounce(
+        &self,
+        _accuser_id: Uuid,
+        _target_id: Uuid,
+        _reason: &str,
+    ) -> Result<(), TrustServiceError> {
+        unimplemented!("StubEndorseServiceEndorsementRepoError: must not be called in this test")
+    }
+}
+
+/// When the trust service returns an endorsement repo error, `endorse_handler`
+/// must return 500 Internal Server Error.
+///
+/// `TrustServiceError::EndorsementRepo` wraps a reputation repo failure and maps
+/// to 500 via `trust_service_error_response`. This exercises the distinct match
+/// arm for `EndorsementRepo` (as opposed to `Repo`, which wraps `TrustRepoError`).
+/// The `EndorsementRepo` variant is reachable in production when the verifier
+/// check (`has_endorsement`) or slot count (`count_active_trust_endorsements_by`)
+/// fails during `DefaultTrustService::endorse`.
+#[shared_runtime_test]
+async fn endorse_handler_returns_500_when_service_propagates_endorsement_repo_error() {
+    let db = isolated_db().await;
+    let (_, keys, _) = signup_and_get_account("endorserepofail", db.pool()).await;
+
+    let app = TestAppBuilder::new()
+        .with_identity_pool(db.pool().clone())
+        .with_stub_trust_repo(Arc::new(NeverCalledTrustRepo))
+        .with_stub_trust_service(Arc::new(StubEndorseServiceEndorsementRepoError))
+        .build();
+
+    let body = serde_json::json!({
+        "subject_id": Uuid::new_v4(),
+        "weight": 1.0
+    })
+    .to_string();
+    let request = build_authed_request(
+        Method::POST,
+        "/trust/endorse",
+        &body,
+        &keys.device_signing_key,
+        &keys.device_kid,
+    );
+
+    let response = app.oneshot(request).await.expect("response");
+    assert_eq!(
+        response.status(),
+        StatusCode::INTERNAL_SERVER_ERROR,
+        "endorse_handler must return 500 when service propagates EndorsementRepo error"
+    );
+}
+
 /// When the trust service returns a database error, `endorse_handler` must
 /// return 500 Internal Server Error.
 ///
