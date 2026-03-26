@@ -7,4 +7,4 @@ pub mod config;
 pub mod tasks;
 pub mod worker;
 
-pub use config::{BotConfig, Quality, RunMode};
+pub use config::{BotConfig, CompanyTopic, Quality, RunMode};

@@ -1,6 +1,6 @@
 //! Bot configuration types deserialized from `rooms__rooms.engine_config.bot`.
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 // ─── Default value helpers ───────────────────────────────────────────────────
 
@@ -31,7 +31,7 @@ const fn default_target_companies() -> u32 {
 // ─── Enums ───────────────────────────────────────────────────────────────────
 
 /// Controls how the bot processes room topics each run.
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum RunMode {
     /// Process only topics not yet covered (incremental).
@@ -43,7 +43,7 @@ pub enum RunMode {
 }
 
 /// Research depth / cost trade-off for a bot run.
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Quality {
     Low,
@@ -51,10 +51,20 @@ pub enum Quality {
     High,
 }
 
+// ─── CompanyTopic ─────────────────────────────────────────────────────────────
+
+/// A company to research in a bot run.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CompanyTopic {
+    pub company: String,
+    #[serde(default)]
+    pub ticker: Option<String>,
+}
+
 // ─── BotConfig ────────────────────────────────────────────────────────────────
 
 /// Bot configuration extracted from a room's `engine_config` JSONB.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BotConfig {
     /// Whether the bot is enabled for this room.
     #[serde(default = "default_enabled")]
@@ -82,6 +92,14 @@ pub struct BotConfig {
     /// Number of companies to target per run.
     #[serde(default = "default_target_companies")]
     pub target_companies: u32,
+
+    /// Ordered list of company topics for this room.
+    #[serde(default)]
+    pub topics: Vec<CompanyTopic>,
+
+    /// Index of the next topic to process (cursor for incremental runs).
+    #[serde(default)]
+    pub topic_cursor: usize,
 }
 
 impl BotConfig {
@@ -172,5 +190,35 @@ mod tests {
         assert_eq!(bot.search_provider, "exa");
         assert_eq!(bot.quality, Quality::High);
         assert_eq!(bot.target_companies, 1);
+    }
+
+    #[test]
+    fn from_engine_config_parses_topics() {
+        let config = serde_json::json!({
+            "bot": {
+                "enabled": true,
+                "topics": [
+                    { "company": "Apple", "ticker": "AAPL" },
+                    { "company": "Google" }
+                ],
+                "topic_cursor": 1
+            }
+        });
+        let bot = BotConfig::from_engine_config(&config).unwrap();
+        assert_eq!(bot.topics.len(), 2);
+        assert_eq!(bot.topics[0].company, "Apple");
+        assert_eq!(bot.topics[0].ticker.as_deref(), Some("AAPL"));
+        assert_eq!(bot.topics[1].ticker, None);
+        assert_eq!(bot.topic_cursor, 1);
+    }
+
+    #[test]
+    fn from_engine_config_defaults_topics_empty() {
+        let config = serde_json::json!({
+            "bot": { "enabled": true }
+        });
+        let bot = BotConfig::from_engine_config(&config).unwrap();
+        assert!(bot.topics.is_empty());
+        assert_eq!(bot.topic_cursor, 0);
     }
 }
