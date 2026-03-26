@@ -137,4 +137,27 @@ mod tests {
         assert_eq!(json["detail"], "Internal server error");
         assert_ne!(json["detail"], "db connection lost");
     }
+
+    #[tokio::test]
+    async fn into_response_includes_detail_for_non_internal_error() {
+        let err = EngineError::NotFound("room 42 not found".into());
+        let response = err.into_response();
+
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+
+        // Non-internal errors MUST surface their message in the detail field.
+        assert_eq!(json["detail"], "room 42 not found");
+        assert_eq!(json["status"], 404u16);
+        assert_eq!(json["title"], "Not Found");
+        assert!(
+            json["type"].as_str().unwrap().contains("not-found"),
+            "expected type slug 'not-found' in type field: {}",
+            json["type"]
+        );
+    }
 }
