@@ -4405,3 +4405,74 @@ async fn accept_invite_handler_returns_500_when_accept_invite_db_fails() {
         "accept_invite_handler must return 500 when accept_invite query fails"
     );
 }
+
+// ─── Stub TrustService returning a db error from revoke_endorsement ───────────
+
+/// Stub [`TrustService`] that returns a database error from `revoke_endorsement`.
+/// All other methods panic — they must never be reached in this test.
+struct StubRevokeServiceDbError;
+
+#[async_trait]
+impl TrustService for StubRevokeServiceDbError {
+    async fn endorse(
+        &self,
+        _endorser_id: Uuid,
+        _subject_id: Uuid,
+        _weight: f32,
+        _attestation: Option<serde_json::Value>,
+    ) -> Result<(), TrustServiceError> {
+        unimplemented!("StubRevokeServiceDbError: must not be called in this test")
+    }
+    async fn revoke_endorsement(
+        &self,
+        _endorser_id: Uuid,
+        _subject_id: Uuid,
+    ) -> Result<(), TrustServiceError> {
+        Err(TrustServiceError::Repo(TrustRepoError::Database(
+            sqlx::Error::RowNotFound,
+        )))
+    }
+    async fn denounce(
+        &self,
+        _accuser_id: Uuid,
+        _target_id: Uuid,
+        _reason: &str,
+    ) -> Result<(), TrustServiceError> {
+        unimplemented!("StubRevokeServiceDbError: must not be called in this test")
+    }
+}
+
+/// `revoke_handler` must return 500 Internal Server Error when the trust service
+/// returns a database error.
+///
+/// This tests the `trust_service_error_response` wiring for the revoke handler —
+/// specifically that `TrustServiceError::Repo(TrustRepoError::Database(…))` is
+/// forwarded to the error mapper rather than panicking or being swallowed.
+#[shared_runtime_test]
+async fn revoke_handler_returns_500_when_service_returns_db_error() {
+    let db = isolated_db().await;
+    let (_, keys, _) = signup_and_get_account("revoke500user", db.pool()).await;
+
+    let app = TestAppBuilder::new()
+        .with_identity_pool(db.pool().clone())
+        .with_stub_trust_repo(Arc::new(PanickingTrustRepo))
+        .with_stub_trust_service(Arc::new(StubRevokeServiceDbError))
+        .build();
+
+    let subject_id = Uuid::new_v4();
+    let body = serde_json::json!({ "subject_id": subject_id }).to_string();
+    let request = build_authed_request(
+        Method::POST,
+        "/trust/revoke",
+        &body,
+        &keys.device_signing_key,
+        &keys.device_kid,
+    );
+
+    let response = app.oneshot(request).await.expect("response");
+    assert_eq!(
+        response.status(),
+        StatusCode::INTERNAL_SERVER_ERROR,
+        "revoke_handler must return 500 when the service returns a database error"
+    );
+}
