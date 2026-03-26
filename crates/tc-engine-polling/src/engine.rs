@@ -104,8 +104,10 @@ impl RoomEngine for PollingEngine {
                 .unwrap_or_else(|_| "deepseek/deepseek-chat-v3-0324".to_string()),
         };
 
+        let scheduler_handle = crate::bot::scheduler::spawn_scheduler(ctx.pool.clone());
+
         let bot_handle = crate::bot::worker::spawn_bot_worker(ctx.pool, bot_config);
 
-        Ok(vec![lifecycle_handle, bot_handle])
+        Ok(vec![lifecycle_handle, bot_handle, scheduler_handle])
     }
 }
