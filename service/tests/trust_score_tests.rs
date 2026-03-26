@@ -235,6 +235,83 @@ async fn test_upsert_score_with_context_updates_on_conflict() {
 // ---------------------------------------------------------------------------
 // Test 7: graph reader — negative path_diversity treated as no score
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// graph_reader data-corruption guards
+// ---------------------------------------------------------------------------
+
+#[shared_runtime_test]
+async fn test_graph_reader_treats_null_trust_distance_as_no_score() {
+    let db = isolated_db().await;
+    let pool = db.pool().clone();
+
+    let user = AccountFactory::new()
+        .with_seed(81)
+        .create(&pool)
+        .await
+        .expect("create user");
+
+    // Insert a score with NULL trust_distance — simulates a partially-written row
+    // or data corruption. The guard must return None rather than propagating None
+    // into downstream engine-api consumers.
+    sqlx::query(
+        "INSERT INTO trust__score_snapshots \
+         (user_id, context_user_id, trust_distance, path_diversity, eigenvector_centrality) \
+         VALUES ($1, NULL, NULL, 1, 0.5)",
+    )
+    .bind(user.id)
+    .execute(&pool)
+    .await
+    .expect("insert score with null trust_distance");
+
+    let trust_repo = Arc::new(PgTrustRepo::new(pool));
+    let reader = TrustRepoGraphReader::new(trust_repo);
+    let score = reader
+        .get_score(user.id, None)
+        .await
+        .expect("get_score should not error on corrupt data");
+
+    assert!(
+        score.is_none(),
+        "NULL trust_distance should be treated as no score (data corruption guard)"
+    );
+}
+
+#[shared_runtime_test]
+async fn test_graph_reader_treats_negative_trust_distance_as_no_score() {
+    let db = isolated_db().await;
+    let pool = db.pool().clone();
+
+    let user = AccountFactory::new()
+        .with_seed(82)
+        .create(&pool)
+        .await
+        .expect("create user");
+
+    // Insert a score with negative trust_distance — the engine never writes
+    // negative distances (min is 0.0 for the anchor), so this signals corruption.
+    sqlx::query(
+        "INSERT INTO trust__score_snapshots \
+         (user_id, context_user_id, trust_distance, path_diversity, eigenvector_centrality) \
+         VALUES ($1, NULL, -1.0, 1, 0.5)",
+    )
+    .bind(user.id)
+    .execute(&pool)
+    .await
+    .expect("insert score with negative trust_distance");
+
+    let trust_repo = Arc::new(PgTrustRepo::new(pool));
+    let reader = TrustRepoGraphReader::new(trust_repo);
+    let score = reader
+        .get_score(user.id, None)
+        .await
+        .expect("get_score should not error on corrupt data");
+
+    assert!(
+        score.is_none(),
+        "negative trust_distance should be treated as no score (data corruption guard)"
+    );
+}
+
 #[shared_runtime_test]
 async fn test_graph_reader_treats_negative_path_diversity_as_no_score() {
     let db = isolated_db().await;
