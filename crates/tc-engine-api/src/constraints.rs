@@ -435,19 +435,27 @@ pub fn build_constraint(
             Ok(Box::new(CongressConstraint::new(anchor_id, min_diversity)?))
         }
         "identity_verified" => {
-            let verifier_ids = config
+            let arr = config
                 .get("verifier_ids")
                 .and_then(|v| v.as_array())
-                .map(|arr| {
-                    arr.iter()
-                        .filter_map(|v| v.as_str().and_then(|s| Uuid::parse_str(s).ok()))
-                        .collect::<Vec<_>>()
-                })
                 .ok_or_else(|| {
                     anyhow::anyhow!(
                         "identity_verified constraint requires verifier_ids array in config"
                     )
                 })?;
+            let verifier_ids = arr
+                .iter()
+                .enumerate()
+                .map(|(i, v)| {
+                    v.as_str()
+                        .and_then(|s| Uuid::parse_str(s).ok())
+                        .ok_or_else(|| {
+                            anyhow::anyhow!(
+                                "identity_verified constraint: verifier_ids[{i}] is not a valid UUID"
+                            )
+                        })
+                })
+                .collect::<Result<Vec<_>, _>>()?;
             if verifier_ids.is_empty() {
                 anyhow::bail!("identity_verified constraint requires at least one verifier_id");
             }
@@ -952,6 +960,25 @@ mod tests {
         assert!(result.err().unwrap().to_string().contains("verifier_ids"));
     }
 
+    #[test]
+    fn build_identity_verified_rejects_invalid_uuid_in_array() {
+        let valid = Uuid::new_v4();
+        let config = serde_json::json!({
+            "verifier_ids": [valid.to_string(), "not-a-uuid"]
+        });
+        let result = build_constraint("identity_verified", &config);
+        assert!(result.is_err());
+        let msg = result.err().unwrap().to_string();
+        assert!(
+            msg.contains("verifier_ids[1]"),
+            "expected index in error: {msg}"
+        );
+        assert!(
+            msg.contains("valid UUID"),
+            "expected 'valid UUID' in error: {msg}"
+        );
+    }
+
     // ── Error propagation ─────────────────────────────────────────────
 
     /// A mock trust reader that always returns an infrastructure error.
@@ -982,7 +1009,10 @@ mod tests {
         let user = Uuid::new_v4();
         let anchor = Uuid::new_v4();
         let constraint = EndorsedByConstraint::new(anchor);
-        let err = constraint.check(user, &FailingTrustReader).await.unwrap_err();
+        let err = constraint
+            .check(user, &FailingTrustReader)
+            .await
+            .unwrap_err();
         assert!(err.to_string().contains("trust reader error"));
     }
 
@@ -991,7 +1021,10 @@ mod tests {
         let user = Uuid::new_v4();
         let anchor = Uuid::new_v4();
         let constraint = CommunityConstraint::new(anchor, 5.0, 2).unwrap();
-        let err = constraint.check(user, &FailingTrustReader).await.unwrap_err();
+        let err = constraint
+            .check(user, &FailingTrustReader)
+            .await
+            .unwrap_err();
         assert!(err.to_string().contains("trust reader error"));
     }
 
@@ -1000,7 +1033,10 @@ mod tests {
         let user = Uuid::new_v4();
         let anchor = Uuid::new_v4();
         let constraint = CongressConstraint::new(anchor, 3).unwrap();
-        let err = constraint.check(user, &FailingTrustReader).await.unwrap_err();
+        let err = constraint
+            .check(user, &FailingTrustReader)
+            .await
+            .unwrap_err();
         assert!(err.to_string().contains("trust reader error"));
     }
 
@@ -1009,7 +1045,10 @@ mod tests {
         let user = Uuid::new_v4();
         let owner = Uuid::new_v4(); // distinct from user — avoids the owner short-circuit
         let constraint = EndorsedByUserConstraint::new(owner);
-        let err = constraint.check(user, &FailingTrustReader).await.unwrap_err();
+        let err = constraint
+            .check(user, &FailingTrustReader)
+            .await
+            .unwrap_err();
         assert!(err.to_string().contains("trust reader error"));
     }
 
@@ -1018,7 +1057,10 @@ mod tests {
         let user = Uuid::new_v4();
         let verifier = Uuid::new_v4();
         let constraint = IdentityVerifiedConstraint::new(vec![verifier], "identity_verified");
-        let err = constraint.check(user, &FailingTrustReader).await.unwrap_err();
+        let err = constraint
+            .check(user, &FailingTrustReader)
+            .await
+            .unwrap_err();
         assert!(err.to_string().contains("trust reader error"));
     }
 
