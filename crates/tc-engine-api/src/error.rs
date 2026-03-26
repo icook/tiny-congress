@@ -120,4 +120,21 @@ mod tests {
         let err = EngineError::Internal(anyhow::anyhow!("db connection lost"));
         assert_eq!(err.to_string(), "db connection lost");
     }
+
+    #[tokio::test]
+    async fn into_response_masks_internal_error_detail() {
+        let err = EngineError::Internal(anyhow::anyhow!("db connection lost"));
+        let response = err.into_response();
+
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+
+        // Internal errors MUST NOT leak implementation details to clients.
+        assert_eq!(json["detail"], "Internal server error");
+        assert_ne!(json["detail"], "db connection lost");
+    }
 }
