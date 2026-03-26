@@ -10,8 +10,7 @@ name: Refinement Loop
 #                              Run: ./scripts/refine-setup.sh
 
 on:
-  schedule:
-    - cron: '0 */2 * * *'
+  # schedule disabled — re-enable with: cron: '0 */2 * * *'
   workflow_dispatch:
     inputs:
       max_prs:
