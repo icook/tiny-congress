@@ -3449,3 +3449,191 @@ async fn budget_returns_500_when_denouncements_count_fails() {
         "budget_handler must return 500 when denouncement count query fails"
     );
 }
+
+// ─── Stub TrustRepo for scores_me 500 error ──────────────────────────────────
+
+/// Stub [`TrustRepo`] that returns a database error from `get_all_scores`,
+/// simulating the failure path in `scores_me_handler`.  All other methods
+/// panic — they must never be reached in this test.
+struct StubScoresMeTrustRepoError;
+
+#[async_trait]
+impl TrustRepo for StubScoresMeTrustRepoError {
+    async fn get_all_scores(&self, _user_id: Uuid) -> Result<Vec<ScoreSnapshot>, TrustRepoError> {
+        Err(TrustRepoError::Database(sqlx::Error::RowNotFound))
+    }
+
+    async fn get_or_create_influence(
+        &self,
+        _user_id: Uuid,
+    ) -> Result<InfluenceRecord, TrustRepoError> {
+        unimplemented!("StubScoresMeTrustRepoError: must not be called in this test")
+    }
+
+    async fn enqueue_action(
+        &self,
+        _actor_id: Uuid,
+        _action_type: ActionType,
+        _payload: &serde_json::Value,
+    ) -> Result<ActionRecord, TrustRepoError> {
+        unimplemented!("StubScoresMeTrustRepoError: must not be called in this test")
+    }
+
+    async fn count_daily_actions(&self, _actor_id: Uuid) -> Result<i64, TrustRepoError> {
+        unimplemented!("StubScoresMeTrustRepoError: must not be called in this test")
+    }
+
+    async fn get_action(&self, _action_id: Uuid) -> Result<ActionRecord, TrustRepoError> {
+        unimplemented!("StubScoresMeTrustRepoError: must not be called in this test")
+    }
+
+    async fn complete_action(&self, _action_id: Uuid) -> Result<(), TrustRepoError> {
+        unimplemented!("StubScoresMeTrustRepoError: must not be called in this test")
+    }
+
+    async fn fail_action(&self, _action_id: Uuid, _error: &str) -> Result<(), TrustRepoError> {
+        unimplemented!("StubScoresMeTrustRepoError: must not be called in this test")
+    }
+
+    async fn create_denouncement(
+        &self,
+        _accuser_id: Uuid,
+        _target_id: Uuid,
+        _reason: &str,
+    ) -> Result<DenouncementRecord, TrustRepoError> {
+        unimplemented!("StubScoresMeTrustRepoError: must not be called in this test")
+    }
+
+    async fn create_denouncement_and_revoke_endorsement(
+        &self,
+        _accuser_id: Uuid,
+        _target_id: Uuid,
+        _reason: &str,
+    ) -> Result<DenouncementRecord, TrustRepoError> {
+        unimplemented!("StubScoresMeTrustRepoError: must not be called in this test")
+    }
+
+    async fn list_denouncements_against(
+        &self,
+        _target_id: Uuid,
+    ) -> Result<Vec<DenouncementRecord>, TrustRepoError> {
+        unimplemented!("StubScoresMeTrustRepoError: must not be called in this test")
+    }
+
+    async fn list_denouncements_by(
+        &self,
+        _accuser_id: Uuid,
+    ) -> Result<Vec<DenouncementRecord>, TrustRepoError> {
+        unimplemented!("StubScoresMeTrustRepoError: must not be called in this test")
+    }
+
+    async fn list_denouncements_by_with_username(
+        &self,
+        _accuser_id: Uuid,
+    ) -> Result<Vec<DenouncementWithUsername>, TrustRepoError> {
+        unimplemented!("StubScoresMeTrustRepoError: must not be called in this test")
+    }
+
+    async fn count_total_denouncements_by(&self, _accuser_id: Uuid) -> Result<i64, TrustRepoError> {
+        unimplemented!("StubScoresMeTrustRepoError: must not be called in this test")
+    }
+
+    async fn has_active_denouncement(
+        &self,
+        _accuser_id: Uuid,
+        _target_id: Uuid,
+    ) -> Result<bool, TrustRepoError> {
+        unimplemented!("StubScoresMeTrustRepoError: must not be called in this test")
+    }
+
+    async fn create_invite(
+        &self,
+        _endorser_id: Uuid,
+        _envelope: &[u8],
+        _delivery_method: DeliveryMethod,
+        _relationship_depth: Option<RelationshipDepth>,
+        _weight: f32,
+        _attestation: &serde_json::Value,
+        _expires_at: chrono::DateTime<chrono::Utc>,
+    ) -> Result<InviteRecord, TrustRepoError> {
+        unimplemented!("StubScoresMeTrustRepoError: must not be called in this test")
+    }
+
+    async fn get_invite(&self, _invite_id: Uuid) -> Result<InviteRecord, TrustRepoError> {
+        unimplemented!("StubScoresMeTrustRepoError: must not be called in this test")
+    }
+
+    async fn accept_invite(
+        &self,
+        _invite_id: Uuid,
+        _accepted_by: Uuid,
+    ) -> Result<InviteRecord, TrustRepoError> {
+        unimplemented!("StubScoresMeTrustRepoError: must not be called in this test")
+    }
+
+    async fn list_invites_by_endorser(
+        &self,
+        _endorser_id: Uuid,
+    ) -> Result<Vec<InviteRecord>, TrustRepoError> {
+        unimplemented!("StubScoresMeTrustRepoError: must not be called in this test")
+    }
+
+    async fn upsert_score(
+        &self,
+        _user_id: Uuid,
+        _context_user_id: Option<Uuid>,
+        _distance: Option<f32>,
+        _diversity: Option<i32>,
+        _centrality: Option<f32>,
+    ) -> Result<(), TrustRepoError> {
+        unimplemented!("StubScoresMeTrustRepoError: must not be called in this test")
+    }
+
+    async fn get_score(
+        &self,
+        _user_id: Uuid,
+        _context_user_id: Option<Uuid>,
+    ) -> Result<Option<ScoreSnapshot>, TrustRepoError> {
+        unimplemented!("StubScoresMeTrustRepoError: must not be called in this test")
+    }
+
+    async fn has_identity_endorsement(
+        &self,
+        _user_id: Uuid,
+        _verifier_ids: &[Uuid],
+        _topic: &str,
+    ) -> Result<bool, TrustRepoError> {
+        unimplemented!("StubScoresMeTrustRepoError: must not be called in this test")
+    }
+}
+
+/// When `get_all_scores` returns a database error, `scores_me_handler` must
+/// return 500 Internal Server Error.
+///
+/// A stub repo simulates the database failure to confirm the error path fires
+/// correctly.
+#[shared_runtime_test]
+async fn scores_me_returns_500_when_get_all_scores_fails() {
+    let db = isolated_db().await;
+    let (_, keys, _) = signup_and_get_account("scoresmeerror", db.pool()).await;
+
+    let app = TestAppBuilder::new()
+        .with_identity_pool(db.pool().clone())
+        .with_stub_trust_repo(Arc::new(StubScoresMeTrustRepoError))
+        .build();
+
+    let request = build_authed_request(
+        Method::GET,
+        "/trust/scores/me",
+        "",
+        &keys.device_signing_key,
+        &keys.device_kid,
+    );
+
+    let response = app.oneshot(request).await.expect("response");
+    assert_eq!(
+        response.status(),
+        StatusCode::INTERNAL_SERVER_ERROR,
+        "scores_me_handler must return 500 when get_all_scores fails"
+    );
+}
