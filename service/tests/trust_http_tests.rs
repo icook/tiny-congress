@@ -4405,3 +4405,217 @@ async fn accept_invite_handler_returns_500_when_accept_invite_db_fails() {
         "accept_invite_handler must return 500 when accept_invite query fails"
     );
 }
+
+// ─── Stub TrustService for endorse_handler 500 error ─────────────────────────
+
+/// Stub [`TrustService`] that returns a database error from `endorse`,
+/// simulating a repo failure propagated as [`TrustServiceError::Repo`].
+/// All other methods panic — they must never be reached in this test.
+struct StubEndorseServiceDbError;
+
+#[async_trait]
+impl TrustService for StubEndorseServiceDbError {
+    async fn endorse(
+        &self,
+        _endorser_id: Uuid,
+        _subject_id: Uuid,
+        _weight: f32,
+        _attestation: Option<serde_json::Value>,
+    ) -> Result<(), TrustServiceError> {
+        Err(TrustServiceError::Repo(TrustRepoError::Database(
+            sqlx::Error::RowNotFound,
+        )))
+    }
+    async fn revoke_endorsement(
+        &self,
+        _endorser_id: Uuid,
+        _subject_id: Uuid,
+    ) -> Result<(), TrustServiceError> {
+        unimplemented!("StubEndorseServiceDbError: must not be called in this test")
+    }
+    async fn denounce(
+        &self,
+        _accuser_id: Uuid,
+        _target_id: Uuid,
+        _reason: &str,
+    ) -> Result<(), TrustServiceError> {
+        unimplemented!("StubEndorseServiceDbError: must not be called in this test")
+    }
+}
+
+/// Stub [`TrustRepo`] that panics on every method.
+///
+/// Used in tests that exercise a handler code path that calls only the
+/// [`TrustService`] extension, never the [`TrustRepo`] extension directly.
+/// Registered solely to satisfy the `include_trust` requirement in
+/// [`TestAppBuilder`].
+struct NeverCalledTrustRepo;
+
+#[async_trait]
+impl TrustRepo for NeverCalledTrustRepo {
+    async fn get_or_create_influence(
+        &self,
+        _user_id: Uuid,
+    ) -> Result<InfluenceRecord, TrustRepoError> {
+        unimplemented!("NeverCalledTrustRepo: must not be called in this test")
+    }
+    async fn enqueue_action(
+        &self,
+        _actor_id: Uuid,
+        _action_type: ActionType,
+        _payload: &serde_json::Value,
+    ) -> Result<ActionRecord, TrustRepoError> {
+        unimplemented!("NeverCalledTrustRepo: must not be called in this test")
+    }
+    async fn count_daily_actions(&self, _actor_id: Uuid) -> Result<i64, TrustRepoError> {
+        unimplemented!("NeverCalledTrustRepo: must not be called in this test")
+    }
+    async fn get_action(&self, _action_id: Uuid) -> Result<ActionRecord, TrustRepoError> {
+        unimplemented!("NeverCalledTrustRepo: must not be called in this test")
+    }
+    async fn complete_action(&self, _action_id: Uuid) -> Result<(), TrustRepoError> {
+        unimplemented!("NeverCalledTrustRepo: must not be called in this test")
+    }
+    async fn fail_action(&self, _action_id: Uuid, _error: &str) -> Result<(), TrustRepoError> {
+        unimplemented!("NeverCalledTrustRepo: must not be called in this test")
+    }
+    async fn create_denouncement(
+        &self,
+        _accuser_id: Uuid,
+        _target_id: Uuid,
+        _reason: &str,
+    ) -> Result<DenouncementRecord, TrustRepoError> {
+        unimplemented!("NeverCalledTrustRepo: must not be called in this test")
+    }
+    async fn create_denouncement_and_revoke_endorsement(
+        &self,
+        _accuser_id: Uuid,
+        _target_id: Uuid,
+        _reason: &str,
+    ) -> Result<DenouncementRecord, TrustRepoError> {
+        unimplemented!("NeverCalledTrustRepo: must not be called in this test")
+    }
+    async fn list_denouncements_against(
+        &self,
+        _target_id: Uuid,
+    ) -> Result<Vec<DenouncementRecord>, TrustRepoError> {
+        unimplemented!("NeverCalledTrustRepo: must not be called in this test")
+    }
+    async fn list_denouncements_by(
+        &self,
+        _accuser_id: Uuid,
+    ) -> Result<Vec<DenouncementRecord>, TrustRepoError> {
+        unimplemented!("NeverCalledTrustRepo: must not be called in this test")
+    }
+    async fn list_denouncements_by_with_username(
+        &self,
+        _accuser_id: Uuid,
+    ) -> Result<Vec<DenouncementWithUsername>, TrustRepoError> {
+        unimplemented!("NeverCalledTrustRepo: must not be called in this test")
+    }
+    async fn count_total_denouncements_by(&self, _accuser_id: Uuid) -> Result<i64, TrustRepoError> {
+        unimplemented!("NeverCalledTrustRepo: must not be called in this test")
+    }
+    async fn has_active_denouncement(
+        &self,
+        _accuser_id: Uuid,
+        _target_id: Uuid,
+    ) -> Result<bool, TrustRepoError> {
+        unimplemented!("NeverCalledTrustRepo: must not be called in this test")
+    }
+    async fn create_invite(
+        &self,
+        _endorser_id: Uuid,
+        _envelope: &[u8],
+        _delivery_method: DeliveryMethod,
+        _relationship_depth: Option<RelationshipDepth>,
+        _weight: f32,
+        _attestation: &serde_json::Value,
+        _expires_at: chrono::DateTime<chrono::Utc>,
+    ) -> Result<InviteRecord, TrustRepoError> {
+        unimplemented!("NeverCalledTrustRepo: must not be called in this test")
+    }
+    async fn get_invite(&self, _invite_id: Uuid) -> Result<InviteRecord, TrustRepoError> {
+        unimplemented!("NeverCalledTrustRepo: must not be called in this test")
+    }
+    async fn accept_invite(
+        &self,
+        _invite_id: Uuid,
+        _accepted_by: Uuid,
+    ) -> Result<InviteRecord, TrustRepoError> {
+        unimplemented!("NeverCalledTrustRepo: must not be called in this test")
+    }
+    async fn list_invites_by_endorser(
+        &self,
+        _endorser_id: Uuid,
+    ) -> Result<Vec<InviteRecord>, TrustRepoError> {
+        unimplemented!("NeverCalledTrustRepo: must not be called in this test")
+    }
+    async fn upsert_score(
+        &self,
+        _user_id: Uuid,
+        _context_user_id: Option<Uuid>,
+        _distance: Option<f32>,
+        _diversity: Option<i32>,
+        _centrality: Option<f32>,
+    ) -> Result<(), TrustRepoError> {
+        unimplemented!("NeverCalledTrustRepo: must not be called in this test")
+    }
+    async fn get_score(
+        &self,
+        _user_id: Uuid,
+        _context_user_id: Option<Uuid>,
+    ) -> Result<Option<ScoreSnapshot>, TrustRepoError> {
+        unimplemented!("NeverCalledTrustRepo: must not be called in this test")
+    }
+    async fn get_all_scores(&self, _user_id: Uuid) -> Result<Vec<ScoreSnapshot>, TrustRepoError> {
+        unimplemented!("NeverCalledTrustRepo: must not be called in this test")
+    }
+    async fn has_identity_endorsement(
+        &self,
+        _user_id: Uuid,
+        _verifier_ids: &[Uuid],
+        _topic: &str,
+    ) -> Result<bool, TrustRepoError> {
+        unimplemented!("NeverCalledTrustRepo: must not be called in this test")
+    }
+}
+
+/// When the trust service returns a database error, `endorse_handler` must
+/// return 500 Internal Server Error.
+///
+/// `TrustServiceError::Repo` wraps the underlying repo failure and maps to
+/// 500 via `trust_service_error_response`.  This covers the code path where
+/// an unexpected DB error surfaces through the service layer rather than a
+/// user-visible error like `QuotaExceeded` or `SelfAction`.
+#[shared_runtime_test]
+async fn endorse_handler_returns_500_when_service_db_fails() {
+    let db = isolated_db().await;
+    let (_, keys, _) = signup_and_get_account("endorsesvcerr", db.pool()).await;
+
+    let app = TestAppBuilder::new()
+        .with_identity_pool(db.pool().clone())
+        .with_stub_trust_repo(Arc::new(NeverCalledTrustRepo))
+        .with_stub_trust_service(Arc::new(StubEndorseServiceDbError))
+        .build();
+
+    let body = serde_json::json!({
+        "subject_id": Uuid::new_v4(),
+        "weight": 1.0
+    })
+    .to_string();
+    let request = build_authed_request(
+        Method::POST,
+        "/trust/endorse",
+        &body,
+        &keys.device_signing_key,
+        &keys.device_kid,
+    );
+
+    let response = app.oneshot(request).await.expect("response");
+    assert_eq!(
+        response.status(),
+        StatusCode::INTERNAL_SERVER_ERROR,
+        "endorse_handler must return 500 when the service propagates a database error"
+    );
+}
