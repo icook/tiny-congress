@@ -230,3 +230,112 @@ impl Default for EngineRegistry {
         Self::new()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    struct MockEngine {
+        engine_type: &'static str,
+        display_name: &'static str,
+    }
+
+    impl MockEngine {
+        fn new(engine_type: &'static str, display_name: &'static str) -> Self {
+            Self {
+                engine_type,
+                display_name,
+            }
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl RoomEngine for MockEngine {
+        fn engine_type(&self) -> &'static str {
+            self.engine_type
+        }
+
+        fn metadata(&self) -> EngineMetadata {
+            EngineMetadata {
+                display_name: self.display_name.to_string(),
+                description: String::new(),
+            }
+        }
+
+        fn routes(&self) -> axum::Router<PlatformState> {
+            axum::Router::new()
+        }
+
+        fn config_schema(&self) -> serde_json::Value {
+            serde_json::json!({})
+        }
+
+        fn validate_config(&self, _config: &serde_json::Value) -> Result<(), EngineError> {
+            Ok(())
+        }
+
+        async fn on_room_created(
+            &self,
+            _room_id: Uuid,
+            _config: &serde_json::Value,
+            _ctx: &EngineContext,
+        ) -> Result<(), EngineError> {
+            Ok(())
+        }
+
+        fn start(
+            &self,
+            _ctx: EngineContext,
+        ) -> Result<Vec<tokio::task::JoinHandle<()>>, anyhow::Error> {
+            Ok(vec![])
+        }
+    }
+
+    #[test]
+    fn get_returns_none_for_unregistered_type() {
+        let registry = EngineRegistry::new();
+        assert!(registry.get("poll").is_none());
+    }
+
+    #[test]
+    fn get_returns_registered_engine() {
+        let mut registry = EngineRegistry::new();
+        registry.register(MockEngine::new("poll", "Poll"));
+        let engine = registry.get("poll").unwrap();
+        assert_eq!(engine.engine_type(), "poll");
+    }
+
+    #[test]
+    fn register_replaces_engine_with_same_type() {
+        let mut registry = EngineRegistry::new();
+        registry.register(MockEngine::new("poll", "Old Poll"));
+        registry.register(MockEngine::new("poll", "New Poll"));
+        let engine = registry.get("poll").unwrap();
+        assert_eq!(engine.metadata().display_name, "New Poll");
+    }
+
+    #[test]
+    fn all_returns_all_registered_engines() {
+        let mut registry = EngineRegistry::new();
+        registry.register(MockEngine::new("poll", "Poll"));
+        registry.register(MockEngine::new("deliberation", "Deliberation"));
+        assert_eq!(registry.all().len(), 2);
+    }
+
+    #[test]
+    fn engine_types_returns_type_strings_for_all_engines() {
+        let mut registry = EngineRegistry::new();
+        registry.register(MockEngine::new("poll", "Poll"));
+        registry.register(MockEngine::new("deliberation", "Deliberation"));
+        let mut types = registry.engine_types();
+        types.sort();
+        assert_eq!(types, vec!["deliberation", "poll"]);
+    }
+
+    #[test]
+    fn default_creates_empty_registry() {
+        let registry = EngineRegistry::default();
+        assert!(registry.all().is_empty());
+        assert!(registry.engine_types().is_empty());
+    }
+}
