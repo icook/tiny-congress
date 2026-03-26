@@ -3070,3 +3070,113 @@ async fn budget_returns_500_when_endorsement_count_fails() {
         "budget_handler must return 500 when endorsement count query fails"
     );
 }
+
+// ─── Stub ReputationRepo for budget all-endorsements 500 error ───────────────
+
+/// Stub [`ReputationRepo`] that lets `count_active_trust_endorsements_by` succeed
+/// but returns an error from `count_all_active_trust_endorsements_by`, simulating
+/// the second early-return 500 path in `budget_handler`.  All other methods panic.
+struct StubBudgetAllEndorsementsReturnsError;
+
+#[async_trait]
+impl ReputationRepo for StubBudgetAllEndorsementsReturnsError {
+    async fn count_active_trust_endorsements_by(
+        &self,
+        _endorser_id: Uuid,
+    ) -> Result<i64, EndorsementRepoError> {
+        Ok(0)
+    }
+
+    async fn count_all_active_trust_endorsements_by(
+        &self,
+        _endorser_id: Uuid,
+    ) -> Result<i64, EndorsementRepoError> {
+        Err(EndorsementRepoError::NotFound)
+    }
+
+    async fn create_endorsement(
+        &self,
+        _subject_id: Uuid,
+        _topic: &str,
+        _endorser_id: Option<Uuid>,
+        _evidence: Option<&serde_json::Value>,
+        _weight: f32,
+        _attestation: Option<&serde_json::Value>,
+        _in_slot: bool,
+    ) -> Result<CreatedEndorsement, EndorsementRepoError> {
+        unimplemented!("StubBudgetAllEndorsementsReturnsError: not needed for this test")
+    }
+
+    async fn has_endorsement(
+        &self,
+        _subject_id: Uuid,
+        _topic: &str,
+    ) -> Result<bool, EndorsementRepoError> {
+        unimplemented!("StubBudgetAllEndorsementsReturnsError: not needed for this test")
+    }
+
+    async fn list_endorsements_by_subject(
+        &self,
+        _subject_id: Uuid,
+    ) -> Result<Vec<EndorsementRecord>, EndorsementRepoError> {
+        unimplemented!("StubBudgetAllEndorsementsReturnsError: not needed for this test")
+    }
+
+    async fn revoke_endorsement(
+        &self,
+        _endorser_id: Uuid,
+        _subject_id: Uuid,
+        _topic: &str,
+    ) -> Result<(), EndorsementRepoError> {
+        unimplemented!("StubBudgetAllEndorsementsReturnsError: not needed for this test")
+    }
+
+    async fn link_external_identity(
+        &self,
+        _account_id: Uuid,
+        _provider: &str,
+        _provider_subject: &str,
+    ) -> Result<ExternalIdentityRecord, ExternalIdentityRepoError> {
+        unimplemented!("StubBudgetAllEndorsementsReturnsError: not needed for this test")
+    }
+
+    async fn get_external_identity_by_provider(
+        &self,
+        _provider: &str,
+        _provider_subject: &str,
+    ) -> Result<ExternalIdentityRecord, ExternalIdentityRepoError> {
+        unimplemented!("StubBudgetAllEndorsementsReturnsError: not needed for this test")
+    }
+}
+
+/// When `count_all_active_trust_endorsements_by` returns an error,
+/// `budget_handler` must return 500 Internal Server Error before reaching the
+/// `TrustRepo` call.
+///
+/// The first reputation-repo call succeeds (returns 0); the second fails.
+#[shared_runtime_test]
+async fn budget_returns_500_when_all_endorsements_count_fails() {
+    let db = isolated_db().await;
+    let (_, keys, _) = signup_and_get_account("budgetallerror", db.pool()).await;
+
+    let app = TestAppBuilder::new()
+        .with_identity_pool(db.pool().clone())
+        .with_stub_trust_repo(Arc::new(PanickingTrustRepo))
+        .with_stub_reputation_repo(Arc::new(StubBudgetAllEndorsementsReturnsError))
+        .build();
+
+    let request = build_authed_request(
+        Method::GET,
+        "/trust/budget",
+        "",
+        &keys.device_signing_key,
+        &keys.device_kid,
+    );
+
+    let response = app.oneshot(request).await.expect("response");
+    assert_eq!(
+        response.status(),
+        StatusCode::INTERNAL_SERVER_ERROR,
+        "budget_handler must return 500 when all-endorsements count query fails"
+    );
+}
