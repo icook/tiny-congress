@@ -27,7 +27,9 @@ use tinycongress_api::trust::repo::{
     ActionRecord, DenouncementRecord, DenouncementWithUsername, InfluenceRecord, InviteRecord,
     ScoreSnapshot, TrustRepo, TrustRepoError,
 };
-use tinycongress_api::trust::service::{ActionType, TrustService, TrustServiceError};
+use tinycongress_api::trust::service::{
+    ActionType, TrustService, TrustServiceError, ENDORSEMENT_SLOT_LIMIT,
+};
 use tinycongress_api::trust::weight::{DeliveryMethod, RelationshipDepth};
 
 // ─── Stub TrustRepo for accepted_at=None scenario ────────────────────────────
@@ -5368,5 +5370,125 @@ async fn budget_clamps_out_of_slot_count_to_zero_on_concurrent_revocation() {
     assert_eq!(
         json["out_of_slot_count"], 0,
         "out_of_slot_count must be clamped to 0 when all_endorsements < endorsements_used"
+    );
+}
+
+// ─── Stub ReputationRepo simulating slots_used exceeding limit ────────────────
+
+/// Stub [`ReputationRepo`] where `count_active_trust_endorsements_by` returns
+/// `ENDORSEMENT_SLOT_LIMIT + 1`, simulating a slot-limit reduction after rows were
+/// already inserted (e.g. the constant was lowered from 4 to 3 while a user held 4
+/// in-slot endorsements).
+///
+/// `budget_handler` must clamp `slots_available` to zero rather than returning a
+/// negative value to the client.
+struct StubBudgetRepoSlotsOverLimit;
+
+#[async_trait]
+impl ReputationRepo for StubBudgetRepoSlotsOverLimit {
+    async fn count_active_trust_endorsements_by(
+        &self,
+        _endorser_id: Uuid,
+    ) -> Result<i64, EndorsementRepoError> {
+        Ok(i64::from(ENDORSEMENT_SLOT_LIMIT) + 1)
+    }
+
+    async fn count_all_active_trust_endorsements_by(
+        &self,
+        _endorser_id: Uuid,
+    ) -> Result<i64, EndorsementRepoError> {
+        Ok(i64::from(ENDORSEMENT_SLOT_LIMIT) + 1)
+    }
+
+    async fn create_endorsement(
+        &self,
+        _subject_id: Uuid,
+        _topic: &str,
+        _endorser_id: Option<Uuid>,
+        _evidence: Option<&serde_json::Value>,
+        _weight: f32,
+        _attestation: Option<&serde_json::Value>,
+        _in_slot: bool,
+    ) -> Result<CreatedEndorsement, EndorsementRepoError> {
+        unimplemented!("StubBudgetRepoSlotsOverLimit: not needed for this test")
+    }
+
+    async fn has_endorsement(
+        &self,
+        _subject_id: Uuid,
+        _topic: &str,
+    ) -> Result<bool, EndorsementRepoError> {
+        unimplemented!("StubBudgetRepoSlotsOverLimit: not needed for this test")
+    }
+
+    async fn list_endorsements_by_subject(
+        &self,
+        _subject_id: Uuid,
+    ) -> Result<Vec<EndorsementRecord>, EndorsementRepoError> {
+        unimplemented!("StubBudgetRepoSlotsOverLimit: not needed for this test")
+    }
+
+    async fn revoke_endorsement(
+        &self,
+        _endorser_id: Uuid,
+        _subject_id: Uuid,
+        _topic: &str,
+    ) -> Result<(), EndorsementRepoError> {
+        unimplemented!("StubBudgetRepoSlotsOverLimit: not needed for this test")
+    }
+
+    async fn link_external_identity(
+        &self,
+        _account_id: Uuid,
+        _provider: &str,
+        _provider_subject: &str,
+    ) -> Result<ExternalIdentityRecord, ExternalIdentityRepoError> {
+        unimplemented!("StubBudgetRepoSlotsOverLimit: not needed for this test")
+    }
+
+    async fn get_external_identity_by_provider(
+        &self,
+        _provider: &str,
+        _provider_subject: &str,
+    ) -> Result<ExternalIdentityRecord, ExternalIdentityRepoError> {
+        unimplemented!("StubBudgetRepoSlotsOverLimit: not needed for this test")
+    }
+}
+
+/// When `endorsements_used` exceeds the current `ENDORSEMENT_SLOT_LIMIT` (e.g. after
+/// the constant is reduced while existing rows exceed the new limit), the raw
+/// `slots_available` calculation produces a negative value.  `budget_handler` must
+/// clamp this to zero rather than returning a negative count to the client.
+///
+/// This is the parallel clamp to the one tested by
+/// `budget_clamps_out_of_slot_count_to_zero_on_concurrent_revocation`; without this
+/// test, removing the `.max(0)` on `slots_available` would go undetected.
+#[shared_runtime_test]
+async fn budget_clamps_slots_available_to_zero_when_slots_used_exceeds_limit() {
+    let db = isolated_db().await;
+    let (_, keys, _) = signup_and_get_account("budgetslotclamp", db.pool()).await;
+
+    // endorsements_used = ENDORSEMENT_SLOT_LIMIT + 1; slots_available raw = -1.
+    let app = TestAppBuilder::new()
+        .with_identity_pool(db.pool().clone())
+        .with_stub_trust_repo(Arc::new(StubBudgetTrustRepoZeroDenouncementsSucceed))
+        .with_stub_reputation_repo(Arc::new(StubBudgetRepoSlotsOverLimit))
+        .build();
+
+    let request = build_authed_request(
+        Method::GET,
+        "/trust/budget",
+        "",
+        &keys.device_signing_key,
+        &keys.device_kid,
+    );
+
+    let response = app.oneshot(request).await.expect("response");
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let json = json_body(response).await;
+    assert_eq!(
+        json["slots_available"], 0,
+        "slots_available must be clamped to 0 when endorsements_used exceeds the slot limit"
     );
 }
