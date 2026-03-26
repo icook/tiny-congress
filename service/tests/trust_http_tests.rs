@@ -3996,3 +3996,412 @@ async fn list_invites_returns_500_when_db_fails() {
         "list_invites_handler must return 500 when list_invites_by_endorser query fails"
     );
 }
+
+// ─── Stub TrustRepo for create_invite_handler 500 error ──────────────────────
+
+/// Stub [`TrustRepo`] that returns a database error from `create_invite`,
+/// simulating a failing insert in `create_invite_handler`.  All other methods
+/// panic — they must never be reached in this test.
+struct StubCreateInviteReturnsError;
+
+#[async_trait]
+impl TrustRepo for StubCreateInviteReturnsError {
+    async fn create_invite(
+        &self,
+        _endorser_id: Uuid,
+        _envelope: &[u8],
+        _delivery_method: DeliveryMethod,
+        _relationship_depth: Option<RelationshipDepth>,
+        _weight: f32,
+        _attestation: &serde_json::Value,
+        _expires_at: chrono::DateTime<chrono::Utc>,
+    ) -> Result<InviteRecord, TrustRepoError> {
+        Err(TrustRepoError::Database(sqlx::Error::RowNotFound))
+    }
+
+    async fn get_or_create_influence(
+        &self,
+        _user_id: Uuid,
+    ) -> Result<InfluenceRecord, TrustRepoError> {
+        unimplemented!("StubCreateInviteReturnsError: must not be called in this test")
+    }
+
+    async fn enqueue_action(
+        &self,
+        _actor_id: Uuid,
+        _action_type: ActionType,
+        _payload: &serde_json::Value,
+    ) -> Result<ActionRecord, TrustRepoError> {
+        unimplemented!("StubCreateInviteReturnsError: must not be called in this test")
+    }
+
+    async fn count_daily_actions(&self, _actor_id: Uuid) -> Result<i64, TrustRepoError> {
+        unimplemented!("StubCreateInviteReturnsError: must not be called in this test")
+    }
+
+    async fn get_action(&self, _action_id: Uuid) -> Result<ActionRecord, TrustRepoError> {
+        unimplemented!("StubCreateInviteReturnsError: must not be called in this test")
+    }
+
+    async fn complete_action(&self, _action_id: Uuid) -> Result<(), TrustRepoError> {
+        unimplemented!("StubCreateInviteReturnsError: must not be called in this test")
+    }
+
+    async fn fail_action(&self, _action_id: Uuid, _error: &str) -> Result<(), TrustRepoError> {
+        unimplemented!("StubCreateInviteReturnsError: must not be called in this test")
+    }
+
+    async fn create_denouncement(
+        &self,
+        _accuser_id: Uuid,
+        _target_id: Uuid,
+        _reason: &str,
+    ) -> Result<DenouncementRecord, TrustRepoError> {
+        unimplemented!("StubCreateInviteReturnsError: must not be called in this test")
+    }
+
+    async fn create_denouncement_and_revoke_endorsement(
+        &self,
+        _accuser_id: Uuid,
+        _target_id: Uuid,
+        _reason: &str,
+    ) -> Result<DenouncementRecord, TrustRepoError> {
+        unimplemented!("StubCreateInviteReturnsError: must not be called in this test")
+    }
+
+    async fn list_denouncements_against(
+        &self,
+        _target_id: Uuid,
+    ) -> Result<Vec<DenouncementRecord>, TrustRepoError> {
+        unimplemented!("StubCreateInviteReturnsError: must not be called in this test")
+    }
+
+    async fn list_denouncements_by(
+        &self,
+        _accuser_id: Uuid,
+    ) -> Result<Vec<DenouncementRecord>, TrustRepoError> {
+        unimplemented!("StubCreateInviteReturnsError: must not be called in this test")
+    }
+
+    async fn list_denouncements_by_with_username(
+        &self,
+        _accuser_id: Uuid,
+    ) -> Result<Vec<DenouncementWithUsername>, TrustRepoError> {
+        unimplemented!("StubCreateInviteReturnsError: must not be called in this test")
+    }
+
+    async fn count_total_denouncements_by(&self, _accuser_id: Uuid) -> Result<i64, TrustRepoError> {
+        unimplemented!("StubCreateInviteReturnsError: must not be called in this test")
+    }
+
+    async fn has_active_denouncement(
+        &self,
+        _accuser_id: Uuid,
+        _target_id: Uuid,
+    ) -> Result<bool, TrustRepoError> {
+        unimplemented!("StubCreateInviteReturnsError: must not be called in this test")
+    }
+
+    async fn get_invite(&self, _invite_id: Uuid) -> Result<InviteRecord, TrustRepoError> {
+        unimplemented!("StubCreateInviteReturnsError: must not be called in this test")
+    }
+
+    async fn accept_invite(
+        &self,
+        _invite_id: Uuid,
+        _accepted_by: Uuid,
+    ) -> Result<InviteRecord, TrustRepoError> {
+        unimplemented!("StubCreateInviteReturnsError: must not be called in this test")
+    }
+
+    async fn list_invites_by_endorser(
+        &self,
+        _endorser_id: Uuid,
+    ) -> Result<Vec<InviteRecord>, TrustRepoError> {
+        unimplemented!("StubCreateInviteReturnsError: must not be called in this test")
+    }
+
+    async fn upsert_score(
+        &self,
+        _user_id: Uuid,
+        _context_user_id: Option<Uuid>,
+        _distance: Option<f32>,
+        _diversity: Option<i32>,
+        _centrality: Option<f32>,
+    ) -> Result<(), TrustRepoError> {
+        unimplemented!("StubCreateInviteReturnsError: must not be called in this test")
+    }
+
+    async fn get_score(
+        &self,
+        _user_id: Uuid,
+        _context_user_id: Option<Uuid>,
+    ) -> Result<Option<ScoreSnapshot>, TrustRepoError> {
+        unimplemented!("StubCreateInviteReturnsError: must not be called in this test")
+    }
+
+    async fn get_all_scores(&self, _user_id: Uuid) -> Result<Vec<ScoreSnapshot>, TrustRepoError> {
+        unimplemented!("StubCreateInviteReturnsError: must not be called in this test")
+    }
+
+    async fn has_identity_endorsement(
+        &self,
+        _user_id: Uuid,
+        _verifier_ids: &[Uuid],
+        _topic: &str,
+    ) -> Result<bool, TrustRepoError> {
+        unimplemented!("StubCreateInviteReturnsError: must not be called in this test")
+    }
+}
+
+/// When `create_invite` returns a database error, `create_invite_handler` must
+/// return 500 Internal Server Error.
+///
+/// A stub repo simulates the database failure; the handler must propagate it
+/// via `trust_repo_error_response` rather than panic or swallow it.
+#[shared_runtime_test]
+async fn create_invite_handler_returns_500_when_db_fails() {
+    let db = isolated_db().await;
+    let (_, keys, _) = signup_and_get_account("createinvitedberr", db.pool()).await;
+
+    let app = TestAppBuilder::new()
+        .with_identity_pool(db.pool().clone())
+        .with_stub_trust_repo(Arc::new(StubCreateInviteReturnsError))
+        .build();
+
+    let envelope_b64 = tc_crypto::encode_base64url(b"dummy-envelope");
+    let body = serde_json::json!({
+        "envelope": envelope_b64,
+        "delivery_method": "email",
+        "attestation": {}
+    })
+    .to_string();
+
+    let request = build_authed_request(
+        Method::POST,
+        "/trust/invites",
+        &body,
+        &keys.device_signing_key,
+        &keys.device_kid,
+    );
+
+    let response = app.oneshot(request).await.expect("response");
+    assert_eq!(
+        response.status(),
+        StatusCode::INTERNAL_SERVER_ERROR,
+        "create_invite_handler must return 500 when create_invite query fails"
+    );
+}
+
+// ─── Stub TrustRepo for accept_invite_handler accept_invite 500 error ────────
+
+/// Stub [`TrustRepo`] that returns Ok from `get_invite` (so the self-accept
+/// guard passes) and a database error from `accept_invite`, simulating a
+/// failing insert in `accept_invite_handler`.  All other methods panic.
+struct StubAcceptInviteAcceptReturnsError {
+    endorser_id: Uuid,
+}
+
+#[async_trait]
+impl TrustRepo for StubAcceptInviteAcceptReturnsError {
+    async fn get_invite(&self, _invite_id: Uuid) -> Result<InviteRecord, TrustRepoError> {
+        Ok(InviteRecord {
+            id: Uuid::new_v4(),
+            endorser_id: self.endorser_id,
+            envelope: vec![0u8],
+            delivery_method: "qr".to_string(),
+            attestation: serde_json::Value::Object(serde_json::Map::new()),
+            accepted_by: None,
+            expires_at: chrono::Utc::now() + chrono::Duration::days(7),
+            accepted_at: None,
+            created_at: chrono::Utc::now(),
+            relationship_depth: None,
+            weight: 1.0,
+        })
+    }
+
+    async fn accept_invite(
+        &self,
+        _invite_id: Uuid,
+        _accepted_by: Uuid,
+    ) -> Result<InviteRecord, TrustRepoError> {
+        Err(TrustRepoError::Database(sqlx::Error::RowNotFound))
+    }
+
+    async fn get_or_create_influence(
+        &self,
+        _user_id: Uuid,
+    ) -> Result<InfluenceRecord, TrustRepoError> {
+        unimplemented!("StubAcceptInviteAcceptReturnsError: must not be called in this test")
+    }
+
+    async fn enqueue_action(
+        &self,
+        _actor_id: Uuid,
+        _action_type: ActionType,
+        _payload: &serde_json::Value,
+    ) -> Result<ActionRecord, TrustRepoError> {
+        unimplemented!("StubAcceptInviteAcceptReturnsError: must not be called in this test")
+    }
+
+    async fn count_daily_actions(&self, _actor_id: Uuid) -> Result<i64, TrustRepoError> {
+        unimplemented!("StubAcceptInviteAcceptReturnsError: must not be called in this test")
+    }
+
+    async fn get_action(&self, _action_id: Uuid) -> Result<ActionRecord, TrustRepoError> {
+        unimplemented!("StubAcceptInviteAcceptReturnsError: must not be called in this test")
+    }
+
+    async fn complete_action(&self, _action_id: Uuid) -> Result<(), TrustRepoError> {
+        unimplemented!("StubAcceptInviteAcceptReturnsError: must not be called in this test")
+    }
+
+    async fn fail_action(&self, _action_id: Uuid, _error: &str) -> Result<(), TrustRepoError> {
+        unimplemented!("StubAcceptInviteAcceptReturnsError: must not be called in this test")
+    }
+
+    async fn create_denouncement(
+        &self,
+        _accuser_id: Uuid,
+        _target_id: Uuid,
+        _reason: &str,
+    ) -> Result<DenouncementRecord, TrustRepoError> {
+        unimplemented!("StubAcceptInviteAcceptReturnsError: must not be called in this test")
+    }
+
+    async fn create_denouncement_and_revoke_endorsement(
+        &self,
+        _accuser_id: Uuid,
+        _target_id: Uuid,
+        _reason: &str,
+    ) -> Result<DenouncementRecord, TrustRepoError> {
+        unimplemented!("StubAcceptInviteAcceptReturnsError: must not be called in this test")
+    }
+
+    async fn list_denouncements_against(
+        &self,
+        _target_id: Uuid,
+    ) -> Result<Vec<DenouncementRecord>, TrustRepoError> {
+        unimplemented!("StubAcceptInviteAcceptReturnsError: must not be called in this test")
+    }
+
+    async fn list_denouncements_by(
+        &self,
+        _accuser_id: Uuid,
+    ) -> Result<Vec<DenouncementRecord>, TrustRepoError> {
+        unimplemented!("StubAcceptInviteAcceptReturnsError: must not be called in this test")
+    }
+
+    async fn list_denouncements_by_with_username(
+        &self,
+        _accuser_id: Uuid,
+    ) -> Result<Vec<DenouncementWithUsername>, TrustRepoError> {
+        unimplemented!("StubAcceptInviteAcceptReturnsError: must not be called in this test")
+    }
+
+    async fn count_total_denouncements_by(&self, _accuser_id: Uuid) -> Result<i64, TrustRepoError> {
+        unimplemented!("StubAcceptInviteAcceptReturnsError: must not be called in this test")
+    }
+
+    async fn has_active_denouncement(
+        &self,
+        _accuser_id: Uuid,
+        _target_id: Uuid,
+    ) -> Result<bool, TrustRepoError> {
+        unimplemented!("StubAcceptInviteAcceptReturnsError: must not be called in this test")
+    }
+
+    async fn create_invite(
+        &self,
+        _endorser_id: Uuid,
+        _envelope: &[u8],
+        _delivery_method: DeliveryMethod,
+        _relationship_depth: Option<RelationshipDepth>,
+        _weight: f32,
+        _attestation: &serde_json::Value,
+        _expires_at: chrono::DateTime<chrono::Utc>,
+    ) -> Result<InviteRecord, TrustRepoError> {
+        unimplemented!("StubAcceptInviteAcceptReturnsError: must not be called in this test")
+    }
+
+    async fn list_invites_by_endorser(
+        &self,
+        _endorser_id: Uuid,
+    ) -> Result<Vec<InviteRecord>, TrustRepoError> {
+        unimplemented!("StubAcceptInviteAcceptReturnsError: must not be called in this test")
+    }
+
+    async fn upsert_score(
+        &self,
+        _user_id: Uuid,
+        _context_user_id: Option<Uuid>,
+        _distance: Option<f32>,
+        _diversity: Option<i32>,
+        _centrality: Option<f32>,
+    ) -> Result<(), TrustRepoError> {
+        unimplemented!("StubAcceptInviteAcceptReturnsError: must not be called in this test")
+    }
+
+    async fn get_score(
+        &self,
+        _user_id: Uuid,
+        _context_user_id: Option<Uuid>,
+    ) -> Result<Option<ScoreSnapshot>, TrustRepoError> {
+        unimplemented!("StubAcceptInviteAcceptReturnsError: must not be called in this test")
+    }
+
+    async fn get_all_scores(&self, _user_id: Uuid) -> Result<Vec<ScoreSnapshot>, TrustRepoError> {
+        unimplemented!("StubAcceptInviteAcceptReturnsError: must not be called in this test")
+    }
+
+    async fn has_identity_endorsement(
+        &self,
+        _user_id: Uuid,
+        _verifier_ids: &[Uuid],
+        _topic: &str,
+    ) -> Result<bool, TrustRepoError> {
+        unimplemented!("StubAcceptInviteAcceptReturnsError: must not be called in this test")
+    }
+}
+
+/// When `accept_invite` returns a database error, `accept_invite_handler` must
+/// return 500 Internal Server Error.
+///
+/// The stub returns Ok from `get_invite` (with a different endorser so the
+/// self-accept guard passes), then returns a database error from `accept_invite`.
+/// The handler must propagate it via `trust_repo_error_response`.
+#[shared_runtime_test]
+async fn accept_invite_handler_returns_500_when_accept_invite_db_fails() {
+    let db = isolated_db().await;
+    let (_, keys, account_id) = signup_and_get_account("acceptinvitedberr", db.pool()).await;
+
+    // endorser_id must differ from account_id so the self-accept guard does not fire.
+    let endorser_id = Uuid::new_v4();
+    assert_ne!(
+        endorser_id, account_id,
+        "stub endorser_id must differ from acceptor"
+    );
+
+    let app = TestAppBuilder::new()
+        .with_identity_pool(db.pool().clone())
+        .with_stub_trust_repo(Arc::new(StubAcceptInviteAcceptReturnsError { endorser_id }))
+        .with_stub_trust_service(Arc::new(PanickingTrustService))
+        .build();
+
+    let invite_id = Uuid::new_v4();
+    let uri = format!("/trust/invites/{invite_id}/accept");
+    let request = build_authed_request(
+        Method::POST,
+        &uri,
+        "",
+        &keys.device_signing_key,
+        &keys.device_kid,
+    );
+
+    let response = app.oneshot(request).await.expect("response");
+    assert_eq!(
+        response.status(),
+        StatusCode::INTERNAL_SERVER_ERROR,
+        "accept_invite_handler must return 500 when accept_invite query fails"
+    );
+}
