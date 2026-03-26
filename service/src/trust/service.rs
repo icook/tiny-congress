@@ -1555,6 +1555,26 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn revoke_endorsement_propagates_repo_error_from_count_daily_actions() {
+        // `count_daily_actions` is the first repo call in `revoke_endorsement` (after
+        // the pure self-action check). If the database fails there, the service must
+        // surface the error rather than silently succeeding or panicking.
+        // `StubTrustRepo` panics on `enqueue_action`, so a missing `?` would cause
+        // the test to fail loudly.
+        let svc = DefaultTrustService::new(
+            Arc::new(StubTrustRepo::default().daily_error()),
+            Arc::new(StubReputationRepo::default()),
+        );
+        let a = Uuid::new_v4();
+        let b = Uuid::new_v4();
+        let err = svc.revoke_endorsement(a, b).await.unwrap_err();
+        assert!(
+            matches!(err, TrustServiceError::Repo(TrustRepoError::Database(_))),
+            "expected Repo(Database(...)), got: {err}"
+        );
+    }
+
+    #[tokio::test]
     async fn revoke_endorsement_propagates_repo_error_from_enqueue_action() {
         // `enqueue_action` is the last repo call in `revoke_endorsement` — all
         // guards pass (self-action check and daily quota check). If the database
