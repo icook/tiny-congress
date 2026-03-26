@@ -996,6 +996,29 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn denounce_returns_already_denounced_when_active_denouncement_exists() {
+        // `has_active_denouncement` returning true must short-circuit with
+        // AlreadyDenounced before the daily quota or slot checks are reached.
+        // `StubTrustRepo` panics on `count_daily_actions` and
+        // `count_total_denouncements_by`, so a missing guard would cause the test
+        // to panic rather than pass.
+        let svc = DefaultTrustService::new(
+            Arc::new(StubTrustRepo::default().active(true)),
+            Arc::new(StubReputationRepo::default()),
+        );
+        let accuser = Uuid::new_v4();
+        let target = Uuid::new_v4();
+        let err = svc
+            .denounce(accuser, target, "valid reason")
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(err, TrustServiceError::AlreadyDenounced),
+            "expected AlreadyDenounced, got: {err}"
+        );
+    }
+
+    #[tokio::test]
     async fn denounce_returns_slots_exhausted_when_at_denouncement_limit() {
         // The permanent denouncement budget (d=2) is full. The guard must fire
         // before enqueue_action is called — StubTrustRepo panics
