@@ -1192,6 +1192,26 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn revoke_endorsement_propagates_repo_error_from_count_daily_actions() {
+        // `count_daily_actions` is the only repo call in `revoke_endorsement`
+        // before `enqueue_action`. If the database fails there, the service must
+        // surface the error rather than silently succeeding or panicking.
+        // `StubTrustRepo` panics on `enqueue_action`, so a missing `?` on the
+        // `count_daily_actions` call would cause the test to fail loudly.
+        let svc = DefaultTrustService::new(
+            Arc::new(StubTrustRepo::default().daily_error()),
+            Arc::new(StubReputationRepo::default()),
+        );
+        let a = Uuid::new_v4();
+        let b = Uuid::new_v4();
+        let err = svc.revoke_endorsement(a, b).await.unwrap_err();
+        assert!(
+            matches!(err, TrustServiceError::Repo(TrustRepoError::Database(_))),
+            "expected Repo(Database(...)), got: {err}"
+        );
+    }
+
     // ─── in_slot computation tests ───────────────────────────────────────────
     //
     // Every test above stops before `has_endorsement` because the guard it is
