@@ -53,7 +53,7 @@ verifiers:
     public_key: "TE6tpZpkJEPqjGR6h7LDvN2vXkSz5FT6nUnZMGNxZpo"
 
 sim:
-  enabled: true
+  enabled: false  # Disabled: poll lifecycle moved into room bot (#743). See #723, #904 for sim resume work if re-enabling.
   schedule: "*/30 * * * *"
   apiUrl: "http://tc-demo.tiny-congress-demo.svc.cluster.local:8080"
   openrouterModel: "meta-llama/llama-3.3-70b-instruct"
