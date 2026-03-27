@@ -54,7 +54,7 @@ pub(super) async fn create_denouncement_and_revoke_endorsement(
     )
     .await
     {
-        Ok(()) | Err(crate::reputation::repo::endorsements::EndorsementRepoError::NotFound) => {}
+        Ok(()) => {}
         Err(crate::reputation::repo::endorsements::EndorsementRepoError::Database(db_err)) => {
             return Err(TrustRepoError::Database(db_err));
         }
