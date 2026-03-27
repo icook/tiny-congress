@@ -27,8 +27,6 @@ pub struct CreatedEndorsement {
 
 #[derive(Debug, thiserror::Error)]
 pub enum EndorsementRepoError {
-    #[error("endorsement not found")]
-    NotFound,
     #[error("database error: {0}")]
     Database(#[from] sqlx::Error),
 }
@@ -248,34 +246,4 @@ where
     .await?;
 
     Ok(count)
-}
-
-/// # Errors
-///
-/// Returns `NotFound` if no endorsement exists for this subject and topic.
-/// Returns `Database` on connection or query failure.
-pub async fn get_endorsement_by_subject_and_topic<'e, E>(
-    executor: E,
-    subject_id: Uuid,
-    topic: &str,
-) -> Result<EndorsementRecord, EndorsementRepoError>
-where
-    E: sqlx::Executor<'e, Database = sqlx::Postgres>,
-{
-    let row = sqlx::query_as::<_, EndorsementRow>(
-        r"
-        SELECT id, subject_id, topic, endorser_id, evidence, created_at, revoked_at
-        FROM reputation__endorsements
-        WHERE subject_id = $1 AND topic = $2
-        ",
-    )
-    .bind(subject_id)
-    .bind(topic)
-    .fetch_optional(executor)
-    .await?;
-
-    row.map_or_else(
-        || Err(EndorsementRepoError::NotFound),
-        |r| Ok(row_to_record(r)),
-    )
 }

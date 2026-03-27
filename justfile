@@ -69,10 +69,6 @@ fmt-backend:
 build-backend:
     cd service && cargo build
 
-# Build backend (release)
-build-backend-release:
-    cd service && cargo build --release
-
 # Run backend dev server with hot reload
 dev-backend:
     cd service && cargo watch --watch src --watch migrations -x "run --bin tinycongress-api"
@@ -471,9 +467,6 @@ test-cov: test-backend-cov test-frontend-cov
 build: build-backend build-wasm build-frontend
     @echo "✓ All builds successful"
 
-# Build everything in release mode
-build-release: build-backend-release build-wasm build-frontend
-    @echo "✓ Release builds successful"
 
 # =============================================================================
 # Full-Stack Testing (Requires Docker + Kubernetes)
