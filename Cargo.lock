@@ -3663,6 +3663,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "tc-engine-ranking"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "axum",
+ "chrono",
+ "rand 0.8.5",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "tc-engine-api",
+ "thiserror 2.0.17",
+ "tokio",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "tc-llm"
 version = "0.1.0"
 dependencies = [
@@ -3838,6 +3857,7 @@ dependencies = [
  "tc-crypto",
  "tc-engine-api",
  "tc-engine-polling",
+ "tc-engine-ranking",
  "tc-llm",
  "tc-test-macros",
  "testcontainers",
