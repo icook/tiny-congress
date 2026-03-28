@@ -25,6 +25,8 @@ use tc_engine_api::constraints::ConstraintRegistry;
 use tc_engine_api::engine::{EngineContext, EngineRegistry};
 use tc_engine_polling::engine::PollingEngine;
 use tc_engine_polling::service::{DefaultPollingService, PollingService};
+use tc_engine_ranking::engine::RankingEngine;
+use tc_engine_ranking::service::{DefaultRankingService, RankingService};
 use tinycongress_api::{
     build_info::BuildInfo,
     config::Config,
@@ -224,6 +226,7 @@ async fn build_app(
     // Register room engine plugins
     let mut engine_registry = EngineRegistry::new();
     engine_registry.register(PollingEngine::new());
+    engine_registry.register(RankingEngine::new());
 
     // Start background tasks for all registered engines
     // TODO: Store engine handles in app state and join them during graceful shutdown.
@@ -263,6 +266,10 @@ async fn build_app(
     let polling_service = Arc::new(DefaultPollingService::new(pool.clone(), trust_graph_reader))
         as Arc<dyn PollingService>;
 
+    // Ranking wiring
+    let ranking_service =
+        Arc::new(DefaultRankingService::new(pool.clone())) as Arc<dyn RankingService>;
+
     let (prometheus_layer, metric_handle) = PrometheusMetricLayer::pair();
 
     let app = Router::new()
@@ -294,6 +301,7 @@ async fn build_app(
         .layer(Extension(reputation_repo_ext))
         .layer(Extension(rooms_service))
         .layer(Extension(polling_service))
+        .layer(Extension(ranking_service))
         .layer(Extension(trust_service))
         .layer(Extension(trust_repo_for_http))
         .layer(Extension(trust_engine.clone()))
