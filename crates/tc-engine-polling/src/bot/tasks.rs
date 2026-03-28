@@ -343,12 +343,15 @@ pub async fn research_company(
     .await?;
 
     // Create poll
+    let position = polls::next_agenda_position(pool, task.room_id)
+        .await
+        .context("computing agenda position")?;
     let poll = polls::create_poll(
         pool,
         task.room_id,
         &company,
         Some(&evidence.relevance_hook),
-        None,
+        Some(position),
     )
     .await
     .context("creating poll")?;

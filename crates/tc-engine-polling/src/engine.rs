@@ -8,7 +8,9 @@ use tc_engine_api::error::EngineError;
 use tc_engine_api::RoomEngine;
 use uuid::Uuid;
 
+use crate::bot::config::BotConfig;
 use crate::lifecycle::spawn_lifecycle_consumer;
+use crate::repo::pgmq::{self, BotTask};
 use crate::service::DefaultPollingService;
 
 /// Default lifecycle consumer poll interval (seconds).
@@ -63,11 +65,51 @@ impl RoomEngine for PollingEngine {
 
     async fn on_room_created(
         &self,
-        _room_id: Uuid,
-        _config: &serde_json::Value,
-        _ctx: &EngineContext,
+        room_id: Uuid,
+        config: &serde_json::Value,
+        ctx: &EngineContext,
     ) -> Result<(), EngineError> {
-        // No per-room setup needed yet — polls are created via the HTTP API.
+        let Some(bot_config) = BotConfig::from_engine_config(config) else {
+            return Ok(());
+        };
+        if bot_config.topics.is_empty() {
+            return Ok(());
+        }
+
+        let count = bot_config.topics.len().min(5);
+        for topic in &bot_config.topics[..count] {
+            let params = serde_json::json!({
+                "company": topic.company,
+                "ticker": topic.ticker.as_deref().unwrap_or(""),
+            });
+            if let Err(e) = pgmq::send_task(
+                &ctx.pool,
+                &BotTask {
+                    room_id,
+                    task: "research_company".to_string(),
+                    params,
+                },
+            )
+            .await
+            {
+                tracing::error!(room_id = %room_id, "on_room_created: failed to enqueue: {e}");
+            }
+        }
+
+        if let Err(e) = sqlx::query(
+            "UPDATE rooms__rooms \
+             SET engine_config = jsonb_set(engine_config, '{bot,topic_cursor}', $1::jsonb) \
+             WHERE id = $2",
+        )
+        .bind(serde_json::json!(count))
+        .bind(room_id)
+        .execute(&ctx.pool)
+        .await
+        {
+            tracing::error!(room_id = %room_id, "on_room_created: failed to persist cursor: {e}");
+        }
+
+        tracing::info!(room_id = %room_id, count, "on_room_created: enqueued initial research tasks");
         Ok(())
     }
 
@@ -104,8 +146,10 @@ impl RoomEngine for PollingEngine {
                 .unwrap_or_else(|_| "deepseek/deepseek-chat-v3-0324".to_string()),
         };
 
+        let scheduler_handle = crate::bot::scheduler::spawn_scheduler(ctx.pool.clone());
+
         let bot_handle = crate::bot::worker::spawn_bot_worker(ctx.pool, bot_config);
 
-        Ok(vec![lifecycle_handle, bot_handle])
+        Ok(vec![lifecycle_handle, bot_handle, scheduler_handle])
     }
 }
