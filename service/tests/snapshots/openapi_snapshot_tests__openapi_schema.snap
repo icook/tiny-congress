@@ -720,6 +720,153 @@ expression: schema
         }
       }
     },
+    "/rooms/{room_id}/hall-of-fame": {
+      "get": {
+        "tags": [
+          "Ranking"
+        ],
+        "summary": "Get hall of fame entries for a room",
+        "operationId": "get_hall_of_fame",
+        "parameters": [
+          {
+            "name": "room_id",
+            "in": "path",
+            "description": "Room ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Max entries to return (default 20)",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "description": "Offset for pagination (default 0)",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Hall of fame entries",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/HallOfFameEntryResponse"
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/rooms/{room_id}/matchup": {
+      "get": {
+        "tags": [
+          "Ranking"
+        ],
+        "summary": "Get the next matchup pair to judge",
+        "operationId": "get_matchup",
+        "parameters": [
+          {
+            "name": "room_id",
+            "in": "path",
+            "description": "Room ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Next matchup pair",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MatchupResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No matchups available"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/rooms/{room_id}/matchups": {
+      "post": {
+        "tags": [
+          "Ranking"
+        ],
+        "summary": "Record a matchup judgment (win/loss or skip)",
+        "operationId": "record_matchup",
+        "parameters": [
+          {
+            "name": "room_id",
+            "in": "path",
+            "description": "Room ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecordMatchupRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Matchup recorded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MatchupResultResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request or not in ranking phase"
+          },
+          "403": {
+            "description": "Cannot rank own submission"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
     "/rooms/{room_id}/my-capabilities": {
       "get": {
         "tags": [
@@ -1439,6 +1586,180 @@ expression: schema
           },
           "404": {
             "description": "Room not found"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/rooms/{room_id}/rounds": {
+      "get": {
+        "tags": [
+          "Ranking"
+        ],
+        "summary": "List all rounds for a room",
+        "operationId": "list_rounds",
+        "parameters": [
+          {
+            "name": "room_id",
+            "in": "path",
+            "description": "Room ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "All rounds for the room",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RoundResponse"
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/rooms/{room_id}/rounds/current": {
+      "get": {
+        "tags": [
+          "Ranking"
+        ],
+        "summary": "Get current (non-closed) rounds for a room",
+        "operationId": "get_current_rounds",
+        "parameters": [
+          {
+            "name": "room_id",
+            "in": "path",
+            "description": "Room ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Active rounds for the room",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RoundResponse"
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/rooms/{room_id}/rounds/{round_id}/leaderboard": {
+      "get": {
+        "tags": [
+          "Ranking"
+        ],
+        "summary": "Get the leaderboard for a specific round",
+        "operationId": "get_leaderboard",
+        "parameters": [
+          {
+            "name": "room_id",
+            "in": "path",
+            "description": "Room ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "round_id",
+            "in": "path",
+            "description": "Round ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Leaderboard for the round",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LeaderboardResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Round not found"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/rooms/{room_id}/submissions": {
+      "post": {
+        "tags": [
+          "Ranking"
+        ],
+        "summary": "Submit a meme to the current round",
+        "operationId": "submit_meme",
+        "parameters": [
+          {
+            "name": "room_id",
+            "in": "path",
+            "description": "Room ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SubmitMemeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Submission created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubmissionResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request or not in submit phase"
+          },
+          "409": {
+            "description": "Already submitted this round"
           },
           "500": {
             "description": "Internal server error"
@@ -2776,6 +3097,32 @@ expression: schema
           }
         }
       },
+      "HallOfFameEntryResponse": {
+        "type": "object",
+        "required": [
+          "submission",
+          "round_number",
+          "final_rating",
+          "rank"
+        ],
+        "properties": {
+          "final_rating": {
+            "type": "number",
+            "format": "double"
+          },
+          "rank": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "round_number": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "submission": {
+            "$ref": "#/components/schemas/SubmissionWithAuthorResponse"
+          }
+        }
+      },
       "HasEndorsementResponse": {
         "type": "object",
         "required": [
@@ -2831,6 +3178,59 @@ expression: schema
             "items": {
               "$ref": "#/components/schemas/InviteResponse"
             }
+          }
+        }
+      },
+      "LeaderboardEntry": {
+        "type": "object",
+        "required": [
+          "submission",
+          "rating",
+          "deviation",
+          "matchup_count",
+          "rank"
+        ],
+        "properties": {
+          "deviation": {
+            "type": "number",
+            "format": "double"
+          },
+          "matchup_count": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "rank": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "rating": {
+            "type": "number",
+            "format": "double"
+          },
+          "submission": {
+            "$ref": "#/components/schemas/SubmissionResponse"
+          }
+        }
+      },
+      "LeaderboardResponse": {
+        "type": "object",
+        "required": [
+          "round_id",
+          "round_status",
+          "entries"
+        ],
+        "properties": {
+          "entries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LeaderboardEntry"
+            }
+          },
+          "round_id": {
+            "type": "string"
+          },
+          "round_status": {
+            "type": "string"
           }
         }
       },
@@ -2900,6 +3300,42 @@ expression: schema
           }
         }
       },
+      "MatchupResponse": {
+        "type": "object",
+        "required": [
+          "submission_a",
+          "submission_b"
+        ],
+        "properties": {
+          "submission_a": {
+            "$ref": "#/components/schemas/SubmissionResponse"
+          },
+          "submission_b": {
+            "$ref": "#/components/schemas/SubmissionResponse"
+          }
+        }
+      },
+      "MatchupResultResponse": {
+        "type": "object",
+        "required": [
+          "id",
+          "created_at"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "winner_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
       "MessageResponse": {
         "type": "object",
         "required": [
@@ -2939,6 +3375,19 @@ expression: schema
           },
           "role": {
             "type": "string"
+          }
+        }
+      },
+      "PaginationParams": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "offset": {
+            "type": "integer",
+            "format": "int64"
           }
         }
       },
@@ -3130,6 +3579,41 @@ expression: schema
           }
         }
       },
+      "RecordMatchupRequest": {
+        "type": "object",
+        "properties": {
+          "loser_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "skipped": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "submission_a": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "submission_b": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "winner_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
       "RenameDeviceRequest": {
         "type": "object",
         "required": [
@@ -3207,6 +3691,42 @@ expression: schema
             "format": "int32"
           },
           "status": {
+            "type": "string"
+          }
+        }
+      },
+      "RoundResponse": {
+        "type": "object",
+        "required": [
+          "id",
+          "room_id",
+          "round_number",
+          "submit_opens_at",
+          "rank_opens_at",
+          "closes_at",
+          "status"
+        ],
+        "properties": {
+          "closes_at": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "rank_opens_at": {
+            "type": "string"
+          },
+          "room_id": {
+            "type": "string"
+          },
+          "round_number": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "status": {
+            "type": "string"
+          },
+          "submit_opens_at": {
             "type": "string"
           }
         }
@@ -3343,6 +3863,121 @@ expression: schema
           },
           "root_kid": {
             "type": "string"
+          }
+        }
+      },
+      "SubmissionResponse": {
+        "type": "object",
+        "required": [
+          "id",
+          "round_id",
+          "content_type",
+          "created_at"
+        ],
+        "properties": {
+          "caption": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "content_type": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "image_key": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "round_id": {
+            "type": "string"
+          },
+          "url": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "SubmissionWithAuthorResponse": {
+        "type": "object",
+        "required": [
+          "id",
+          "round_id",
+          "author_id",
+          "content_type",
+          "created_at"
+        ],
+        "properties": {
+          "author_id": {
+            "type": "string"
+          },
+          "caption": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "content_type": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "image_key": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "round_id": {
+            "type": "string"
+          },
+          "url": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "SubmitMemeRequest": {
+        "type": "object",
+        "required": [
+          "content_type"
+        ],
+        "properties": {
+          "caption": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "content_type": {
+            "type": "string"
+          },
+          "image_key": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "url": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       },

@@ -6,6 +6,7 @@
 
 pub(crate) mod platform;
 pub(crate) mod polling;
+pub(crate) mod ranking;
 
 use axum::{
     routing::{delete, get, patch, post},
@@ -201,5 +202,34 @@ pub fn router() -> Router {
         .route(
             "/rooms/{room_id}/polls/{poll_id}/traces",
             get(polling::get_poll_traces),
+        )
+        // Ranking engine routes
+        .route(
+            "/rooms/{room_id}/submissions",
+            post(ranking::submit_meme),
+        )
+        .route(
+            "/rooms/{room_id}/matchup",
+            get(ranking::get_matchup),
+        )
+        .route(
+            "/rooms/{room_id}/matchups",
+            post(ranking::record_matchup),
+        )
+        .route(
+            "/rooms/{room_id}/rounds/current",
+            get(ranking::get_current_rounds),
+        )
+        .route(
+            "/rooms/{room_id}/rounds",
+            get(ranking::list_rounds),
+        )
+        .route(
+            "/rooms/{room_id}/rounds/{round_id}/leaderboard",
+            get(ranking::get_leaderboard),
+        )
+        .route(
+            "/rooms/{room_id}/hall-of-fame",
+            get(ranking::get_hall_of_fame),
         )
 }
