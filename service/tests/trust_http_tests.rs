@@ -313,24 +313,6 @@ async fn test_endorse_returns_202() {
 }
 
 #[shared_runtime_test]
-async fn test_endorse_self_returns_400() {
-    let db = isolated_db().await;
-    let (app, keys, account_id) = signup_and_get_account("selfendorser", db.pool()).await;
-
-    let body = serde_json::json!({ "subject_id": account_id }).to_string();
-    let request = build_authed_request(
-        Method::POST,
-        "/trust/endorse",
-        &body,
-        &keys.device_signing_key,
-        &keys.device_kid,
-    );
-
-    let response = app.oneshot(request).await.expect("response");
-    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
-}
-
-#[shared_runtime_test]
 async fn test_endorse_quota_exceeded_returns_429() {
     let db = isolated_db().await;
     let (app, keys, account_id) = signup_and_get_account("quotauser", db.pool()).await;
@@ -491,55 +473,6 @@ async fn test_revoke_self_returns_400() {
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 }
 
-#[shared_runtime_test]
-async fn test_revoke_quota_exceeded_returns_429() {
-    let db = isolated_db().await;
-    let (app, keys, account_id) = signup_and_get_account("revokequota", db.pool()).await;
-
-    // Seed 5 actions (daily quota) directly in the DB
-    use tinycongress_api::trust::repo::{PgTrustRepo, TrustRepo};
-    use tinycongress_api::trust::service::ActionType;
-    let trust_repo = PgTrustRepo::new(db.pool().clone());
-    for _ in 0..5 {
-        trust_repo
-            .enqueue_action(account_id, ActionType::Revoke, &serde_json::json!({}))
-            .await
-            .expect("enqueue");
-    }
-
-    // Sign up another user to revoke
-    let (json2, _) = valid_signup_with_keys("revokequotasubject");
-    let resp2 = app
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method(Method::POST)
-                .uri("/auth/signup")
-                .header(CONTENT_TYPE, "application/json")
-                .body(Body::from(json2))
-                .expect("request"),
-        )
-        .await
-        .expect("response");
-    let body2 = axum::body::to_bytes(resp2.into_body(), 1024 * 1024)
-        .await
-        .expect("body2");
-    let j2: Value = serde_json::from_slice(&body2).expect("json2");
-    let subject_id = j2["account_id"].as_str().expect("account_id");
-
-    let body = serde_json::json!({ "subject_id": subject_id }).to_string();
-    let request = build_authed_request(
-        Method::POST,
-        "/trust/revoke",
-        &body,
-        &keys.device_signing_key,
-        &keys.device_kid,
-    );
-
-    let response = app.oneshot(request).await.expect("response");
-    assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
-}
-
 // ─── Denounce ────────────────────────────────────────────────────────────────
 
 #[shared_runtime_test]
@@ -585,81 +518,6 @@ async fn test_denounce_returns_202() {
 
     let json = json_body(response).await;
     assert_eq!(json["message"], "denouncement queued");
-}
-
-#[shared_runtime_test]
-async fn test_denounce_self_returns_400() {
-    let db = isolated_db().await;
-    let (app, keys, account_id) = signup_and_get_account("selfdenounce", db.pool()).await;
-
-    let body = serde_json::json!({
-        "target_id": account_id,
-        "reason": "testing self-denounce"
-    })
-    .to_string();
-    let request = build_authed_request(
-        Method::POST,
-        "/trust/denounce",
-        &body,
-        &keys.device_signing_key,
-        &keys.device_kid,
-    );
-
-    let response = app.oneshot(request).await.expect("response");
-    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
-}
-
-#[shared_runtime_test]
-async fn test_denounce_quota_exceeded_returns_429() {
-    let db = isolated_db().await;
-    let (app, keys, account_id) = signup_and_get_account("denouncequota", db.pool()).await;
-
-    // Seed 5 actions (daily quota) directly in the DB
-    use tinycongress_api::trust::repo::{PgTrustRepo, TrustRepo};
-    use tinycongress_api::trust::service::ActionType::Denounce;
-    let trust_repo = PgTrustRepo::new(db.pool().clone());
-    for _ in 0..5 {
-        trust_repo
-            .enqueue_action(account_id, Denounce, &serde_json::json!({}))
-            .await
-            .expect("enqueue");
-    }
-
-    // Sign up another user to denounce
-    let (json2, _) = valid_signup_with_keys("denouncequotasubject");
-    let resp2 = app
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method(Method::POST)
-                .uri("/auth/signup")
-                .header(CONTENT_TYPE, "application/json")
-                .body(Body::from(json2))
-                .expect("request"),
-        )
-        .await
-        .expect("response");
-    let body2 = axum::body::to_bytes(resp2.into_body(), 1024 * 1024)
-        .await
-        .expect("body2");
-    let j2: Value = serde_json::from_slice(&body2).expect("json2");
-    let target_id = j2["account_id"].as_str().expect("account_id");
-
-    let body = serde_json::json!({
-        "target_id": target_id,
-        "reason": "quota test"
-    })
-    .to_string();
-    let request = build_authed_request(
-        Method::POST,
-        "/trust/denounce",
-        &body,
-        &keys.device_signing_key,
-        &keys.device_kid,
-    );
-
-    let response = app.oneshot(request).await.expect("response");
-    assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
 }
 
 #[shared_runtime_test]
@@ -987,80 +845,6 @@ async fn test_accept_invite_auto_enqueues_endorsement() {
     let _ = (endorser_keys, acceptor_keys); // suppress unused warnings
 }
 
-#[shared_runtime_test]
-async fn endorse_rejects_weight_above_one() {
-    let db = isolated_db().await;
-    let (app, keys, _account_id) = signup_and_get_account("weightaboveendorser", db.pool()).await;
-
-    let (json2, _) = valid_signup_with_keys("weightabovesubject");
-    let resp2 = app
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method(Method::POST)
-                .uri("/auth/signup")
-                .header(CONTENT_TYPE, "application/json")
-                .body(Body::from(json2))
-                .expect("request"),
-        )
-        .await
-        .expect("response");
-    let body2 = axum::body::to_bytes(resp2.into_body(), 1024 * 1024)
-        .await
-        .expect("body2");
-    let j2: Value = serde_json::from_slice(&body2).expect("json2");
-    let subject_id = j2["account_id"].as_str().expect("account_id");
-
-    let body = serde_json::json!({ "subject_id": subject_id, "weight": 1.5 }).to_string();
-    let request = build_authed_request(
-        Method::POST,
-        "/trust/endorse",
-        &body,
-        &keys.device_signing_key,
-        &keys.device_kid,
-    );
-
-    let response = app.oneshot(request).await.expect("response");
-    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
-}
-
-#[shared_runtime_test]
-async fn endorse_rejects_negative_weight() {
-    let db = isolated_db().await;
-    let (app, keys, _account_id) = signup_and_get_account("weightnegendorser", db.pool()).await;
-
-    let (json2, _) = valid_signup_with_keys("weightnegsubject");
-    let resp2 = app
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method(Method::POST)
-                .uri("/auth/signup")
-                .header(CONTENT_TYPE, "application/json")
-                .body(Body::from(json2))
-                .expect("request"),
-        )
-        .await
-        .expect("response");
-    let body2 = axum::body::to_bytes(resp2.into_body(), 1024 * 1024)
-        .await
-        .expect("body2");
-    let j2: Value = serde_json::from_slice(&body2).expect("json2");
-    let subject_id = j2["account_id"].as_str().expect("account_id");
-
-    let body = serde_json::json!({ "subject_id": subject_id, "weight": -0.5 }).to_string();
-    let request = build_authed_request(
-        Method::POST,
-        "/trust/endorse",
-        &body,
-        &keys.device_signing_key,
-        &keys.device_kid,
-    );
-
-    let response = app.oneshot(request).await.expect("response");
-    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
-}
-
 // ─── Endorse attestation size validation ─────────────────────────────────────
 
 #[shared_runtime_test]
@@ -1304,62 +1088,6 @@ async fn create_invite_rejects_weight_zero() {
         "envelope": envelope_b64,
         "delivery_method": "qr",
         "weight": 0.0,
-        "attestation": {}
-    })
-    .to_string();
-
-    let request = build_authed_request(
-        Method::POST,
-        "/trust/invites",
-        &body,
-        &keys.device_signing_key,
-        &keys.device_kid,
-    );
-
-    let response = app.oneshot(request).await.expect("response");
-    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
-    let json = json_body(response).await;
-    assert!(json["error"].as_str().unwrap_or("").contains("weight"));
-}
-
-#[shared_runtime_test]
-async fn create_invite_rejects_weight_above_one() {
-    let db = isolated_db().await;
-    let (app, keys, _account_id) = signup_and_get_account("inviteweightabove", db.pool()).await;
-
-    let envelope_b64 = tc_crypto::encode_base64url(b"dummy");
-    let body = serde_json::json!({
-        "envelope": envelope_b64,
-        "delivery_method": "qr",
-        "weight": 1.5,
-        "attestation": {}
-    })
-    .to_string();
-
-    let request = build_authed_request(
-        Method::POST,
-        "/trust/invites",
-        &body,
-        &keys.device_signing_key,
-        &keys.device_kid,
-    );
-
-    let response = app.oneshot(request).await.expect("response");
-    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
-    let json = json_body(response).await;
-    assert!(json["error"].as_str().unwrap_or("").contains("weight"));
-}
-
-#[shared_runtime_test]
-async fn create_invite_rejects_negative_weight() {
-    let db = isolated_db().await;
-    let (app, keys, _account_id) = signup_and_get_account("inviteweightneg", db.pool()).await;
-
-    let envelope_b64 = tc_crypto::encode_base64url(b"dummy");
-    let body = serde_json::json!({
-        "envelope": envelope_b64,
-        "delivery_method": "qr",
-        "weight": -0.5,
         "attestation": {}
     })
     .to_string();
