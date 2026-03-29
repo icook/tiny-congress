@@ -26,3 +26,6 @@ crates/tc-crypto/pkg/
 
 # Skaffold build output
 artifacts.json
+
+# Local file upload storage (development only)
+uploads/

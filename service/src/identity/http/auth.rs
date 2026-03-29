@@ -20,7 +20,8 @@ use std::sync::Arc;
 use axum::http::StatusCode;
 use axum::{
     body::Bytes,
-    extract::{FromRequest, Request},
+    extract::{FromRequest, FromRequestParts, Request},
+    http::request::Parts,
     response::Response,
 };
 use sha2::{Digest, Sha256};
@@ -265,6 +266,149 @@ impl<S: Send + Sync> FromRequest<S> for AuthenticatedDevice {
             account_id: device.account_id,
             device_kid: kid,
             body_bytes,
+        })
+    }
+}
+
+// ─── Parts-only auth extractor (for multipart/form-data handlers) ────────────
+
+/// Authenticated device extracted from request headers only (no body read).
+///
+/// Unlike [`AuthenticatedDevice`], this extractor implements [`FromRequestParts`]
+/// and does **not** consume the request body.  The signature is verified over an
+/// empty body hash, so the frontend must sign the canonical message with an empty
+/// body string when using multipart upload endpoints.
+///
+/// Use this in handlers that also extract [`axum::extract::Multipart`] because
+/// Axum only allows one [`FromRequest`] (body-consuming) extractor per handler.
+pub struct AuthenticatedDeviceParts {
+    pub account_id: Uuid,
+    pub device_kid: tc_crypto::Kid,
+}
+
+impl<S: Send + Sync> FromRequestParts<S> for AuthenticatedDeviceParts {
+    type Rejection = Response;
+
+    #[allow(clippy::too_many_lines)]
+    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+        let repo = parts
+            .extensions
+            .get::<Arc<dyn IdentityRepo>>()
+            .ok_or_else(|| auth_error("Server misconfiguration"))?
+            .clone();
+
+        let kid_str = parts
+            .headers
+            .get("X-Device-Kid")
+            .and_then(|v| v.to_str().ok())
+            .ok_or_else(|| auth_error("Missing X-Device-Kid header"))?
+            .to_string();
+
+        let signature_str = parts
+            .headers
+            .get("X-Signature")
+            .and_then(|v| v.to_str().ok())
+            .ok_or_else(|| auth_error("Missing X-Signature header"))?
+            .to_string();
+
+        let timestamp_str = parts
+            .headers
+            .get("X-Timestamp")
+            .and_then(|v| v.to_str().ok())
+            .ok_or_else(|| auth_error("Missing X-Timestamp header"))?
+            .to_string();
+
+        let nonce = parts
+            .headers
+            .get("X-Nonce")
+            .and_then(|v| v.to_str().ok())
+            .ok_or_else(|| auth_error("Missing X-Nonce header"))?
+            .to_string();
+
+        if let Err(msg) = validate_nonce(&nonce) {
+            return Err(auth_error(msg));
+        }
+
+        let kid: tc_crypto::Kid = kid_str
+            .parse()
+            .map_err(|_| auth_error("Invalid KID format"))?;
+
+        let timestamp: i64 = timestamp_str
+            .parse()
+            .map_err(|_| auth_error("Invalid timestamp"))?;
+
+        let now = chrono::Utc::now().timestamp();
+        if super::timestamp_is_stale(now, timestamp) {
+            return Err(auth_error("Timestamp out of range"));
+        }
+
+        let sig_bytes = tc_crypto::decode_base64url(&signature_str)
+            .map_err(|_| auth_error("Invalid signature encoding"))?;
+        let sig_arr: [u8; 64] = sig_bytes
+            .as_slice()
+            .try_into()
+            .map_err(|_| auth_error("Signature must be 64 bytes"))?;
+
+        let method = parts.method.to_string();
+        let path = parts.uri.path_and_query().map_or_else(
+            || parts.uri.path().to_string(),
+            |pq| pq.as_str().to_string(),
+        );
+
+        // Verify signature over empty body (canonical message with empty body hash).
+        let empty_hash = Sha256::digest(b"");
+        let empty_hash_hex = format!("{empty_hash:x}");
+        let canonical = format!("{method}\n{path}\n{timestamp}\n{nonce}\n{empty_hash_hex}");
+
+        let device = repo
+            .get_device_key_by_kid(&kid)
+            .await
+            .map_err(|e| match e {
+                DeviceKeyRepoError::NotFound => auth_error("Device not found"),
+                DeviceKeyRepoError::Database(db_err) => {
+                    tracing::error!("Auth device lookup failed: {db_err}");
+                    auth_error("Authentication failed")
+                }
+                DeviceKeyRepoError::DuplicateKid
+                | DeviceKeyRepoError::AlreadyRevoked
+                | DeviceKeyRepoError::MaxDevicesReached => {
+                    tracing::error!("Unexpected repo error during auth lookup: {e}");
+                    auth_error("Authentication failed")
+                }
+            })?;
+
+        let device_pubkey = DevicePubkey::from_base64url(&device.device_pubkey)
+            .map_err(|_| auth_error("Corrupted device key"))?;
+
+        tc_crypto::verify_ed25519(device_pubkey.as_bytes(), canonical.as_bytes(), &sig_arr)
+            .map_err(|_| auth_error("Invalid signature"))?;
+
+        let nonce_hash = Sha256::digest(nonce.as_bytes());
+        repo.check_and_record_nonce(&nonce_hash)
+            .await
+            .map_err(|e| match e {
+                NonceRepoError::Replay => auth_error("Duplicate nonce (possible replay)"),
+                NonceRepoError::Database(db_err) => {
+                    tracing::error!("Nonce check failed: {db_err}");
+                    auth_error("Authentication failed")
+                }
+            })?;
+
+        if device.revoked_at.is_some() {
+            return Err(super::forbidden("Device has been revoked"));
+        }
+
+        let touch_kid = kid.clone();
+        let touch_repo = repo;
+        tokio::spawn(async move {
+            if let Err(e) = touch_repo.touch_device_key(&touch_kid).await {
+                tracing::warn!("Failed to touch device {touch_kid}: {e}");
+            }
+        });
+
+        Ok(Self {
+            account_id: device.account_id,
+            device_kid: kid,
         })
     }
 }
