@@ -4,7 +4,7 @@
  */
 
 import { fetchJson } from '@/api/fetchClient';
-import { signedFetchJson } from '@/api/signing';
+import { signedFetchFormData, signedFetchJson } from '@/api/signing';
 import type { CryptoModule } from '@/providers/CryptoProvider';
 
 // === Types ===
@@ -120,6 +120,29 @@ export async function submitMeme(
     privateKey,
     wasmCrypto,
     body
+  );
+}
+
+export async function submitMemeWithImage(
+  roomId: string,
+  image: File,
+  caption: string | undefined,
+  deviceKid: string,
+  privateKey: CryptoKey,
+  wasmCrypto: CryptoModule
+): Promise<Submission> {
+  const formData = new FormData();
+  formData.append('image', image);
+  if (caption) {
+    formData.append('caption', caption);
+  }
+  return signedFetchFormData(
+    `/api/v1/rooms/${roomId}/submissions/upload`,
+    'POST',
+    deviceKid,
+    privateKey,
+    wasmCrypto,
+    formData
   );
 }
 

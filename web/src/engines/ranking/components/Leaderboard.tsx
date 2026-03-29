@@ -1,4 +1,5 @@
-import { Badge, Center, Loader, Stack, Table, Text, Title } from '@mantine/core';
+import { Badge, Center, Image, Loader, Stack, Table, Text, Title } from '@mantine/core';
+import { getApiBaseUrl } from '@/config';
 import { useLeaderboard, type Submission } from '../api';
 
 interface Props {
@@ -41,9 +42,13 @@ function SubmissionPreviewCell({
         </Text>
       ) : null}
       {submission.content_type === 'image' && submission.image_key ? (
-        <Text size="sm" c="dimmed" fs="italic">
-          [image]
-        </Text>
+        <Image
+          src={`${getApiBaseUrl()}/api/v1/uploads/${submission.image_key}`}
+          alt={submission.caption ?? 'Submission'}
+          maw={120}
+          radius="sm"
+          fallbackSrc="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"
+        />
       ) : null}
       {submission.caption ? (
         <Text size="xs" c="dimmed" truncate maw={250}>

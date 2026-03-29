@@ -12,6 +12,7 @@ import {
   Text,
   Title,
 } from '@mantine/core';
+import { getApiBaseUrl } from '@/config';
 import { useCrypto } from '@/providers/CryptoProvider';
 import { useDevice } from '@/providers/DeviceProvider';
 import { useMatchup, useRecordMatchup, type Round, type Submission } from '../api';
@@ -47,7 +48,7 @@ function SubmissionCard({
       <Stack gap="xs">
         {submission.content_type === 'image' && submission.image_key ? (
           <Image
-            src={submission.image_key}
+            src={`${getApiBaseUrl()}/api/v1/uploads/${submission.image_key}`}
             alt="Submission"
             radius="sm"
             fit="contain"

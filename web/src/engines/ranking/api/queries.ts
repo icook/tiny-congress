@@ -12,6 +12,7 @@ import {
   listRounds,
   recordMatchup,
   submitMeme,
+  submitMemeWithImage,
   type HallOfFameEntry,
   type LeaderboardResponse,
   type MatchupPair,
@@ -91,6 +92,28 @@ export function useSubmitMeme(roomId: string) {
   >({
     mutationFn: ({ body, deviceKid, privateKey, wasmCrypto }) =>
       submitMeme(roomId, body, deviceKid, privateKey, wasmCrypto),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['ranking', 'rounds', 'current', roomId] });
+    },
+  });
+}
+
+export function useSubmitMemeWithImage(roomId: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation<
+    Submission,
+    Error,
+    {
+      image: File;
+      caption?: string;
+      deviceKid: string;
+      privateKey: CryptoKey;
+      wasmCrypto: CryptoModule;
+    }
+  >({
+    mutationFn: ({ image, caption, deviceKid, privateKey, wasmCrypto }) =>
+      submitMemeWithImage(roomId, image, caption, deviceKid, privateKey, wasmCrypto),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['ranking', 'rounds', 'current', roomId] });
     },

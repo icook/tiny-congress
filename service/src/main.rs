@@ -48,9 +48,11 @@ use tinycongress_api::{
     rooms::{
         self,
         content_filter::{ContentFilter, NoopFilter},
+        http::serve_upload,
         repo::{PgRoomsRepo, RoomsRepo},
         service::{DefaultRoomsService, RoomsService},
     },
+    storage::{LocalFileStore, ObjectStore},
     trust::{
         self,
         engine::TrustEngine,
@@ -163,7 +165,16 @@ async fn build_app(
     schema: Schema<QueryRoot, MutationRoot, EmptySubscription>,
     allow_origin: AllowOrigin,
 ) -> Result<(Router, PgPool), anyhow::Error> {
-    let rest_v1 = Router::new().route("/build-info", get(rest::get_build_info));
+    // Object store for uploaded files
+    let upload_dir = std::env::var("TC_UPLOAD_DIR").unwrap_or_else(|_| "./uploads".to_string());
+    let object_store: Arc<dyn ObjectStore> = Arc::new(
+        LocalFileStore::new(upload_dir.into(), "/api/v1/uploads")
+            .map_err(|e| anyhow::anyhow!("failed to create upload directory: {e}"))?,
+    );
+
+    let rest_v1 = Router::new()
+        .route("/build-info", get(rest::get_build_info))
+        .route("/uploads/{*key}", get(serve_upload));
 
     // Identity wiring
     let repo = Arc::new(PgIdentityRepo::new(pool.clone()));
@@ -310,7 +321,8 @@ async fn build_app(
         .layer(Extension(pool.clone()))
         .layer(Extension(engine_registry))
         .layer(Extension(engine_ctx))
-        .layer(Extension(Arc::new(NoopFilter) as Arc<dyn ContentFilter>));
+        .layer(Extension(Arc::new(NoopFilter) as Arc<dyn ContentFilter>))
+        .layer(Extension(object_store));
 
     // Add ID.me config extension if configured
     let app = if let Some(ref idme_config) = config.idme {

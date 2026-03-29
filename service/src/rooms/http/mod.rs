@@ -9,19 +9,21 @@ pub(crate) mod polling;
 pub(crate) mod ranking;
 
 use axum::{
+    extract::DefaultBodyLimit,
     routing::{delete, get, patch, post},
     Router,
 };
 use serde::Deserialize;
 use utoipa::ToSchema;
 
-// Re-export response/request types that external code depends on
+// Re-export handlers/types that external code depends on
 pub use polling::{
     BucketResponse, CreateDimensionRequest, CreateEvidenceBody, CreatePollRequest,
     DimensionDetailResponse, DimensionDistributionResponse, DimensionResponse,
     DimensionStatsResponse, EvidenceItem, EvidenceResponse, PollDistributionResponse, PollResponse,
     PollResultsResponse, PollStatusRequest, VoteResponse,
 };
+pub use ranking::serve_upload;
 
 // ─── Request types (platform-level) ───────────────────────────────────────
 
@@ -207,6 +209,10 @@ pub fn router() -> Router {
         .route(
             "/rooms/{room_id}/submissions",
             post(ranking::submit_meme),
+        )
+        .route(
+            "/rooms/{room_id}/submissions/upload",
+            post(ranking::submit_meme_upload).layer(DefaultBodyLimit::max(6 * 1024 * 1024)),
         )
         .route(
             "/rooms/{room_id}/matchup",

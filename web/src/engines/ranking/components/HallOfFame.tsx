@@ -1,5 +1,17 @@
 import { useState } from 'react';
-import { Badge, Button, Card, Center, Group, Loader, Stack, Text, Title } from '@mantine/core';
+import {
+  Badge,
+  Button,
+  Card,
+  Center,
+  Group,
+  Image,
+  Loader,
+  Stack,
+  Text,
+  Title,
+} from '@mantine/core';
+import { getApiBaseUrl } from '@/config';
 import { getHallOfFame, type HallOfFameEntry } from '../api';
 
 const PAGE_SIZE = 20;
@@ -26,10 +38,14 @@ function HallOfFameCard({ entry }: { entry: HallOfFameEntry }) {
               {entry.submission.url}
             </Text>
           ) : null}
-          {entry.submission.content_type === 'image' ? (
-            <Text size="sm" c="dimmed" fs="italic">
-              [image]
-            </Text>
+          {entry.submission.content_type === 'image' && entry.submission.image_key ? (
+            <Image
+              src={`${getApiBaseUrl()}/api/v1/uploads/${entry.submission.image_key}`}
+              alt={entry.submission.caption ?? 'Submission'}
+              maw={200}
+              radius="sm"
+              fallbackSrc="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"
+            />
           ) : null}
           {entry.submission.caption ? <Text size="sm">{entry.submission.caption}</Text> : null}
           <Text size="xs" c="dimmed">

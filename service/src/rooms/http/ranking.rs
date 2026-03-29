@@ -6,7 +6,13 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use axum::{extract::Extension, extract::Query, http::StatusCode, response::IntoResponse, Json};
+use axum::{
+    extract::Extension,
+    extract::Query,
+    http::StatusCode,
+    response::{IntoResponse, Response},
+    Json,
+};
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use tc_engine_ranking::repo::rounds::{RoundRecord, RoundStatus};
@@ -16,7 +22,14 @@ use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::http::{bad_request, conflict, forbidden, internal_error, not_found, Path};
-use crate::identity::http::auth::AuthenticatedDevice;
+use crate::identity::http::auth::{AuthenticatedDevice, AuthenticatedDeviceParts};
+use crate::storage::ObjectStore;
+
+/// Maximum allowed upload size in bytes (5 MiB).
+const MAX_UPLOAD_BYTES: usize = 5 * 1024 * 1024;
+
+/// MIME types accepted for image uploads.
+const ALLOWED_IMAGE_TYPES: &[&str] = &["image/jpeg", "image/png", "image/gif", "image/webp"];
 
 // ─── Response types ──────────────────────────────────────────────────────────
 
@@ -616,6 +629,149 @@ pub async fn get_current_rounds(
             let resp: Vec<_> = rounds.iter().map(round_to_response).collect();
             (StatusCode::OK, Json(resp)).into_response()
         }
+        Err(e) => ranking_error_response(e),
+    }
+}
+
+// ─── Upload handlers ──────────────────────────────────────────────────────────
+
+/// Serve an uploaded file by its storage key.
+// lint-patterns:allow-no-utoipa — static file serving endpoint; no JSON schema needed
+pub async fn serve_upload(
+    Path(key): Path<String>,
+    Extension(store): Extension<Arc<dyn ObjectStore>>,
+) -> Response {
+    match store.get(&key).await {
+        Ok(Some((data, content_type))) => Response::builder()
+            .header("Content-Type", content_type)
+            .header("Cache-Control", "public, max-age=31536000, immutable")
+            .body(axum::body::Body::from(data))
+            .unwrap_or_else(|_| internal_error()),
+        Ok(None) => not_found("file not found"),
+        Err(e) => {
+            tracing::error!("Object store get error: {e}");
+            internal_error()
+        }
+    }
+}
+
+/// Return the file extension string for a known image MIME type.
+fn ext_for_mime(mime: &str) -> Option<&'static str> {
+    match mime {
+        "image/jpeg" => Some("jpg"),
+        "image/png" => Some("png"),
+        "image/gif" => Some("gif"),
+        "image/webp" => Some("webp"),
+        _ => None,
+    }
+}
+
+/// Submit a meme with an image upload via multipart/form-data.
+///
+/// Form fields:
+/// - `image` (required): the image file
+/// - `caption` (optional): text caption
+///
+/// Authentication: uses [`AuthenticatedDeviceParts`] (signature over empty body)
+/// because [`axum::extract::Multipart`] also consumes the request body and only
+/// one body-consuming extractor is allowed per handler.
+// lint-patterns:allow-no-utoipa — multipart endpoint; utoipa doesn't support multipart form bodies
+pub async fn submit_meme_upload(
+    auth: AuthenticatedDeviceParts,
+    Path(room_id): Path<Uuid>,
+    Extension(ranking_service): Extension<Arc<dyn RankingService>>,
+    Extension(store): Extension<Arc<dyn ObjectStore>>,
+    mut multipart: axum::extract::Multipart,
+) -> Response {
+    let mut image_data: Option<Vec<u8>> = None;
+    let mut image_content_type: Option<String> = None;
+    let mut caption: Option<String> = None;
+
+    loop {
+        let field = match multipart.next_field().await {
+            Ok(Some(f)) => f,
+            Ok(None) => break,
+            Err(e) => return bad_request(&format!("invalid multipart data: {e}")),
+        };
+
+        let field_name = field.name().unwrap_or("").to_string();
+
+        match field_name.as_str() {
+            "image" => {
+                let ct = field
+                    .content_type()
+                    .unwrap_or("application/octet-stream")
+                    .to_string();
+
+                if !ALLOWED_IMAGE_TYPES.contains(&ct.as_str()) {
+                    return bad_request(&format!(
+                        "unsupported image type: {ct}. Allowed: jpeg, png, gif, webp"
+                    ));
+                }
+
+                let bytes = match field.bytes().await {
+                    Ok(b) => b,
+                    Err(e) => return bad_request(&format!("failed to read image data: {e}")),
+                };
+
+                if bytes.len() > MAX_UPLOAD_BYTES {
+                    return bad_request("image exceeds 5 MB limit");
+                }
+
+                if bytes.is_empty() {
+                    return bad_request("image field is empty");
+                }
+
+                image_content_type = Some(ct);
+                image_data = Some(bytes.to_vec());
+            }
+            "caption" => {
+                let text = match field.text().await {
+                    Ok(t) => t,
+                    Err(e) => return bad_request(&format!("failed to read caption: {e}")),
+                };
+                if !text.is_empty() {
+                    caption = Some(text);
+                }
+            }
+            _ => {
+                // Ignore unknown fields
+            }
+        }
+    }
+
+    let Some(data) = image_data else {
+        return bad_request("image field is required");
+    };
+    let Some(content_type) = image_content_type else {
+        return bad_request("image content-type is missing");
+    };
+
+    let Some(ext) = ext_for_mime(&content_type) else {
+        return bad_request(&format!("unsupported image type: {content_type}"));
+    };
+
+    // Key format: {room_id}/{uuid}.{ext}
+    let file_id = Uuid::new_v4();
+    let key = format!("{room_id}/{file_id}.{ext}");
+
+    if let Err(e) = store.put(&key, &data, &content_type).await {
+        tracing::error!("Failed to store upload {key}: {e}");
+        return internal_error();
+    }
+
+    match ranking_service
+        .submit(
+            room_id,
+            auth.account_id,
+            ContentType::Image,
+            None,
+            Some(&key),
+            caption.as_deref(),
+        )
+        .await
+    {
+        Ok(sub) => (StatusCode::CREATED, Json(submission_to_response(&sub))).into_response(),
         Err(e) => ranking_error_response(e),
     }
 }

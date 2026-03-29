@@ -12,9 +12,10 @@ import {
   TextInput,
   Title,
 } from '@mantine/core';
+import { getApiBaseUrl } from '@/config';
 import { useCrypto } from '@/providers/CryptoProvider';
 import { useDevice } from '@/providers/DeviceProvider';
-import { useSubmitMeme, type Round, type Submission } from '../api';
+import { useSubmitMeme, useSubmitMemeWithImage, type Round, type Submission } from '../api';
 import { RoundCountdown } from './RoundCountdown';
 
 interface Props {
@@ -43,7 +44,7 @@ function SubmissionPreview({ submission }: { submission: Submission }) {
         ) : null}
         {submission.content_type === 'image' && submission.image_key ? (
           <Image
-            src={submission.image_key}
+            src={`${getApiBaseUrl()}/api/v1/uploads/${submission.image_key}`}
             alt="Submitted meme"
             maw={300}
             radius="sm"
@@ -64,6 +65,7 @@ export function SubmitView({ roomId, round }: Props) {
   const { deviceKid, privateKey } = useDevice();
   const { crypto } = useCrypto();
   const submitMutation = useSubmitMeme(roomId);
+  const submitImageMutation = useSubmitMemeWithImage(roomId);
 
   const [mode, setMode] = useState<ContentMode>('url');
   const [url, setUrl] = useState('');
@@ -73,6 +75,8 @@ export function SubmitView({ roomId, round }: Props) {
 
   const isAuthenticated = Boolean(deviceKid && privateKey && crypto);
   const hasContent = mode === 'url' ? url.trim().length > 0 : imageFile !== null;
+  const isPending = submitMutation.isPending || submitImageMutation.isPending;
+  const mutationError = submitMutation.error ?? submitImageMutation.error;
 
   const handleSubmit = () => {
     if (!deviceKid || !privateKey || !crypto) {
@@ -82,19 +86,29 @@ export function SubmitView({ roomId, round }: Props) {
       return;
     }
 
-    const body =
-      mode === 'url'
-        ? {
-            content_type: 'url' as const,
-            url: url.trim(),
-            caption: caption.trim() || undefined,
-          }
-        : {
-            content_type: 'image' as const,
-            // image_key would be set after upload; placeholder for now
-            image_key: imageFile?.name,
-            caption: caption.trim() || undefined,
-          };
+    if (mode === 'image' && imageFile) {
+      submitImageMutation.mutate(
+        {
+          image: imageFile,
+          caption: caption.trim() || undefined,
+          deviceKid,
+          privateKey,
+          wasmCrypto: crypto,
+        },
+        {
+          onSuccess: (result) => {
+            setSubmitted(result);
+          },
+        }
+      );
+      return;
+    }
+
+    const body = {
+      content_type: 'url' as const,
+      url: url.trim(),
+      caption: caption.trim() || undefined,
+    };
 
     submitMutation.mutate(
       { body, deviceKid, privateKey, wasmCrypto: crypto },
@@ -205,13 +219,13 @@ export function SubmitView({ roomId, round }: Props) {
             </Card>
           ) : null}
 
-          {submitMutation.error ? (
+          {mutationError ? (
             <Text size="sm" c="red">
-              {submitMutation.error.message}
+              {mutationError.message}
             </Text>
           ) : null}
 
-          <Button onClick={handleSubmit} disabled={!hasContent} loading={submitMutation.isPending}>
+          <Button onClick={handleSubmit} disabled={!hasContent} loading={isPending}>
             Submit
           </Button>
         </>
