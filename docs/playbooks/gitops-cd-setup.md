@@ -1,132 +1,60 @@
-# GitOps CD Setup
+# CD Setup (ArgoCD)
 
 ## When to use
-- First-time setup of the gitops CD pipeline
-- Rotating the deploy key or webhook secret
-- Debugging the `deploy-gitops` CI job
+- First-time setup of the ArgoCD CI deploy pipeline
+- Rotating the ArgoCD CI token
+- Debugging the `deploy-argocd` CI job
 
 ## Overview
 
-The `deploy-gitops` job in CI automatically updates image digests in the `icook/homelab-gitops` repo after building images on `master`. This triggers Flux reconciliation and a rolling deployment.
+The `deploy-argocd` job in CI sets image digests on the ArgoCD Application and triggers a sync after building images on `master`. No write access to `homelab-gitops` is needed.
 
 ```
 Push to master
   → CI builds & pushes images to GHCR (~3-5 min)
-  → deploy-gitops writes digests to homelab-gitops/main
-  → GitHub webhook fires → Flux reconciles
-  → Helm sees digest diff → rolling update (~30s)
+  → deploy-argocd sets digests via ArgoCD API + syncs
+  → ArgoCD rolling update (~30s)
 Total: ~4-6 min from push to pods running
 ```
 
+### ArgoCD config (in homelab-gitops)
+- **CI account**: `accounts.ci: apiKey` (API-only, no UI login)
+- **CI RBAC**: sync, get, override on `default/tiny-congress-demo` only
+- **Application**: `tiny-congress-demo` in `default` project
+
 ## Prerequisites
 
-- `gh` CLI authenticated with admin access to both repos
-- `ssh-keygen` for key generation
-- `kubectl` access to the cluster running Flux
-- `sops` for decrypting the webhook token
+- `argocd` CLI
+- `gh` CLI authenticated with admin access to `icook/tiny-congress`
+- Browser access to `argocd.ibcook.com` for SSO login
 
 ## LLM delegation
-
-Steps are marked to indicate who should run them:
 
 - **LLM**: Safe to delegate — no secrets involved
 - **HUMAN**: Requires handling secret material — must be run by a human
 
-## Step 1: Generate deploy key (HUMAN)
+## Step 1: Generate ArgoCD CI token (HUMAN)
 
-Generate an Ed25519 SSH keypair. This produces secret material that must not be exposed to an LLM.
+Log in via SSO and generate an API token for the `ci` account:
 
 ```bash
-ssh-keygen -t ed25519 -C "tiny-congress-ci" -f /tmp/gitops-deploy-key -N ""
+argocd login argocd.ibcook.com --sso --grpc-web
+argocd account generate-token --account ci --grpc-web
 ```
 
-## Step 2: Add public deploy key to gitops repo (LLM)
-
-The public key is not secret and can be added by an LLM:
+## Step 2: Set GHA secrets (HUMAN)
 
 ```bash
-gh repo deploy-key add /tmp/gitops-deploy-key.pub \
-  --repo icook/homelab-gitops \
-  --title "tiny-congress-ci" \
-  --allow-write
+gh secret set ARGOCD_AUTH_TOKEN --repo icook/tiny-congress --body "<token>"
+gh secret set ARGOCD_SERVER --repo icook/tiny-congress --body "argocd.ibcook.com"
 ```
 
-Verify it was added:
+## Step 3: Verify the pipeline (LLM)
+
+Check that secrets exist (does not reveal values):
 
 ```bash
-gh repo deploy-key list --repo icook/homelab-gitops
-```
-
-## Step 3: Set deploy key secret on tiny-congress (HUMAN)
-
-The private key is secret. Set it as a repository secret manually:
-
-```bash
-gh secret set GITOPS_DEPLOY_KEY \
-  --repo icook/tiny-congress \
-  < /tmp/gitops-deploy-key
-```
-
-Clean up the local key files:
-
-```bash
-rm /tmp/gitops-deploy-key /tmp/gitops-deploy-key.pub
-```
-
-## Step 4: Get Flux webhook path (LLM)
-
-```bash
-kubectl -n flux-system get receiver github-receiver \
-  -o jsonpath='{.status.webhookPath}'
-```
-
-Save the output — it's needed for webhook configuration but is not secret on its own.
-
-## Step 5: Decrypt webhook token (HUMAN)
-
-This produces a secret token. Do not share the output with an LLM.
-
-```bash
-sops --decrypt clusters/sauce/flux-system/webhook-token.sops.yaml
-# Note the stringData.token value
-```
-
-## Step 6: Create webhooks on both repos (HUMAN)
-
-These commands require the webhook secret token from Step 5. Replace `<webhook-path>` and `<webhook-secret>` with actual values.
-
-```bash
-for REPO in icook/homelab-gitops icook/tiny-congress; do
-  gh api "repos/${REPO}/hooks" \
-    --method POST \
-    --field name=web \
-    --field active=true \
-    -f "config[url]=https://flux-webhook.ibcook.com/<webhook-path>" \
-    -f "config[content_type]=application/json" \
-    -f "config[secret]=<webhook-secret>" \
-    --field "events[]=push"
-done
-```
-
-Verify webhooks were created:
-
-```bash
-gh api repos/icook/homelab-gitops/hooks --jq '.[].config.url'
-gh api repos/icook/tiny-congress/hooks --jq '.[].config.url'
-```
-
-## Step 7: Verify the pipeline (LLM)
-
-Check that the `GITOPS_DEPLOY_KEY` secret exists (does not reveal the value):
-
-```bash
-gh secret list --repo icook/tiny-congress | grep GITOPS_DEPLOY_KEY
-```
-
-Check that the deploy key exists on the gitops repo:
-
-```bash
-gh repo deploy-key list --repo icook/homelab-gitops
+gh secret list --repo icook/tiny-congress | grep -E 'ARGOCD_(AUTH_TOKEN|SERVER)'
 ```
 
 Watch for a CI run on the latest master push:
@@ -137,52 +65,43 @@ gh run list --repo icook/tiny-congress \
   --json databaseId,status,conclusion,displayTitle
 ```
 
-Check `deploy-gitops` job output from the most recent run:
+Check `deploy-argocd` job output from the most recent run:
 
 ```bash
 RUN_ID=$(gh run list --repo icook/tiny-congress \
   --branch master --limit 1 --json databaseId --jq '.[0].databaseId')
 gh run view "$RUN_ID" --repo icook/tiny-congress --log \
   --job "$(gh run view "$RUN_ID" --repo icook/tiny-congress \
-    --json jobs --jq '.jobs[] | select(.name == "Update gitops image digests") | .databaseId')"
+    --json jobs --jq '.jobs[] | select(.name == "Deploy via ArgoCD") | .databaseId')"
 ```
 
-Verify the gitops repo was updated:
+Check ArgoCD app status:
 
 ```bash
-gh api repos/icook/homelab-gitops/commits/main \
-  --jq '.commit.message'
-```
-
-Check Flux reconciliation:
-
-```bash
-kubectl -n flux-system get kustomization -w
-flux get helmrelease -n default
+argocd app get tiny-congress-demo --grpc-web
+# Should show Synced + Healthy with the new digest
 ```
 
 ## Troubleshooting
 
 | Symptom | Cause | Fix |
 |---------|-------|-----|
-| `deploy-gitops` job not running | Not a push to `master` | Job only runs on `master` pushes |
-| "Permission denied (publickey)" | Deploy key misconfigured | Verify `GITOPS_DEPLOY_KEY` secret matches the deploy key |
+| `deploy-argocd` job not running | Not a push to `master` | Job only runs on `master` pushes with deployable changes |
+| "ARGOCD_AUTH_TOKEN not set" | Secret missing | Re-run Step 2 |
+| ArgoCD permission denied | CI token expired or RBAC wrong | Regenerate token (Step 1); check RBAC in homelab-gitops |
 | Empty digest output | GHCR API path wrong | Check if `/orgs/` should be `/users/` for the account type |
-| "No digest changes detected" | Images unchanged | Expected if no code changed; check GHCR for new tags |
-| Flux not reconciling | Webhook not configured | Check recent deliveries: `gh api repos/icook/homelab-gitops/hooks --jq '.[].last_response'` |
+| `--grpc-web` errors | Cloudflare Tunnel config | Native gRPC not supported through Cloudflare Tunnel; `--grpc-web` is required |
 | Pods not updating | Chart doesn't use digest | Verify templates include `@digest` suffix |
-| Helm template fails with "syntheticBackupKey must be set" | HelmRelease missing `syntheticBackupKey` value | Extract from cluster: `kubectl get secret tc-demo-app -n tiny-congress-demo -o jsonpath='{.data.synthetic-backup-key}' \| base64 -d` and add to HelmRelease values |
 
 ## Verification checklist
 
-- [ ] Deploy key with write access exists on `icook/homelab-gitops` (LLM)
-- [ ] `GITOPS_DEPLOY_KEY` secret exists on `icook/tiny-congress` (LLM — existence only)
-- [ ] Webhooks configured on both repos (LLM — URL check only)
-- [ ] `deploy-gitops` job completes on a `master` push (LLM)
-- [ ] Gitops repo shows updated digest values after CI run (LLM)
-- [ ] Flux reconciles and pods show new image digests (LLM)
+- [ ] `ARGOCD_AUTH_TOKEN` secret exists on `icook/tiny-congress` (LLM — existence only)
+- [ ] `ARGOCD_SERVER` secret exists on `icook/tiny-congress` (LLM — existence only)
+- [ ] `deploy-argocd` job completes on a `master` push (LLM)
+- [ ] `argocd app get tiny-congress-demo` shows Synced + Healthy (LLM)
 
 ## See also
-- `.github/workflows/ci.yml` - The `deploy-gitops` job definition
-- `kube/app/templates/deployment.yaml` - Helm templates with digest support
-- `kube/app/values.yaml` - Default values including `digest: ""`
+- `.github/workflows/ci.yml` — The `deploy-argocd` job definition
+- `kube/app/templates/deployment.yaml` — Helm templates with digest support
+- `kube/app/values.yaml` — Default values including `digest: ""`
+- ArgoCD CI account config lives in `homelab-gitops` (see handoff doc)
