@@ -1,6 +1,5 @@
 ---
 source: service/tests/schema_snapshot.rs
-assertion_line: 188
 expression: current_schema
 ---
 -- Schema Snapshot
@@ -70,6 +69,24 @@ CREATE TABLE rooms__bot_traces (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     completed_at TIMESTAMPTZ);
 
+CREATE TABLE rooms__hall_of_fame (
+    id UUID NOT NULL DEFAULT gen_random_uuid(),
+    room_id UUID NOT NULL,
+    round_id UUID NOT NULL,
+    submission_id UUID NOT NULL,
+    final_rating FLOAT8 NOT NULL,
+    rank INT4 NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now());
+
+CREATE TABLE rooms__matchups (
+    id UUID NOT NULL DEFAULT gen_random_uuid(),
+    round_id UUID NOT NULL,
+    ranker_id UUID NOT NULL,
+    submission_a UUID NOT NULL,
+    submission_b UUID NOT NULL,
+    winner_id UUID,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now());
+
 CREATE TABLE rooms__poll_dimensions (
     id UUID NOT NULL DEFAULT gen_random_uuid(),
     poll_id UUID NOT NULL,
@@ -100,6 +117,13 @@ CREATE TABLE rooms__polls (
     closed_at TIMESTAMPTZ,
     closes_at TIMESTAMPTZ,
     agenda_position INT4);
+
+CREATE TABLE rooms__ratings (
+    submission_id UUID NOT NULL,
+    rating FLOAT8 NOT NULL DEFAULT 1500.0,
+    deviation FLOAT8 NOT NULL DEFAULT 350.0,
+    volatility FLOAT8 NOT NULL DEFAULT 0.06,
+    matchup_count INT4 NOT NULL DEFAULT 0);
 
 CREATE TABLE rooms__research_suggestions (
     id UUID NOT NULL DEFAULT gen_random_uuid(),
@@ -135,6 +159,26 @@ CREATE TABLE rooms__rooms (
     engine_type TEXT NOT NULL DEFAULT 'polling'::text,
     engine_config JSONB NOT NULL DEFAULT '{}'::jsonb,
     owner_id UUID);
+
+CREATE TABLE rooms__rounds (
+    id UUID NOT NULL DEFAULT gen_random_uuid(),
+    room_id UUID NOT NULL,
+    round_number INT4 NOT NULL,
+    submit_opens_at TIMESTAMPTZ NOT NULL,
+    rank_opens_at TIMESTAMPTZ NOT NULL,
+    closes_at TIMESTAMPTZ NOT NULL,
+    status RANKING_ROUND_STATUS NOT NULL DEFAULT 'submitting'::ranking_round_status,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now());
+
+CREATE TABLE rooms__submissions (
+    id UUID NOT NULL DEFAULT gen_random_uuid(),
+    round_id UUID NOT NULL,
+    author_id UUID NOT NULL,
+    content_type SUBMISSION_CONTENT_TYPE NOT NULL,
+    url TEXT,
+    image_key TEXT,
+    caption TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now());
 
 CREATE TABLE rooms__votes (
     id UUID NOT NULL DEFAULT gen_random_uuid(),
@@ -270,6 +314,24 @@ CREATE INDEX idx_bot_traces_status ON public.rooms__bot_traces USING btree (stat
 -- rooms__bot_traces.rooms__bot_traces_pkey
 CREATE UNIQUE INDEX rooms__bot_traces_pkey ON public.rooms__bot_traces USING btree (id)
 
+-- rooms__hall_of_fame.idx_hall_of_fame_room_created
+CREATE INDEX idx_hall_of_fame_room_created ON public.rooms__hall_of_fame USING btree (room_id, created_at DESC)
+
+-- rooms__hall_of_fame.rooms__hall_of_fame_pkey
+CREATE UNIQUE INDEX rooms__hall_of_fame_pkey ON public.rooms__hall_of_fame USING btree (id)
+
+-- rooms__matchups.idx_matchups_round
+CREATE INDEX idx_matchups_round ON public.rooms__matchups USING btree (round_id)
+
+-- rooms__matchups.idx_matchups_round_ranker
+CREATE INDEX idx_matchups_round_ranker ON public.rooms__matchups USING btree (round_id, ranker_id)
+
+-- rooms__matchups.rooms__matchups_pkey
+CREATE UNIQUE INDEX rooms__matchups_pkey ON public.rooms__matchups USING btree (id)
+
+-- rooms__matchups.uq_matchups_round_ranker_pair
+CREATE UNIQUE INDEX uq_matchups_round_ranker_pair ON public.rooms__matchups USING btree (round_id, ranker_id, submission_a, submission_b)
+
 -- rooms__poll_dimensions.idx_poll_dimensions_poll
 CREATE INDEX idx_poll_dimensions_poll ON public.rooms__poll_dimensions USING btree (poll_id)
 
@@ -290,6 +352,9 @@ CREATE INDEX idx_polls_room ON public.rooms__polls USING btree (room_id)
 
 -- rooms__polls.rooms__polls_pkey
 CREATE UNIQUE INDEX rooms__polls_pkey ON public.rooms__polls USING btree (id)
+
+-- rooms__ratings.rooms__ratings_pkey
+CREATE UNIQUE INDEX rooms__ratings_pkey ON public.rooms__ratings USING btree (submission_id)
 
 -- rooms__research_suggestions.idx_suggestions_account_daily
 CREATE INDEX idx_suggestions_account_daily ON public.rooms__research_suggestions USING btree (room_id, account_id, created_at)
@@ -314,6 +379,21 @@ CREATE UNIQUE INDEX rooms__rooms_pkey ON public.rooms__rooms USING btree (id)
 
 -- rooms__rooms.uq_rooms_name
 CREATE UNIQUE INDEX uq_rooms_name ON public.rooms__rooms USING btree (name)
+
+-- rooms__rounds.idx_rounds_room_status
+CREATE INDEX idx_rounds_room_status ON public.rooms__rounds USING btree (room_id, status)
+
+-- rooms__rounds.rooms__rounds_pkey
+CREATE UNIQUE INDEX rooms__rounds_pkey ON public.rooms__rounds USING btree (id)
+
+-- rooms__rounds.uq_rounds_room_number
+CREATE UNIQUE INDEX uq_rounds_room_number ON public.rooms__rounds USING btree (room_id, round_number)
+
+-- rooms__submissions.rooms__submissions_pkey
+CREATE UNIQUE INDEX rooms__submissions_pkey ON public.rooms__submissions USING btree (id)
+
+-- rooms__submissions.uq_submissions_round_author
+CREATE UNIQUE INDEX uq_submissions_round_author ON public.rooms__submissions USING btree (round_id, author_id)
 
 -- rooms__votes.idx_votes_poll
 CREATE INDEX idx_votes_poll ON public.rooms__votes USING btree (poll_id)
@@ -371,9 +451,18 @@ CREATE UNIQUE INDEX trust__user_influence_pkey ON public.trust__user_influence U
 -- reputation__external_identities.account_id -> accounts.id (ON UPDATE NO ACTION, ON DELETE CASCADE)
 -- rooms__bot_traces.poll_id -> rooms__polls.id (ON UPDATE NO ACTION, ON DELETE NO ACTION)
 -- rooms__bot_traces.room_id -> rooms__rooms.id (ON UPDATE NO ACTION, ON DELETE NO ACTION)
+-- rooms__hall_of_fame.room_id -> rooms__rooms.id (ON UPDATE NO ACTION, ON DELETE CASCADE)
+-- rooms__hall_of_fame.round_id -> rooms__rounds.id (ON UPDATE NO ACTION, ON DELETE CASCADE)
+-- rooms__hall_of_fame.submission_id -> rooms__submissions.id (ON UPDATE NO ACTION, ON DELETE CASCADE)
+-- rooms__matchups.ranker_id -> accounts.id (ON UPDATE NO ACTION, ON DELETE CASCADE)
+-- rooms__matchups.round_id -> rooms__rounds.id (ON UPDATE NO ACTION, ON DELETE CASCADE)
+-- rooms__matchups.submission_a -> rooms__submissions.id (ON UPDATE NO ACTION, ON DELETE CASCADE)
+-- rooms__matchups.submission_b -> rooms__submissions.id (ON UPDATE NO ACTION, ON DELETE CASCADE)
+-- rooms__matchups.winner_id -> rooms__submissions.id (ON UPDATE NO ACTION, ON DELETE SET NULL)
 -- rooms__poll_dimensions.poll_id -> rooms__polls.id (ON UPDATE NO ACTION, ON DELETE CASCADE)
 -- rooms__poll_evidence.dimension_id -> rooms__poll_dimensions.id (ON UPDATE NO ACTION, ON DELETE CASCADE)
 -- rooms__polls.room_id -> rooms__rooms.id (ON UPDATE NO ACTION, ON DELETE CASCADE)
+-- rooms__ratings.submission_id -> rooms__submissions.id (ON UPDATE NO ACTION, ON DELETE CASCADE)
 -- rooms__research_suggestions.account_id -> accounts.id (ON UPDATE NO ACTION, ON DELETE NO ACTION)
 -- rooms__research_suggestions.poll_id -> rooms__polls.id (ON UPDATE NO ACTION, ON DELETE NO ACTION)
 -- rooms__research_suggestions.room_id -> rooms__rooms.id (ON UPDATE NO ACTION, ON DELETE NO ACTION)
@@ -381,6 +470,9 @@ CREATE UNIQUE INDEX trust__user_influence_pkey ON public.trust__user_influence U
 -- rooms__role_assignments.assigned_by -> accounts.id (ON UPDATE NO ACTION, ON DELETE NO ACTION)
 -- rooms__role_assignments.room_id -> rooms__rooms.id (ON UPDATE NO ACTION, ON DELETE NO ACTION)
 -- rooms__rooms.owner_id -> accounts.id (ON UPDATE NO ACTION, ON DELETE NO ACTION)
+-- rooms__rounds.room_id -> rooms__rooms.id (ON UPDATE NO ACTION, ON DELETE CASCADE)
+-- rooms__submissions.author_id -> accounts.id (ON UPDATE NO ACTION, ON DELETE CASCADE)
+-- rooms__submissions.round_id -> rooms__rounds.id (ON UPDATE NO ACTION, ON DELETE CASCADE)
 -- rooms__votes.dimension_id -> rooms__poll_dimensions.id (ON UPDATE NO ACTION, ON DELETE CASCADE)
 -- rooms__votes.poll_id -> rooms__polls.id (ON UPDATE NO ACTION, ON DELETE CASCADE)
 -- rooms__votes.user_id -> accounts.id (ON UPDATE NO ACTION, ON DELETE CASCADE)
@@ -448,6 +540,23 @@ CREATE UNIQUE INDEX trust__user_influence_pkey ON public.trust__user_influence U
 -- rooms__bot_traces: rooms__bot_traces_steps_not_null (CHECK)
 -- rooms__bot_traces: rooms__bot_traces_task_not_null (CHECK)
 -- rooms__bot_traces: rooms__bot_traces_total_cost_usd_not_null (CHECK)
+-- rooms__hall_of_fame: rooms__hall_of_fame_created_at_not_null (CHECK)
+-- rooms__hall_of_fame: rooms__hall_of_fame_final_rating_not_null (CHECK)
+-- rooms__hall_of_fame: rooms__hall_of_fame_id_not_null (CHECK)
+-- rooms__hall_of_fame: rooms__hall_of_fame_pkey (PRIMARY KEY)
+-- rooms__hall_of_fame: rooms__hall_of_fame_rank_not_null (CHECK)
+-- rooms__hall_of_fame: rooms__hall_of_fame_room_id_not_null (CHECK)
+-- rooms__hall_of_fame: rooms__hall_of_fame_round_id_not_null (CHECK)
+-- rooms__hall_of_fame: rooms__hall_of_fame_submission_id_not_null (CHECK)
+-- rooms__matchups: chk_matchups_ordered_pair (CHECK)
+-- rooms__matchups: rooms__matchups_created_at_not_null (CHECK)
+-- rooms__matchups: rooms__matchups_id_not_null (CHECK)
+-- rooms__matchups: rooms__matchups_pkey (PRIMARY KEY)
+-- rooms__matchups: rooms__matchups_ranker_id_not_null (CHECK)
+-- rooms__matchups: rooms__matchups_round_id_not_null (CHECK)
+-- rooms__matchups: rooms__matchups_submission_a_not_null (CHECK)
+-- rooms__matchups: rooms__matchups_submission_b_not_null (CHECK)
+-- rooms__matchups: uq_matchups_round_ranker_pair (UNIQUE)
 -- rooms__poll_dimensions: rooms__poll_dimensions_id_not_null (CHECK)
 -- rooms__poll_dimensions: rooms__poll_dimensions_max_value_not_null (CHECK)
 -- rooms__poll_dimensions: rooms__poll_dimensions_min_value_not_null (CHECK)
@@ -470,6 +579,12 @@ CREATE UNIQUE INDEX trust__user_influence_pkey ON public.trust__user_influence U
 -- rooms__polls: rooms__polls_room_id_not_null (CHECK)
 -- rooms__polls: rooms__polls_status_check (CHECK)
 -- rooms__polls: rooms__polls_status_not_null (CHECK)
+-- rooms__ratings: rooms__ratings_deviation_not_null (CHECK)
+-- rooms__ratings: rooms__ratings_matchup_count_not_null (CHECK)
+-- rooms__ratings: rooms__ratings_pkey (PRIMARY KEY)
+-- rooms__ratings: rooms__ratings_rating_not_null (CHECK)
+-- rooms__ratings: rooms__ratings_submission_id_not_null (CHECK)
+-- rooms__ratings: rooms__ratings_volatility_not_null (CHECK)
 -- rooms__research_suggestions: rooms__research_suggestions_account_id_not_null (CHECK)
 -- rooms__research_suggestions: rooms__research_suggestions_created_at_not_null (CHECK)
 -- rooms__research_suggestions: rooms__research_suggestions_evidence_ids_not_null (CHECK)
@@ -499,6 +614,25 @@ CREATE UNIQUE INDEX trust__user_influence_pkey ON public.trust__user_influence U
 -- rooms__rooms: rooms__rooms_status_check (CHECK)
 -- rooms__rooms: rooms__rooms_status_not_null (CHECK)
 -- rooms__rooms: uq_rooms_name (UNIQUE)
+-- rooms__rounds: rooms__rounds_closes_at_not_null (CHECK)
+-- rooms__rounds: rooms__rounds_created_at_not_null (CHECK)
+-- rooms__rounds: rooms__rounds_id_not_null (CHECK)
+-- rooms__rounds: rooms__rounds_pkey (PRIMARY KEY)
+-- rooms__rounds: rooms__rounds_rank_opens_at_not_null (CHECK)
+-- rooms__rounds: rooms__rounds_room_id_not_null (CHECK)
+-- rooms__rounds: rooms__rounds_round_number_not_null (CHECK)
+-- rooms__rounds: rooms__rounds_status_not_null (CHECK)
+-- rooms__rounds: rooms__rounds_submit_opens_at_not_null (CHECK)
+-- rooms__rounds: uq_rounds_room_number (UNIQUE)
+-- rooms__submissions: chk_submissions_image_requires_key (CHECK)
+-- rooms__submissions: chk_submissions_url_requires_url (CHECK)
+-- rooms__submissions: rooms__submissions_author_id_not_null (CHECK)
+-- rooms__submissions: rooms__submissions_content_type_not_null (CHECK)
+-- rooms__submissions: rooms__submissions_created_at_not_null (CHECK)
+-- rooms__submissions: rooms__submissions_id_not_null (CHECK)
+-- rooms__submissions: rooms__submissions_pkey (PRIMARY KEY)
+-- rooms__submissions: rooms__submissions_round_id_not_null (CHECK)
+-- rooms__submissions: uq_submissions_round_author (UNIQUE)
 -- rooms__votes: rooms__votes_created_at_not_null (CHECK)
 -- rooms__votes: rooms__votes_dimension_id_not_null (CHECK)
 -- rooms__votes: rooms__votes_id_not_null (CHECK)
