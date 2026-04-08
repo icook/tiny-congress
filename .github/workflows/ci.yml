@@ -1292,7 +1292,8 @@ jobs:
           PREVIEW_PID=$!
           timeout 60 bash -c 'until curl -sf http://localhost:5173 >/dev/null; do sleep 1; done'
 
-          # Run tests - coverage report generated in Playwright global teardown
+          # Run Playwright inside the official Docker image for deterministic
+          # font rendering (identical stack on GHA and GitLab CI).
           yarn playwright:clean
           SNAPSHOT_FLAG=""
           GENERATE_BASELINES=""
@@ -1300,7 +1301,17 @@ jobs:
             SNAPSHOT_FLAG="--update-snapshots"
             GENERATE_BASELINES="true"
           fi
-          GENERATE_BASELINES="$GENERATE_BASELINES" yarn playwright:test --project chromium $SNAPSHOT_FLAG || TEST_EXIT=$?
+          docker run --rm --network host --ipc=host \
+            -v "$(pwd):/work" \
+            -w /work \
+            -e CI=true \
+            -e PLAYWRIGHT_COVERAGE="${PLAYWRIGHT_COVERAGE}" \
+            -e PLAYWRIGHT_BASE_URL="${PLAYWRIGHT_BASE_URL}" \
+            -e PLAYWRIGHT_API_URL="${PLAYWRIGHT_API_URL}" \
+            -e PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
+            -e GENERATE_BASELINES="$GENERATE_BASELINES" \
+            mcr.microsoft.com/playwright:v1.57.0-noble \
+            npx playwright test --project chromium $SNAPSHOT_FLAG || TEST_EXIT=$?
 
           # Cleanup
           kill "$PREVIEW_PID" "$PF_API_PID" 2>/dev/null || true
