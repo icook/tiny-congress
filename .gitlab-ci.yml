@@ -1,0 +1,1122 @@
+# .gitlab-ci.yml — tiny-congress CI
+#
+# Translation of .github/workflows/ci.yml to GitLab CI.
+#
+# Key differences from the GHA workflow:
+#   - Change detection: dorny/paths-filter → rules: changes: per job
+#   - Registry: $ZOT_REGISTRY (set as CI/CD variable) instead of GHCR for ARC builds
+#   - Builds: buildctl against in-cluster buildkitd instead of docker/build-push-action
+#   - Services: GitLab services: keyword replaces docker run for Postgres sidecars
+#   - sccache: credentials injected via CI/CD variables (masked)
+#   - collect-telemetry: skipped — GitLab has built-in job timing
+#   - ARC runner selection: not needed — this pipeline always runs on ARC runners
+#   - Concurrency: interruptible: true replaces GHA cancel-in-progress
+
+# ---------------------------------------------------------------------------
+# Variable defaults (override via GitLab CI/CD Settings → Variables)
+# ---------------------------------------------------------------------------
+variables:
+  # Internal Zot registry for CI-built images (accessible from ARC runner pods)
+  ZOT_REGISTRY: "zot.zot.svc.cluster.local:5000"
+  # sccache S3 backend (Garage in-cluster). Credentials set as masked variables:
+  #   SCCACHE_ACCESS_KEY_ID, SCCACHE_SECRET_ACCESS_KEY
+  SCCACHE_ENDPOINT: "http://garage.garage.svc.cluster.local:3900"
+  SCCACHE_BUCKET: "sccache"
+  SCCACHE_REGION: "garage"
+  SCCACHE_S3_USE_SSL: "false"
+  SCCACHE_IDLE_TIMEOUT: "0"
+  TRIVY_VERSION: "0.69.3"
+  # Node.js version — matches web/.nvmrc
+  NODE_VERSION: "22.16.0"
+  # BuildKit daemon address (in-cluster)
+  BUILDKIT_ADDR: "tcp://buildkitd.buildkit.svc.cluster.local:1234"
+  # Disable yarn hardened mode (avoids registry round-trips on locked deps)
+  YARN_ENABLE_HARDENED_MODE: "0"
+
+# ---------------------------------------------------------------------------
+# Default job configuration
+# ---------------------------------------------------------------------------
+default:
+  image: ghcr.io/icook/tiny-congress/arc-runner:latest
+  # Allow newer pipelines to cancel older ones on the same ref
+  interruptible: true
+  # Install Node.js + configure sccache.
+  # The ARC runner image has Rust baked in (~/.cargo/bin on PATH) but NOT Node.
+  # GHA uses actions/setup-node at runtime; we do the equivalent here.
+  before_script:
+    - |
+      # Install Node.js if not present (ARC runner image doesn't include it).
+      # Skips gracefully on images without sudo/curl (e.g. python:3.12-slim).
+      if ! command -v node >/dev/null 2>&1 && command -v sudo >/dev/null 2>&1; then
+        NODE_TARBALL="node-v${NODE_VERSION}-linux-x64.tar.xz"
+        NODE_URL="https://nodejs.org/dist/v${NODE_VERSION}/${NODE_TARBALL}"
+        echo "Installing Node.js v${NODE_VERSION}..."
+        curl -fsSL "$NODE_URL" | sudo tar -xJ -C /usr/local --strip-components=1
+        echo "Node $(node --version) installed"
+      fi
+    - |
+      # Bootstrap yarn from committed binary (same as GHA setup-web action)
+      if [ -f web/package.json ]; then
+        YARN_VER=$(node -p "require('./web/package.json').packageManager.split('@')[1]" 2>/dev/null || true)
+        if [ -n "$YARN_VER" ]; then
+          YARN_BIN="$CI_PROJECT_DIR/web/.yarn/releases/yarn-${YARN_VER}.cjs"
+          if [ -f "$YARN_BIN" ]; then
+            printf '#!/bin/sh\nexec node "%s" "$@"\n' "$YARN_BIN" | sudo tee /usr/local/bin/yarn > /dev/null
+            sudo chmod +x /usr/local/bin/yarn
+          fi
+        fi
+      fi
+    - |
+      # sccache: only enable if S3 credentials are available
+      if command -v sccache >/dev/null 2>&1 && [ -n "${SCCACHE_ACCESS_KEY_ID:-}" ]; then
+        export RUSTC_WRAPPER=sccache
+        export AWS_ACCESS_KEY_ID="${SCCACHE_ACCESS_KEY_ID}"
+        export AWS_SECRET_ACCESS_KEY="${SCCACHE_SECRET_ACCESS_KEY}"
+      fi
+
+# ---------------------------------------------------------------------------
+# Stages (roughly mirrors GHA job ordering)
+# ---------------------------------------------------------------------------
+stages:
+  - check       # lint, static analysis, codegen checks (no build needed)
+  - build       # compile containers + WASM
+  - scan        # vulnerability scanning (after images exist)
+  - test        # unit, integration, E2E
+  - report      # coverage aggregation + deploy reports
+  - deploy      # ArgoCD (master only)
+
+# ---------------------------------------------------------------------------
+# Reusable anchors
+# ---------------------------------------------------------------------------
+.node-cache: &node-cache
+  cache:
+    key: "yarn-$CI_COMMIT_REF_SLUG"
+    paths:
+      - web/.yarn/cache
+      - web/node_modules/
+
+.cargo-cache: &cargo-cache
+  cache:
+    key: "cargo-$CI_COMMIT_REF_SLUG"
+    paths:
+      - target/
+      - ~/.cargo/registry/
+      - ~/.cargo/git/
+
+# Path filter sets used in rules: changes: below.
+# Maps 1:1 to the dorny/paths-filter groups in detect-changes.
+.paths-api: &paths-api
+  - "service/**"
+  - "crates/**"
+  - "Cargo.toml"
+  - "Cargo.lock"
+
+.paths-ui: &paths-ui
+  - "web/**"
+  - "crates/tc-crypto/**"
+
+.paths-chart: &paths-chart
+  - "kube/app/**"
+  - "kube/environments/**"
+
+.paths-dashboards: &paths-dashboards
+  - "kube/dashboards/**"
+  - "kube/app/files/dashboards/**"
+
+.paths-ci: &paths-ci
+  - ".gitlab-ci.yml"
+  - "justfile"
+  - "skaffold.yaml"
+
+.paths-postgres: &paths-postgres
+  - "dockerfiles/Dockerfile.postgres"
+
+# Deployable = any path that needs an ArgoCD sync
+.paths-deployable: &paths-deployable
+  - "service/**"
+  - "crates/**"
+  - "Cargo.toml"
+  - "Cargo.lock"
+  - "web/**"
+  - "dockerfiles/**"
+  - "kube/**"
+  - ".gitlab-ci.yml"
+  - "justfile"
+  - "skaffold.yaml"
+
+# Helper rule: run on master push or when paths changed in MR
+.rule-api: &rule-api
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "master"'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      changes: *paths-api
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      changes: *paths-ci
+
+.rule-ui: &rule-ui
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "master"'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      changes: *paths-ui
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      changes: *paths-ci
+
+.rule-chart: &rule-chart
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "master"'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      changes: *paths-chart
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      changes: *paths-ci
+
+.rule-api-or-ui: &rule-api-or-ui
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "master"'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      changes: *paths-api
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      changes: *paths-ui
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      changes: *paths-ci
+
+# ---------------------------------------------------------------------------
+# STAGE: check
+# ---------------------------------------------------------------------------
+
+# ── Backend checks (lint + codegen + security audit) ────────────────────
+backend-checks:
+  stage: check
+  <<: *rule-api-or-ui
+  <<: *cargo-cache
+  script:
+    # Rust toolchain is pre-installed in the ARC runner image.
+    # sccache is configured in before_script.
+
+    # ── Lint ──
+    - just lint-backend
+
+    # Anti-pattern check (non-blocking — mirrors continue-on-error: true in GHA)
+    - just lint-patterns || true
+
+    # ── Codegen check ──
+    # Install frontend deps (needed to run graphql-codegen)
+    - just _ensure-frontend-deps
+    # Snapshot file hashes before codegen (git diff unreliable in GitLab runner)
+    - find web/schema.graphql web/openapi.json web/src/api/generated/ -type f | sort | xargs sha256sum > /tmp/pre-codegen.sha
+    - just codegen
+    - cd "$CI_PROJECT_DIR"
+    - |
+      if ! sha256sum -c /tmp/pre-codegen.sha > /dev/null 2>&1; then
+        echo "ERROR: Codegen is out of date. Run 'just codegen' and commit the changes."
+        sha256sum -c /tmp/pre-codegen.sha 2>&1 | grep -v ': OK$' || true
+        exit 1
+      fi
+      echo "Codegen is up to date"
+
+    # ── Security & dependency audit ──
+    # cargo-deny, cargo-machete pre-installed in ARC runner image
+    - just audit-deps
+    - just audit-unused
+
+# ── Lint Kubernetes manifests ────────────────────────────────────────────
+lint-kube:
+  stage: check
+  <<: *rule-chart
+  script:
+    - |
+      source .github/tool-versions
+      mkdir -p ~/.local/bin
+      curl -fsSL "https://github.com/stackrox/kube-linter/releases/download/${KUBE_LINTER_VERSION}/kube-linter-linux.tar.gz" \
+        | tar xz -C ~/.local/bin
+      export PATH="$HOME/.local/bin:$PATH"
+    - kube-linter lint kube/ --config .kube-linter.yaml
+
+    # Render chart with each environment values file to catch drift
+    - |
+      for VALUES_FILE in kube/environments/*.yaml; do
+        ENV_NAME=$(basename "$VALUES_FILE" .yaml)
+        echo "=== helm template ($ENV_NAME) ==="
+        helm template "tc-${ENV_NAME}" kube/app \
+          -f "$VALUES_FILE" \
+          --set image.tag=ci-stub \
+          --set frontend.image.tag=ci-stub \
+          --set postgres.image.tag=ci-stub
+      done
+
+# ── Validate Grafana dashboards ──────────────────────────────────────────
+check-dashboards:
+  stage: check
+  image: python:3.12-slim
+  before_script:
+    - apt-get update -qq && apt-get install -y -qq git > /dev/null
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "master"'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      changes: *paths-dashboards
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      changes: *paths-ci
+  script:
+    - pip install -r kube/dashboards/requirements.txt
+    - cd "$CI_PROJECT_DIR/kube/dashboards" && python generate.py --check
+    - cd "$CI_PROJECT_DIR/kube/dashboards" && python generate.py
+    - |
+      if ! git diff --exit-code "$CI_PROJECT_DIR/kube/app/files/dashboards/"; then
+        echo "ERROR: Generated dashboard JSON is out of date. Run 'just generate-dashboards' and commit."
+        exit 1
+      fi
+
+# ── Frontend checks (lint + Storybook build) ────────────────────────────
+frontend-checks:
+  stage: check
+  <<: *rule-ui
+  <<: *node-cache
+  script:
+    # Node + yarn pre-installed in ARC runner image.
+    # yarn 4.x binary committed at web/.yarn/releases/ — bootstrap a /usr/local/bin shim
+    - |
+      YARN_VER=$(node -p "require('./web/package.json').packageManager.split('@')[1]")
+      YARN_BIN="$CI_PROJECT_DIR/web/.yarn/releases/yarn-${YARN_VER}.cjs"
+      printf '#!/bin/sh\nexec node "%s" "$@"\n' "$YARN_BIN" | sudo tee /usr/local/bin/yarn > /dev/null
+      sudo chmod +x /usr/local/bin/yarn
+    - just _ensure-frontend-deps
+    - just lint-frontend
+    - just build-storybook
+  artifacts:
+    name: storybook-static
+    paths:
+      - web/storybook-static/
+    expire_in: 30 days
+
+# ── Static analysis (typos, Dockerfiles, workflows, scripts) ────────────
+static-analysis:
+  stage: check
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "master"'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      changes: *paths-api
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      changes: *paths-ui
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      changes: *paths-chart
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      changes: *paths-ci
+  script:
+    # hadolint, actionlint, shellcheck pre-installed in ARC runner image.
+    # typos: install from GitHub releases (no pre-install in image — TODO: add to ARC runner)
+    - |
+      TYPOS_TAG=$(curl -fsSL https://api.github.com/repos/crate-ci/typos/releases/latest \
+        | grep '"tag_name"' | sed 's/.*"tag_name": *"\([^"]*\)".*/\1/')
+      mkdir -p ~/.local/bin
+      curl -fsSL "https://github.com/crate-ci/typos/releases/download/${TYPOS_TAG}/typos-${TYPOS_TAG}-x86_64-unknown-linux-musl.tar.gz" \
+        | tar xz -C ~/.local/bin ./typos
+      export PATH="$HOME/.local/bin:$PATH"
+    - just lint-static
+
+    # Secrets scan — gitleaks not in ARC image yet; TODO: add to Dockerfile.arc-runner
+    - |
+      source .github/tool-versions
+      mkdir -p ~/.local/bin
+      curl -fsSL "https://github.com/gitleaks/gitleaks/releases/download/${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION#v}_linux_x64.tar.gz" \
+        | tar xz -C ~/.local/bin gitleaks
+      export PATH="$HOME/.local/bin:$PATH"
+    - just audit-secrets
+
+# ── Build API documentation ──────────────────────────────────────────────
+build-docs:
+  stage: check
+  <<: *rule-api-or-ui
+  <<: *cargo-cache
+  script:
+    - |
+      YARN_VER=$(node -p "require('./web/package.json').packageManager.split('@')[1]")
+      YARN_BIN="$CI_PROJECT_DIR/web/.yarn/releases/yarn-${YARN_VER}.cjs"
+      printf '#!/bin/sh\nexec node "%s" "$@"\n' "$YARN_BIN" | sudo tee /usr/local/bin/yarn > /dev/null
+      sudo chmod +x /usr/local/bin/yarn
+    - cargo doc --workspace --no-deps
+    - just _ensure-frontend-deps
+    - cd web && yarn typedoc
+  artifacts:
+    name: docs
+    paths:
+      - target/doc/
+      - web/docs/
+    expire_in: 7 days
+
+# ── Block .plan/ files on master ─────────────────────────────────────────
+check-no-plans:
+  stage: check
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+  script:
+    - |
+      plans=$(find .plan -name '*.md' ! -name 'README.md' 2>/dev/null || true)
+      if [ -n "$plans" ]; then
+        echo "ERROR: .plan/ files must be stripped before merging to master."
+        echo "Graduate decisions to docs/decisions/, docs/domain-model.md, or docs/playbooks/."
+        echo ""
+        echo "Files found:"
+        echo "$plans"
+        exit 1
+      fi
+
+# ---------------------------------------------------------------------------
+# STAGE: build
+# ---------------------------------------------------------------------------
+
+# ── Build WASM tc-crypto ─────────────────────────────────────────────────
+build-wasm:
+  stage: build
+  needs: []
+  <<: *cargo-cache
+  # Run on all pipelines — WASM is needed by unit-tests and e2e-tests
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "master"'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+  script:
+    # wasm-pack pre-installed in ARC runner image
+    - cd crates/tc-crypto
+    - wasm-pack build --target web --release --out-dir ../../web/src/wasm/tc-crypto
+  artifacts:
+    name: tc-crypto-wasm
+    paths:
+      - web/src/wasm/tc-crypto/
+    expire_in: 1 day
+
+# ── Build container images ───────────────────────────────────────────────
+# GHA used a matrix strategy with docker/build-push-action.
+# GitLab doesn't support parameterized matrix jobs with buildctl directly,
+# so we define three parallel jobs. They share the same script pattern.
+#
+# Images are pushed to $ZOT_REGISTRY (internal Zot) using buildctl against
+# the in-cluster BuildKit daemon.
+
+.build-image-base:
+  stage: build
+  needs: []
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "master"'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+  variables:
+    # Subclasses must set: IMAGE_NAME, CONTEXT, DOCKERFILE
+    IMAGE_NAME: ""
+    CONTEXT: "."
+    DOCKERFILE: ""
+  script:
+    # Install buildctl if not present (ARC runner image doesn't include it)
+    - |
+      if ! command -v buildctl >/dev/null 2>&1; then
+        BUILDKIT_VERSION="v0.21.1"
+        echo "Installing buildctl ${BUILDKIT_VERSION}..."
+        curl -fsSL "https://github.com/moby/buildkit/releases/download/${BUILDKIT_VERSION}/buildkit-${BUILDKIT_VERSION}.linux-amd64.tar.gz" \
+          | sudo tar xz -C /usr/local bin/buildctl
+      fi
+    - |
+      RUST_VERSION=$(grep '^rust' mise.toml | sed 's/.*= *"\([^"]*\)".*/\1/')
+      NODE_VERSION=$(grep '^node' mise.toml | sed 's/.*= *"\([^"]*\)".*/\1/')
+      BUILD_TIME=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
+      SHA_TAG="${ZOT_REGISTRY}/tiny-congress/${IMAGE_NAME}:${CI_COMMIT_SHA}"
+      # Sanitise branch name: lowercase, replace non-alphanumeric with -
+      BRANCH=$(echo "${CI_COMMIT_REF_NAME}" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9._-]/-/g')
+      BRANCH_TAG="${ZOT_REGISTRY}/tiny-congress/${IMAGE_NAME}:branch-${BRANCH}"
+      CACHE_REF="${ZOT_REGISTRY}/cache/${IMAGE_NAME}:cache"
+
+      echo "Building ${IMAGE_NAME} → ${SHA_TAG}"
+      buildctl --addr "${BUILDKIT_ADDR}" build \
+        --frontend dockerfile.v0 \
+        --local context="${CONTEXT}" \
+        --local dockerfile="$(dirname ${DOCKERFILE})" \
+        --opt filename="$(basename ${DOCKERFILE})" \
+        --opt build-arg:RUST_VERSION="${RUST_VERSION}" \
+        --opt build-arg:NODE_VERSION="${NODE_VERSION}" \
+        --opt build-arg:GIT_SHA="${CI_COMMIT_SHA}" \
+        --opt build-arg:APP_VERSION="${CI_COMMIT_REF_NAME}@${CI_COMMIT_SHA}" \
+        --opt build-arg:BUILD_TIME="${BUILD_TIME}" \
+        --opt build-arg:BUILDKIT_INLINE_CACHE=1 \
+        --import-cache type=registry,ref="${CACHE_REF}" \
+        --export-cache type=registry,ref="${CACHE_REF}",mode=max \
+        --output "type=image,name=${SHA_TAG},push=true,registry.insecure=true" \
+        --output "type=image,name=${BRANCH_TAG},push=true,registry.insecure=true"
+
+      echo "IMAGE_SHA_TAG=${SHA_TAG}" >> build.env
+      echo "IMAGE_BRANCH_TAG=${BRANCH_TAG}" >> build.env
+  artifacts:
+    reports:
+      dotenv: build.env
+
+build-image-api:
+  extends: .build-image-base
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "master"'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      changes: *paths-api
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      changes: *paths-ci
+  variables:
+    IMAGE_NAME: "tc-api-release"
+    CONTEXT: "."
+    DOCKERFILE: "service/Dockerfile"
+
+build-image-ui:
+  extends: .build-image-base
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "master"'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      changes: *paths-ui
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      changes: *paths-ci
+  variables:
+    IMAGE_NAME: "tc-ui-release"
+    CONTEXT: "."
+    DOCKERFILE: "web/Dockerfile"
+
+build-image-postgres:
+  extends: .build-image-base
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "master"'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      changes: *paths-postgres
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      changes: *paths-ci
+  variables:
+    IMAGE_NAME: "postgres"
+    CONTEXT: "."
+    DOCKERFILE: "dockerfiles/Dockerfile.postgres"
+
+# ---------------------------------------------------------------------------
+# STAGE: scan
+# ---------------------------------------------------------------------------
+
+# ── Vulnerability scanning (Trivy) ───────────────────────────────────────
+# Non-blocking (allow_failure: true) — mirrors continue-on-error: true
+# TODO: harden to allow_failure: false before public launch
+
+.scan-image-base:
+  stage: scan
+  allow_failure: true
+  variables:
+    IMAGE_NAME: ""
+  script:
+    - |
+      mkdir -p "$HOME/.local/bin"
+      DL_URL="https://github.com/aquasecurity/trivy/releases/download"
+      TARBALL="trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
+      curl -fL --retry 3 --retry-delay 5 \
+        "${DL_URL}/v${TRIVY_VERSION}/${TARBALL}" -o /tmp/trivy.tar.gz
+      tar -xzf /tmp/trivy.tar.gz -C "$HOME/.local/bin" trivy
+      export PATH="$HOME/.local/bin:$PATH"
+    - |
+      IMAGE_REF="${ZOT_REGISTRY}/tiny-congress/${IMAGE_NAME}:${CI_COMMIT_SHA}"
+      trivy image \
+        --format table \
+        --exit-code 1 \
+        --ignore-unfixed \
+        --severity CRITICAL,HIGH \
+        --ignorefile .trivyignore \
+        --insecure \
+        "${IMAGE_REF}"
+
+scan-api:
+  extends: .scan-image-base
+  needs: [build-image-api]
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "master"'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      changes: *paths-api
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      changes: *paths-ci
+  variables:
+    IMAGE_NAME: "tc-api-release"
+
+scan-ui:
+  extends: .scan-image-base
+  needs: [build-image-ui]
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "master"'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      changes: *paths-ui
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      changes: *paths-ci
+  variables:
+    IMAGE_NAME: "tc-ui-release"
+
+scan-postgres:
+  extends: .scan-image-base
+  needs: [build-image-postgres]
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "master"'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      changes: *paths-postgres
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      changes: *paths-ci
+  variables:
+    IMAGE_NAME: "postgres"
+
+# ---------------------------------------------------------------------------
+# STAGE: test
+# ---------------------------------------------------------------------------
+
+# ── Vitest unit tests + coverage ──────────────────────────────────────────
+unit-tests:
+  stage: test
+  needs: [build-wasm]
+  <<: *rule-ui
+  <<: *node-cache
+  script:
+    - |
+      YARN_VER=$(node -p "require('./web/package.json').packageManager.split('@')[1]")
+      YARN_BIN="$CI_PROJECT_DIR/web/.yarn/releases/yarn-${YARN_VER}.cjs"
+      printf '#!/bin/sh\nexec node "%s" "$@"\n' "$YARN_BIN" | sudo tee /usr/local/bin/yarn > /dev/null
+      sudo chmod +x /usr/local/bin/yarn
+    - just _ensure-frontend-deps
+    - cd web && CI=true yarn vitest:coverage
+  artifacts:
+    name: vitest-coverage
+    when: always
+    paths:
+      - web/coverage/vitest/
+    expire_in: 7 days
+    reports:
+      # TODO: convert lcov to cobertura for GitLab coverage visualisation
+      # coverage_report:
+      #   coverage_format: cobertura
+      #   path: web/coverage/vitest/cobertura-coverage.xml
+
+# ── SQLx snapshot check ───────────────────────────────────────────────────
+sqlx-check:
+  stage: test
+  needs: []
+  <<: *rule-api
+  <<: *cargo-cache
+  services:
+    # Custom image with pgmq extension (matches GHA's TEST_POSTGRES_IMAGE)
+    - name: ghcr.io/icook/tiny-congress/postgres:branch-master
+      alias: postgres
+      variables:
+        POSTGRES_USER: postgres
+        POSTGRES_PASSWORD: postgres
+        POSTGRES_DB: tiny_congress_test
+  variables:
+    DATABASE_URL: "postgres://postgres:postgres@postgres:5432/tiny_congress_test"
+  script:
+    # sqlx-cli: install if not cached
+    - |
+      if ! command -v sqlx >/dev/null 2>&1; then
+        cargo install sqlx-cli --version 0.8.6 --locked --no-default-features --features postgres
+      fi
+    - |
+      # Wait for postgres to be ready (pg_isready not in ARC image, use TCP probe)
+      for i in $(seq 1 30); do
+        if (echo > /dev/tcp/postgres/5432) 2>/dev/null; then
+          echo "Postgres is ready"
+          break
+        fi
+        echo "Waiting for postgres... ($i/30)"
+        sleep 1
+      done
+    - cd "$CI_PROJECT_DIR/service" && cargo sqlx migrate run
+    - |
+      cd "$CI_PROJECT_DIR/service"
+      output=$(cargo sqlx prepare --check 2>&1) || {
+        echo "$output"
+        echo "ERROR: SQLx query snapshots are out of date. Run 'just sqlx-prepare' and commit service/.sqlx/"
+        exit 1
+      }
+      echo "$output"
+      if echo "$output" | grep -q "potentially unused queries"; then
+        echo "ERROR: Unused SQLx query snapshots found in .sqlx/. Run 'just sqlx-prepare' to remove stale entries."
+        exit 1
+      fi
+      echo "SQLx snapshots are up to date"
+
+# ── Rust coverage ─────────────────────────────────────────────────────────
+rust-coverage:
+  stage: test
+  needs: []
+  <<: *rule-api
+  <<: *cargo-cache
+  services:
+    - name: docker:dind
+      alias: docker
+      variables:
+        DOCKER_TLS_CERTDIR: ""
+  variables:
+    DOCKER_HOST: "tcp://docker:2375"
+    # Testcontainers connects to Docker via DOCKER_HOST and starts a custom
+    # postgres container (with pgmq). No GitLab service container needed.
+    TEST_POSTGRES_IMAGE: "ghcr.io/icook/tiny-congress/postgres:branch-master"
+  script:
+    # cargo-llvm-cov pre-installed in ARC runner image
+    # Disable RUSTC_WRAPPER for llvm-cov — sccache conflicts with coverage instrumentation
+    # Limit parallelism: DinD overhead causes testcontainers Postgres to exhaust
+    # max_connections when all tests run concurrently.
+    - |
+      cd service
+      mkdir -p coverage
+      RUSTC_WRAPPER="" cargo llvm-cov --lcov --output-path coverage/backend-unit.lcov --fail-under-lines 60 -- --test-threads=4
+  artifacts:
+    name: rust-coverage
+    when: always
+    paths:
+      - service/coverage/backend-unit.lcov
+    expire_in: 7 days
+
+# ── E2E tests (KinD + Skaffold + Playwright) ──────────────────────────────
+#
+# ── E2E tests (KinD + Skaffold + Playwright) ──────────────────────────────
+#
+# Uses DinD sidecar for Docker access. KinD creates a nested Kubernetes
+# cluster inside the DinD container, Skaffold deploys the app, and
+# Playwright runs browser tests against it.
+e2e-tests:
+  stage: test
+  needs:
+    - build-wasm
+    - build-image-api
+    - build-image-ui
+    - build-image-postgres
+  services:
+    - name: docker:dind
+      alias: docker
+      variables:
+        DOCKER_TLS_CERTDIR: ""
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "master"'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+  variables:
+    DOCKER_HOST: "tcp://docker:2375"
+    SKAFFOLD_DEFAULT_REPO: "${ZOT_REGISTRY}/tiny-congress"
+    SKAFFOLD_PROFILE: "ci"
+    PLAYWRIGHT_BROWSERS_PATH: "${CI_PROJECT_DIR}/.cache/ms-playwright"
+    KIND_CLUSTER_NAME: "skaffold-ci-${CI_PIPELINE_ID}"
+  cache:
+    key: "playwright-chromium-${CI_COMMIT_REF_SLUG}"
+    paths:
+      - .cache/ms-playwright/
+  <<: *node-cache
+  script:
+    # ── Yarn bootstrap ──
+    - |
+      YARN_VER=$(node -p "require('./web/package.json').packageManager.split('@')[1]")
+      YARN_BIN="$CI_PROJECT_DIR/web/.yarn/releases/yarn-${YARN_VER}.cjs"
+      printf '#!/bin/sh\nexec node "%s" "$@"\n' "$YARN_BIN" | sudo tee /usr/local/bin/yarn > /dev/null
+      sudo chmod +x /usr/local/bin/yarn
+
+    # ── Install Docker CLI + KinD ──
+    - |
+      mkdir -p ~/.local/bin
+      export PATH="$HOME/.local/bin:$PATH"
+      if ! command -v docker >/dev/null 2>&1; then
+        curl -fsSL https://download.docker.com/linux/static/stable/x86_64/docker-27.5.1.tgz \
+          | sudo tar xz -C /usr/local/bin --strip-components=1 docker/docker
+      fi
+      if ! command -v kind >/dev/null 2>&1; then
+        curl -fsSL -o ~/.local/bin/kind https://kind.sigs.k8s.io/dl/v0.27.0/kind-linux-amd64
+        chmod +x ~/.local/bin/kind
+      fi
+    - |
+      echo "Waiting for Docker daemon..."
+      for i in $(seq 1 30); do
+        if docker info >/dev/null 2>&1; then echo "Docker is ready"; break; fi
+        sleep 2
+      done
+      docker info >/dev/null 2>&1 || { echo "Docker not available"; exit 1; }
+
+    # ── KinD cluster setup ──
+    - |
+      set -euo pipefail
+      sudo iptables -P FORWARD ACCEPT 2>/dev/null || true
+
+      KIND_CONFIG="${CI_PROJECT_DIR}/.kind-config-${CI_PIPELINE_ID}.yaml"
+      cat > "$KIND_CONFIG" <<'KINDEOF'
+      kind: Cluster
+      apiVersion: kind.x-k8s.io/v1alpha4
+      networking:
+        # Avoid CIDR overlap with parent Talos cluster (default 10.96.0.0/12)
+        serviceSubnet: "10.11.0.0/16"
+        podSubnet: "10.12.0.0/16"
+      nodes:
+        - role: control-plane
+          kubeadmConfigPatches:
+            - |
+              kind: InitConfiguration
+              nodeRegistration:
+                kubeletExtraArgs:
+                  node-labels: "ingress-ready=true"
+      containerdConfigPatches:
+        - |-
+          [plugins."io.containerd.grpc.v1.cri".registry.mirrors."zot.zot.svc.cluster.local:5000"]
+            endpoint = ["http://zot.zot.svc.cluster.local:5000"]
+      KINDEOF
+
+      echo "Starting KinD cluster ${KIND_CLUSTER_NAME}..."
+      kind create cluster --name "${KIND_CLUSTER_NAME}" --config "$KIND_CONFIG" --wait 0s &
+
+    # ── Install Skaffold ──
+    - |
+      SKAFFOLD_VERSION="v$(cat .skaffold-version)"
+      mkdir -p /tmp/skaffold-bin
+      curl -fsSL -o /tmp/skaffold-bin/skaffold \
+        "https://storage.googleapis.com/skaffold/releases/${SKAFFOLD_VERSION}/skaffold-linux-amd64"
+      chmod +x /tmp/skaffold-bin/skaffold
+      sudo install /tmp/skaffold-bin/skaffold /usr/local/bin/skaffold
+
+    # ── Install Playwright browsers ──
+    - cd web && yarn install --immutable
+    - yarn playwright install --with-deps chromium
+    - cd "$CI_PROJECT_DIR"
+
+    # ── Wait for KinD readiness ──
+    - |
+      set -euo pipefail
+      NODE="${KIND_CLUSTER_NAME}-control-plane"
+
+      echo "Waiting for cluster API..."
+      if ! timeout 180 bash -c "until kubectl cluster-info --context kind-${KIND_CLUSTER_NAME} >/dev/null 2>&1; do sleep 5; done"; then
+        echo "KinD did not start in time"
+        exit 1
+      fi
+
+      kubectl wait node "$NODE" --for=condition=Ready --timeout=180s
+      docker exec "$NODE" iptables -P FORWARD ACCEPT
+
+      kubectl wait pods -n kube-system -l k8s-app=kube-dns \
+        --for=condition=Ready --timeout=240s
+
+      timeout 60 bash -c \
+        'until kubectl get sa default -n default >/dev/null 2>&1; do sleep 2; done'
+
+      kubectl config set-context --current --namespace=default
+      kubectl get nodes -o wide
+      echo "KinD cluster ready."
+
+    # ── Write Skaffold artifacts file (reuse pre-built images) ──
+    - |
+      set -euo pipefail
+      IMAGE_REG="${ZOT_REGISTRY}/tiny-congress"
+      ARTIFACTS_FILE="${CI_PROJECT_DIR}/skaffold-artifacts.json"
+      printf '{\n  "builds": [\n    {"imageName": "tc-api-release", "tag": "%s/tc-api-release:%s"},\n    {"imageName": "tc-ui-release", "tag": "%s/tc-ui-release:%s"},\n    {"imageName": "postgres", "tag": "%s/postgres:%s"}\n  ]\n}\n' \
+        "$IMAGE_REG" "$CI_COMMIT_SHA" \
+        "$IMAGE_REG" "$CI_COMMIT_SHA" \
+        "$IMAGE_REG" "$CI_COMMIT_SHA" \
+        > "$ARTIFACTS_FILE"
+
+    # ── Deploy with Skaffold ──
+    - |
+      set -euo pipefail
+      skaffold deploy -p "${SKAFFOLD_PROFILE}" --status-check=true \
+        --kube-context "kind-${KIND_CLUSTER_NAME}" \
+        --build-artifacts "${CI_PROJECT_DIR}/skaffold-artifacts.json"
+
+    # ── Build instrumented frontend for E2E ──
+    - cd "$CI_PROJECT_DIR/web"
+    - VITE_API_URL=http://localhost:8080 PLAYWRIGHT_COVERAGE=1 yarn build
+
+    # ── Run Playwright E2E tests ──
+    # Port-forward + Vite run on the host; Playwright runs inside the official
+    # image for deterministic font rendering across CI platforms.
+    - |
+      set -euo pipefail
+      cd "$CI_PROJECT_DIR/web"
+
+      # Port-forward API from cluster
+      kubectl port-forward service/tc 8080:8080 &
+      PF_API_PID=$!
+      timeout 60 bash -c 'until curl -sf http://localhost:8080/health >/dev/null; do sleep 1; done'
+
+      # Start Vite preview server with instrumented build
+      yarn preview --host 0.0.0.0 --port 5173 --strictPort &
+      PREVIEW_PID=$!
+      timeout 60 bash -c 'until curl -sf http://localhost:5173 >/dev/null; do sleep 1; done'
+
+      # Run Playwright inside the official Docker image (pinned font stack).
+      # --network host: shares pod network (port-forward + vite on localhost)
+      # --ipc=host: Chromium shared memory
+      yarn playwright:clean
+      docker run --rm --network host --ipc=host \
+        -v "$CI_PROJECT_DIR/web:/work" \
+        -w /work \
+        -e CI=true \
+        -e PLAYWRIGHT_COVERAGE=1 \
+        -e PLAYWRIGHT_BASE_URL=http://localhost:5173 \
+        -e PLAYWRIGHT_API_URL=http://localhost:8080/graphql \
+        -e PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
+        mcr.microsoft.com/playwright:v1.57.0-noble \
+        npx playwright test --project chromium || TEST_EXIT=$?
+
+      kill "$PREVIEW_PID" "$PF_API_PID" 2>/dev/null || true
+      exit "${TEST_EXIT:-0}"
+
+  after_script:
+    # ── Diagnostics on failure ──
+    - |
+      if [ "$CI_JOB_STATUS" = "failed" ]; then
+        echo '--- Pods ---'
+        kubectl get pods -A -o wide || true
+        echo '--- Services ---'
+        kubectl get svc -A || true
+        echo '--- Events ---'
+        kubectl get events -A --sort-by=.lastTimestamp || true
+        echo '--- All Resources ---'
+        kubectl get all -n default || true
+      fi
+    # ── Always cleanup KinD ──
+    - export PATH="$HOME/.local/bin:$PATH"
+    - kind delete cluster --name "${KIND_CLUSTER_NAME}" || true
+
+  artifacts:
+    name: playwright-test-results
+    when: always
+    paths:
+      - web/test-results/
+      - web/reports/playwright.xml
+      - web/reports/playwright-results.json
+      - web/playwright-report/
+      - web/coverage/playwright/
+      - web/tests/e2e/screenshots.spec.ts-snapshots/
+    reports:
+      junit: web/reports/playwright.xml
+    expire_in: 7 days
+
+  # Screenshots as a separate artifact (longer retention)
+  # GitLab doesn't support multiple artifacts: blocks per job, so screenshots
+  # are included in the main artifact above.
+  # TODO: split into a child pipeline if retention per-artifact is needed.
+
+# ---------------------------------------------------------------------------
+# STAGE: report
+# ---------------------------------------------------------------------------
+
+# ── Upload CI reports to Dufs ─────────────────────────────────────────────
+deploy-reports:
+  stage: report
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "master" && $CI_PIPELINE_SOURCE == "push"'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+  needs:
+    - job: unit-tests
+      artifacts: true
+      optional: true
+    - job: rust-coverage
+      artifacts: true
+      optional: true
+    - job: e2e-tests
+      artifacts: true
+      optional: true
+    - job: frontend-checks
+      artifacts: true
+      optional: true
+    - job: build-docs
+      artifacts: true
+      optional: true
+  <<: *node-cache
+  script:
+    # ── Yarn bootstrap ──
+    - |
+      YARN_VER=$(node -p "require('./web/package.json').packageManager.split('@')[1]")
+      YARN_BIN="$CI_PROJECT_DIR/web/.yarn/releases/yarn-${YARN_VER}.cjs"
+      printf '#!/bin/sh\nexec node "%s" "$@"\n' "$YARN_BIN" | sudo tee /usr/local/bin/yarn > /dev/null
+      sudo chmod +x /usr/local/bin/yarn
+    - cd "$CI_PROJECT_DIR/web" && yarn install --immutable
+
+    - sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends gettext-base lcov
+
+    # ── Assemble site directory ──
+    - |
+      mkdir -p site
+      cp web/src/logo-dark.svg site/logo.svg
+      cp web/src/favicon.ico site/favicon.ico
+
+    # ── Organise artifacts ──
+    - |
+      if [ -d web/coverage/vitest ];    then cp -r web/coverage/vitest site/coverage-vitest; fi
+      if [ -d web/coverage/playwright ]; then cp -r web/coverage/playwright site/coverage-pw; fi
+      if [ -d web/storybook-static ];   then cp -r web/storybook-static site/storybook; fi
+      if [ -d web/playwright-report ];  then cp -r web/playwright-report site/playwright; fi
+
+    # ── Coverage summary ──
+    - |
+      node scripts/summarize-coverage.mjs \
+        --vitest web/coverage/vitest/coverage-summary.json \
+        --playwright web/coverage/playwright/coverage-summary.json \
+        --rust "service/coverage/backend-unit.lcov:unit" \
+        2>/dev/null || echo "Coverage summary skipped (artifacts may be missing)"
+
+    # ── Unified HTML coverage report ──
+    - cd web && node scripts/build-coverage-report.mjs || true
+    - cd "$CI_PROJECT_DIR"
+    - |
+      if [ -d coverage-report ]; then mv coverage-report site/coverage; fi
+
+    # ── Generate landing page ──
+    - |
+      COMMIT_SHORT="${CI_COMMIT_SHORT_SHA}"
+      BUILD_DATE="$(date -u +"%Y-%m-%d %H:%M UTC")"
+      export COMMIT_SHORT BUILD_DATE
+      # Replace GHA-specific vars with GitLab equivalents before envsubst
+      sed -e "s/\$GITHUB_SHA/${CI_COMMIT_SHA}/g" \
+          -e "s/\$GITHUB_REF_NAME/${CI_COMMIT_REF_NAME}/g" \
+          .github/templates/reports-landing.html | envsubst > site/index.html
+
+    # ── Upload to Dufs ──
+    - |
+      set -euo pipefail
+      # Derive report key from branch name (slashes → hyphens), same as GHA report-key
+      DEST=$(echo "${CI_COMMIT_REF_NAME}" | sed 's|/|-|g')
+      BASE="https://reports-upload.ibcook.com"
+
+      for attempt in 1 2 3; do
+        if find site -type f -print0 \
+          | xargs -0 -P 8 -I{} curl --retry 2 --max-time 60 --silent --fail-with-body \
+              --user "ci:${DUFS_UPLOAD_PASSWORD}" \
+              --upload-file {} \
+              "${BASE}/${DEST}/{}"; then
+          echo "Upload succeeded"
+          break
+        fi
+        [ "$attempt" -lt 3 ] && sleep $((attempt * 60)) || { echo "Upload failed after 3 attempts"; exit 1; }
+      done
+
+      # TODO: build-reports-index.mjs root index (same as GHA deploy-reports)
+      # Skipping for now — the script uses GITHUB_* vars that need mapping.
+      echo "Reports: https://reports.ibcook.com/${DEST}/index.html"
+
+# ---------------------------------------------------------------------------
+# STAGE: deploy
+# ---------------------------------------------------------------------------
+
+# ── Deploy via ArgoCD (master only) ─────────────────────────────────────
+#
+# GHA promoted images from Zot → GHCR using crane, then got digests from
+# the GHCR API. On GitLab CI (always on ARC/Zot), images stay in Zot.
+# ArgoCD must be configured to pull from $ZOT_REGISTRY, or a crane promote
+# step must remain. This job keeps the promote step as-is.
+#
+# Required CI/CD variables (masked):
+#   ARGOCD_AUTH_TOKEN, ARGOCD_SERVER
+#   GHCR_TOKEN (for crane promotion to GHCR)
+#   GHCR_USER  (GitHub username for crane push)
+deploy-argocd:
+  stage: deploy
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "master" && $CI_PIPELINE_SOURCE == "push"'
+      changes: *paths-deployable
+  needs:
+    - job: build-image-api
+      artifacts: false
+    - job: build-image-ui
+      artifacts: false
+    - job: build-image-postgres
+      artifacts: false
+    # Depend on the CI gate jobs (tests must pass before deploy)
+    - job: unit-tests
+      optional: true
+    - job: sqlx-check
+      optional: true
+    - job: rust-coverage
+      optional: true
+    - job: e2e-tests
+      optional: true
+  script:
+    # ── Install crane (for Zot → GHCR promotion) ──
+    - |
+      CRANE_VERSION=0.20.3
+      curl -fsSL "https://github.com/google/go-containerregistry/releases/download/v${CRANE_VERSION}/go-containerregistry_Linux_x86_64.tar.gz" \
+        | sudo tar -xz -C /usr/local/bin crane
+
+    # ── Promote images from Zot to GHCR ──
+    - |
+      set -euo pipefail
+      ZOT="${ZOT_REGISTRY}/tiny-congress"
+      GHCR="ghcr.io/icook/tiny-congress"
+      SHA="${CI_COMMIT_SHA}"
+      BRANCH=$(echo "${CI_COMMIT_REF_NAME}" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9._-]/-/g')
+
+      echo "${GHCR_TOKEN}" | crane auth login ghcr.io -u "${GHCR_USER}" --password-stdin
+
+      for IMAGE in tc-api-release tc-ui-release postgres; do
+        echo "Promoting ${IMAGE}..."
+        crane copy --insecure "${ZOT}/${IMAGE}:${SHA}" "${GHCR}/${IMAGE}:${SHA}"
+        crane copy --insecure "${ZOT}/${IMAGE}:branch-${BRANCH}" "${GHCR}/${IMAGE}:branch-${BRANCH}"
+      done
+
+    # ── Get image digests from GHCR ──
+    - |
+      set -euo pipefail
+      SHA="${CI_COMMIT_SHA}"
+      for IMAGE in tc-api-release tc-ui-release postgres; do
+        DIGEST=$(curl -fsSL \
+          -H "Authorization: Bearer ${GHCR_TOKEN}" \
+          "https://api.github.com/users/icook/packages/container/tiny-congress%2F${IMAGE}/versions" \
+          | python3 -c "import json,sys; data=json.load(sys.stdin); print(next(v['name'] for v in data if '${SHA}' in v.get('metadata',{}).get('container',{}).get('tags',[])))")
+        echo "  ${IMAGE}: ${DIGEST}"
+        # Store for argocd step
+        eval "DIGEST_${IMAGE//-/_}=${DIGEST}"
+      done
+
+    # ── ArgoCD sync ──
+    - |
+      curl -sSL -o argocd \
+        "https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64"
+      chmod +x argocd
+      ./argocd app set tiny-congress-demo \
+        --parameter "image.digest=${DIGEST_tc_api_release}" \
+        --parameter "frontend.image.digest=${DIGEST_tc_ui_release}" \
+        --parameter "postgres.image.digest=${DIGEST_postgres}" \
+        --grpc-web \
+        --server "${ARGOCD_SERVER}" \
+        --auth-token "${ARGOCD_AUTH_TOKEN}"
+      ./argocd app sync tiny-congress-demo --grpc-web \
+        --server "${ARGOCD_SERVER}" \
+        --auth-token "${ARGOCD_AUTH_TOKEN}"
+
+# ---------------------------------------------------------------------------
+# CI gate — single job all MRs must pass
+# (GitLab has branch protection rules natively; this mirrors the GHA gate)
+# ---------------------------------------------------------------------------
+ci-gate:
+  stage: deploy
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "master"'
+  needs:
+    - job: backend-checks
+      optional: true
+    - job: lint-kube
+      optional: true
+    - job: frontend-checks
+      optional: true
+    - job: static-analysis
+      optional: true
+    - job: check-dashboards
+      optional: true
+    - job: check-no-plans
+      optional: true
+    - job: build-image-api
+      optional: true
+    - job: build-image-ui
+      optional: true
+    - job: build-image-postgres
+      optional: true
+    - job: build-wasm
+      optional: true
+    - job: scan-api
+      optional: true
+    - job: scan-ui
+      optional: true
+    - job: scan-postgres
+      optional: true
+    - job: unit-tests
+      optional: true
+    - job: sqlx-check
+      optional: true
+    - job: rust-coverage
+      optional: true
+    - job: e2e-tests
+      optional: true
+    - job: build-docs
+      optional: true
+  script:
+    # In GitLab, if any upstream job fails without allow_failure, the pipeline
+    # is already marked failed. This gate job makes the "required check" surface
+    # explicit for branch protection rules configured in GitLab settings.
+    - echo "All required jobs passed"
