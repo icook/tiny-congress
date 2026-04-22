@@ -732,8 +732,8 @@ rust-coverage:
         POSTGRES_PASSWORD: postgres
         POSTGRES_DB: tiny_congress_test
   variables:
-    KUBERNETES_CPU_REQUEST: "4"
-    KUBERNETES_MEMORY_REQUEST: "4Gi"
+    KUBERNETES_CPU_REQUEST: "2"
+    KUBERNETES_MEMORY_REQUEST: "2Gi"
     KUBERNETES_MEMORY_LIMIT: "14Gi"
     # Use the postgres services: sidecar instead of DinD + testcontainers.
     # This eliminates DinD startup overhead and allows full test parallelism.
