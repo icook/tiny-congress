@@ -712,11 +712,9 @@ rust-coverage:
   <<: *rule-api
   before_script: *rust-before-script
   cache:
-    - key: "llvm-cov-$CI_COMMIT_REF_SLUG"
-      fallback_keys:
-        - "llvm-cov-master"
-      paths:
-        - target/llvm-cov-target/
+    # target/llvm-cov-target/ intentionally NOT cached — 14k files take 5+ min
+    # to upload but only save ~30s of incremental compilation. sccache handles
+    # dependency compilation; workspace crates always recompile on code changes.
     - key: "cargo-registry-$CI_COMMIT_REF_SLUG"
       fallback_keys:
         - "cargo-registry-master"
