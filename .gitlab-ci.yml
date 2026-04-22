@@ -123,6 +123,20 @@ stages:
       - ~/.cargo/registry/
       - ~/.cargo/git/
 
+# Rust-only before_script — skips Node.js/Yarn setup for jobs that don't need
+# them, saving ~10s on cache hit and ~4.5 min on cache miss.
+.rust-before-script: &rust-before-script
+  - |
+    if command -v sccache >/dev/null 2>&1 && [ -n "${SCCACHE_ACCESS_KEY_ID:-}" ]; then
+      export AWS_ACCESS_KEY_ID="${SCCACHE_ACCESS_KEY_ID}"
+      export AWS_SECRET_ACCESS_KEY="${SCCACHE_SECRET_ACCESS_KEY}"
+      mkdir -p ~/.cargo
+      printf '[build]\nrustc-wrapper = "sccache"\n' >> ~/.cargo/config.toml
+      echo -e "\e[0Ksection_start:$(date +%s):sccache_init[collapsed=true]\r\e[0Ksccache: enabled via ~/.cargo/config.toml"
+      sccache --show-stats 2>&1 || true
+      echo -e "\e[0Ksection_end:$(date +%s):sccache_init\r\e[0K"
+    fi
+
 # Path filter sets used in rules: changes: below.
 # Maps 1:1 to the dorny/paths-filter groups in detect-changes.
 .paths-api: &paths-api
@@ -410,6 +424,7 @@ check-no-plans:
 build-wasm:
   stage: build
   needs: []
+  before_script: *rust-before-script
   cache:
     - key: "wasm-$CI_COMMIT_REF_SLUG"
       fallback_keys:
@@ -644,6 +659,7 @@ sqlx-check:
   needs: []
   <<: *rule-api
   <<: *cargo-cache
+  before_script: *rust-before-script
   services:
     # Custom image with pgmq extension (matches GHA's TEST_POSTGRES_IMAGE)
     - name: ghcr.io/icook/tiny-congress/postgres:branch-master
@@ -694,6 +710,7 @@ rust-coverage:
   stage: test
   needs: []
   <<: *rule-api
+  before_script: *rust-before-script
   cache:
     - key: "llvm-cov-$CI_COMMIT_REF_SLUG"
       fallback_keys:
@@ -715,8 +732,8 @@ rust-coverage:
         POSTGRES_PASSWORD: postgres
         POSTGRES_DB: tiny_congress_test
   variables:
-    KUBERNETES_CPU_REQUEST: "2"
-    KUBERNETES_MEMORY_REQUEST: "2Gi"
+    KUBERNETES_CPU_REQUEST: "4"
+    KUBERNETES_MEMORY_REQUEST: "4Gi"
     KUBERNETES_MEMORY_LIMIT: "14Gi"
     # Use the postgres services: sidecar instead of DinD + testcontainers.
     # This eliminates DinD startup overhead and allows full test parallelism.
