@@ -481,7 +481,7 @@ build-wasm:
     # Install buildctl if not present (ARC runner image doesn't include it)
     - |
       if ! command -v buildctl >/dev/null 2>&1; then
-        BUILDKIT_VERSION="v0.21.1"
+        BUILDKIT_VERSION="v0.28.0"  # must match buildkitd StatefulSet version
         echo "Installing buildctl ${BUILDKIT_VERSION}..."
         curl -fsSL "https://github.com/moby/buildkit/releases/download/${BUILDKIT_VERSION}/buildkit-${BUILDKIT_VERSION}.linux-amd64.tar.gz" \
           | sudo tar xz -C /usr/local bin/buildctl
@@ -507,7 +507,6 @@ build-wasm:
         --opt build-arg:GIT_SHA="${CI_COMMIT_SHA}" \
         --opt build-arg:APP_VERSION="${CI_COMMIT_REF_NAME}@${CI_COMMIT_SHA}" \
         --opt build-arg:BUILD_TIME="${BUILD_TIME}" \
-        --opt build-arg:BUILDKIT_INLINE_CACHE=1 \
         --import-cache type=registry,ref="${CACHE_REF}" \
         --export-cache type=registry,ref="${CACHE_REF}",mode=max \
         --output "type=image,name=${SHA_TAG},push=true,registry.insecure=true" \
