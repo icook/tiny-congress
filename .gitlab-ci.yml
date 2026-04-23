@@ -29,7 +29,7 @@ variables:
   # Node.js version — matches web/.nvmrc
   NODE_VERSION: "22.16.0"
   # BuildKit daemon address (in-cluster)
-  BUILDKIT_ADDR: "tcp+tls://buildkitd.buildkit.svc.cluster.local:1234"
+  BUILDKIT_ADDR: "tcp://buildkitd.buildkit.svc.cluster.local:1234"
   BUILDKIT_CA_CERT: "/etc/buildkit-ca/ca.crt"
   # Disable yarn hardened mode (avoids registry round-trips on locked deps)
   YARN_ENABLE_HARDENED_MODE: "0"
