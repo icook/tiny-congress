@@ -120,6 +120,7 @@ stages:
       - "cargo-master"
     paths:
       - target/
+      - ~/.cargo/bin/
       - ~/.cargo/registry/
       - ~/.cargo/git/
 
@@ -333,6 +334,11 @@ frontend-checks:
 # ── Static analysis (typos, Dockerfiles, workflows, scripts) ────────────
 static-analysis:
   stage: check
+  before_script: []  # no Node.js/sccache needed — pure lint tools
+  cache:
+    - key: "lint-tools-v1"
+      paths:
+        - .cache/lint-tools/
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "master"'
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
@@ -345,23 +351,24 @@ static-analysis:
       changes: *paths-ci
   script:
     # hadolint, actionlint, shellcheck pre-installed in ARC runner image.
-    # typos: install from GitHub releases (no pre-install in image — TODO: add to ARC runner)
+    # typos + gitleaks: cached in .cache/lint-tools/ to avoid per-run downloads.
     - |
-      TYPOS_TAG=$(curl -fsSL https://api.github.com/repos/crate-ci/typos/releases/latest \
-        | grep '"tag_name"' | sed 's/.*"tag_name": *"\([^"]*\)".*/\1/')
-      mkdir -p ~/.local/bin
-      curl -fsSL "https://github.com/crate-ci/typos/releases/download/${TYPOS_TAG}/typos-${TYPOS_TAG}-x86_64-unknown-linux-musl.tar.gz" \
-        | tar xz -C ~/.local/bin ./typos
-      export PATH="$HOME/.local/bin:$PATH"
+      mkdir -p .cache/lint-tools
+      export PATH="$CI_PROJECT_DIR/.cache/lint-tools:$PATH"
+      if ! command -v typos >/dev/null 2>&1; then
+        TYPOS_TAG=$(curl -fsSL https://api.github.com/repos/crate-ci/typos/releases/latest \
+          | grep '"tag_name"' | sed 's/.*"tag_name": *"\([^"]*\)".*/\1/')
+        curl -fsSL "https://github.com/crate-ci/typos/releases/download/${TYPOS_TAG}/typos-${TYPOS_TAG}-x86_64-unknown-linux-musl.tar.gz" \
+          | tar xz -C .cache/lint-tools ./typos
+      fi
     - just lint-static
-
-    # Secrets scan — gitleaks not in ARC image yet; TODO: add to Dockerfile.arc-runner
     - |
-      source .github/tool-versions
-      mkdir -p ~/.local/bin
-      curl -fsSL "https://github.com/gitleaks/gitleaks/releases/download/${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION#v}_linux_x64.tar.gz" \
-        | tar xz -C ~/.local/bin gitleaks
-      export PATH="$HOME/.local/bin:$PATH"
+      export PATH="$CI_PROJECT_DIR/.cache/lint-tools:$PATH"
+      if ! command -v gitleaks >/dev/null 2>&1; then
+        source .github/tool-versions
+        curl -fsSL "https://github.com/gitleaks/gitleaks/releases/download/${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION#v}_linux_x64.tar.gz" \
+          | tar xz -C .cache/lint-tools gitleaks
+      fi
     - just audit-secrets
 
 # ── Build API documentation ──────────────────────────────────────────────
@@ -426,11 +433,8 @@ build-wasm:
   needs: []
   before_script: *rust-before-script
   cache:
-    - key: "wasm-$CI_COMMIT_REF_SLUG"
-      fallback_keys:
-        - "wasm-master"
-      paths:
-        - target/wasm32-unknown-unknown/
+    # target/wasm32-unknown-unknown/ intentionally NOT cached — sccache handles
+    # dependency compilation, and the upload cost exceeds incremental savings.
     - key: "cargo-registry-$CI_COMMIT_REF_SLUG"
       fallback_keys:
         - "cargo-registry-master"
@@ -782,7 +786,7 @@ e2e-tests:
     SKAFFOLD_PROFILE: "ci"
     KUBERNETES_CPU_REQUEST: "2"
     KUBERNETES_MEMORY_REQUEST: "2Gi"
-    KUBERNETES_MEMORY_LIMIT: "8Gi"
+    KUBERNETES_MEMORY_LIMIT: "16Gi"
     KUBERNETES_SERVICE_CPU_REQUEST: "1"
     KUBERNETES_SERVICE_MEMORY_REQUEST: "1Gi"
     KUBERNETES_SERVICE_MEMORY_LIMIT: "4Gi"
