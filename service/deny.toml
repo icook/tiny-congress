@@ -17,14 +17,7 @@ unmaintained = "workspace"
 # How to handle yanked crates: "deny", "warn", "allow"
 yanked = "deny"
 # Ignore specific advisories (add with justification if needed)
-ignore = [
-  # RUSTSEC-2026-0066: astral-tokio-tar PAX extension validation — low-severity,
-  # transitive dev-only dep via testcontainers. Upstream testcontainers has not
-  # yet released a version that pulls in astral-tokio-tar >=0.6.0. Track at
-  # https://github.com/testcontainers/testcontainers-rs to remove this ignore
-  # when testcontainers adopts the fix.
-  { id = "RUSTSEC-2026-0066", reason = "low-severity transitive dev dependency; testcontainers upstream has not adopted astral-tokio-tar 0.6.0 yet" },
-]
+ignore = []
 
 # =============================================================================
 # Licenses - ensure all dependencies use acceptable licenses
