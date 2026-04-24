@@ -1039,7 +1039,9 @@ jobs:
     env:
       SKAFFOLD_DEFAULT_REPO: ${{ needs.detect-changes.outputs.image-registry }}
       SKAFFOLD_PROFILE: ci
-      PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.cache/ms-playwright
+      # Use the official Playwright Docker image for deterministic font rendering
+      # across CI platforms (matches GitLab CI). Browsers are baked into the image.
+      PLAYWRIGHT_DOCKER_IMAGE: mcr.microsoft.com/playwright:v1.57.0-noble
       KIND_CLUSTER_NAME: skaffold-ci-${{ github.run_id }}
     steps:
       - name: Checkout
@@ -1161,22 +1163,8 @@ jobs:
       - name: Setup web toolchain
         uses: ./.github/actions/setup-web
 
-      - name: Restore Playwright browser cache
-        uses: runs-on/cache/restore@v4
-        with:
-          path: ${{ env.PLAYWRIGHT_BROWSERS_PATH }}
-          key: playwright-chromium-${{ hashFiles('web/yarn.lock') }}
-
-      - name: Install Playwright browsers
-        working-directory: web
-        run: yarn playwright install --with-deps chromium
-
-      - name: Save Playwright browser cache
-        if: always()
-        uses: runs-on/cache/save@v4
-        with:
-          path: ${{ env.PLAYWRIGHT_BROWSERS_PATH }}
-          key: playwright-chromium-${{ hashFiles('web/yarn.lock') }}
+      - name: Pull Playwright Docker image
+        run: docker pull "$PLAYWRIGHT_DOCKER_IMAGE"
 
       - name: Download WASM artifact
         uses: actions/download-artifact@v4
@@ -1274,11 +1262,6 @@ jobs:
 
       - name: Run Playwright E2E tests
         working-directory: web
-        env:
-          CI: true
-          PLAYWRIGHT_COVERAGE: "1"
-          PLAYWRIGHT_BASE_URL: http://localhost:5173
-          PLAYWRIGHT_API_URL: http://localhost:8080/graphql
         run: |
           set -euo pipefail
 
@@ -1292,15 +1275,30 @@ jobs:
           PREVIEW_PID=$!
           timeout 60 bash -c 'until curl -sf http://localhost:5173 >/dev/null; do sleep 1; done'
 
-          # Run tests - coverage report generated in Playwright global teardown
-          yarn playwright:clean
+          # Clean previous test artifacts
+          node scripts/reset-playwright-coverage.mjs
+
           SNAPSHOT_FLAG=""
           GENERATE_BASELINES=""
           if [ "${{ inputs.update_snapshots }}" = "true" ]; then
             SNAPSHOT_FLAG="--update-snapshots"
             GENERATE_BASELINES="true"
           fi
-          GENERATE_BASELINES="$GENERATE_BASELINES" yarn playwright:test --project chromium $SNAPSHOT_FLAG || TEST_EXIT=$?
+
+          # Run Playwright inside the official Docker image for deterministic
+          # font rendering. --network host shares the runner's network namespace
+          # so localhost:5173 (Vite) and localhost:8080 (API) are reachable.
+          docker run --rm --network host --ipc=host \
+            -v "${GITHUB_WORKSPACE}/web:/work" \
+            -w /work \
+            -e CI=true \
+            -e PLAYWRIGHT_COVERAGE=1 \
+            -e PLAYWRIGHT_BASE_URL=http://localhost:5173 \
+            -e PLAYWRIGHT_API_URL=http://localhost:8080/graphql \
+            -e GENERATE_BASELINES="$GENERATE_BASELINES" \
+            -e PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
+            "$PLAYWRIGHT_DOCKER_IMAGE" \
+            npx playwright test --project chromium $SNAPSHOT_FLAG || TEST_EXIT=$?
 
           # Cleanup
           kill "$PREVIEW_PID" "$PF_API_PID" 2>/dev/null || true
