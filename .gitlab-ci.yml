@@ -1083,8 +1083,9 @@ deploy-reports:
       BUILD_DATE="$(date -u +"%Y-%m-%d %H:%M UTC")"
       export COMMIT_SHORT BUILD_DATE
       # Replace GHA-specific vars with GitLab equivalents before envsubst
-      sed -e "s/\$GITHUB_SHA/${CI_COMMIT_SHA}/g" \
-          -e "s/\$GITHUB_REF_NAME/${CI_COMMIT_REF_NAME}/g" \
+      # Use | delimiter — branch names contain / which breaks s///
+      sed -e "s|\$GITHUB_SHA|${CI_COMMIT_SHA}|g" \
+          -e "s|\$GITHUB_REF_NAME|${CI_COMMIT_REF_NAME}|g" \
           .github/templates/reports-landing.html | envsubst > site/index.html
 
     # ── Upload to Dufs ──
