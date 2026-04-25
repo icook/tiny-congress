@@ -900,7 +900,8 @@ e2e-tests:
       NODE="${KIND_CLUSTER_NAME}-control-plane"
 
       echo "Waiting for cluster API..."
-      if ! timeout 180 bash -c "until kubectl cluster-info --context kind-${KIND_CLUSTER_NAME} >/dev/null 2>&1; do sleep 5; done"; then
+      # 300s accommodates slow kindest/node image pulls on uncached DinD sidecars
+      if ! timeout 300 bash -c "until kubectl cluster-info --context kind-${KIND_CLUSTER_NAME} >/dev/null 2>&1; do sleep 5; done"; then
         echo "KinD did not start in time"
         exit 1
       fi
