@@ -1118,7 +1118,8 @@ deploy-reports:
       set -euo pipefail
       # Derive report key from branch name (slashes → hyphens), same as GHA report-key
       DEST=$(echo "${CI_COMMIT_REF_NAME}" | sed 's|/|-|g')
-      BASE="https://reports-upload.ibcook.com"
+      # Use in-cluster service URL — avoids Cloudflare Tunnel dependency
+      BASE="http://dufs.dufs.svc.cluster.local"
 
       for attempt in 1 2 3; do
         if find site -type f -print0 \
