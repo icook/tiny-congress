@@ -28,7 +28,8 @@ export default defineConfig({
   ],
   expect: {
     toHaveScreenshot: {
-      // Allow minor anti-aliasing and sub-pixel rendering differences across CI runs.
+      // Both GHA and GitLab CI run Playwright inside mcr.microsoft.com/playwright
+      // for deterministic font rendering. Minor anti-aliasing diffs only.
       maxDiffPixelRatio: 0.01,
       threshold: 0.3,
     },

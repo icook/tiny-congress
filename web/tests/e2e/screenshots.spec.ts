@@ -126,6 +126,21 @@ test.describe.serial('screenshot gallery @screenshots', () => {
 
   test('settings page', async ({ page }) => {
     await signupUser(page);
+
+    // Pin device timestamps so date column widths are deterministic.
+    // Without this, single-digit days ("Apr 8") vs double-digit ("Apr 24")
+    // cause different text wrapping in the narrow mobile table columns.
+    const fixedTimestamp = '2025-01-15T12:00:00+00:00';
+    await page.route('**/auth/devices', async (route) => {
+      const response = await route.fetch();
+      const json = await response.json();
+      for (const device of json.devices) {
+        device.created_at = fixedTimestamp;
+        device.last_used_at = fixedTimestamp;
+      }
+      await route.fulfill({ response, json });
+    });
+
     await page.goto('/settings');
     await expect(page.getByRole('heading', { name: /devices/i })).toBeVisible({ timeout: 10_000 });
     await capture(page, 'settings-desktop-dark', { viewport: DESKTOP, colorScheme: 'dark' });

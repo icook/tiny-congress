@@ -338,12 +338,121 @@ pub mod test_db {
         TEST_RUNTIME.block_on(f)
     }
 
+    /// Parse host, port, user, and password from a postgres://user:pass@host:port/db URL.
+    fn parse_postgres_url(url: &str) -> (String, u16, String, String, String) {
+        let stripped = url
+            .strip_prefix("postgres://")
+            .or_else(|| url.strip_prefix("postgresql://"))
+            .expect("TEST_DATABASE_URL must start with postgres://");
+        let (userinfo, rest) = stripped.split_once('@').expect("missing @ in URL");
+        let (user, password) = userinfo.split_once(':').unwrap_or((userinfo, ""));
+        let (hostport, dbname) = rest.split_once('/').unwrap_or((rest, ""));
+        let (host, port_str) = hostport.split_once(':').unwrap_or((hostport, "5432"));
+        let port: u16 = port_str.parse().expect("invalid port in URL");
+        (
+            host.to_string(),
+            port,
+            user.to_string(),
+            password.to_string(),
+            dbname.to_string(),
+        )
+    }
+
     /// Get a reference to the shared test database.
     /// Initializes the container and pool on first call.
     #[allow(clippy::expect_used)]
     pub async fn get_test_db() -> &'static TestDb {
         TEST_DB
             .get_or_init(|| async {
+                // If TEST_DATABASE_URL is set, use the external postgres directly
+                // (e.g., GitLab CI services: sidecar). Skip container startup entirely.
+                if let Ok(ext_url) = std::env::var("TEST_DATABASE_URL") {
+                    let (host, port, user, password, _dbname) = parse_postgres_url(&ext_url);
+
+                    // Use the provided database for migrations
+                    let database_url = ext_url.clone();
+                    let mut migration_conn = PgConnection::connect(&database_url)
+                        .await
+                        .expect("Failed to connect to TEST_DATABASE_URL");
+
+                    let migrator = Migrator::new(Path::new(concat!(
+                        env!("CARGO_MANIFEST_DIR"),
+                        "/migrations"
+                    )))
+                    .await
+                    .expect("Failed to load migrations");
+
+                    migrator
+                        .run(&mut migration_conn)
+                        .await
+                        .expect("Failed to run migrations");
+
+                    sqlx::query(
+                        "CREATE TABLE IF NOT EXISTS test_items (
+                            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                            name TEXT NOT NULL,
+                            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                        )",
+                    )
+                    .execute(&mut migration_conn)
+                    .await
+                    .expect("Failed to create test_items table");
+
+                    drop(migration_conn);
+
+                    // Create template database for isolated_db()
+                    let maintenance_url =
+                        format!("postgres://{user}:{password}@{host}:{port}/postgres");
+                    let mut maint_conn = PgConnection::connect(&maintenance_url)
+                        .await
+                        .expect("Failed to connect to postgres for template check");
+
+                    let template_exists: bool = sqlx::query_scalar(
+                        "SELECT EXISTS(SELECT 1 FROM pg_database WHERE datname = 'tiny_congress_template')",
+                    )
+                    .fetch_one(&mut maint_conn)
+                    .await
+                    .expect("Failed to check template existence");
+
+                    if !template_exists {
+                        let _ = sqlx::query(
+                            "SELECT pg_terminate_backend(pid) FROM pg_stat_activity \
+                             WHERE datname = 'tiny_congress_test' AND pid != pg_backend_pid()",
+                        )
+                        .execute(&mut maint_conn)
+                        .await;
+
+                        sqlx::query(
+                            "CREATE DATABASE \"tiny_congress_template\" TEMPLATE \"tiny_congress_test\"",
+                        )
+                        .execute(&mut maint_conn)
+                        .await
+                        .expect("Failed to create template database");
+                    }
+
+                    drop(maint_conn);
+
+                    let pool = PgPoolOptions::new()
+                        .max_connections(5)
+                        .acquire_timeout(Duration::from_secs(30))
+                        .connect(&database_url)
+                        .await
+                        .expect("Failed to connect to test database");
+
+                    sqlx_core::query_scalar::query_scalar::<_, i32>("SELECT 1")
+                        .fetch_one(&pool)
+                        .await
+                        .expect("Failed to verify pool connectivity");
+
+                    return TestDb {
+                        pool,
+                        _container: None,
+                        database_url,
+                        host,
+                        port,
+                    };
+                }
+
                 // Phase 1: Acquire lock and determine if we need a new container.
                 // Lock is released at the end of this block.
                 let (host, port, container) = {
@@ -580,10 +689,8 @@ pub mod test_db {
         pool: PgPool,
         database_name: String,
         database_url: String,
-        /// Host of the shared test container (used for cleanup connection)
-        host: String,
-        /// Port of the shared test container (used for cleanup connection)
-        port: u16,
+        /// Maintenance URL (postgres://user:pass@host:port/postgres) for cleanup
+        maintenance_url: String,
     }
 
     impl IsolatedDb {
@@ -606,15 +713,11 @@ pub mod test_db {
     impl Drop for IsolatedDb {
         fn drop(&mut self) {
             let db_name = self.database_name.clone();
-            let host = self.host.clone();
-            let port = self.port;
+            let maintenance_url = self.maintenance_url.clone();
 
             // Spawn cleanup on the shared runtime to ensure it completes
             TEST_RUNTIME.spawn(async move {
                 // Connect to postgres (maintenance) database to perform cleanup
-                let maintenance_url =
-                    format!("postgres://postgres:postgres@{host}:{port}/postgres");
-
                 if let Ok(mut conn) = PgConnection::connect(&maintenance_url).await {
                     // Terminate any remaining connections to the isolated database
                     let _ = sqlx::query(&format!(
@@ -665,6 +768,13 @@ pub mod test_db {
 
         // Connect to postgres (maintenance) database to create the isolated DB
         let maintenance_url = format!("postgres://postgres:postgres@{host}:{port}/postgres");
+        // If using external DB, credentials may differ — override from env
+        let maintenance_url = if std::env::var("TEST_DATABASE_URL").is_ok() {
+            let (h, p, u, pw, _) = parse_postgres_url(&std::env::var("TEST_DATABASE_URL").unwrap());
+            format!("postgres://{u}:{pw}@{h}:{p}/postgres")
+        } else {
+            maintenance_url
+        };
         let mut maint_conn = PgConnection::connect(&maintenance_url)
             .await
             .expect("Failed to connect to postgres database");
@@ -680,7 +790,12 @@ pub mod test_db {
         .expect("Failed to create isolated database from template");
 
         // Build connection string for the new database
-        let database_url = format!("postgres://postgres:postgres@{host}:{port}/{db_name}");
+        let database_url = if std::env::var("TEST_DATABASE_URL").is_ok() {
+            let (h, p, u, pw, _) = parse_postgres_url(&std::env::var("TEST_DATABASE_URL").unwrap());
+            format!("postgres://{u}:{pw}@{h}:{p}/{db_name}")
+        } else {
+            format!("postgres://postgres:postgres@{host}:{port}/{db_name}")
+        };
 
         // Connect to the new isolated database
         let pool = PgPoolOptions::new()
@@ -694,8 +809,7 @@ pub mod test_db {
             pool,
             database_name: db_name,
             database_url,
-            host: host.to_string(),
-            port,
+            maintenance_url,
         }
     }
 
@@ -735,7 +849,12 @@ pub mod test_db {
         let db_name = format!("test_empty_{}", uuid::Uuid::new_v4().simple());
 
         // Connect to postgres (maintenance) database to create the empty DB
-        let maintenance_url = format!("postgres://postgres:postgres@{host}:{port}/postgres");
+        let maintenance_url = if let Ok(ext_url) = std::env::var("TEST_DATABASE_URL") {
+            let (h, p, u, pw, _) = parse_postgres_url(&ext_url);
+            format!("postgres://{u}:{pw}@{h}:{p}/postgres")
+        } else {
+            format!("postgres://postgres:postgres@{host}:{port}/postgres")
+        };
         let mut maint_conn = PgConnection::connect(&maintenance_url)
             .await
             .expect("Failed to connect to postgres database");
@@ -747,7 +866,12 @@ pub mod test_db {
             .expect("Failed to create empty database");
 
         // Build connection string for the new database
-        let database_url = format!("postgres://postgres:postgres@{host}:{port}/{db_name}");
+        let database_url = if let Ok(ext_url) = std::env::var("TEST_DATABASE_URL") {
+            let (h, p, u, pw, _) = parse_postgres_url(&ext_url);
+            format!("postgres://{u}:{pw}@{h}:{p}/{db_name}")
+        } else {
+            format!("postgres://postgres:postgres@{host}:{port}/{db_name}")
+        };
 
         // Connect to the new empty database
         let pool = PgPoolOptions::new()
@@ -761,8 +885,7 @@ pub mod test_db {
             pool,
             database_name: db_name,
             database_url,
-            host: host.to_string(),
-            port,
+            maintenance_url,
         }
     }
 }

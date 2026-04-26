@@ -1277,7 +1277,6 @@ jobs:
 
           # Clean previous test artifacts
           node scripts/reset-playwright-coverage.mjs
-
           SNAPSHOT_FLAG=""
           GENERATE_BASELINES=""
           if [ "${{ inputs.update_snapshots }}" = "true" ]; then
