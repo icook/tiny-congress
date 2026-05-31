@@ -75,3 +75,66 @@ export async function signedFetchJson<T>(
 
   return fetchJson<T>(path, options);
 }
+
+/**
+ * Send a multipart/form-data request with Ed25519 auth headers.
+ *
+ * The signature is computed over an **empty** body string. The backend's
+ * `AuthenticatedDeviceParts` extractor verifies the same empty-body canonical
+ * message because multipart bodies cannot be read twice in the same handler.
+ *
+ * Do NOT set Content-Type — the browser must set it (with the form boundary).
+ */
+export async function signedFetchFormData<T>(
+  path: string,
+  method: string,
+  deviceKid: string,
+  privateKey: CryptoKey,
+  wasmCrypto: CryptoModule,
+  formData: FormData
+): Promise<T> {
+  // Sign over empty body — backend verifies the same empty-body canonical msg
+  const emptyBytes = new TextEncoder().encode('');
+  const authHeaders = await buildAuthHeaders(
+    method,
+    path,
+    emptyBytes,
+    deviceKid,
+    privateKey,
+    wasmCrypto
+  );
+
+  const url = `${(await import('@/config')).getApiBaseUrl()}${path}`;
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method,
+      headers: authHeaders, // No Content-Type — browser sets it with boundary
+      body: formData,
+    });
+  } catch (err) {
+    if (err instanceof DOMException && err.name === 'AbortError') {
+      throw new Error('The request was cancelled.');
+    }
+    throw new Error('Unable to connect. Check your internet connection and try again.');
+  }
+
+  if (!response.ok) {
+    let errorMessage = `HTTP ${String(response.status)}: ${response.statusText}`;
+    try {
+      const errorBody = (await response.json()) as { error?: string };
+      if (errorBody.error) {
+        errorMessage = errorBody.error;
+      }
+    } catch {
+      // JSON parsing failed, use default
+    }
+    throw new Error(errorMessage);
+  }
+
+  if (response.status === 204) {
+    return undefined as T;
+  }
+
+  return response.json() as Promise<T>;
+}

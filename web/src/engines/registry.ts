@@ -6,4 +6,5 @@ export const engineMap: Record<
   () => Promise<{ EngineView: React.ComponentType<EngineViewProps> }>
 > = {
   polling: () => import('./polling'),
+  ranking: () => import('./ranking'),
 };

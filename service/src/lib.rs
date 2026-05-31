@@ -18,4 +18,5 @@ pub mod reputation;
 pub mod rest;
 pub mod rooms;
 pub mod sim;
+pub mod storage;
 pub mod trust;

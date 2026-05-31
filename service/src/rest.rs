@@ -135,6 +135,14 @@ impl IntoResponse for ProblemDetails {
         crate::rooms::http::polling::get_distribution,
         crate::rooms::http::polling::my_votes,
         crate::rooms::http::polling::get_poll_traces,
+        // Rooms (ranking)
+        crate::rooms::http::ranking::submit_meme,
+        crate::rooms::http::ranking::get_matchup,
+        crate::rooms::http::ranking::record_matchup,
+        crate::rooms::http::ranking::get_leaderboard,
+        crate::rooms::http::ranking::get_hall_of_fame,
+        crate::rooms::http::ranking::list_rounds,
+        crate::rooms::http::ranking::get_current_rounds,
     ),
     components(schemas(
         BuildInfo,
@@ -201,6 +209,18 @@ impl IntoResponse for ProblemDetails {
         crate::rooms::http::polling::PollStatusTransition,
         crate::rooms::http::polling::CreateEvidenceBody,
         crate::rooms::http::polling::EvidenceItem,
+        // Ranking schemas
+        crate::rooms::http::ranking::SubmitMemeRequest,
+        crate::rooms::http::ranking::SubmissionResponse,
+        crate::rooms::http::ranking::SubmissionWithAuthorResponse,
+        crate::rooms::http::ranking::MatchupResponse,
+        crate::rooms::http::ranking::RecordMatchupRequest,
+        crate::rooms::http::ranking::MatchupResultResponse,
+        crate::rooms::http::ranking::LeaderboardEntry,
+        crate::rooms::http::ranking::LeaderboardResponse,
+        crate::rooms::http::ranking::RoundResponse,
+        crate::rooms::http::ranking::HallOfFameEntryResponse,
+        crate::rooms::http::ranking::PaginationParams,
     ))
 )]
 pub struct ApiDoc;

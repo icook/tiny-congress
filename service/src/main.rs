@@ -25,6 +25,8 @@ use tc_engine_api::constraints::ConstraintRegistry;
 use tc_engine_api::engine::{EngineContext, EngineRegistry};
 use tc_engine_polling::engine::PollingEngine;
 use tc_engine_polling::service::{DefaultPollingService, PollingService};
+use tc_engine_ranking::engine::RankingEngine;
+use tc_engine_ranking::service::{DefaultRankingService, RankingService};
 use tinycongress_api::{
     build_info::BuildInfo,
     config::Config,
@@ -46,9 +48,11 @@ use tinycongress_api::{
     rooms::{
         self,
         content_filter::{ContentFilter, NoopFilter},
+        http::serve_upload,
         repo::{PgRoomsRepo, RoomsRepo},
         service::{DefaultRoomsService, RoomsService},
     },
+    storage::{LocalFileStore, ObjectStore},
     trust::{
         self,
         engine::TrustEngine,
@@ -161,7 +165,16 @@ async fn build_app(
     schema: Schema<QueryRoot, MutationRoot, EmptySubscription>,
     allow_origin: AllowOrigin,
 ) -> Result<(Router, PgPool), anyhow::Error> {
-    let rest_v1 = Router::new().route("/build-info", get(rest::get_build_info));
+    // Object store for uploaded files
+    let upload_dir = std::env::var("TC_UPLOAD_DIR").unwrap_or_else(|_| "./uploads".to_string());
+    let object_store: Arc<dyn ObjectStore> = Arc::new(
+        LocalFileStore::new(upload_dir.into(), "/api/v1/uploads")
+            .map_err(|e| anyhow::anyhow!("failed to create upload directory: {e}"))?,
+    );
+
+    let rest_v1 = Router::new()
+        .route("/build-info", get(rest::get_build_info))
+        .route("/uploads/{*key}", get(serve_upload));
 
     // Identity wiring
     let repo = Arc::new(PgIdentityRepo::new(pool.clone()));
@@ -224,6 +237,7 @@ async fn build_app(
     // Register room engine plugins
     let mut engine_registry = EngineRegistry::new();
     engine_registry.register(PollingEngine::new());
+    engine_registry.register(RankingEngine::new());
 
     // Start background tasks for all registered engines
     // TODO: Store engine handles in app state and join them during graceful shutdown.
@@ -263,6 +277,10 @@ async fn build_app(
     let polling_service = Arc::new(DefaultPollingService::new(pool.clone(), trust_graph_reader))
         as Arc<dyn PollingService>;
 
+    // Ranking wiring
+    let ranking_service =
+        Arc::new(DefaultRankingService::new(pool.clone())) as Arc<dyn RankingService>;
+
     let (prometheus_layer, metric_handle) = PrometheusMetricLayer::pair();
 
     let app = Router::new()
@@ -294,6 +312,7 @@ async fn build_app(
         .layer(Extension(reputation_repo_ext))
         .layer(Extension(rooms_service))
         .layer(Extension(polling_service))
+        .layer(Extension(ranking_service))
         .layer(Extension(trust_service))
         .layer(Extension(trust_repo_for_http))
         .layer(Extension(trust_engine.clone()))
@@ -302,7 +321,8 @@ async fn build_app(
         .layer(Extension(pool.clone()))
         .layer(Extension(engine_registry))
         .layer(Extension(engine_ctx))
-        .layer(Extension(Arc::new(NoopFilter) as Arc<dyn ContentFilter>));
+        .layer(Extension(Arc::new(NoopFilter) as Arc<dyn ContentFilter>))
+        .layer(Extension(object_store));
 
     // Add ID.me config extension if configured
     let app = if let Some(ref idme_config) = config.idme {

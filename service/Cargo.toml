@@ -10,7 +10,7 @@ test-utils = []
 
 [dependencies]
 # Web server
-axum = "0.8"
+axum = { version = "0.8", features = ["multipart"] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "signal", "time"] }
 tower = "0.5"
 tower-http = { version = "0.6", features = ["cors", "trace"] }
@@ -72,6 +72,7 @@ urlencoding = "2"
 # Engine plugin API
 tc-engine-api = { path = "../crates/tc-engine-api", version = "0.1.0" }
 tc-engine-polling = { path = "../crates/tc-engine-polling", version = "0.1.0" }
+tc-engine-ranking = { path = "../crates/tc-engine-ranking", version = "0.1.0" }
 tc-llm = { path = "../crates/tc-llm", version = "0.1.0" }
 
 # Cryptography
@@ -117,7 +118,7 @@ path = "src/bin/tc_ops.rs"
 
 # cargo-machete false positives (used via derive macros or wired in follow-up tasks)
 [package.metadata.cargo-machete]
-ignored = ["serde", "thiserror", "async-trait", "utoipa", "tc-engine-polling"]
+ignored = ["serde", "thiserror", "async-trait", "utoipa", "tc-engine-polling", "tc-engine-ranking"]
 
 [lints]
 workspace = true
