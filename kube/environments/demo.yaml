@@ -94,5 +94,3 @@ demoVerifier:
   enabled: true
   apiUrl: "http://tc-demo.tiny-congress-demo.svc.cluster.local:8080"
   allowedCallback: "https://demo.tinycongress.com"
-  ingress:
-    host: "demo-verify.tinycongress.com"

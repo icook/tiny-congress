@@ -55,7 +55,7 @@ impl RelationshipDepth {
 
 /// Base weight for each delivery method (ADR-023).
 #[must_use]
-pub const fn base_weight(delivery_method: DeliveryMethod) -> f32 {
+const fn base_weight(delivery_method: DeliveryMethod) -> f32 {
     match delivery_method {
         DeliveryMethod::Qr => 1.0,
         DeliveryMethod::Video => 0.7,
@@ -66,7 +66,7 @@ pub const fn base_weight(delivery_method: DeliveryMethod) -> f32 {
 
 /// Multiplier for relationship depth (ADR-023).
 #[must_use]
-pub const fn depth_multiplier(relationship_depth: Option<RelationshipDepth>) -> f32 {
+const fn depth_multiplier(relationship_depth: Option<RelationshipDepth>) -> f32 {
     match relationship_depth {
         Some(RelationshipDepth::Years) | None => 1.0,
         Some(RelationshipDepth::Months) => 0.7,

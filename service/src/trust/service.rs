@@ -374,7 +374,7 @@ mod tests {
                 *cap.lock().unwrap() = Some(topic.to_string());
             }
             if self.endorsement_fails {
-                return Err(EndorsementRepoError::NotFound);
+                return Err(EndorsementRepoError::Database(sqlx::Error::RowNotFound));
             }
             if let Some(v) = self.endorsement {
                 return Ok(v);

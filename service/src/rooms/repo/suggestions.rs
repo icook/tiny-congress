@@ -1,7 +1,6 @@
 //! Research suggestion persistence operations
 
 use chrono::{DateTime, Utc};
-use sqlx::PgPool;
 use uuid::Uuid;
 
 #[derive(Debug, Clone)]
@@ -147,107 +146,4 @@ where
     .await?;
 
     Ok(count)
-}
-
-/// Atomically claims the next queued suggestion using `FOR UPDATE SKIP LOCKED`.
-///
-/// Returns `None` if no queued suggestions are available.
-///
-/// # Errors
-///
-/// Returns `Database` on connection failure.
-pub async fn claim_next_queued(
-    pool: &PgPool,
-) -> Result<Option<SuggestionRecord>, SuggestionRepoError> {
-    let mut tx = pool.begin().await?;
-
-    let row = sqlx::query_as::<_, SuggestionRow>(
-        r"
-        SELECT id, room_id, poll_id, account_id, suggestion_text, status, filter_reason,
-               evidence_ids, created_at, processed_at
-        FROM rooms__research_suggestions
-        WHERE status = 'queued'
-        ORDER BY created_at ASC
-        LIMIT 1
-        FOR UPDATE SKIP LOCKED
-        ",
-    )
-    .fetch_optional(&mut *tx)
-    .await?;
-
-    let Some(row) = row else {
-        tx.rollback().await?;
-        return Ok(None);
-    };
-
-    sqlx::query(r"UPDATE rooms__research_suggestions SET status = 'processing' WHERE id = $1")
-        .bind(row.id)
-        .execute(&mut *tx)
-        .await?;
-
-    tx.commit().await?;
-
-    Ok(Some(row_to_record(row)))
-}
-
-/// Marks a suggestion as complete and records the evidence IDs produced.
-///
-/// # Errors
-///
-/// Returns `NotFound` if no suggestion exists with this ID.
-pub async fn complete_suggestion<'e, E>(
-    executor: E,
-    suggestion_id: Uuid,
-    evidence_ids: &[Uuid],
-) -> Result<(), SuggestionRepoError>
-where
-    E: sqlx::Executor<'e, Database = sqlx::Postgres>,
-{
-    let result = sqlx::query(
-        r"
-        UPDATE rooms__research_suggestions
-        SET status = 'complete', evidence_ids = $2, processed_at = now()
-        WHERE id = $1
-        ",
-    )
-    .bind(suggestion_id)
-    .bind(evidence_ids)
-    .execute(executor)
-    .await?;
-
-    if result.rows_affected() == 0 {
-        return Err(SuggestionRepoError::NotFound);
-    }
-    Ok(())
-}
-
-/// Marks a suggestion as failed and records the reason.
-///
-/// # Errors
-///
-/// Returns `NotFound` if no suggestion exists with this ID.
-pub async fn fail_suggestion<'e, E>(
-    executor: E,
-    suggestion_id: Uuid,
-    reason: &str,
-) -> Result<(), SuggestionRepoError>
-where
-    E: sqlx::Executor<'e, Database = sqlx::Postgres>,
-{
-    let result = sqlx::query(
-        r"
-        UPDATE rooms__research_suggestions
-        SET status = 'failed', filter_reason = $2, processed_at = now()
-        WHERE id = $1
-        ",
-    )
-    .bind(suggestion_id)
-    .bind(reason)
-    .execute(executor)
-    .await?;
-
-    if result.rows_affected() == 0 {
-        return Err(SuggestionRepoError::NotFound);
-    }
-    Ok(())
 }

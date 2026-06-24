@@ -824,16 +824,6 @@ mod tests {
     }
 
     #[test]
-    fn service_endorsement_repo_error_maps_to_500() {
-        assert_eq!(
-            service_status(&TrustServiceError::EndorsementRepo(
-                EndorsementRepoError::NotFound
-            )),
-            StatusCode::INTERNAL_SERVER_ERROR
-        );
-    }
-
-    #[test]
     fn service_endorsement_repo_database_error_maps_to_500() {
         assert_eq!(
             service_status(&TrustServiceError::EndorsementRepo(

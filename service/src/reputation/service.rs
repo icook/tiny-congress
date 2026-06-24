@@ -82,10 +82,6 @@ impl EndorsementService for DefaultEndorsementService {
             .create_endorsement(subject_id, topic, endorser_id, evidence, 1.0, None, true)
             .await
             .map_err(|e| match e {
-                EndorsementRepoError::NotFound => {
-                    tracing::error!("Unexpected NotFound during endorsement creation");
-                    EndorsementError::Internal("Internal server error".to_string())
-                }
                 EndorsementRepoError::Database(e) => {
                     tracing::error!("Endorsement creation failed: {e}");
                     EndorsementError::Internal("Internal server error".to_string())
@@ -106,9 +102,6 @@ impl EndorsementService for DefaultEndorsementService {
                     tracing::error!("Endorsement check failed: {e}");
                     EndorsementError::Internal("Internal server error".to_string())
                 }
-                EndorsementRepoError::NotFound => {
-                    EndorsementError::Internal("Internal server error".to_string())
-                }
             })
     }
 
@@ -122,9 +115,6 @@ impl EndorsementService for DefaultEndorsementService {
             .map_err(|e| match e {
                 EndorsementRepoError::Database(e) => {
                     tracing::error!("Endorsement list failed: {e}");
-                    EndorsementError::Internal("Internal server error".to_string())
-                }
-                EndorsementRepoError::NotFound => {
                     EndorsementError::Internal("Internal server error".to_string())
                 }
             })

@@ -28,8 +28,3 @@ export function QueryProvider({ children }: QueryProviderProps) {
     </QueryClientProvider>
   );
 }
-
-/**
- * Export queryClient for use in tests and manual cache operations
- */
-export { queryClient };

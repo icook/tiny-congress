@@ -7,4 +7,3 @@ export { AgendaProgress } from '@/engines/polling/components/AgendaProgress';
 export { UpcomingPollPreview } from '@/engines/polling/components/UpcomingPollPreview';
 export { EvidenceCards } from '@/engines/polling/components/EvidenceCards';
 export { SuggestionFeed } from '@/engines/polling/components/SuggestionFeed';
-export type { CountdownState } from '@/engines/polling/hooks/usePollCountdown';
