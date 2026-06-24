@@ -7,7 +7,7 @@
  * once a stable CI environment with WASM artifacts is available.
  */
 import { expect, test } from './fixtures';
-import { signupUser } from './helpers';
+import { seedRoomWithPoll, signupUser } from './helpers';
 
 test.describe('page load baselines', () => {
   test('home page renders @smoke', async ({ page }) => {
@@ -50,6 +50,51 @@ test.describe('page load baselines', () => {
   test('settings page loads when authenticated @smoke', async ({ page }) => {
     await signupUser(page);
     await page.goto('/settings');
-    await expect(page.getByRole('heading', { name: /devices/i })).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByRole('heading', { name: /devices/i })).toBeVisible({
+      timeout: 10_000,
+    });
+  });
+});
+
+test.describe('poll flow baselines', () => {
+  test('room detail with active poll @smoke', async ({ page }) => {
+    await signupUser(page);
+    const { roomId } = await seedRoomWithPoll(page);
+
+    await page.goto(`/rooms/${roomId}`);
+    await expect(page.getByText(/should we increase park funding/i)).toBeVisible({
+      timeout: 10_000,
+    });
+
+    await test.info().attach('room-detail-with-poll', {
+      body: await page.screenshot(),
+      contentType: 'image/png',
+    });
+  });
+
+  test('poll page vote and results @smoke', async ({ page }) => {
+    await signupUser(page);
+    const { roomId, pollId } = await seedRoomWithPoll(page);
+
+    await page.goto(`/rooms/${roomId}/polls/${pollId}`);
+    await expect(
+      page.getByRole('heading', { name: /should we increase park funding/i })
+    ).toBeVisible({ timeout: 10_000 });
+
+    // Pre-vote screenshot (owner can vote)
+    await test.info().attach('poll-pre-vote', {
+      body: await page.screenshot(),
+      contentType: 'image/png',
+    });
+
+    // Submit vote
+    await page.getByRole('button', { name: /submit vote/i }).click();
+    await expect(page.getByText(/thanks for voting/i)).toBeVisible({ timeout: 10_000 });
+
+    // Post-vote screenshot with results
+    await test.info().attach('poll-post-vote', {
+      body: await page.screenshot(),
+      contentType: 'image/png',
+    });
   });
 });
